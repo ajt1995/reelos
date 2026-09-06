@@ -387,6 +387,148 @@ async function handleUpdateStatus(_req, res) {
   send(res, 200, { ok: true, local: localVersion(), running, log });
 }
 
+async function arrGet(url, key) {
+  return pull(url, key);
+}
+
+async function arrPost(url, key, body) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 45000);
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "X-Api-Key": key, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ac.signal,
+    });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    if (!res.ok && res.status !== 400) throw new Error(`${res.status} ${text.slice(0, 240)}`);
+    return { ok: res.ok || res.status === 400, status: res.status, json, text };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function firstRoot(base, key, prefer) {
+  const roots = await arrGet(`${base}/rootfolder`, key);
+  const list = Array.isArray(roots) ? roots : [];
+  const hit = list.find((r) => r.path === prefer) || list[0];
+  return hit?.path || prefer;
+}
+
+async function firstProfile(base, key) {
+  const qs = await arrGet(`${base}/qualityprofile`, key);
+  const list = Array.isArray(qs) ? qs : [];
+  return list[0]?.id || 1;
+}
+
+async function handleRequest(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false, error: "POST only" });
+    return;
+  }
+  const body = await readBody(req);
+  const titleId = String(body.titleId || body.data?.titleId || "").trim();
+  const season = body.season ?? body.data?.season;
+  note(`request ${titleId}`);
+  if (!titleId) {
+    send(res, 400, { ok: false, error: "No title" });
+    return;
+  }
+  try {
+    if (titleId.startsWith("tmdb-")) {
+      const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
+      if (!rk) {
+        send(res, 503, { ok: false, error: "Movies engine has no API key" });
+        return;
+      }
+      const tmdb = titleId.slice(5);
+      const hits = await arrGet(
+        `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(`tmdb:${tmdb}`)}`,
+        rk,
+      );
+      const movie = Array.isArray(hits) ? hits[0] : null;
+      if (!movie) {
+        send(res, 404, { ok: false, error: "Radarr did not find that TMDB id" });
+        return;
+      }
+      const root = await firstRoot("http://127.0.0.1:7878/api/v3", rk, "/mnt/symlinks");
+      const profileId = await firstProfile("http://127.0.0.1:7878/api/v3", rk);
+      const added = await arrPost("http://127.0.0.1:7878/api/v3/movie", rk, {
+        ...movie,
+        qualityProfileId: movie.qualityProfileId || profileId,
+        rootFolderPath: root,
+        monitored: true,
+        addOptions: { searchForMovie: true },
+      });
+      note(`radarr add ${added.status} root=${root}`);
+      send(res, 200, { ok: true, engine: "radarr", added: added.ok, title: movie.title || titleId });
+      return;
+    }
+    if (titleId.startsWith("tvdb-")) {
+      const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+      if (!sk) {
+        send(res, 503, { ok: false, error: "TV engine has no API key" });
+        return;
+      }
+      const tvdb = titleId.slice(5);
+      const hits = await arrGet(
+        `http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(`tvdb:${tvdb}`)}`,
+        sk,
+      );
+      const series = Array.isArray(hits) ? hits[0] : null;
+      if (!series) {
+        send(res, 404, { ok: false, error: "Sonarr did not find that TVDB id" });
+        return;
+      }
+      const root = await firstRoot("http://127.0.0.1:8989/api/v3", sk, "/mnt/symlinks");
+      const profileId = await firstProfile("http://127.0.0.1:8989/api/v3", sk);
+      const added = await arrPost("http://127.0.0.1:8989/api/v3/series", sk, {
+        ...series,
+        qualityProfileId: series.qualityProfileId || profileId,
+        rootFolderPath: root,
+        monitored: true,
+        seasonFolder: true,
+        addOptions: { searchForMissingEpisodes: true },
+      });
+      note(`sonarr add ${added.status} root=${root} season=${season ?? ""}`);
+      send(res, 200, { ok: true, engine: "sonarr", added: added.ok, title: series.title || titleId });
+      return;
+    }
+    send(res, 400, { ok: false, error: "That title is not from the movie/TV engines. Search again, then request." });
+  } catch (e) {
+    const error = String(e?.name === "AbortError" ? "Engine timed out" : e);
+    note(`request err ${error}`);
+    send(res, 500, { ok: false, error });
+  }
+}
+
+async function handleDoctor(_req, res) {
+  const script = "/opt/reelos/bin/reelos-doctor.py";
+  if (!existsSync(script)) {
+    send(res, 200, { ok: true, live: false, version: localVersion(), checks: [] });
+    return;
+  }
+  const r = spawnSync("python3", [script], { encoding: "utf8", timeout: 25000 });
+  try {
+    const parsed = JSON.parse(r.stdout || "{}");
+    send(res, 200, {
+      ok: true,
+      live: true,
+      version: parsed.version || localVersion(),
+      checks: parsed.checks || [],
+    });
+  } catch {
+    send(res, 200, { ok: false, live: false, version: localVersion(), checks: [], error: r.stderr || "doctor parse" });
+  }
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -403,6 +545,8 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/update/check") return void (await handleUpdateCheck(req, res));
           if (pathOnly === "/api/update/apply") return void (await handleUpdateApply(req, res));
           if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
+          if (pathOnly === "/api/request") return void (await handleRequest(req, res));
+          if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;

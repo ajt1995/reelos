@@ -1,9 +1,9 @@
 {
-  "version": "1.2.6",
+  "version": "1.2.8",
   "channel": "stable",
   "notes": [
-    "Settings Check and Apply run on the box, not in the phone.",
-    "Jellyfin in the browser. Tailscale install from Connect."
+    "Watch is a gold button to Jellyfin in this browser (:8096).",
+    "Request talks to Radarr/Sonarr on the box. Doctor too."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.6.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.8.tar.gz"
 }

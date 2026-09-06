@@ -61,18 +61,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="px-3 pb-3">
-          <Link
-            to="/settings"
-            className={cn(
-              "flex h-11 items-center gap-3 rounded-xl px-3 text-sm",
-              path.startsWith("/settings")
-                ? "bg-card text-foreground"
-                : "text-muted hover:bg-card/60 hover:text-foreground",
-            )}
+          <a
+            href={typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "http://127.0.0.1:8096"}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 text-sm text-gold hover:bg-card/60"
           >
-            <Settings className="size-4" />
-            Settings
-          </Link>
+            <Clapperboard className="size-4" />
+            Watch
+          </a>
           <div className="mt-3 rounded-xl bg-raised px-3 py-3">
             <p className="font-mono text-[11px] text-faint">{HOSTNAME}</p>
             <p className="mt-1 flex items-center gap-1.5 text-[11px] text-live">
@@ -89,9 +86,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <span className="font-display text-sm font-semibold tracking-[0.18em] text-gold">
             ReelOS
           </span>
+          <a
+            href={typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "#"}
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto flex h-11 items-center rounded-xl px-3 text-sm font-medium text-gold"
+          >
+            Watch
+          </a>
           <Link
             to="/discover"
-            className="ml-auto flex size-11 items-center justify-center rounded-xl text-muted"
+            className="flex size-11 items-center justify-center rounded-xl text-muted"
             aria-label="Search"
           >
             <Search className="size-5" />

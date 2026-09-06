@@ -18,7 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { HOSTNAME, LAN_IP } from "@/lib/catalog";
 import { adapterProfile } from "@/lib/adapter";
-import { runDoctor, runTerminal } from "@/lib/appliance";
+import { runTerminal } from "@/lib/appliance";
 import {
   accessLabel,
   CHANNEL,
@@ -597,9 +597,12 @@ function Doctor() {
   const [live, setLive] = useState<{ ok: boolean; label: string; detail: string }[] | null>(null);
 
   useEffect(() => {
-    void runDoctor().then((r) => {
-      if (r.live && r.checks.length) setLive(r.checks);
-    });
+    void fetch("/api/doctor", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((r: { live?: boolean; checks?: { ok: boolean; label: string; detail: string }[] }) => {
+        if (r.live && r.checks?.length) setLive(r.checks);
+      })
+      .catch(() => {});
   }, []);
 
   const fallback = [

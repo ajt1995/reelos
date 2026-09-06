@@ -13,7 +13,9 @@ export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
-  const [watchUrl, setWatchUrl] = useState("");
+  const [watchUrl, setWatchUrl] = useState(
+    typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "",
+  );
   useEffect(() => {
     void fetch("/api/box", { cache: "no-store" })
       .then((r) => r.json())
@@ -111,7 +113,7 @@ export function HomeView() {
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
-      {watchUrl && (frontend === "jellyfin" || frontend === "both") ? (
+      {watchUrl ? (
         <a
           href={watchUrl}
           target="_blank"

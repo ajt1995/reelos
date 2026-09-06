@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
-import { pushRequest } from "@/lib/appliance";
 import { getTitle, kindLabel } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import { formatRuntime } from "@/lib/utils";
@@ -13,7 +12,6 @@ export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
   const remote = useReelStore((s) => s.remoteTitles.find((t) => t.id === id));
   const title = catalog ?? remote;
-  const navigate = useNavigate();
   const request = useReelStore((s) =>
     s.requests.find((r) => r.titleId === id && r.status !== "failed"),
   );
@@ -28,6 +26,22 @@ export function TitleView({ id }: { id: string }) {
   const [season, setSeason] = useState(1);
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
+  const [reqErr, setReqErr] = useState<string | null>(null);
+  const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
+
+  const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
+    setReqErr(null);
+    void fetch("/api/request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then((r) => r.json())
+      .then((j: { ok?: boolean; error?: string }) => {
+        if (!j.ok) setReqErr(j.error || "Engine did not add the title");
+      })
+      .catch((e) => setReqErr(String(e)));
+  };
 
   if (!title) {
     return (
@@ -98,13 +112,12 @@ export function TitleView({ id }: { id: string }) {
 
           <div className="mt-6 flex flex-wrap gap-3">
             {available ? (
-              <Button
-                size="lg"
-                onClick={() => void navigate({ to: "/play/$id", params: { id: title.id } })}
-              >
-                <Play className="size-4" fill="currentColor" />
-                Play
-              </Button>
+              <a href={jellyfin} target="_blank" rel="noreferrer">
+                <Button size="lg">
+                  <Play className="size-4" fill="currentColor" />
+                  Play in Jellyfin
+                </Button>
+              </a>
             ) : (
               <Button size="lg" disabled>
                 <Play className="size-4" />
@@ -141,11 +154,9 @@ export function TitleView({ id }: { id: string }) {
                     title.id,
                     title.kind === "tv" || title.kind === "anime" ? season : undefined,
                   );
-                  void pushRequest({
-                    data: {
-                      titleId: title.id,
-                      season: title.kind === "tv" || title.kind === "anime" ? season : undefined,
-                    },
+                  sendRequest({
+                    titleId: title.id,
+                    season: title.kind === "tv" || title.kind === "anime" ? season : undefined,
                   });
                 }}
               >
@@ -157,6 +168,7 @@ export function TitleView({ id }: { id: string }) {
           {failed ? (
             <p className="mt-4 text-sm text-danger">{failed.reason}</p>
           ) : null}
+          {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
           {!available && !blocked ? (
             <form
@@ -167,7 +179,7 @@ export function TitleView({ id }: { id: string }) {
                 setHashErr(!ok);
                 if (ok) {
                   setHash("");
-                  void pushRequest({ data: { titleId: title.id, hash } });
+                  sendRequest({ titleId: title.id, hash });
                 }
               }}
             >

@@ -109,6 +109,8 @@ need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
 need daemon/wire-engines.py use_webdav
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
+need src/components/title-view.tsx 'Play in Jellyfin'
+need src/components/title-view.tsx '/api/request'
 log "canaries ok"
 
 NEXT="$ROOT.next"
