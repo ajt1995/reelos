@@ -14,8 +14,8 @@ Environment=REELOS_ROOT=/opt/reelos
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/usr/bin/env npm run start:box
-Restart=on-failure
-RestartSec=3
+Restart=always
+RestartSec=2
 User=root
 
 [Install]

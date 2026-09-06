@@ -108,8 +108,8 @@ export const applyChannel = createServerFn({ method: "POST" }).handler(async () 
   const { spawn } = await import("node:child_process");
   const script = "/tmp/reelos-update.sh";
   const urls = [
-    "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/daemon/reelos-update.sh",
     "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
+    "https://github.com/ajt1995/reelos/raw/refs/heads/main/daemon/reelos-update.sh",
   ];
   let got = false;
   for (const url of urls) {

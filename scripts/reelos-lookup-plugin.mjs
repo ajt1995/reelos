@@ -188,6 +188,7 @@ async function handleBox(_req, res) {
     access: a.access || "lan",
     adminName: a.adminName || "reelos",
     adminPassword: a.adminPassword || "reelos",
+    answers: a,
     tailscaleAuth,
     tailscaleInstalled: Boolean(tailscaleBin()),
     tailscaleUp: tailscaleRunning(),
@@ -375,7 +376,7 @@ async function handleUpdateApply(req, res) {
     let body = "";
     for (const u of urls) {
       try {
-        const r = await fetch(u, { cache: "no-store" });
+        const r = await fetch(u, { cache: "no-store", headers: { "User-Agent": "ReelOS-update" } });
         if (r.ok) {
           body = await r.text();
           break;

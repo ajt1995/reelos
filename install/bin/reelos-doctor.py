@@ -117,6 +117,44 @@ def main() -> int:
         checks.append(ok("Cloudflare Tunnel", "Unit present" if cf else "Token not applied", cf))
 
     checks.append(ok("ReelOS", f"Version {version}", True))
+
+    # Hops: lookup / request / decypharr / jellyfin
+    try:
+        import urllib.request
+        with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=x", timeout=4) as r:
+            raw = r.read().decode()
+        hop = '"titles"' in raw
+        checks.append(ok("Lookup hop", "GET /api/lookup answered" if hop else "Lookup JSON missing titles", hop))
+    except Exception as e:
+        checks.append(ok("Lookup hop", f"Dead ({e.__class__.__name__})", False))
+
+    radarr_up = listening(7878) and api_key(COMPOSE / "configs" / "radarr" / "config.xml")
+    checks.append(ok("Request hop", "Radarr will accept adds" if radarr_up else "Radarr not accepting adds", radarr_up))
+
+    decy = False
+    detail = "Decypharr not listening"
+    if listening(8282):
+        decy = True
+        detail = "Decypharr :8282"
+    else:
+        try:
+            out = subprocess.check_output(
+                ["docker", "ps", "--filter", "name=decypharr", "--format", "{{.Status}}"],
+                text=True,
+                timeout=4,
+            )
+            if "Up" in out:
+                decy = True
+                detail = out.strip()
+            elif out.strip():
+                detail = out.strip()
+        except Exception:
+            pass
+    checks.append(ok("Decypharr hop", detail, decy))
+
+    jf = listening(8096)
+    checks.append(ok("Jellyfin hop", "http://127.0.0.1:8096" if jf else "Jellyfin not on :8096", jf))
+
     print(json.dumps({"version": version, "checks": checks}))
     return 0
 

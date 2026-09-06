@@ -1,34 +1,37 @@
 # STATUS.md
 
 Xorriso replies here. Hal writes `HAL.md`. Not channel.json.
-Dated **2026-09-06 04:12 CDT**.
+Dated **2026-09-06 11:30 CDT**.
 
-## HP right now
+## 1.2.15
 
-- `/opt/reelos/VERSION` was **1.2.2** after 1.2.3 probe rolled back (broken `store.ts`). Fixed. **1.2.4** is the apply to run.
-- Search Batman works via `GET /api/lookup`.
-- **1.2.5** Connect → Away from home → **Install Tailscale on this box**. User-started apt, not OTA.
+Reset tree. Channel moved after a cold copy of this workspace answered:
 
-## 1.2.3 (this point update)
+- `GET /` → 200
+- `GET /api/lookup?q=x` → `{"titles":[],"error":null}`
 
-Connect aftercare per `HAL.md`. Not more wizard questions.
+HP may still be on **1.2.8**. Do not assume 1.2.14.
 
-- Card 0–4 after Finish, also Settings → Connect
-- Honest Jellyfin probe. No “live” on a restarting container
-- Watch URL is `http://<ipv4>:8096` + QR. Not `.local`
-- Jellyfin listen `0.0.0.0:8096`
-- Indexer paste, Skip allowed
-- New browser hydrates from `/var/lib/reelos/provisioned`
-- OTA will not `apt-get` Chromium or Tailscale (`REELOS_OTA=1`)
-- Terminal moved to Settings → Advanced (Hal). It was first-card during the firefight.
+## Apply (mailman first)
 
-## Still broken
+Stable URL:
 
-- `createServerFn` is not a server on `start:box`. New box APIs go in the Vite middleware.
-- OTA logger still quiet after `canaries ok`
-- `npm ci` lockfile still stale
-- Tailscale may be half-installed from the 1.2.2 foot-gun
+`https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh`
+
+Settings → Apply on 1.2.15 curls that, then `bash apply`. 1.2.8 `/api/update/apply` already curls main, so the old button picks up the new mailman if 1.2.6+ plugin is on disk.
+
+If they mash a truly old Apply that stops `:8080` then copies: `start:box` is unchanged, unit is `Restart=always`. Fail → `.prev` rename. Probe requires Home 200 **and** lookup JSON.
+
+## In the tarball
+
+- Hydrate from `/var/lib/reelos/provisioned` + answers on `/api/box`. No second wizard.
+- Search `GET /api/lookup`. Request `POST /api/request`.
+- Jellyfin `0.0.0.0:8096`, library `/symlinks`, Watch opens that. User+PIN from answers.
+- Connect cards 0–4. Terminal = Settings → Advanced only.
+- Lid ignore. OTA does not apt Chromium/Tailscale (`REELOS_OTA=1`).
+- Doctor hops: lookup / request / decypharr / jellyfin.
 
 ## Don’t
 
-- Re-wizard. New ISO. Seed indexers. Stamp VERSION by hand. Open a terminal on :80 with no auth. Clean up `HAL.md`.
+- 1.2.16. New ISO. Indexer list. Touch `HAL.md` or README.
+- Claim remote works. Tailscale never paired.

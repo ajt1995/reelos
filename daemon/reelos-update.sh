@@ -1,16 +1,11 @@
 #!/bin/bash
-# ReelOS OTA. Phone stays up until the new tree is ready. VERSION is stamped last.
-# Never touches /srv/media libraries or compose configs/.env (API keys).
+# ReelOS OTA. Stage in .next while :8080 keeps serving. mv, then probe, then stamp VERSION.
+# Rollback is rename .prev. Never apt Chromium or Tailscale.
 set -euo pipefail
 ROOT="${REELOS_ROOT:-/opt/reelos}"
 STATE=/var/lib/reelos
 WORK=/tmp/reelos-ota
 LOG="$STATE/ota.log"
-CHANNEL_URLS=(
-  "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json"
-  "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json"
-  "https://github.com/ajt1995/reelos/raw/main/channel.json"
-)
 mkdir -p "$STATE" "$WORK"
 log() { echo "$*" | tee -a "$LOG" >/dev/stderr; }
 
@@ -26,10 +21,13 @@ best = None
 best_key = []
 for u in urls:
     try:
-        req = urllib.request.Request(u, headers={"User-Agent": "reelos-ota", "Accept": "application/vnd.github.raw"})
+        req = urllib.request.Request(u, headers={"User-Agent": "ReelOS-update", "Accept": "application/vnd.github.raw"})
         with urllib.request.urlopen(req, timeout=20) as r:
             raw = r.read().decode()
         data = json.loads(raw)
+        if "content" in data and data.get("encoding") == "base64":
+            import base64
+            data = json.loads(base64.b64decode(data["content"]).decode())
         ver = str(data.get("version") or "")
         key = [int(x) for x in ver.split(".") if x.isdigit()]
         if key > best_key:
@@ -40,10 +38,6 @@ if not best:
     sys.exit(1)
 open("/tmp/reelos-ota/channel.json", "w").write(json.dumps(best, indent=2) + "\n")
 PY
-}
-
-json() {
-  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2]) or "")' "$WORK/channel.json" "$1"
 }
 
 LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
@@ -58,20 +52,31 @@ if [ -z "$TARBALL" ]; then
   TARBALL="https://github.com/ajt1995/reelos/archive/refs/tags/v${REMOTE}.tar.gz"
 fi
 
+newer() {
+  python3 -c 'import sys
+a=[int(x) for x in sys.argv[1].split(".") if x.isdigit()]
+b=[int(x) for x in sys.argv[2].split(".") if x.isdigit()]
+n=max(len(a),len(b)); a+=[0]*(n-len(a)); b+=[0]*(n-len(b))
+sys.exit(0 if a>b else 1)' "$1" "$2"
+}
+
 if [ "$MODE" = "check" ]; then
   python3 -c 'import json,sys
-print(json.dumps({"local": sys.argv[1], "remote": sys.argv[2], "available": sys.argv[1] != sys.argv[2]}))' "$LOCAL" "$REMOTE"
+loc, rem = sys.argv[1], sys.argv[2]
+def key(v):
+    return [int(x) for x in v.split(".") if x.isdigit()]
+print(json.dumps({"local": loc, "remote": rem, "available": key(rem) > key(loc)}))' "$LOCAL" "$REMOTE"
   exit 0
 fi
 
-if [ "$REMOTE" = "$LOCAL" ]; then
-  log "already $LOCAL"
+if ! newer "$REMOTE" "$LOCAL"; then
+  log "already $LOCAL (channel $REMOTE)"
   echo "already $LOCAL"
   exit 0
 fi
 
 log "ReelOS $LOCAL → $REMOTE"
-curl -fL --max-time 120 "$TARBALL" -o "$WORK/src.tar.gz"
+curl -fL --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
 rm -rf "$WORK/src"
 mkdir -p "$WORK/src"
 tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
@@ -81,11 +86,10 @@ if [ "$GOT" != "$REMOTE" ]; then
   exit 1
 fi
 
-# Re-exec the updater from this tarball so tonight's script cannot run tomorrow's apply.
 NEW_UP="$WORK/src/daemon/reelos-update.sh"
 if [ -f "$NEW_UP" ] && [ "${REELOS_OTA_REEXEC:-}" != "1" ]; then
   if ! cmp -s "$NEW_UP" "$0" 2>/dev/null; then
-    log "re-exec updater from tarball"
+    log "re-exec updater from tarball (mailman first)"
     chmod 755 "$NEW_UP"
     export REELOS_OTA_REEXEC=1
     exec bash "$NEW_UP" apply
@@ -102,23 +106,20 @@ need() {
   [ -f "$WORK/src/$f" ] || { log "canary missing $f"; return 1; }
   grep -q "$pat" "$WORK/src/$f" || { log "canary fail $f ~ $pat"; return 1; }
 }
-need src/components/settings-view.tsx 'title="Terminal"'
 need src/components/home-view.tsx '/api/lookup'
-need src/components/home-view.tsx 'Watch in this browser'
-need src/lib/appliance.ts runTerminal
-need src/lib/catalog.ts rememberCatalogTitles
-need install/compose/docker-compose.yml rshared
+need src/components/title-view.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
+need src/components/advanced-view.tsx TerminalRow
 need install/compose/docker-compose.yml '0.0.0.0:8096'
+need install/compose/docker-compose.yml rshared
 need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
-need daemon/reelos-update.sh 'restore after failure'
-need daemon/reelos-update.sh 'stopping shell for mv'
+need scripts/reelos-lookup-plugin.mjs '/api/lookup'
+need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
-need src/components/title-view.tsx 'Play in Jellyfin'
-need src/components/title-view.tsx '/api/request'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
+need src/lib/catalog.ts rememberCatalogTitles
 log "canaries ok"
 
 NEXT="$ROOT.next"
@@ -144,7 +145,6 @@ if [ -d "$WORK/src/daemon" ]; then
   cp -a "$WORK/src/daemon/." "$NEXT/bin/"
 fi
 chmod 755 "$NEXT/bin/"* 2>/dev/null || true
-# Keep live secrets. Do not stamp VERSION yet.
 if [ -d "$ROOT/compose/configs" ]; then
   mkdir -p "$NEXT/compose"
   cp -a "$ROOT/compose/configs" "$NEXT/compose/configs"
@@ -158,12 +158,12 @@ if [ -f "$WORK/src/install/compose/Caddyfile" ]; then
   cp "$WORK/src/install/compose/Caddyfile" "$NEXT/compose/Caddyfile"
 fi
 
-# npm in the staged tree while the current shell keeps serving.
 SKIP_NPM=0
 if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
   if cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json"; then
     SKIP_NPM=1
     if [ -d "$ROOT/app/node_modules" ]; then
+      log "copying node_modules into staging (8080 still up)"
       cp -a "$ROOT/app/node_modules" "$NEXT/app/node_modules"
       log "package.json unchanged — reused node_modules"
     else
@@ -181,7 +181,6 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
   }
 fi
 
-# NEXT is fully ready. 8080 is still serving. Do not copy after stop.
 if [ -d "$ROOT.prev" ]; then
   log "dropping old backup (8080 still up)"
   rm -rf "$ROOT.prev"
@@ -201,6 +200,8 @@ restore() {
     [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
   fi
   systemctl daemon-reload 2>/dev/null || true
+  systemctl start reelos 2>/dev/null || true
+  sleep 2
   systemctl start reelos 2>/dev/null || true
 }
 
@@ -228,13 +229,18 @@ if [ -f "$ROOT/systemd/reelos.service" ]; then
 fi
 log "starting shell"
 systemctl enable --now reelos || true
+systemctl restart reelos || true
 
 probe() {
-  local i
+  local i code body
   for i in $(seq 1 45); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
-    log "probe $i $code"
-    [ "$code" = "200" ] && return 0
+    body=$(curl -sS --max-time 5 "http://127.0.0.1:8080/api/lookup?q=x" || true)
+    log "probe $i home=$code lookup=${body:0:40}"
+    if [ "$code" = "200" ] && echo "$body" | grep -q 'titles'; then
+      return 0
+    fi
+    systemctl start reelos 2>/dev/null || true
     sleep 1
   done
   return 1
@@ -259,17 +265,15 @@ load_env() {
 if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
   load_env
   (cd "$ROOT/compose" && docker compose up -d --remove-orphans) || log "compose up skipped"
-  (cd "$ROOT/compose" && docker compose up -d --force-recreate jellyfin decypharr) || true
+  (cd "$ROOT/compose" && docker compose --profile jellyfin --profile debrid up -d jellyfin decypharr) || true
 fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
-
 if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
   bash "$ROOT/bin/reelos-lid.sh" || log "lid ignore non-fatal"
-elif [ -x "$WORK/src/daemon/reelos-lid.sh" ]; then
-  bash "$WORK/src/daemon/reelos-lid.sh" || true
 fi
+
 echo "$REMOTE" >"$ROOT/VERSION"
 log "$NOTES"
 log "ReelOS $REMOTE applied."

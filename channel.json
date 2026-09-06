@@ -1,9 +1,9 @@
 {
-  "version": "1.2.14",
+  "version": "1.2.15",
   "channel": "stable",
   "notes": [
-    "OTA keeps 8080 up until the new tree is ready, then mv. Rollback is seconds.",
-    "Watch, Request, Jellyfin library, lid. Do not Apply the old 1.2.13 script."
+    "Reset build. Apply curls the updater from main first.",
+    "Home stays up until mv. Probe is :8080 and GET /api/lookup."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.14.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.15.tar.gz"
 }

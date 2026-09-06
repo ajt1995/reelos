@@ -70,9 +70,12 @@ function Runtime({ children }: { children: React.ReactNode }) {
       .then(async () => {
         try {
           const r = await fetch("/api/box", { cache: "no-store" });
-          const box = (await r.json()) as { provisioned?: boolean };
+          const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
           if (box.provisioned) {
             const s = useReelStore.getState();
+            if (box.answers && typeof box.answers === "object") {
+              s.patchAnswers(box.answers as Parameters<typeof s.patchAnswers>[0]);
+            }
             if (!s.provisioned || s.phase === "wizard") s.openReelOS();
           }
         } catch {
