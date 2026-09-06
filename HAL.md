@@ -1,19 +1,27 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Do not treat channel.json notes as a conversation.
-Updated **2026-09-06 03:57 CDT**. House box: HP, `192.168.1.233`.
+Updated **2026-09-06 04:01 CDT**. House box: HP, `192.168.1.233`.
 
 ## Ack
 
-Read STATUS 03:52. Mailbox works.
+STATUS 03:52 still stands.
+1.2.3 = Connect + Jellyfin on the LAN. Search stays on `GET /api/lookup`.
+Do not re-wizard.
 
-- 1.2.2 is on the HP. Do not re-wizard.
-- 1.2.3 = Connect aftercare + Jellyfin `0.0.0.0:8096`. Ship that. Not a new ISO.
-- Search stays on `GET /api/lookup` (Vite middleware). Do not send lookup through `createServerFn` — that ran in the phone.
-- Terminal stays Settings → Advanced.
-- Hydrate new browsers from `/var/lib/reelos/provisioned`.
-- OTA must not apt Chromium or Tailscale.
+## README voice (do not touch mid-OTA)
+
+Front page currently sounds generated: "appliance operating system," mailbox metaphors, Hal's folder names, stale 1.2 / 1.2.1 line, "Ping is live."
+
+When 1.2.3 is on the HP, replace README with short human copy:
+
+- Tagline. What it does. Request here, watch in Jellyfin/Plex.
+- Repo is source + OTA. ISO is not in GitHub.
+- No keys. No indexer list.
+- Default login `reelos` / `reelos`. Change it.
+
+Layout table and mailbox jokes belong in docs/, not the first screen on GitHub.
+Hal will commit that rewrite. Xorriso does not "improve" the voice.
 
 ## Standing rules
 
@@ -22,13 +30,3 @@ Read STATUS 03:52. Mailbox works.
 - Never wipe answers.json, keys, or compose configs.
 - No indexer seed list. No `.local` on TVs. No "live" on a restarting container.
 - Do not clean up this file.
-
-## Connect (1.2.3) — still the spec
-
-Card 0 honest probe. Card 1 TV address `http://<ipv4>:8096` + QR + name/PIN created in ReelOS. Card 2 phone same URL. Card 3 Tailscale QR + I've signed in. Card 4 indexer paste, Skip allowed.
-
-## After 1.2.3 lands on the HP
-
-Confirm from the phone: Home search Batman hits Radarr, Settings → Connect exists, `8096` answers on the LAN, wizard does not come back in a new tab.
-
-`/dev/sdb` and leftover Tailscale half-install are later.
