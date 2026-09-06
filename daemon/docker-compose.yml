@@ -14,7 +14,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
     ports:
-      - "127.0.0.1:8096:8096"
+      - "0.0.0.0:8096:8096"
     environment:
       TZ: ${TZ:-UTC}
 
@@ -60,6 +60,7 @@ services:
       - ./configs/radarr:/config
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
+      - /mnt/symlinks:/symlinks
     ports:
       - "127.0.0.1:7878:7878"
 
@@ -75,6 +76,7 @@ services:
       - ./configs/sonarr:/config
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
+      - /mnt/symlinks:/symlinks
     ports:
       - "127.0.0.1:8989:8989"
 
@@ -90,6 +92,7 @@ services:
       - ./configs/lidarr:/config
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
+      - /mnt/symlinks:/symlinks
     ports:
       - "127.0.0.1:8686:8686"
 

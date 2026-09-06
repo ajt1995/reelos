@@ -60,19 +60,47 @@ n=max(len(a),len(b)); a+=[0]*(n-len(a)); b+=[0]*(n-len(b))
 sys.exit(0 if a>b else 1)' "$1" "$2"
 }
 
+github_sha() {
+  python3 - <<'PY'
+import json, urllib.request
+try:
+    req = urllib.request.Request(
+        "https://api.github.com/repos/ajt1995/reelos/commits/main",
+        headers={"User-Agent": "ReelOS-update", "Accept": "application/vnd.github+json"},
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        print(json.load(r).get("sha") or "")
+except Exception:
+    print("")
+PY
+}
+
+HEAD_SHA=$(github_sha)
+APPLIED_SHA=$(cat "$STATE/applied-sha" 2>/dev/null || true)
+
 if [ "$MODE" = "check" ]; then
   python3 -c 'import json,sys
-loc, rem = sys.argv[1], sys.argv[2]
+loc, rem, head, applied = sys.argv[1:5]
 def key(v):
     return [int(x) for x in v.split(".") if x.isdigit()]
-print(json.dumps({"local": loc, "remote": rem, "available": key(rem) > key(loc)}))' "$LOCAL" "$REMOTE"
+same_tree = bool(head) and head == applied
+print(json.dumps({
+  "local": loc,
+  "remote": rem,
+  "available": key(rem) > key(loc) or (bool(head) and not same_tree),
+  "sha": head[:12],
+}))' "$LOCAL" "$REMOTE" "$HEAD_SHA" "$APPLIED_SHA"
   exit 0
 fi
 
 if ! newer "$REMOTE" "$LOCAL"; then
-  log "already $LOCAL (channel $REMOTE)"
-  echo "already $LOCAL"
-  exit 0
+  if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$APPLIED_SHA" ]; then
+    log "same $LOCAL, new main ${HEAD_SHA:0:12}"
+  else
+    log "already $LOCAL (channel $REMOTE)"
+    echo "already $LOCAL"
+    exit 0
+  fi
 fi
 
 log "ReelOS $LOCAL → $REMOTE"
@@ -119,7 +147,9 @@ need scripts/reelos-lookup-plugin.mjs '/api/lookup'
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
-need src/lib/catalog.ts rememberCatalogTitles
+need src/components/library-view.tsx '/api/library'
+need scripts/reelos-lookup-plugin.mjs '/api/library'
+need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 log "canaries ok"
 
 NEXT="$ROOT.next"
@@ -275,6 +305,9 @@ if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
 fi
 
 echo "$REMOTE" >"$ROOT/VERSION"
+if [ -n "${HEAD_SHA:-}" ]; then
+  echo "$HEAD_SHA" >"$STATE/applied-sha"
+fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
 echo "ReelOS $REMOTE applied."

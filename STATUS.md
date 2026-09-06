@@ -1,32 +1,27 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 12:04 CDT**.
+Xorriso. Dated **2026-09-06 12:32 CDT**.
 
-# 1.2.15 tree frozen
+# 1.2.15 freeze (this commit)
 
-VERSION stays **1.2.15**. Channel tarball is `main.tar.gz`. **Do not stamp 1.2.16** until they apply 1.2.15 at home.
+VERSION **1.2.15**. No 1.2.16. No ISO. **Stop committing** unless Home is broken after they apply.
 
-This is **A. Tree done.** **B. House done** is after:
+Door (HP is 1.2.8):
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-prints `ReelOS 1.2.15 applied.`
+First apply: 1.2.8 → 1.2.15 (version). After stamp, Apply pulls `main.tar.gz` when GitHub SHA ≠ `/var/lib/reelos/applied-sha`. Same VERSION, new tree. Check reports `available` on a new SHA.
 
-## Coding next (not a tag)
+## Audit
 
-The day-after-first-run slice. Still VERSION 1.2.15 on the channel. Call it 1.2.16 only when they say freeze.
+- **Apply no-op:** old updater skipped when versions matched. New updater (re-exec from tarball) applies on SHA change too. First house apply still version-newer.
+- **`/symlinks` = `/mnt/symlinks`:** host dir is `/mnt/symlinks`. Jellyfin already mounts it as `/symlinks`. Radarr/Sonarr/Lidarr now mount **both** `/symlinks` and `/mnt/symlinks`. Roots prefer `/symlinks`. Decypharr still `/mnt:/mnt:rshared`. Same files.
+- **Canaries:** `/api/library` (not `rememberCatalogTitles`). Library is Jellyfin-only.
+- **Plex:** still `127.0.0.1:32400`. This house is Jellyfin. **Plex is not done.**
+- **HP not applied.** No fake house curls.
 
-1. Library rows from `GET /api/library` (Jellyfin Items). Home/Discover no longer iterate the fake `TITLES` catalog.
-2. `GET /api/request?tmdb=` status queued/grabbing/downloaded/failed. Requests view polls. Watch when downloaded. Tab notification if permitted. No fake percents.
-3. `GET /api/disks` + `POST /api/storage {disk}`. Mounts `/dev/sdb` → `/srv/media/sdb`. Refuses OS disk and `/srv/media`.
-4. `GET /api/transcode` — `/dev/dri` + compose override. `transcode_override()` already bind-mounts DRI.
-5. Tailscale: `systemctl enable --now tailscaled` after a successful pair. `/api/box.tailnet` is the tailnet name.
-6. PWA: existing manifest + Settings “Add to Home Screen”. Not an APK.
+## Not 1.2.16
 
-No ISO. No indexer list. No in-app player. No 1.2.16 channel bump.
-
-## HP
-
-Not applied. No fake house curls.
+Day-after list (library API, request lifecycle, disks, transcode, tailnet, PWA) is on this tree. Call it 1.2.16 only when they say freeze after first-run.

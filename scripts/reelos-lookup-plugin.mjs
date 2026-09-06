@@ -566,7 +566,11 @@ async function arrPost(url, key, body) {
 async function firstRoot(base, key, prefer) {
   const roots = await arrGet(`${base}/rootfolder`, key);
   const list = Array.isArray(roots) ? roots : [];
-  const hit = list.find((r) => r.path === prefer) || list[0];
+  const hit =
+    list.find((r) => r.path === prefer) ||
+    list.find((r) => r.path === "/mnt/symlinks") ||
+    list.find((r) => r.path === "/symlinks") ||
+    list[0];
   return hit?.path || prefer;
 }
 
@@ -689,7 +693,7 @@ async function handleRequest(req, res) {
         send(res, 404, { ok: false, error: "Radarr did not find that TMDB id" });
         return;
       }
-      const root = await firstRoot("http://127.0.0.1:7878/api/v3", rk, "/mnt/symlinks");
+      const root = await firstRoot("http://127.0.0.1:7878/api/v3", rk, "/symlinks");
       const profileId = await namedProfile("http://127.0.0.1:7878/api/v3", rk);
       const added = await arrPost("http://127.0.0.1:7878/api/v3/movie", rk, {
         ...movie,
@@ -718,7 +722,7 @@ async function handleRequest(req, res) {
         send(res, 404, { ok: false, error: "Sonarr did not find that TVDB id" });
         return;
       }
-      const root = await firstRoot("http://127.0.0.1:8989/api/v3", sk, "/mnt/symlinks");
+      const root = await firstRoot("http://127.0.0.1:8989/api/v3", sk, "/symlinks");
       const profileId = await namedProfile("http://127.0.0.1:8989/api/v3", sk);
       const added = await arrPost("http://127.0.0.1:8989/api/v3/series", sk, {
         ...series,
