@@ -260,10 +260,20 @@ export const lookupMedia = createServerFn({ method: "POST" })
   .validator((data: { q: string }) => data)
   .handler(async ({ data }) => {
     type Hit = Title;
-    const q = data.q.trim();
-    if (q.length < 2) return { titles: [] as Hit[] };
+    const q = String(data?.q ?? "").trim();
     const titles: Hit[] = [];
+    const note = (msg: string) => {
+      try {
+        const fs = require("node:fs") as typeof import("node:fs");
+        fs.appendFileSync("/var/lib/reelos/lookup.log", `${new Date().toISOString()} ${msg}\n`);
+      } catch {
+        /* */
+      }
+    };
+    if (q.length < 2) return { titles, error: null as string | null };
+    let error: string | null = null;
     const rk = radarrKey();
+    note(`q=${q} radarrKey=${rk ? "yes" : "NO"}`);
     if (rk) {
       try {
         const hits = (await api(
@@ -271,8 +281,8 @@ export const lookupMedia = createServerFn({ method: "POST" })
           rk,
           "GET",
         )) as Array<Record<string, unknown>>;
-        for (const h of (hits || []).slice(0, 6)) {
-          const tmdb = h.tmdbId;
+        for (const h of (hits || []).slice(0, 8)) {
+          const tmdb = h.tmdbId ?? (h as { ids?: { tmdb?: number } }).ids?.tmdb;
           if (!tmdb) continue;
           const genres = Array.isArray(h.genres)
             ? (h.genres as Array<string | { name?: string }>).map((g) => (typeof g === "string" ? g : g.name || "")).filter(Boolean)
@@ -290,9 +300,13 @@ export const lookupMedia = createServerFn({ method: "POST" })
             popularity: 50,
           });
         }
-      } catch {
-        /* radarr down */
+        note(`radarr hits=${(hits || []).length} mapped=${titles.length}`);
+      } catch (e) {
+        error = `radarr ${String(e)}`;
+        note(error);
       }
+    } else {
+      error = "radarr has no API key yet";
     }
     const sk = sonarrKey();
     if (sk) {
@@ -319,12 +333,13 @@ export const lookupMedia = createServerFn({ method: "POST" })
             seasons: Array.isArray(h.seasons) ? (h.seasons as unknown[]).length : undefined,
           } as Hit);
         }
-      } catch {
-        /* sonarr down */
+      } catch (e) {
+        error = error || `sonarr ${String(e)}`;
+        note(`sonarr ${String(e)}`);
       }
     }
     rememberCatalogTitles(titles);
-    return { titles };
+    return { titles, error };
   });
 
 export const runDoctor = createServerFn({ method: "GET" }).handler(async () => {

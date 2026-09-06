@@ -459,7 +459,8 @@ export const TITLE_BY_ID: Record<string, Title> = Object.fromEntries(
 const extra: Record<string, Title> = {};
 
 /** Engine lookup (TMDB via Radarr/Sonarr) lives here so title pages resolve after search. */
-export function rememberCatalogTitles(list: Title[]) {
+export function rememberCatalogTitles(list: Title[] | null | undefined) {
+  if (!list || !list.length) return;
   for (const t of list) extra[t.id] = t;
 }
 

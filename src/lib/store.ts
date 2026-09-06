@@ -715,11 +715,14 @@ export const useReelStore = create<ReelState>()(
         activity: s.activity,
         users: s.users,
         settings: s.settings,
-        update: s.update,
         adapter: s.adapter,
         indexers: s.indexers,
         remoteTitles: s.remoteTitles,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        state.update = idleUpdate();
+      },
     },
   ),
 );

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const [lookupErr, setLookupErr] = useState<string | null>(null);
   const rememberTitles = useReelStore((s) =>
     "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
   );
@@ -42,6 +43,7 @@ export function HomeView() {
     const term = q.trim();
     if (term.length < 2) {
       setRemoteHits([]);
+      setLookupErr(null);
       return;
     }
     let cancelled = false;
@@ -49,12 +51,18 @@ export function HomeView() {
       void lookupMedia({ data: { q: term } })
         .then((r) => {
           if (cancelled) return;
-          rememberCatalogTitles(r.titles);
-          rememberTitles?.(r.titles);
-          setRemoteHits(r.titles);
+          const bag = r as { titles?: Title[]; error?: string | null };
+          const titles = Array.isArray(bag?.titles) ? bag.titles : Array.isArray(r) ? (r as Title[]) : [];
+          rememberCatalogTitles(titles);
+          rememberTitles?.(titles);
+          setRemoteHits(titles);
+          setLookupErr(bag?.error || (titles.length ? null : "Engine returned no titles"));
         })
-        .catch(() => {
-          if (!cancelled) setRemoteHits([]);
+        .catch((e) => {
+          if (!cancelled) {
+            setRemoteHits([]);
+            setLookupErr(String(e));
+          }
         });
     }, 280);
     return () => {
@@ -125,7 +133,7 @@ export function HomeView() {
           </ul>
         ) : q.trim().length >= 2 ? (
           <p className="mt-2 text-xs text-muted">
-            Looking up through the movie engine. If this stays empty, Radarr is still starting.
+            {lookupErr ?? "Looking up through the movie engine…"}
           </p>
         ) : null}
       </form>
