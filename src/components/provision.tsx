@@ -1,8 +1,6 @@
-import { Check, ChevronDown, Copy, LoaderCircle } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, LoaderCircle } from "lucide-react";
 import { Wordmark } from "@/components/logo";
-import { Button } from "@/components/ui/button";
-import { HOSTNAME, LAN_IP } from "@/lib/catalog";
+import { ConnectView } from "@/components/connect-view";
 import { useReelStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -97,48 +95,5 @@ function StatusDot({ status }: { status: string }) {
 }
 
 function Ready() {
-  const [copied, setCopied] = useState(false);
-  const access = useReelStore((s) => s.answers.access);
-  const url = `http://${HOSTNAME}`;
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      /* ignore */
-    }
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  };
-
-  return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/3 size-[28rem] -translate-x-1/2 rounded-full bg-gold/12 blur-[100px]"
-      />
-      <Wordmark markClassName="size-16" className="flex-col gap-4" />
-      <h1 className="mt-10 font-display text-3xl font-semibold tracking-tight">ReelOS is ready</h1>
-      <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-        One front door. Search and request here. Watch in Jellyfin or Plex.
-      </p>
-      <div className="mt-8 flex flex-col items-center gap-2 rounded-2xl bg-card px-8 py-5 shadow-[var(--shadow-border)]">
-        <p className="font-display text-lg tracking-wide text-gold">{HOSTNAME}</p>
-        <p className="font-mono text-xs text-muted">{LAN_IP}</p>
-      </div>
-      <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-        <Button variant="ghost" onClick={() => void copy()}>
-          <Copy className="size-4" />
-          {copied ? "Copied" : "Copy setup URL"}
-        </Button>
-        <Button size="lg" onClick={() => useReelStore.getState().openReelOS()}>
-          Open ReelOS
-        </Button>
-      </div>
-      {access === "tailscale" ? (
-        <p className="mt-6 max-w-sm text-xs text-muted">
-          Tailscale is waiting for an auth click. Finish that on any device signed into your tailnet.
-        </p>
-      ) : null}
-    </div>
-  );
+  return <ConnectView />;
 }

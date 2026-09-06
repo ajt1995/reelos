@@ -52,17 +52,18 @@ export interface Settings {
   notifyFailed: boolean;
   autoUpdate: boolean;
   stackImages: boolean;
+  connectDone: boolean;
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.2";
-export const SHIPPED_VERSION = "1.2.2";
+export const LATEST_VERSION = "1.2.3";
+export const SHIPPED_VERSION = "1.2.3";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "OTA keeps the phone up. VERSION stamps after the shell answers.",
-  "Compose uses your profiles. Wiring does not die on extra disks.",
-  "Settings terminal. Search through Radarr. Debrid path has no torrent client.",
+  "Connect: TV address is http://<ip>:8096. Jellyfin is on the LAN.",
+  "Search talks to Radarr on the box. OTA will not install Chromium.",
+  "New browser hydrates from the box. Do not re-run the wizard.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);
@@ -321,8 +322,7 @@ function labState(): Pick<
       notifyFailed: true,
       autoUpdate: true,
       stackImages: false,
-    },
-    update: idleUpdate(),
+      connectDone: true,
     adapter: {
       ...makeAdapter(demoAnswers),
       cacheHits: 3,
@@ -355,6 +355,7 @@ const initial = {
     notifyFailed: true,
     autoUpdate: true,
     stackImages: false,
+    connectDone: false,
   } as Settings,
   update: idleUpdate(),
   adapter: makeAdapter(defaultAnswers),

@@ -40,7 +40,7 @@ export function SettingsView() {
   const removeUser = useReelStore((s) => s.removeUser);
   const adapter = useReelStore((s) => s.adapter);
   const [name, setName] = useState("");
-  const [panel, setPanel] = useState<string | null>("terminal");
+  const [panel, setPanel] = useState<string | null>(null);
   const profile = adapterProfile(answers.source, answers.frontend);
 
   return (
@@ -51,10 +51,16 @@ export function SettingsView() {
       </p>
 
       <div className="mt-8 grid gap-3">
-        <TerminalRow
-          open={panel === "terminal"}
-          onClick={() => setPanel(panel === "terminal" ? null : "terminal")}
-        />
+        <Link
+          to="/connect"
+          className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
+        >
+          <div>
+            <p className="font-display font-medium">Connect</p>
+            <p className="mt-1 text-sm text-muted">TV, phone, away from home, indexers.</p>
+          </div>
+          <ChevronRight className="size-4 text-faint" />
+        </Link>
         <Row
           icon={HardDrive}
           title="Library"
@@ -380,7 +386,7 @@ function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   );
 }
 
-function TerminalRow({ open, onClick }: { open: boolean; onClick: () => void }) {
+export function TerminalRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const [cmd, setCmd] = useState("");
   const [out, setOut] = useState("");
   const [running, setRunning] = useState(false);

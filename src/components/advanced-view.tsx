@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import {
   Clapperboard,
   Download,
@@ -11,6 +12,7 @@ import {
 import { adapterProfile } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
+import { TerminalRow } from "@/components/settings-view";
 
 const ENGINES = [
   { id: "indexers", label: "Indexers", blurb: "Empty on purpose. You add your own.", icon: ListFilter },
@@ -25,6 +27,7 @@ export function AdvancedView() {
   const hide = useReelStore((s) => s.settings.hideAdvanced);
   const intent = useReelStore((s) => s.answers.intent);
   const answers = useReelStore((s) => s.answers);
+  const [term, setTerm] = useState(false);
   const profile = adapterProfile(answers.source, answers.frontend);
   const tiles = ENGINES.filter((e) => {
     if (e.id === "movies" && !intent.movies) return false;
@@ -60,6 +63,9 @@ export function AdvancedView() {
             </span>
           </Link>
         ))}
+      </div>
+      <div className="mt-8">
+        <TerminalRow open={term} onClick={() => setTerm((v) => !v)} />
       </div>
       <div className="mt-8">
         <Button

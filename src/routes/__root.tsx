@@ -66,7 +66,20 @@ function RootDocument() {
 function Runtime({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const finish = () => useReelStore.getState().setHydrated();
-    void Promise.resolve(useReelStore.persist.rehydrate()).then(finish, finish);
+    void Promise.resolve(useReelStore.persist.rehydrate())
+      .then(async () => {
+        try {
+          const r = await fetch("/api/box", { cache: "no-store" });
+          const box = (await r.json()) as { provisioned?: boolean };
+          if (box.provisioned) {
+            const s = useReelStore.getState();
+            if (!s.provisioned || s.phase === "wizard") s.openReelOS();
+          }
+        } catch {
+          /* preview / no box */
+        }
+      })
+      .then(finish, finish);
   }, []);
 
   useEffect(() => {

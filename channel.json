@@ -1,10 +1,9 @@
 {
-  "version": "1.2.2",
+  "version": "1.2.3",
   "channel": "stable",
   "notes": [
-    "OTA keeps the phone up. VERSION is stamped after the shell answers.",
-    "Compose uses your profiles so Jellyfin and Decypharr actually recreate.",
-    "Wiring skips dead extra disks. Settings terminal. Search through Radarr."
+    "Connect: TV uses http://<ip>:8096. Jellyfin is on the LAN.",
+    "Search is /api/lookup on the box. OTA will not apt-get Chromium."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.2.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.3.tar.gz"
 }

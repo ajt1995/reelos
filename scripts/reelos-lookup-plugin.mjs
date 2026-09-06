@@ -1,4 +1,5 @@
 import { readFileSync, existsSync, appendFileSync } from "node:fs";
+import os from "node:os";
 
 function xmlKey(file) {
   if (!existsSync(file)) return null;
@@ -11,6 +12,37 @@ function note(msg) {
     appendFileSync("/var/lib/reelos/lookup.log", `${new Date().toISOString()} ${msg}\n`);
   } catch {
     /* */
+  }
+}
+
+function ipv4() {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list || []) {
+      if (!a || a.internal) continue;
+      if (a.family === "IPv4" || a.family === 4) return a.address;
+    }
+  }
+  return "";
+}
+
+function answers() {
+  try {
+    return JSON.parse(readFileSync("/var/lib/reelos/answers.json", "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function probe(url, ms = 2500) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
+  try {
+    const res = await fetch(url, { signal: ac.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
   }
 }
 
@@ -64,54 +96,147 @@ async function pull(url, key) {
   }
 }
 
+function send(res, code, body) {
+  res.statusCode = code;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.end(JSON.stringify(body));
+}
+
+async function readBody(req) {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+async function handleLookup(req, res) {
+  const raw = req.url ?? "";
+  const q = new URL(raw, "http://reelos.local").searchParams.get("q")?.trim() || "";
+  const titles = [];
+  let error = null;
+  try {
+    const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
+    const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+    note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
+    if (q.length >= 2 && rk) {
+      const hits = await pull(
+        `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`,
+        rk,
+      );
+      for (const h of (hits || []).slice(0, 8)) {
+        const t = movieHit(h);
+        if (t) titles.push(t);
+      }
+      note(`radarr hits=${(hits || []).length} mapped=${titles.length}`);
+    }
+    if (q.length >= 2 && sk) {
+      const hits = await pull(
+        `http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`,
+        sk,
+      );
+      for (const h of (hits || []).slice(0, 6)) {
+        const t = seriesHit(h);
+        if (t) titles.push(t);
+      }
+    }
+  } catch (e) {
+    error = String(e?.name === "AbortError" || String(e).includes("abort") ? "Radarr timed out (45s)" : e);
+    note(`err ${error}`);
+  }
+  send(res, 200, { titles, error });
+}
+
+async function handleBox(_req, res) {
+  const a = answers();
+  const ip = ipv4();
+  const jfOk = await probe("http://127.0.0.1:8096/System/Info/Public");
+  let tailscaleAuth = null;
+  try {
+    if (existsSync("/var/lib/reelos/tailscale-auth.url")) {
+      tailscaleAuth = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim() || null;
+    }
+  } catch {
+    /* */
+  }
+  send(res, 200, {
+    provisioned: existsSync("/var/lib/reelos/provisioned"),
+    ipv4: ip,
+    watch: ip ? `http://${ip}:8096` : "",
+    jellyfin: jfOk
+      ? { state: "green", detail: "Jellyfin is up" }
+      : { state: "red", detail: "Can't start" },
+    frontend: a.frontend || "jellyfin",
+    access: a.access || "lan",
+    adminName: a.adminName || "reelos",
+    adminPassword: a.adminPassword || "reelos",
+    tailscaleAuth,
+  });
+}
+
+async function handleIndexer(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false, error: "POST only" });
+    return;
+  }
+  const body = await readBody(req);
+  const name = String(body.name || "Indexer").trim();
+  const url = String(body.url || "").trim();
+  const key = String(body.key || "").trim();
+  if (!url || !key) {
+    send(res, 400, { ok: false, error: "Need URL and API key" });
+    return;
+  }
+  const prow = xmlKey("/opt/reelos/compose/configs/prowlarr/config.xml");
+  if (!prow) {
+    send(res, 503, { ok: false, error: "Indexers engine not ready" });
+    return;
+  }
+  try {
+    const r = await fetch("http://127.0.0.1:9696/api/v1/indexer", {
+      method: "POST",
+      headers: { "X-Api-Key": prow, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        enable: true,
+        appProfileId: 1,
+        protocol: "torrent",
+        implementation: "Torznab",
+        implementationName: "Torznab",
+        configContract: "TorznabSettings",
+        fields: [
+          { name: "baseUrl", value: url },
+          { name: "apiPath", value: "/api" },
+          { name: "apiKey", value: key },
+        ],
+      }),
+    });
+    if (!r.ok) throw new Error(`prowlarr ${r.status}`);
+    send(res, 200, { ok: true });
+  } catch (e) {
+    send(res, 500, { ok: false, error: String(e) });
+  }
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
-        const raw = req.url ?? "";
-        const pathOnly = raw.split("?", 1)[0] ?? "";
-        if (pathOnly !== "/api/lookup") {
-          next();
+        const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
+        try {
+          if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
+          if (pathOnly === "/api/box") return void (await handleBox(req, res));
+          if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
+        } catch (e) {
+          send(res, 500, { error: String(e) });
           return;
         }
-        const q = new URL(raw, "http://reelos.local").searchParams.get("q")?.trim() || "";
-        const titles = [];
-        let error = null;
-        try {
-          const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
-          const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
-          note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
-          if (q.length >= 2 && rk) {
-            const hits = await pull(
-              `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`,
-              rk,
-            );
-            for (const h of (hits || []).slice(0, 8)) {
-              const t = movieHit(h);
-              if (t) titles.push(t);
-            }
-            note(`radarr hits=${(hits || []).length} mapped=${titles.length}`);
-          }
-          if (q.length >= 2 && sk) {
-            const hits = await pull(
-              `http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`,
-              sk,
-            );
-            for (const h of (hits || []).slice(0, 6)) {
-              const t = seriesHit(h);
-              if (t) titles.push(t);
-            }
-          }
-        } catch (e) {
-          error = String(e?.name === "AbortError" || String(e).includes("abort") ? "Radarr timed out (45s)" : e);
-          note(`err ${error}`);
-        }
-        res.statusCode = 200;
-        res.setHeader("content-type", "application/json; charset=utf-8");
-        res.setHeader("cache-control", "no-store");
-        res.end(JSON.stringify({ titles, error }));
+        next();
       });
     },
   };

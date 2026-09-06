@@ -99,10 +99,12 @@ need() {
   grep -q "$pat" "$WORK/src/$f" || { log "canary fail $f ~ $pat"; return 1; }
 }
 need src/components/settings-view.tsx 'title="Terminal"'
-need src/components/home-view.tsx lookupMedia
+need src/components/home-view.tsx '/api/lookup'
 need src/lib/appliance.ts runTerminal
 need src/lib/catalog.ts rememberCatalogTitles
 need install/compose/docker-compose.yml rshared
+need src/components/connect-view.tsx 'Watch on the TV'
+need install/compose/docker-compose.yml '0.0.0.0:8096'
 need daemon/wire-engines.py use_webdav
 log "canaries ok"
 
@@ -233,7 +235,7 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   (cd "$ROOT/compose" && docker compose up -d --force-recreate jellyfin decypharr) || true
 fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
-  python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
+  REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
 
 # Stamp VERSION only after the shell answered.

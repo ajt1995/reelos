@@ -427,6 +427,8 @@ def wire_bazarr(radarr_key: str | None, sonarr_key: str | None) -> None:
 
 
 def extra_access() -> None:
+    if os.environ.get("REELOS_OTA") == "1":
+        return
     script = ROOT / "bin" / "reelos-access.sh"
     if script.exists():
         subprocess.run(["bash", str(script)], check=False)
@@ -495,7 +497,7 @@ def main() -> int:
     if lock.exists() and source() != "local-vpn":
         subprocess.run([sys.executable, str(lock)], check=False)
     kiosk = ROOT / "bin" / "kiosk.sh"
-    if kiosk.exists() and Path("/dev/dri").exists():
+    if os.environ.get("REELOS_OTA") != "1" and kiosk.exists() and Path("/dev/dri").exists():
         subprocess.run(["bash", str(kiosk)], check=False)
     return 0
 
