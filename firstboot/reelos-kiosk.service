@@ -1,0 +1,16 @@
+[Unit]
+Description=ReelOS kiosk (optional)
+After=reelos.service
+Wants=reelos.service
+ConditionPathExists=/usr/bin/chromium
+
+[Service]
+Type=simple
+ExecStart=/opt/reelos/bin/kiosk.sh
+Restart=on-failure
+RestartSec=5
+User=reelos
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+[Install]
+WantedBy=graphical.target

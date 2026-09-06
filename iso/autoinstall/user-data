@@ -1,0 +1,52 @@
+#cloud-config
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  refresh-installer:
+    update: false
+  apt:
+    fallback: offline-install
+  identity:
+    hostname: reelos
+    username: reelos
+    password: '$6$dTG7jXc7/PdyOZp5$/GLYde1iiJMYlB3fINRjsdrWLOS4YwEspcvTZK/7XhrpS3dQnhBH.8Cs5nb8VbCorWc3aE/kSxDIidPtJsP.M.'
+  ssh:
+    allow-pw: true
+    install-server: false
+  storage:
+    layout:
+      name: direct
+  network:
+    version: 2
+    ethernets:
+      all-en:
+        match:
+          name: en*
+        dhcp4: true
+      all-eth:
+        match:
+          name: eth*
+        dhcp4: true
+  early-commands:
+    - /bin/bash /cdrom/nocloud/live-wifi.sh || true
+  late-commands:
+    - mkdir -p /target/opt/reelos /target/var/lib/reelos /target/etc/systemd/system /target/opt/reelos/bin
+    - cp -a /cdrom/nocloud/. /target/opt/reelos/seed/ || true
+    - rm -f /target/etc/resolv.conf
+    - printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /target/etc/resolv.conf
+    - curtin in-target -- tar -C /opt/reelos --strip-components=1 -xzf /opt/reelos/seed/reelos-bundle.tar.gz
+    - dpkg --root=/target -i /cdrom/pool/main/libn/libnl3/libnl-3-200_*.deb /cdrom/pool/main/libn/libnl3/libnl-genl-3-200_*.deb /cdrom/pool/main/w/wpa/wpasupplicant_*.deb || true
+    - cp /target/opt/reelos/systemd/reelos.service /target/etc/systemd/system/reelos.service || true
+    - cp /target/opt/reelos/systemd/reelos-firstboot.service /target/etc/systemd/system/reelos-firstboot.service || true
+    - cp /target/opt/reelos/systemd/reelos-console.service /target/etc/systemd/system/reelos-console.service || true
+    - cp /target/opt/reelos/systemd/reelos-lock-clients.service /target/etc/systemd/system/reelos-lock-clients.service || true
+    - cp /target/opt/reelos/systemd/reelos-lock-clients.timer /target/etc/systemd/system/reelos-lock-clients.timer || true
+    - curtin in-target -- chmod 755 /opt/reelos/bin/console-card.sh /opt/reelos/bin/live-wifi.sh /opt/reelos/bin/reelos-update.sh || true
+    - curtin in-target -- systemctl enable reelos-firstboot.service
+    - curtin in-target -- systemctl enable reelos-console.service
+    - curtin in-target -- systemctl enable reelos-lock-clients.timer
+    - curtin in-target -- systemctl disable getty@tty1.service
+    - curtin in-target -- bash -c "bash /opt/reelos/install.sh || echo failed > /var/lib/reelos/install-failed"
+  shutdown: reboot

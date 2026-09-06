@@ -1,0 +1,8 @@
+[Unit]
+Description=ReelOS lock *arrs to the debrid adapter
+After=docker.service
+ConditionPathExists=/opt/reelos/bin/lock-download-clients.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /opt/reelos/bin/lock-download-clients.py
