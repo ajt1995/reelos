@@ -321,52 +321,103 @@ def jellyfin_token() -> str | None:
         return None
 
 
+def log_wire(msg: str) -> None:
+    line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n"
+    try:
+        (STATE / "wire.log").open("a").write(line)
+    except OSError:
+        pass
+
+
 def bootstrap_jellyfin() -> None:
     deadline = time.time() + 90
+    info = None
     while time.time() < deadline:
         try:
-            urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3)
+            with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3) as resp:
+                info = json.loads(resp.read().decode())
             break
-        except (urllib.error.URLError, TimeoutError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
             time.sleep(2)
-    else:
+    if not info:
+        log_wire("jellyfin not up")
         return
     a = answers()
     user = a.get("adminName") or "reelos"
     password = a.get("adminPassword") or "reelos"
-    try:
-        call(
-            "http://127.0.0.1:8096/Startup/User",
-            method="POST",
-            body={"Name": user, "Password": password},
-        )
-        call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
-        pass
+    for path in ("/mnt/symlinks", "/srv/media/movies", "/srv/media/tv"):
+        Path(path).mkdir(parents=True, exist_ok=True)
+    if not info.get("StartupWizardCompleted"):
+        try:
+            call(
+                "http://127.0.0.1:8096/Startup/Configuration",
+                method="POST",
+                body={
+                    "UICulture": "en-US",
+                    "MetadataCountryCode": "US",
+                    "PreferredMetadataLanguage": "en",
+                },
+            )
+            call(
+                "http://127.0.0.1:8096/Startup/RemoteAccess",
+                method="POST",
+                body={"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
+            )
+            call(
+                "http://127.0.0.1:8096/Startup/User",
+                method="POST",
+                body={"Name": user, "Password": password},
+            )
+            call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
+            log_wire("jellyfin startup complete")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"jellyfin startup {e}")
     token = jellyfin_token()
     if not token:
+        log_wire("jellyfin auth failed")
         return
     intent = a.get("intent") or {}
     libs = []
     if intent.get("movies", True):
-        libs.append(("Movies", "movies", ["/media/movies", "/symlinks"]))
+        libs.append(("Movies", "movies", ["/symlinks"]))
     if intent.get("tv") or intent.get("anime"):
-        libs.append(("Shows", "tvshows", ["/media/tv", "/symlinks"]))
+        libs.append(("Shows", "tvshows", ["/symlinks"]))
     if intent.get("music"):
-        libs.append(("Music", "music", ["/media/music"]))
-    if intent.get("kids"):
-        libs.append(("Kids", "movies", ["/media/movies"]))
+        libs.append(("Music", "music", ["/symlinks"]))
+    existing = []
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers={"X-Emby-Token": token}) or []
+        existing = [str(x.get("Name") or "") for x in folders]
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        existing = []
     for name, ctype, paths in libs:
+        if name in existing:
+            continue
         q = urllib.parse.urlencode({"name": name, "collectionType": ctype, "refreshLibrary": "true"})
         try:
             call(
                 f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
                 method="POST",
-                body={"LibraryOptions": {"PathInfos": [{"Path": p} for p in paths]}},
+                body={
+                    "LibraryOptions": {
+                        "EnableRealtimeMonitor": True,
+                        "PathInfos": [{"Path": p} for p in paths],
+                    }
+                },
                 headers={"X-Emby-Token": token},
             )
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
-            pass
+            log_wire(f"jellyfin library {name}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"jellyfin library {name} {e}")
+    try:
+        call(
+            "http://127.0.0.1:8096/Library/Refresh",
+            method="POST",
+            headers={"X-Emby-Token": token},
+        )
+        log_wire("jellyfin refresh")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"jellyfin refresh {e}")
 
 
 def bazarr_key() -> str | None:

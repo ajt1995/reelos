@@ -107,7 +107,7 @@ need install/compose/docker-compose.yml rshared
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
-need daemon/wire-engines.py use_webdav
+need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
 need src/components/title-view.tsx '/api/request'

@@ -1,9 +1,9 @@
 {
-  "version": "1.2.9",
+  "version": "1.2.10",
   "channel": "stable",
   "notes": [
-    "Check only reads main. Never offers a downgrade. No jsDelivr.",
-    "Settings Terminal runs on the box. Apply this from the Updates button."
+    "Jellyfin first-run + Movies library on /symlinks so Watch can see requests.",
+    "Check only reads main. Terminal on the box."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.9.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.10.tar.gz"
 }
