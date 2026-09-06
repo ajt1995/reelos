@@ -18,10 +18,9 @@ fetch_channel() {
   python3 - <<'PY'
 import json, urllib.request, sys
 urls = [
-  "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.2/channel.json",
   "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
+  "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
   "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
-  "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
 ]
 best = None
 best_key = []
@@ -93,6 +92,11 @@ if [ -f "$NEW_UP" ] && [ "${REELOS_OTA_REEXEC:-}" != "1" ]; then
   fi
 fi
 
+if [ -f "$WORK/src/daemon/reelos-lid.sh" ]; then
+  log "lid: ignore close"
+  bash "$WORK/src/daemon/reelos-lid.sh" || log "lid non-fatal"
+fi
+
 need() {
   local f="$1" pat="$2"
   [ -f "$WORK/src/$f" ] || { log "canary missing $f"; return 1; }
@@ -107,6 +111,8 @@ need install/compose/docker-compose.yml rshared
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
+need daemon/reelos-lid.sh HandleLidSwitch
+need daemon/wire-engines.py Startup/Configuration
 need daemon/reelos-update.sh 'restore after failure'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
