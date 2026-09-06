@@ -1,7 +1,9 @@
 [Unit]
 Description=ReelOS shell
-After=network-online.target docker.service reelos-firstboot.service
+After=network-online.target
 Wants=network-online.target
+# Do not wait on firstboot. A looping firstboot (ISO stopped short) used to
+# block this unit forever, so the phone never saw the wizard.
 RequiresMountsFor=/opt/reelos/app
 
 [Service]
@@ -10,7 +12,8 @@ WorkingDirectory=/opt/reelos/app
 Environment=REELOS_APPLIANCE=1
 Environment=REELOS_ROOT=/opt/reelos
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/npm run start:box
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/usr/bin/env npm run start:box
 Restart=on-failure
 RestartSec=3
 User=root
