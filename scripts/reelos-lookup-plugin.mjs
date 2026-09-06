@@ -31,13 +31,20 @@ function tailscaleRunning() {
 }
 
 function ipv4() {
-  for (const list of Object.values(os.networkInterfaces())) {
+  const skip = /^(docker|br-|veth|cni|flannel|virbr|lxc|lo)/;
+  const prefer = [];
+  const rest = [];
+  for (const [name, list] of Object.entries(os.networkInterfaces())) {
+    if (skip.test(name)) continue;
     for (const a of list || []) {
       if (!a || a.internal) continue;
-      if (a.family === "IPv4" || a.family === 4) return a.address;
+      if (!(a.family === "IPv4" || a.family === 4)) continue;
+      if (a.address.startsWith("172.17.") || a.address.startsWith("172.18.") || a.address.startsWith("172.19.")) continue;
+      if (/^(wl|en|eth|wlan)/.test(name)) prefer.push(a.address);
+      else rest.push(a.address);
     }
   }
-  return "";
+  return prefer[0] || rest[0] || "";
 }
 
 function answers() {
@@ -67,14 +74,17 @@ function movieHit(h) {
   const genres = Array.isArray(h.genres)
     ? h.genres.map((g) => (typeof g === "string" ? g : g?.name || "")).filter(Boolean)
     : [];
+  const poster =
+    String(h.remotePoster || "") ||
+    String((h.images || []).find((i) => i?.coverType === "poster")?.remoteUrl || "");
   return {
     id: `tmdb-${tmdb}`,
     kind: "movie",
     title: String(h.title || "Untitled"),
     year: Number(h.year) || 0,
     overview: String(h.overview || ""),
-    poster: String(h.remotePoster || ""),
-    rating: Number(h.ratings?.tmdb?.value || 0),
+    poster,
+    rating: Number(h.ratings?.tmdb?.value || h.ratings?.imdb?.value || 0),
     genres,
     maxQuality: "4k",
     popularity: 50,
@@ -84,13 +94,16 @@ function movieHit(h) {
 function seriesHit(h) {
   const tvdb = h.tvdbId;
   if (!tvdb) return null;
+  const poster =
+    String(h.remotePoster || "") ||
+    String((h.images || []).find((i) => i?.coverType === "poster")?.remoteUrl || "");
   return {
     id: `tvdb-${tvdb}`,
     kind: "tv",
     title: String(h.title || "Untitled"),
     year: Number(h.year) || 0,
     overview: String(h.overview || ""),
-    poster: String(h.remotePoster || ""),
+    poster,
     rating: Number(h.ratings?.tmdb?.value || 0),
     genres: [],
     maxQuality: "4k",
@@ -137,6 +150,9 @@ async function handleLookup(req, res) {
     const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
     const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
     note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
+    if (q.length >= 2 && !rk && !sk) {
+      error = "Movies/TV engines have no API key yet";
+    }
     if (q.length >= 2 && rk) {
       const hits = await pull(
         `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`,
@@ -165,31 +181,59 @@ async function handleLookup(req, res) {
   send(res, 200, { titles, error });
 }
 
-async function handleBox(_req, res) {
-  const a = answers();
-  const ip = ipv4();
-  const jfOk = await probe("http://127.0.0.1:8096/System/Info/Public");
-  let tailscaleAuth = null;
+async function jellyfinState() {
+  try {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 3000);
+    const res = await fetch("http://127.0.0.1:8096/System/Info/Public", { signal: ac.signal });
+    clearTimeout(t);
+    if (!res.ok) return { state: "red", detail: "Can't start" };
+    const j = await res.json().catch(() => ({}));
+    if (j.StartupWizardCompleted === false) {
+      return { state: "amber", detail: "Jellyfin setup is not finished" };
+    }
+    return { state: "green", detail: "Jellyfin is up" };
+  } catch {
+    return { state: "amber", detail: "Still starting" };
+  }
+}
+
+function tailscaleAuthUrl() {
   try {
     if (existsSync("/var/lib/reelos/tailscale-auth.url")) {
-      tailscaleAuth = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim() || null;
+      const t = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim();
+      if (t) return t;
     }
   } catch {
     /* */
   }
+  try {
+    if (existsSync("/var/lib/reelos/tailscale-install.log")) {
+      const log = readFileSync("/var/lib/reelos/tailscale-install.log", "utf8");
+      const m = log.match(/https:\/\/login\.tailscale\.com\/[^\s]+/);
+      if (m) return m[0];
+    }
+  } catch {
+    /* */
+  }
+  return null;
+}
+
+async function handleBox(_req, res) {
+  const a = answers();
+  const ip = ipv4();
+  const jellyfin = await jellyfinState();
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     ipv4: ip,
     watch: ip ? `http://${ip}:8096` : "",
-    jellyfin: jfOk
-      ? { state: "green", detail: "Jellyfin is up" }
-      : { state: "red", detail: "Can't start" },
+    jellyfin,
     frontend: a.frontend || "jellyfin",
     access: a.access || "lan",
     adminName: a.adminName || "reelos",
     adminPassword: a.adminPassword || "reelos",
     answers: a,
-    tailscaleAuth,
+    tailscaleAuth: tailscaleAuthUrl(),
     tailscaleInstalled: Boolean(tailscaleBin()),
     tailscaleUp: tailscaleRunning(),
   });

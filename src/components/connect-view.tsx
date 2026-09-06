@@ -71,7 +71,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
     void navigate({ to: "/" });
   };
 
-  const jfLock = box.jellyfin.state !== "green";
+  const jfLock = box.jellyfin.state === "red";
   const watch = box.watch || (box.ipv4 ? `http://${box.ipv4}:8096` : "");
 
   const addIndexer = async () => {

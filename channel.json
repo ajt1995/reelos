@@ -2,8 +2,8 @@
   "version": "1.2.15",
   "channel": "stable",
   "notes": [
-    "Reset build. Apply curls the updater from main first.",
-    "Home stays up until mv. Probe is :8080 and GET /api/lookup."
+    "1.2.15 tree from main. One apply from 1.2.8.",
+    "Watch, Request, Connect, lid. Mailman first."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.15.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
