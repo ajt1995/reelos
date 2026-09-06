@@ -1,11 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
+import { lookupMedia } from "@/lib/appliance";
 import { searchTitles, TITLES } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
+import type { Title } from "@/lib/types";
 
 export function DiscoverView() {
   const [q, setQ] = useState("");
+  const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const rememberTitles = useReelStore((s) => s.rememberTitles);
   const intent = useReelStore((s) => s.answers.intent);
   const library = useReelStore((s) => s.library);
 
@@ -22,7 +26,42 @@ export function DiscoverView() {
     [intent],
   );
 
-  const hits = q.trim().length >= 2 ? searchTitles(q).filter((t) => visible.includes(t)) : [];
+  const catalogHits = q.trim().length >= 2 ? searchTitles(q).filter((t) => visible.includes(t)) : [];
+  const hits = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Title[] = [];
+    for (const t of [...remoteHits, ...catalogHits]) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+    }
+    return out;
+  }, [catalogHits, remoteHits]);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) {
+      setRemoteHits([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void lookupMedia({ data: { q: term } })
+        .then((r) => {
+          if (cancelled) return;
+          setRemoteHits(r.titles);
+          rememberTitles(r.titles);
+        })
+        .catch(() => {
+          if (!cancelled) setRemoteHits([]);
+        });
+    }, 280);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [q, rememberTitles]);
+
   const trending = [...visible].sort((a, b) => b.popularity - a.popularity).slice(0, 12);
   const movies = visible.filter((t) => t.kind === "movie").slice(0, 12);
   const tv = visible.filter((t) => t.kind === "tv" || t.kind === "anime").slice(0, 12);
@@ -40,12 +79,18 @@ export function DiscoverView() {
           className="h-12 w-full rounded-2xl bg-card pl-11 pr-4 text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
         />
       </div>
-      {hits.length > 0 ? (
-        <Row label="Results">
-          {hits.map((t) => (
-            <TitleCard key={t.id} title={t} />
-          ))}
-        </Row>
+      {q.trim().length >= 2 ? (
+        hits.length > 0 ? (
+          <Row label="Results">
+            {hits.map((t) => (
+              <TitleCard key={t.id} title={t} />
+            ))}
+          </Row>
+        ) : (
+          <p className="mt-10 text-sm text-muted">
+            No titles yet. The movie engine looks this up on TMDB — wait a few seconds after first boot.
+          </p>
+        )
       ) : (
         <>
           <Row label="Trending this week">
