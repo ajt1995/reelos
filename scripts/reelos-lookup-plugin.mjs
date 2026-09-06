@@ -883,6 +883,48 @@ async function handlePorts(_req, res) {
   });
 }
 
+async function handleReset(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  if (process.env.REELOS_OTA === "1") {
+    send(res, 409, { ok: false, error: "Reset does not run during OTA" });
+    return;
+  }
+  const ota = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" });
+  if (ota.status === 0) {
+    send(res, 409, { ok: false, error: "Reset does not run during OTA" });
+    return;
+  }
+  const script = existsSync("/opt/reelos/bin/reelos-reset.sh")
+    ? "/opt/reelos/bin/reelos-reset.sh"
+    : existsSync("/workspace/daemon/reelos-reset.sh")
+      ? "/workspace/daemon/reelos-reset.sh"
+      : "/tmp/reelos-reset.sh";
+  if (script === "/tmp/reelos-reset.sh") {
+    writeFileSync(
+      script,
+      `#!/bin/bash
+set -euo pipefail
+if [ "\${REELOS_OTA:-}" = "1" ] || pgrep -f reelos-update.sh >/dev/null 2>&1; then exit 1; fi
+ROOT=/opt/reelos; STATE=/var/lib/reelos
+sleep 2
+(cd "\$ROOT/compose" && docker compose down --remove-orphans) || true
+rm -f "\$STATE/provisioned" "\$STATE/answers.json" "\$STATE/engine.json"
+rm -rf "\$ROOT/compose/configs"
+mkdir -p "\$ROOT/compose/configs"
+systemctl restart reelos || true
+`,
+      { mode: 0o755 },
+    );
+  }
+  mkdirSync("/var/lib/reelos", { recursive: true });
+  const log = openSync("/var/lib/reelos/reset.log", "a");
+  spawn("bash", [script], { detached: true, stdio: ["ignore", log, log] }).unref();
+  send(res, 200, { ok: true, started: true });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -904,6 +946,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/quality") return void (await handleQuality(req, res));
           if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
+          if (pathOnly === "/api/reset") return void (await handleReset(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });

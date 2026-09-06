@@ -18,6 +18,8 @@ This is **A. Tree done.** It is **not** B. House done. Do not mix them. No 1.2.1
 8. **README** and **HAL.md** untouched by this freeze.
 9. **HP not applied.** No fake house curls.
 
+Owner exception (still 1.2.15, not 1.2.16): Settings → Advanced → **Reset appliance**. `POST /api/reset`. Compose down, deletes `provisioned` / `answers.json` / `compose/configs`, restarts the shell. Does not delete `/srv/media` or images. 409 if OTA is running.
+
 ## B. House done — not today
 
 Only after they run this on `192.168.1.233`:

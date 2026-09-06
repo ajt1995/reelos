@@ -67,6 +67,7 @@ export function AdvancedView() {
       <div className="mt-8">
         <TerminalRow open={term} onClick={() => setTerm((v) => !v)} />
       </div>
+      <ResetAppliance />
       <div className="mt-8">
         <Button
           variant="ghost"
@@ -75,6 +76,55 @@ export function AdvancedView() {
           {hide ? "Show this section" : "Hide Advanced from Settings"}
         </Button>
       </div>
+    </div>
+  );
+}
+
+function ResetAppliance() {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const run = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/reset", { method: "POST" });
+      const j = (await r.json()) as { ok?: boolean; error?: string };
+      if (!j.ok) {
+        setMsg(j.error || "Reset refused");
+        setBusy(false);
+        return;
+      }
+      useReelStore.getState().factoryReset();
+      setMsg("Resetting. The wizard will load when the shell comes back.");
+      window.setTimeout(() => window.location.reload(), 4000);
+    } catch (e) {
+      setMsg(String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mt-8 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <p className="font-display font-medium">Reset appliance</p>
+      <p className="mt-1 text-sm text-muted">
+        First-run again. Keeps media on disk and Docker images. Wipes wizard answers and engine configs. Will not run
+        during an update.
+      </p>
+      {!open ? (
+        <Button className="mt-3" variant="danger" onClick={() => setOpen(true)}>
+          Reset appliance
+        </Button>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="danger" disabled={busy} onClick={() => void run()}>
+            {busy ? "Resetting…" : "Yes, wipe configs"}
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
     </div>
   );
 }
