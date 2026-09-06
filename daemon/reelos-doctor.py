@@ -124,15 +124,15 @@ def main() -> int:
         with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=x", timeout=4) as r:
             raw = r.read().decode()
         hop = '"titles"' in raw
-        checks.append(ok("Lookup hop", "GET /api/lookup answered" if hop else "Lookup JSON missing titles", hop))
+        checks.append(ok("Lookup hop", "GET /api/lookup answered" if hop else "lookup dead", hop))
     except Exception as e:
-        checks.append(ok("Lookup hop", f"Dead ({e.__class__.__name__})", False))
+        checks.append(ok("Lookup hop", f"lookup dead ({e.__class__.__name__})", False))
 
     radarr_up = listening(7878) and api_key(COMPOSE / "configs" / "radarr" / "config.xml")
-    checks.append(ok("Request hop", "Radarr will accept adds" if radarr_up else "Radarr not accepting adds", radarr_up))
+    checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
 
     decy = False
-    detail = "Decypharr not listening"
+    detail = "decypharr dead"
     if listening(8282):
         decy = True
         detail = "Decypharr :8282"
@@ -145,15 +145,18 @@ def main() -> int:
             )
             if "Up" in out:
                 decy = True
-                detail = out.strip()
+                detail = "Decypharr up"
             elif out.strip():
-                detail = out.strip()
+                detail = "decypharr dead"
         except Exception:
             pass
     checks.append(ok("Decypharr hop", detail, decy))
 
+    prow = listening(9696) and api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")
+    checks.append(ok("Prowlarr hop", "Prowlarr accepts indexers" if prow else "indexers dead — Prowlarr", prow))
+
     jf = listening(8096)
-    checks.append(ok("Jellyfin hop", "http://127.0.0.1:8096" if jf else "Jellyfin not on :8096", jf))
+    checks.append(ok("Jellyfin hop", "Jellyfin :8096" if jf else "jellyfin dead", jf))
 
     print(json.dumps({"version": version, "checks": checks}))
     return 0

@@ -173,6 +173,7 @@ export function SettingsView() {
           </p>
           <p className="mt-2 text-sm text-muted">Watching: {frontendLabel[answers.frontend]}</p>
         </Row>
+        <PasswordRow open={panel === "pin"} onClick={() => setPanel(panel === "pin" ? null : "pin")} />
         <Row
           icon={Bell}
           title="Notifications"
@@ -229,6 +230,49 @@ export function SettingsView() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function PasswordRow({ open, onClick }: { open: boolean; onClick: () => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [msg, setMsg] = useState("");
+  const change = async () => {
+    setMsg("");
+    const r = await fetch("/api/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ current, next }),
+    });
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    setMsg(j.ok ? "PIN updated." : j.error || "Could not change PIN");
+    if (j.ok) {
+      setCurrent("");
+      setNext("");
+    }
+  };
+  return (
+    <Row icon={KeyRound} title="Box PIN" hint="Not reelos/reelos" open={open} onClick={onClick}>
+      <p className="text-sm text-muted">Changes the wizard PIN and the Jellyfin user when that engine is up.</p>
+      <input
+        className="mt-3 h-11 w-full rounded-xl bg-raised px-3 text-sm"
+        type="password"
+        placeholder="Current PIN"
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+      />
+      <input
+        className="mt-2 h-11 w-full rounded-xl bg-raised px-3 text-sm"
+        type="password"
+        placeholder="New PIN"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+      />
+      <Button className="mt-3" onClick={() => void change()}>
+        Change PIN
+      </Button>
+      {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
+    </Row>
   );
 }
 

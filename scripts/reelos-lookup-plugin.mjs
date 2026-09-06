@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 
@@ -195,21 +195,59 @@ async function probeJson(url, ms = 3000) {
   }
 }
 
+async function jellyfinToken(user, password) {
+  try {
+    const r = await fetch("http://127.0.0.1:8096/Users/AuthenticateByName", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Emby-Authorization":
+          'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"',
+      },
+      body: JSON.stringify({ Username: user, Pw: password }),
+    });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return { token: j.AccessToken, id: j.User?.Id };
+  } catch {
+    return null;
+  }
+}
+
 async function jellyfinState(ip) {
+  const a = answers();
+  const intent = a.intent || {};
   const lanUrl = ip ? `http://${ip}:8096/System/Info/Public` : null;
-  const loopUrl = "http://127.0.0.1:8096/System/Info/Public";
   const lan = lanUrl ? await probeJson(lanUrl) : { ok: false, json: null };
-  if (lan.ok) {
-    if (lan.json?.StartupWizardCompleted === false) {
-      return { state: "amber", detail: `Jellyfin on http://${ip}:8096 — setup not finished` };
+  if (!lan.ok) {
+    const loop = await probeJson("http://127.0.0.1:8096/System/Info/Public");
+    if (loop.ok) {
+      return { state: "red", detail: "Jellyfin is only on localhost, not the LAN", libraries: [] };
     }
-    return { state: "green", detail: `Jellyfin on http://${ip}:8096` };
+    return { state: "red", detail: "Jellyfin not on :8096", libraries: [] };
   }
-  const loop = await probeJson(loopUrl);
-  if (loop.ok) {
-    return { state: "amber", detail: "Jellyfin answers on localhost only, not the LAN" };
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (!auth?.token) {
+    return { state: "red", detail: "Jellyfin has no matching user/PIN", libraries: [] };
   }
-  return { state: "amber", detail: "Still starting" };
+  let names = [];
+  try {
+    const r = await fetch("http://127.0.0.1:8096/Library/VirtualFolders", {
+      headers: { "X-Emby-Token": auth.token },
+    });
+    const folders = r.ok ? await r.json() : [];
+    names = (Array.isArray(folders) ? folders : []).map((x) => String(x.Name || ""));
+  } catch {
+    names = [];
+  }
+  const need = [];
+  if (intent.movies !== false) need.push("Movies");
+  if (intent.tv || intent.anime) need.push("Shows");
+  const missing = need.filter((n) => !names.includes(n));
+  if (missing.length) {
+    return { state: "red", detail: `Missing library ${missing.join(", ")}`, libraries: names };
+  }
+  return { state: "green", detail: `Jellyfin on http://${ip}:8096`, libraries: names };
 }
 
 function tailscaleAuthUrl() {
@@ -241,6 +279,7 @@ async function handleBox(_req, res) {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     ipv4: ip,
     watch: ip ? `http://${ip}:8096` : "",
+    ui: ip ? `http://${ip}` : "",
     jellyfin,
     frontend: a.frontend || "jellyfin",
     access: a.access || "lan",
@@ -516,13 +555,92 @@ async function firstRoot(base, key, prefer) {
   return hit?.path || prefer;
 }
 
-async function firstProfile(base, key) {
+async function namedProfile(base, key) {
+  const want =
+    { "1080p": "HD-1080p", hybrid: "Ultra-HD", "4k": "Ultra-HD", custom: "Any" }[
+      answers().quality || "hybrid"
+    ] || "Ultra-HD";
   const qs = await arrGet(`${base}/qualityprofile`, key);
   const list = Array.isArray(qs) ? qs : [];
-  return list[0]?.id || 1;
+  return list.find((p) => p.name === want)?.id || list[0]?.id || 1;
+}
+
+function queueStatus(item) {
+  const s = String(item?.status || "").toLowerCase();
+  if (s.includes("fail") || s === "warning") return "failed";
+  if (s.includes("download") || s === "downloading" || s === "paused") return "grabbing";
+  return "queued";
+}
+
+async function handleRequestStatus(req, res) {
+  const u = new URL(req.url || "/", "http://reelos.local");
+  const tmdb = String(u.searchParams.get("tmdb") || "").trim();
+  const tvdb = String(u.searchParams.get("tvdb") || "").trim();
+  let id = String(u.searchParams.get("id") || "").trim();
+  if (!id && tmdb) id = `tmdb-${tmdb}`;
+  if (!id && tvdb) id = `tvdb-${tvdb}`;
+  if (!id) {
+    send(res, 400, { status: "unknown", error: "Need tmdb, tvdb, or id" });
+    return;
+  }
+  try {
+    if (id.startsWith("tmdb-")) {
+      const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
+      if (!rk) {
+        send(res, 200, { status: "unknown", engine: "radarr", error: "Movies engine has no API key" });
+        return;
+      }
+      const tmdbId = id.slice(5);
+      const movies = await arrGet(`http://127.0.0.1:7878/api/v3/movie?tmdbId=${encodeURIComponent(tmdbId)}`, rk);
+      const movie = Array.isArray(movies) ? movies[0] : null;
+      if (!movie) {
+        send(res, 200, { status: "unknown", engine: "radarr", error: "Not in Radarr" });
+        return;
+      }
+      const queue = await arrGet("http://127.0.0.1:7878/api/v3/queue", rk);
+      const records = Array.isArray(queue) ? queue : queue?.records || [];
+      const q = records.find((x) => x.movieId === movie.id);
+      let status = "queued";
+      if (movie.hasFile) status = "downloaded";
+      else if (q) status = queueStatus(q);
+      send(res, 200, { status, engine: "radarr", title: movie.title, hasFile: Boolean(movie.hasFile) });
+      return;
+    }
+    if (id.startsWith("tvdb-")) {
+      const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+      if (!sk) {
+        send(res, 200, { status: "unknown", engine: "sonarr", error: "TV engine has no API key" });
+        return;
+      }
+      const tvdbId = id.slice(5);
+      const series = await arrGet(
+        `http://127.0.0.1:8989/api/v3/series?tvdbId=${encodeURIComponent(tvdbId)}`,
+        sk,
+      );
+      const show = Array.isArray(series) ? series[0] : null;
+      if (!show) {
+        send(res, 200, { status: "unknown", engine: "sonarr", error: "Not in Sonarr" });
+        return;
+      }
+      const queue = await arrGet("http://127.0.0.1:8989/api/v3/queue", sk);
+      const records = Array.isArray(queue) ? queue : queue?.records || [];
+      const q = records.find((x) => x.seriesId === show.id);
+      let status = "queued";
+      if (show.statistics?.percentOfEpisodes === 100) status = "downloaded";
+      else if (q) status = queueStatus(q);
+      send(res, 200, { status, engine: "sonarr", title: show.title });
+      return;
+    }
+    send(res, 400, { status: "unknown", error: "Need tmdb or tvdb id" });
+  } catch (e) {
+    send(res, 200, { status: "unknown", error: String(e) });
+  }
 }
 
 async function handleRequest(req, res) {
+  if ((req.method || "GET").toUpperCase() === "GET") {
+    return handleRequestStatus(req, res);
+  }
   if ((req.method || "GET").toUpperCase() !== "POST") {
     send(res, 405, { ok: false, error: "POST only" });
     return;
@@ -557,7 +675,7 @@ async function handleRequest(req, res) {
         return;
       }
       const root = await firstRoot("http://127.0.0.1:7878/api/v3", rk, "/mnt/symlinks");
-      const profileId = await firstProfile("http://127.0.0.1:7878/api/v3", rk);
+      const profileId = await namedProfile("http://127.0.0.1:7878/api/v3", rk);
       const added = await arrPost("http://127.0.0.1:7878/api/v3/movie", rk, {
         ...movie,
         qualityProfileId: movie.qualityProfileId || profileId,
@@ -586,7 +704,7 @@ async function handleRequest(req, res) {
         return;
       }
       const root = await firstRoot("http://127.0.0.1:8989/api/v3", sk, "/mnt/symlinks");
-      const profileId = await firstProfile("http://127.0.0.1:8989/api/v3", sk);
+      const profileId = await namedProfile("http://127.0.0.1:8989/api/v3", sk);
       const added = await arrPost("http://127.0.0.1:8989/api/v3/series", sk, {
         ...series,
         qualityProfileId: series.qualityProfileId || profileId,
@@ -672,6 +790,99 @@ async function handleTerminal(req, res) {
   send(res, 200, { output: termOut, running: false, cwd: termCwd });
 }
 
+async function handlePassword(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const current = String(body.current || "");
+  const next = String(body.next || "");
+  if (next.length < 4) {
+    send(res, 400, { ok: false, error: "New PIN must be at least 4 characters" });
+    return;
+  }
+  const a = answers();
+  const have = String(a.adminPassword || "reelos");
+  if (current !== have) {
+    send(res, 403, { ok: false, error: "Current PIN does not match" });
+    return;
+  }
+  a.adminPassword = next;
+  try {
+    mkdirSync("/var/lib/reelos", { recursive: true });
+    writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+  } catch (e) {
+    send(res, 500, { ok: false, error: String(e) });
+    return;
+  }
+  let jellyfin = false;
+  const auth = await jellyfinToken(a.adminName || "reelos", current);
+  if (auth?.token && auth.id) {
+    try {
+      const r = await fetch(`http://127.0.0.1:8096/Users/${auth.id}/Password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Emby-Token": auth.token },
+        body: JSON.stringify({ CurrentPw: current, NewPw: next }),
+      });
+      jellyfin = r.ok;
+    } catch {
+      jellyfin = false;
+    }
+  }
+  const box = spawnSync("chpasswd", { input: `reelos:${next}\n`, encoding: "utf8", timeout: 5000 });
+  send(res, 200, { ok: true, jellyfin, boxUser: box.status === 0 });
+}
+
+async function handleQuality(_req, res) {
+  const want = answers().quality || "hybrid";
+  const profile =
+    { "1080p": "HD-1080p", hybrid: "Ultra-HD", "4k": "Ultra-HD", custom: "Any" }[want] || "Ultra-HD";
+  const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
+  const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+  let radarr = null;
+  let sonarr = null;
+  try {
+    if (rk) {
+      const qs = await arrGet("http://127.0.0.1:7878/api/v3/qualityprofile", rk);
+      const list = Array.isArray(qs) ? qs : [];
+      radarr = list.find((p) => p.name === profile)?.name || null;
+    }
+    if (sk) {
+      const qs = await arrGet("http://127.0.0.1:8989/api/v3/qualityprofile", sk);
+      const list = Array.isArray(qs) ? qs : [];
+      sonarr = list.find((p) => p.name === profile)?.name || null;
+    }
+  } catch (e) {
+    send(res, 200, { wanted: want, profile, radarr, sonarr, error: String(e) });
+    return;
+  }
+  send(res, 200, {
+    wanted: want,
+    profile,
+    radarr,
+    sonarr,
+    error: rk || sk ? null : "no engine keys",
+  });
+}
+
+async function handlePorts(_req, res) {
+  let caddy = "";
+  for (const p of ["/opt/reelos/compose/Caddyfile", "/workspace/install/compose/Caddyfile"]) {
+    if (existsSync(p)) {
+      caddy = readFileSync(p, "utf8");
+      break;
+    }
+  }
+  send(res, 200, {
+    ui: 80,
+    shell: 8080,
+    jellyfin: 8096,
+    caddyHas80: caddy.includes(":80"),
+    caddyTo8080: caddy.includes("reverse_proxy 127.0.0.1:8080"),
+  });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -689,6 +900,9 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/update/apply") return void (await handleUpdateApply(req, res));
           if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
           if (pathOnly === "/api/request") return void (await handleRequest(req, res));
+          if (pathOnly === "/api/password") return void (await handlePassword(req, res));
+          if (pathOnly === "/api/quality") return void (await handleQuality(req, res));
+          if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
