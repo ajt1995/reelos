@@ -11,24 +11,36 @@ fi
 
 ROOT=/opt/reelos
 COMPOSE="$ROOT/compose"
-STATE=/var/lib/reelos
 APP="$ROOT/app"
+RAW=https://raw.githubusercontent.com/ajt1995/reelos/main
 
 echo "ReelOS · heal (keep wizard answers)"
 
-mkdir -p "$COMPOSE/configs/jellyfin" "$COMPOSE/configs/decypharr" \
+mkdir -p "$COMPOSE/configs/jellyfin" "$COMPOSE/configs/decypharr" "$ROOT/bin" \
   /mnt/debrid /mnt/symlinks /srv/media/movies /srv/media/tv /srv/media/anime /srv/media/music
 modprobe fuse 2>/dev/null || true
 mount --make-rshared /mnt 2>/dev/null || true
 chown -R 1000:1000 "$COMPOSE/configs" /mnt/debrid /mnt/symlinks /srv/media 2>/dev/null || true
 
-# Pull the compose file that no longer sets user: on jellyfin/decypharr.
-if curl -fsSL "https://raw.githubusercontent.com/ajt1995/reelos/main/install/compose/docker-compose.yml" \
-  -o "$COMPOSE/docker-compose.yml.new"; then
-  mv "$COMPOSE/docker-compose.yml.new" "$COMPOSE/docker-compose.yml"
-fi
+pull() {
+  local url="$1" dest="$2"
+  local tmp
+  tmp="$(mktemp)"
+  if curl -fsSL "$url" -o "$tmp"; then
+    mkdir -p "$(dirname "$dest")"
+    mv "$tmp" "$dest"
+    return 0
+  fi
+  rm -f "$tmp"
+  echo "heal: skip $dest (not on GitHub yet)" >&2
+  return 1
+}
+
+# Compose that no longer sets user: on jellyfin/decypharr.
+pull "$RAW/install/compose/docker-compose.yml" "$COMPOSE/docker-compose.yml" || true
 
 # Drop fuse devices if the kernel has no /dev/fuse — otherwise compose never starts.
+# Exact block only — do not strip gluetun's /dev/net/tun.
 if [ ! -e /dev/fuse ]; then
   python3 - <<'PY'
 from pathlib import Path
@@ -40,21 +52,14 @@ print("heal: stripped fuse device (no /dev/fuse)")
 PY
 fi
 
-# Refresh the shell search path without touching answers.
+# Search + engine lookup. Never touch answers.json.
 for f in src/lib/appliance.ts src/lib/catalog.ts src/components/home-view.tsx src/components/discover-view.tsx; do
-  dest="$APP/$f"
-  mkdir -p "$(dirname "$dest")"
-  curl -fsSL "https://raw.githubusercontent.com/ajt1995/reelos/main/$f" -o "$dest" || true
+  pull "$RAW/$f" "$APP/$f" || true
 done
 
-if [ -x "$ROOT/bin/wire-engines.py" ]; then
-  python3 "$ROOT/bin/wire-engines.py" || true
-elif [ -f /tmp/wire-engines.py ]; then
-  python3 /tmp/wire-engines.py || true
-else
-  curl -fsSL "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/wire-engines.py" \
-    -o /tmp/wire-engines.py && python3 /tmp/wire-engines.py || true
-fi
+# Always take GitHub wire-engines (ISO copy still sets use_webdav).
+pull "$RAW/daemon/wire-engines.py" "$ROOT/bin/wire-engines.py" || true
+chmod +x "$ROOT/bin/wire-engines.py" 2>/dev/null || true
 
 if [ -f "$COMPOSE/.env" ]; then
   set -a
@@ -64,7 +69,12 @@ if [ -f "$COMPOSE/.env" ]; then
 fi
 cd "$COMPOSE"
 docker compose up -d --remove-orphans || true
-sleep 4
+
+if [ -f "$ROOT/bin/wire-engines.py" ]; then
+  python3 "$ROOT/bin/wire-engines.py" || true
+fi
+
+sleep 6
 echo
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 if command -v systemctl >/dev/null; then
@@ -72,3 +82,4 @@ if command -v systemctl >/dev/null; then
 fi
 echo
 echo "Search Batman on http://$(hostname -I | awk '{print $1}'):8080"
+echo "Wizard answers were not touched."

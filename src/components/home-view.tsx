@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
-import { HOSTNAME } from "@/lib/catalog";
+import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle, searchTitles, TITLES } from "@/lib/catalog";
 import { titleInCache } from "@/lib/adapter";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
@@ -13,7 +13,9 @@ import { cn } from "@/lib/utils";
 export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
-  const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const rememberTitles = useReelStore((s) =>
+    "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
+  );
   const navigate = useNavigate();
   const requests = useReelStore((s) => s.requests);
   const library = useReelStore((s) => s.library);
@@ -44,11 +46,16 @@ export function HomeView() {
     }
     let cancelled = false;
     const t = window.setTimeout(() => {
-      void lookupMedia({ data: { q: term } }).then((r) => {
-        if (cancelled) return;
-        setRemoteHits(r.titles);
-        rememberTitles(r.titles);
-      });
+      void lookupMedia({ data: { q: term } })
+        .then((r) => {
+          if (cancelled) return;
+          rememberCatalogTitles(r.titles);
+          rememberTitles?.(r.titles);
+          setRemoteHits(r.titles);
+        })
+        .catch(() => {
+          if (!cancelled) setRemoteHits([]);
+        });
     }, 280);
     return () => {
       cancelled = true;
@@ -116,6 +123,10 @@ export function HomeView() {
               </li>
             ))}
           </ul>
+        ) : q.trim().length >= 2 ? (
+          <p className="mt-2 text-xs text-muted">
+            Looking up through the movie engine. If this stays empty, Radarr is still starting.
+          </p>
         ) : null}
       </form>
 

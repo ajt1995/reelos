@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { lookupMedia } from "@/lib/appliance";
-import { searchTitles, TITLES } from "@/lib/catalog";
+import { rememberCatalogTitles, searchTitles, TITLES } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 
 export function DiscoverView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
-  const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const rememberTitles = useReelStore((s) =>
+    "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
+  );
   const intent = useReelStore((s) => s.answers.intent);
   const library = useReelStore((s) => s.library);
 
@@ -49,8 +51,9 @@ export function DiscoverView() {
       void lookupMedia({ data: { q: term } })
         .then((r) => {
           if (cancelled) return;
+          rememberCatalogTitles(r.titles);
+          rememberTitles?.(r.titles);
           setRemoteHits(r.titles);
-          rememberTitles(r.titles);
         })
         .catch(() => {
           if (!cancelled) setRemoteHits([]);
