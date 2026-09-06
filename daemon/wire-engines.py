@@ -236,6 +236,11 @@ PROVIDER_HINTS = {
     "premiumize": ("premiumize",),
 }
 
+# Vendor-published Prowlarr Cardigann only. Not a tracker roster.
+OFFICIAL_YML = {
+    "torbox": "https://raw.githubusercontent.com/TorBox-App/torbox-prowlarr-indexers/main/torbox-torrents.yml",
+}
+
 
 def _schema_blob(schema: dict) -> str:
     parts = [
@@ -250,42 +255,45 @@ def _schema_blob(schema: dict) -> str:
     return " ".join(parts).lower()
 
 
-def ensure_provider_indexer(prow_key: str) -> None:
-    """One first-party debrid indexer. Not a tracker roster. Skip local-vpn."""
-    src = source()
-    if src == "local-vpn":
-        log_wire("provider indexer skipped (local-vpn)")
-        return
-    key = (answers().get("apiKey") or "").strip()
-    if not key:
-        log_wire("provider indexer skipped (no apiKey)")
-        return
-    name = f"ReelOS-{src}"
-    url = "http://127.0.0.1:9696/api/v1/indexer"
-    try:
-        have = call(url, prow_key) or []
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-        log_wire(f"provider indexer list {e}")
-        return
-    for ix in have if isinstance(have, list) else []:
-        if ix.get("name") == name:
-            log_wire(f"provider indexer exists {name}")
-            return
+def _find_schema(prow_key: str, src: str):
+    url = "http://127.0.0.1:9696/api/v1/indexer/schema"
+    schemas = call(url, prow_key) or []
     hints = PROVIDER_HINTS.get(src, (src,))
-    try:
-        schemas = call(f"{url}/schema", prow_key) or []
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-        log_wire(f"provider indexer schema {e}")
-        return
-    hit = None
     for schema in schemas if isinstance(schemas, list) else []:
-        blob = _schema_blob(schema)
-        if any(h in blob for h in hints):
-            hit = schema
-            break
-    if not hit:
-        log_wire(f"no first-party indexer in Prowlarr for {src}")
-        return
+        if any(h in _schema_blob(schema) for h in hints):
+            return schema
+    return None
+
+
+def install_official_yml(src: str) -> bool:
+    url = OFFICIAL_YML.get(src)
+    if not url:
+        log_wire(f"no official Prowlarr yml for {src}")
+        return False
+    dest_dir = COMPOSE / "configs" / "prowlarr" / "Definitions" / "Custom"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / Path(url).name
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "ReelOS-wire"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            dest.write_bytes(resp.read())
+        log_wire(f"official yml {dest.name} -> {dest}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        log_wire(f"official yml fetch failed {e}")
+        return False
+    subprocess.run(
+        ["docker", "compose", "restart", "prowlarr"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(12)
+    return True
+
+
+def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
     fields = []
     for f in hit.get("fields") or []:
         item = dict(f)
@@ -304,14 +312,56 @@ def ensure_provider_indexer(prow_key: str) -> None:
         "configContract": hit.get("configContract"),
         "fields": fields,
     }
+    call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+    log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
+
+
+def ensure_provider_indexer(prow_key: str) -> None:
+    """One official provider indexer. Not a tracker roster. Skip local-vpn."""
+    src = source()
+    if src == "local-vpn":
+        log_wire("provider indexer skipped (local-vpn)")
+        return
+    key = (answers().get("apiKey") or "").strip()
+    if not key:
+        log_wire("provider indexer failed: no apiKey")
+        return
+    name = f"ReelOS-{src}"
+    url = "http://127.0.0.1:9696/api/v1/indexer"
     try:
-        call(url, prow_key, method="POST", body=body)
-        log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
+        have = call(url, prow_key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"provider indexer list failed {e}")
+        return
+    for ix in have if isinstance(have, list) else []:
+        if ix.get("name") == name:
+            log_wire(f"provider indexer exists {name}")
+            return
+    try:
+        hit = _find_schema(prow_key, src)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"provider indexer schema failed {e}")
+        return
+    if not hit:
+        log_wire(f"no first-party indexer in Prowlarr for {src} — installing official yml")
+        if install_official_yml(src):
+            prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+            prow_key = wait_key(prow_xml, 60) or prow_key
+            try:
+                hit = _find_schema(prow_key, src)
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+                log_wire(f"provider indexer schema after yml failed {e}")
+                return
+    if not hit:
+        log_wire(f"provider indexer missing after official yml for {src}")
+        return
+    try:
+        _add_from_schema(prow_key, name, key, hit)
     except urllib.error.HTTPError as e:
-        err = e.read().decode()[:200] if e.fp else str(e)
-        log_wire(f"provider indexer POST {e.code} {err}")
+        err = e.read().decode()[:240] if e.fp else str(e)
+        log_wire(f"provider indexer POST failed {e.code} {err}")
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
-        log_wire(f"provider indexer POST {e}")
+        log_wire(f"provider indexer POST failed {e}")
 
 
 def transcode_override() -> None:

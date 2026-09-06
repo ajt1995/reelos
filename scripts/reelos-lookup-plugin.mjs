@@ -591,6 +591,18 @@ function queueStatus(item) {
   return "queued";
 }
 
+const jellyfinRefreshed = new Set();
+
+async function jellyfinRefresh(id) {
+  if (!id || jellyfinRefreshed.has(id)) return;
+  jellyfinRefreshed.add(id);
+  try {
+    await fetch("http://127.0.0.1:8096/Library/Refresh", { method: "POST", signal: AbortSignal.timeout(8000) });
+  } catch {
+    /* */
+  }
+}
+
 async function handleRequestStatus(req, res) {
   const u = new URL(req.url || "/", "http://reelos.local");
   const tmdb = String(u.searchParams.get("tmdb") || "").trim();
@@ -622,6 +634,7 @@ async function handleRequestStatus(req, res) {
       let status = "queued";
       if (movie.hasFile) status = "downloaded";
       else if (q) status = queueStatus(q);
+      if (status === "downloaded") await jellyfinRefresh(id);
       send(res, 200, { status, engine: "radarr", title: movie.title, hasFile: Boolean(movie.hasFile) });
       return;
     }
@@ -647,6 +660,7 @@ async function handleRequestStatus(req, res) {
       let status = "queued";
       if (show.statistics?.percentOfEpisodes === 100) status = "downloaded";
       else if (q) status = queueStatus(q);
+      if (status === "downloaded") await jellyfinRefresh(id);
       send(res, 200, { status, engine: "sonarr", title: show.title });
       return;
     }
@@ -1122,17 +1136,31 @@ async function handleProvision(req, res) {
     send(res, 200, { ok: false, simulated: false, error: String(e) });
     return;
   }
-  const up = spawnSync("docker", ["compose", "up", "-d"], {
-    cwd: composeDir,
-    env: { ...process.env, COMPOSE_PROFILES: composeProfiles(a).join(",") },
-    encoding: "utf8",
-    timeout: 180000,
-  });
+  const profiles = composeProfiles(a).join(",");
+  const env = { ...process.env, COMPOSE_PROFILES: profiles };
+  const run = (args, timeout) =>
+    spawnSync("docker", ["compose", ...args], {
+      cwd: composeDir,
+      env,
+      encoding: "utf8",
+      timeout,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+  const pull = run(["pull"], 900000);
+  if (pull.status !== 0 && pull.error) {
+    send(res, 200, {
+      ok: false,
+      simulated: false,
+      error: (pull.stderr || pull.stdout || String(pull.error) || "compose pull failed").slice(0, 800),
+    });
+    return;
+  }
+  const up = run(["up", "-d"], 300000);
   if (up.status !== 0) {
     send(res, 200, {
       ok: false,
       simulated: false,
-      error: (up.stderr || up.stdout || `compose ${up.status}`).slice(0, 400),
+      error: (up.stderr || up.stdout || pull.stderr || `compose ${up.status}`).slice(0, 800),
     });
     return;
   }
