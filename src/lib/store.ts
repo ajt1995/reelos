@@ -56,14 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.8";
-export const SHIPPED_VERSION = "1.2.8";
+export const LATEST_VERSION = "1.2.9";
+export const SHIPPED_VERSION = "1.2.9";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Open Jellyfin in this browser. TV uses http://<ip>:8096.",
-  "Search talks to Radarr on the box. OTA will not install Chromium.",
-  "New browser hydrates from the box. Do not re-run the wizard.",
+  "Check only reads GitHub main. It will not offer an older build.",
+  "Settings Terminal talks to the box. Watch is Jellyfin in this browser.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

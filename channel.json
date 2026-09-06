@@ -1,9 +1,9 @@
 {
-  "version": "1.2.8",
+  "version": "1.2.9",
   "channel": "stable",
   "notes": [
-    "Watch is a gold button to Jellyfin in this browser (:8096).",
-    "Request talks to Radarr/Sonarr on the box. Doctor too."
+    "Check only reads main. Never offers a downgrade. No jsDelivr.",
+    "Settings Terminal runs on the box. Apply this from the Updates button."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.8.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.9.tar.gz"
 }

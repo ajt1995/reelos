@@ -111,6 +111,7 @@ need daemon/wire-engines.py use_webdav
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
 need src/components/title-view.tsx '/api/request'
+need scripts/reelos-lookup-plugin.mjs '/api/terminal'
 log "canaries ok"
 
 NEXT="$ROOT.next"

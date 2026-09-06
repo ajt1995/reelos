@@ -18,7 +18,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { HOSTNAME, LAN_IP } from "@/lib/catalog";
 import { adapterProfile } from "@/lib/adapter";
-import { runTerminal } from "@/lib/appliance";
 import {
   accessLabel,
   CHANNEL,
@@ -402,7 +401,11 @@ export function TerminalRow({ open, onClick }: { open: boolean; onClick: () => v
     let stop = false;
     const tick = async () => {
       while (!stop) {
-        const r = await runTerminal({});
+        const r = await fetch("/api/terminal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        }).then((x) => x.json());
         if (stop) return;
         setOut(r.output || "");
         setRunning(Boolean(r.running));
@@ -421,14 +424,22 @@ export function TerminalRow({ open, onClick }: { open: boolean; onClick: () => v
     const command = cmd.trim();
     if (!command || running) return;
     setRunning(true);
-    const r = await runTerminal({ command });
+    const r = await fetch("/api/terminal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command }),
+    }).then((x) => x.json());
     setOut(r.output || "");
     setRunning(Boolean(r.running));
     if (r.cwd) setCwd(r.cwd);
   };
 
   const kill = async () => {
-    const r = await runTerminal({ kill: true });
+    const r = await fetch("/api/terminal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kill: true }),
+    }).then((x) => x.json());
     setOut(r.output || "");
     setRunning(Boolean(r.running));
   };

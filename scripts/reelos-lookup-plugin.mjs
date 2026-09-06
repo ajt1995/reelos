@@ -301,40 +301,64 @@ function localVersion() {
   return "0";
 }
 
-async function handleUpdateCheck(_req, res) {
-  const local = localVersion();
+async function fetchGh(url) {
+  const r = await fetch(url, {
+    cache: "no-store",
+    headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github+json" },
+  });
+  if (!r.ok) throw new Error(`${r.status}`);
+  return r.text();
+}
+
+async function loadChannel() {
   const urls = [
     "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
-    "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.6/channel.json",
-    "https://github.com/ajt1995/reelos/raw/main/channel.json",
-    "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
+    "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
   ];
-  let best = null;
-  let bestK = [];
   for (const u of urls) {
     try {
-      const r = await fetch(u, { cache: "no-store" });
-      if (!r.ok) continue;
-      const ch = await r.json();
-      const k = versionKey(ch.version);
-      if (!best || cmpVer(k, bestK) > 0) {
-        best = ch;
-        bestK = k;
+      const text = await fetchGh(u);
+      if (u.includes("api.github.com")) {
+        const meta = JSON.parse(text);
+        if (!meta.content) continue;
+        const decoded = Buffer.from(meta.content.replace(/\n/g, ""), "base64").toString("utf8");
+        const ch = JSON.parse(decoded);
+        otaNote(`channel ${ch.version} via api.github.com`);
+        return ch;
       }
-    } catch {
-      /* */
+      const ch = JSON.parse(text);
+      otaNote(`channel ${ch.version} via ${u}`);
+      return ch;
+    } catch (e) {
+      otaNote(`miss ${u} ${e}`);
     }
   }
+  return null;
+}
+
+function otaNote(msg) {
+  try {
+    appendFileSync("/var/lib/reelos/ota.log", `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* */
+  }
+}
+
+async function handleUpdateCheck(_req, res) {
+  const local = localVersion();
+  const best = await loadChannel();
   if (!best) {
     send(res, 200, { ok: false, local, remote: local, available: false, notes: [], error: "channel unreachable" });
     return;
   }
+  const newer = cmpVer(versionKey(best.version), versionKey(local)) > 0;
   send(res, 200, {
     ok: true,
     local,
     remote: best.version,
     notes: best.notes || [],
-    available: best.version !== local,
+    available: newer,
   });
 }
 
@@ -346,7 +370,7 @@ async function handleUpdateApply(req, res) {
   try {
     const urls = [
       "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
-      "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.6/daemon/reelos-update.sh",
+      "https://github.com/ajt1995/reelos/raw/refs/heads/main/daemon/reelos-update.sh",
     ];
     let body = "";
     for (const u of urls) {
@@ -529,6 +553,48 @@ async function handleDoctor(_req, res) {
   }
 }
 
+let termCwd = "/home/reelos";
+let termOut = "";
+
+async function handleTerminal(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  if (body.kill) {
+    send(res, 200, { output: termOut, running: false, cwd: termCwd });
+    return;
+  }
+  const command = String(body.command || "").trim();
+  if (!command) {
+    send(res, 200, { output: termOut, running: false, cwd: termCwd });
+    return;
+  }
+  if (command === "cd" || command.startsWith("cd ")) {
+    const dest = command === "cd" ? "/home/reelos" : command.slice(3).trim() || "/home/reelos";
+    const r = spawnSync("bash", ["-lc", `cd ${JSON.stringify(termCwd)} && cd ${dest} && pwd`], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    const next = (r.stdout || "").trim().split("\n").pop();
+    if (r.status === 0 && next) termCwd = next;
+    termOut += `$ ${command}\n${r.status === 0 ? next : r.stderr || "cd failed"}\n`;
+    send(res, 200, { output: termOut, running: false, cwd: termCwd });
+    return;
+  }
+  const r = spawnSync("bash", ["-lc", command], {
+    cwd: existsSync(termCwd) ? termCwd : "/home/reelos",
+    encoding: "utf8",
+    timeout: 60000,
+    maxBuffer: 1024 * 512,
+    env: { ...process.env, HOME: "/home/reelos" },
+  });
+  termOut += `$ ${command}\n${r.stdout || ""}${r.stderr || ""}`;
+  if (termOut.length > 200000) termOut = termOut.slice(-160000);
+  send(res, 200, { output: termOut, running: false, cwd: termCwd });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -547,6 +613,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
           if (pathOnly === "/api/request") return void (await handleRequest(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
+          if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;
