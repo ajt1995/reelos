@@ -1,0 +1,4 @@
+node_modules/
+public/install/*.iso
+*.iso
+.DS_Store
