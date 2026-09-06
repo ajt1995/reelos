@@ -57,8 +57,9 @@ export const checkChannel = createServerFn({ method: "GET" }).handler(async () =
       : "1.2.0";
   try {
     const urls = [
-      CHANNEL_URL,
       "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+      CHANNEL_URL,
+      "https://github.com/ajt1995/reelos/raw/main/channel.json",
     ];
     let ch: { version: string; notes?: string[] } | null = null;
     for (const url of urls) {
@@ -87,12 +88,38 @@ export const checkChannel = createServerFn({ method: "GET" }).handler(async () =
 
 export const applyChannel = createServerFn({ method: "POST" }).handler(async () => {
   if (!APPLIANCE) return { ok: false as const, error: "not an appliance" };
+  const fs = await import("node:fs");
   const { spawn } = await import("node:child_process");
+  const script = "/tmp/reelos-update.sh";
+  const urls = [
+    "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/daemon/reelos-update.sh",
+    "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
+  ];
+  let got = false;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) continue;
+      fs.writeFileSync(script, Buffer.from(await res.arrayBuffer()));
+      fs.chmodSync(script, 0o755);
+      got = true;
+      break;
+    } catch {
+      /* next */
+    }
+  }
+  const run = got ? script : "/opt/reelos/bin/reelos-update.sh";
+  const log = fs.openSync("/var/lib/reelos/ota.log", "a");
   const code: number = await new Promise((resolve) => {
-    const child = spawn("bash", ["/opt/reelos/bin/reelos-update.sh", "apply"], { stdio: "ignore" });
+    const child = spawn("bash", [run, "apply"], { stdio: ["ignore", log, log] });
     child.on("exit", (c) => resolve(c ?? 1));
     child.on("error", () => resolve(1));
   });
+  try {
+    fs.closeSync(log);
+  } catch {
+    /* */
+  }
   return { ok: code === 0 };
 });
 

@@ -72,7 +72,9 @@ def call(url: str, key: str | None = None, method: str = "GET", body: dict | Non
         return json.loads(raw.decode()) if raw else None
 
 
-def wait_key(xml: Path, seconds: int = 150) -> str | None:
+def wait_key(xml: Path, seconds: int = 90) -> str | None:
+    if not xml.exists():
+        seconds = min(seconds, 12)
     deadline = time.time() + seconds
     while time.time() < deadline:
         k = api_key(xml)
@@ -81,6 +83,28 @@ def wait_key(xml: Path, seconds: int = 150) -> str | None:
         time.sleep(2)
     return None
 
+
+def compose_env() -> dict:
+    env = os.environ.copy()
+    p = COMPOSE / ".env"
+    if p.exists():
+        for line in p.read_text().splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            env.setdefault(k.strip(), v.strip())
+    return env
+
+
+def compose(*args: str) -> None:
+    subprocess.run(
+        ["docker", "compose", *args],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
 
 def patch_decypharr() -> None:
     src = source()
@@ -111,13 +135,7 @@ def patch_decypharr() -> None:
     cfg.setdefault("port", "8282")
     DECYPHARR.parent.mkdir(parents=True, exist_ok=True)
     DECYPHARR.write_text(json.dumps(cfg, indent=2) + "\n")
-    subprocess.run(
-        ["docker", "compose", "restart", "decypharr"],
-        cwd=str(COMPOSE),
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    compose("up", "-d", "--force-recreate", "decypharr")
 
 
 def root_paths(kind: str) -> list[str]:
@@ -135,6 +153,14 @@ def root_paths(kind: str) -> list[str]:
     return paths or ["/mnt/symlinks"]
 
 
+HOST_FOR = {
+    "/media/movies": "/srv/media/movies",
+    "/media/tv": "/srv/media/tv",
+    "/media/anime": "/srv/media/anime",
+    "/media/music": "/srv/media/music",
+}
+
+
 def ensure_roots(base: str, key: str, kind: str) -> None:
     try:
         existing = call(f"{base}/rootfolder", key) or []
@@ -142,7 +168,12 @@ def ensure_roots(base: str, key: str, kind: str) -> None:
         return
     have = {r.get("path") for r in existing if isinstance(r, dict)}
     for path in root_paths(kind):
-        Path(path).mkdir(parents=True, exist_ok=True)
+        host = Path(HOST_FOR.get(path, path))
+        try:
+            host.mkdir(parents=True, exist_ok=True)
+            os.chown(host, 1000, 1000)
+        except OSError:
+            pass
         if path in have:
             continue
         try:
@@ -212,6 +243,7 @@ def transcode_override() -> None:
     subprocess.run(
         ["docker", "compose", "up", "-d"],
         cwd=str(COMPOSE),
+        env=compose_env(),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         check=False,
@@ -219,6 +251,13 @@ def transcode_override() -> None:
 
 
 def mount_extra_disks() -> None:
+    try:
+        _mount_extra_disks()
+    except Exception as exc:
+        print(f"wire-engines: extra disks skipped: {exc}", file=sys.stderr)
+
+
+def _mount_extra_disks() -> None:
     a = answers()
     selected = a.get("selectedDisks") or []
     format_ok = set(a.get("formatDisks") or [])

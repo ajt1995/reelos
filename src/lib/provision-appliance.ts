@@ -58,7 +58,7 @@ export const provisionAppliance = createServerFn({ method: "POST" })
             name: provider,
             api_key: answers.apiKey.trim(),
             folder: "/mnt/debrid",
-            use_webdav: true,
+            use_webdav: false,
           },
         ],
         qbittorrent: {

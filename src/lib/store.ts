@@ -55,14 +55,14 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.1.1";
-export const SHIPPED_VERSION = "1.2.1.1";
+export const LATEST_VERSION = "1.2.2";
+export const SHIPPED_VERSION = "1.2.2";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Settings terminal. Paste a command from your phone; it runs on the box.",
-  "Search goes through Radarr and Sonarr. Jellyfin and Decypharr stay up.",
-  "Wizard answers are kept. No torrent client on the debrid path.",
+  "OTA keeps the phone up. VERSION stamps after the shell answers.",
+  "Compose uses your profiles. Wiring does not die on extra disks.",
+  "Settings terminal. Search through Radarr. Debrid path has no torrent client.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

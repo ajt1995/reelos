@@ -1,10 +1,10 @@
 {
-  "version": "1.2.1.1",
+  "version": "1.2.2",
   "channel": "stable",
   "notes": [
-    "Settings terminal. Paste a command from your phone; it runs on the box.",
-    "Search goes through Radarr and Sonarr. Jellyfin and Decypharr stay up.",
-    "Wizard answers are kept."
+    "OTA keeps the phone up. VERSION is stamped after the shell answers.",
+    "Compose uses your profiles so Jellyfin and Decypharr actually recreate.",
+    "Wiring skips dead extra disks. Settings terminal. Search through Radarr."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.2.tar.gz"
 }

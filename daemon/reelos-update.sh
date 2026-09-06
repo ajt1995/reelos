@@ -1,47 +1,92 @@
 #!/bin/bash
-# ReelOS OTA. Reads GitHub channel.json. Never touches /srv/media or compose configs.
+# ReelOS OTA. Phone stays up until the new tree is ready. VERSION is stamped last.
+# Never touches /srv/media libraries or compose configs/.env (API keys).
 set -euo pipefail
 ROOT="${REELOS_ROOT:-/opt/reelos}"
 STATE=/var/lib/reelos
-CHANNEL_URL="${REELOS_CHANNEL_URL:-https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json}"
 WORK=/tmp/reelos-ota
+LOG="$STATE/ota.log"
+CHANNEL_URLS=(
+  "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json"
+  "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json"
+  "https://github.com/ajt1995/reelos/raw/main/channel.json"
+)
 mkdir -p "$STATE" "$WORK"
+log() { echo "$*" | tee -a "$LOG" >/dev/stderr; }
+
+fetch_channel() {
+  local u
+  for u in "${CHANNEL_URLS[@]}"; do
+    if curl -fsSL --max-time 20 "$u" -o "$WORK/channel.json"; then
+      python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$WORK/channel.json" && return 0
+    fi
+  done
+  return 1
+}
+
+json() {
+  python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2]) or "")' "$WORK/channel.json" "$1"
+}
+
 LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
 MODE="${1:-check}"
+echo "---- $(date -Is) $MODE local=$LOCAL ----" >>"$LOG"
 
-curl -fsSL "$CHANNEL_URL" >"$WORK/channel.json"
-REMOTE=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$WORK/channel.json")
-TARBALL=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("tarball") or "")' "$WORK/channel.json")
+fetch_channel || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
+REMOTE=$(json version)
+TARBALL=$(json tarball)
 NOTES=$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("notes") or []))' "$WORK/channel.json")
+if [ -z "$TARBALL" ]; then
+  TARBALL="https://github.com/ajt1995/reelos/archive/refs/tags/v${REMOTE}.tar.gz"
+fi
 
 if [ "$MODE" = "check" ]; then
   python3 -c 'import json,sys
-local, remote = sys.argv[1], sys.argv[2]
-print(json.dumps({"local": local, "remote": remote, "available": remote != local}))' "$LOCAL" "$REMOTE"
+print(json.dumps({"local": sys.argv[1], "remote": sys.argv[2], "available": sys.argv[1] != sys.argv[2]}))' "$LOCAL" "$REMOTE"
   exit 0
 fi
 
 if [ "$REMOTE" = "$LOCAL" ]; then
+  log "already $LOCAL"
   echo "already $LOCAL"
   exit 0
 fi
 
-echo "ReelOS $LOCAL → $REMOTE"
-curl -fL "$TARBALL" -o "$WORK/src.tar.gz"
+log "ReelOS $LOCAL → $REMOTE"
+curl -fL --max-time 120 "$TARBALL" -o "$WORK/src.tar.gz"
 rm -rf "$WORK/src"
 mkdir -p "$WORK/src"
 tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
-if [ ! -f "$WORK/src/VERSION" ]; then
-  echo "tarball has no VERSION" >&2
-  exit 1
-fi
-GOT=$(cat "$WORK/src/VERSION")
+GOT=$(cat "$WORK/src/VERSION" 2>/dev/null || true)
 if [ "$GOT" != "$REMOTE" ]; then
-  echo "VERSION $GOT != channel $REMOTE" >&2
+  log "tarball VERSION '$GOT' != channel $REMOTE"
   exit 1
 fi
 
-# Stage next tree. Keep secrets and libraries.
+# Re-exec the updater from this tarball so tonight's script cannot run tomorrow's apply.
+NEW_UP="$WORK/src/daemon/reelos-update.sh"
+if [ -f "$NEW_UP" ] && [ "${REELOS_OTA_REEXEC:-}" != "1" ]; then
+  if ! cmp -s "$NEW_UP" "$0" 2>/dev/null; then
+    log "re-exec updater from tarball"
+    chmod 755 "$NEW_UP"
+    export REELOS_OTA_REEXEC=1
+    exec bash "$NEW_UP" apply
+  fi
+fi
+
+need() {
+  local f="$1" pat="$2"
+  [ -f "$WORK/src/$f" ] || { log "canary missing $f"; return 1; }
+  grep -q "$pat" "$WORK/src/$f" || { log "canary fail $f ~ $pat"; return 1; }
+}
+need src/components/settings-view.tsx 'title="Terminal"'
+need src/components/home-view.tsx lookupMedia
+need src/lib/appliance.ts runTerminal
+need src/lib/catalog.ts rememberCatalogTitles
+need install/compose/docker-compose.yml rshared
+need daemon/wire-engines.py use_webdav
+log "canaries ok"
+
 NEXT="$ROOT.next"
 rm -rf "$NEXT"
 mkdir -p "$NEXT/app" "$NEXT/bin" "$NEXT/systemd" "$NEXT/compose"
@@ -60,58 +105,65 @@ if [ -d "$WORK/src/src" ]; then
   fi
   echo 1 >"$NEXT/app/.reelos-appliance"
 fi
-cp "$WORK/src/VERSION" "$NEXT/VERSION"
-cp "$WORK/src/install/reelos-install.sh" "$NEXT/install.sh"
 if [ -d "$WORK/src/daemon" ]; then
   mkdir -p "$NEXT/bin"
-  cp -a "$WORK/src/daemon/." "$NEXT/bin/" 2>/dev/null || true
+  cp -a "$WORK/src/daemon/." "$NEXT/bin/"
 fi
-chmod 755 "$NEXT/install.sh" "$NEXT/bin/"* 2>/dev/null || true
-
-# Swap. Keep compose/configs.
-systemctl stop reelos 2>/dev/null || true
+chmod 755 "$NEXT/bin/"* 2>/dev/null || true
+# Keep live secrets. Do not stamp VERSION yet.
 if [ -d "$ROOT/compose/configs" ]; then
   mkdir -p "$NEXT/compose"
   cp -a "$ROOT/compose/configs" "$NEXT/compose/configs"
   [ -f "$ROOT/compose/.env" ] && cp -a "$ROOT/compose/.env" "$NEXT/compose/.env"
 fi
-# Keep previous as .prev for fail-closed restore
-rm -rf "$ROOT.prev"
-if [ -d "$ROOT/app" ]; then
-  mkdir -p "$ROOT.prev"
-  cp -a "$ROOT/app" "$ROOT.prev/app"
-  cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
+if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
+  mkdir -p "$NEXT/compose"
+  cp "$WORK/src/install/compose/docker-compose.yml" "$NEXT/compose/docker-compose.yml"
 fi
-cp -a "$NEXT/." "$ROOT/"
-rm -rf "$NEXT"
-
-# Disc may have skipped Node. Install it before npm ci.
-export DEBIAN_FRONTEND=noninteractive
-if ! command -v npm >/dev/null 2>&1; then
-  apt-get update -y || true
-  apt-get install -y nodejs npm || true
-fi
-if ! command -v npm >/dev/null 2>&1; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - || true
-  apt-get install -y nodejs || true
-fi
-if ! command -v caddy >/dev/null 2>&1; then
-  apt-get install -y --no-install-recommends caddy || true
+if [ -f "$WORK/src/install/compose/Caddyfile" ]; then
+  cp "$WORK/src/install/compose/Caddyfile" "$NEXT/compose/Caddyfile"
 fi
 
-if [ -f "$ROOT/app/package.json" ]; then
-  (cd "$ROOT/app" && { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; }) || {
-    echo "npm ci failed — restoring" >&2
-    if [ -d "$ROOT.prev/app" ]; then
-      rm -rf "$ROOT/app"
-      cp -a "$ROOT.prev/app" "$ROOT/app"
-      cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION" 2>/dev/null || true
+# npm in the staged tree while the current shell keeps serving.
+SKIP_NPM=0
+if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
+  if cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json"; then
+    SKIP_NPM=1
+    if [ -d "$ROOT/app/node_modules" ]; then
+      cp -a "$ROOT/app/node_modules" "$NEXT/app/node_modules"
+      log "package.json unchanged — reused node_modules"
+    else
+      SKIP_NPM=0
     fi
-    systemctl start reelos 2>/dev/null || true
+  fi
+fi
+if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  command -v npm >/dev/null 2>&1 || apt-get install -y nodejs npm || true
+  (cd "$NEXT/app" && { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; }) || {
+    log "npm failed — not swapping"
+    rm -rf "$NEXT"
     exit 1
   }
 fi
-systemctl daemon-reload || true
+
+rm -rf "$ROOT.prev"
+mkdir -p "$ROOT.prev"
+[ -d "$ROOT/app" ] && cp -a "$ROOT/app" "$ROOT.prev/app"
+cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
+[ -f "$ROOT/compose/docker-compose.yml" ] && cp -a "$ROOT/compose/docker-compose.yml" "$ROOT.prev/docker-compose.yml" || true
+
+# Swap app/bin/compose yml. Phone blips for a few seconds, not minutes.
+systemctl stop reelos 2>/dev/null || true
+rm -rf "$ROOT/app"
+cp -a "$NEXT/app" "$ROOT/app"
+mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
+cp -a "$NEXT/bin/." "$ROOT/bin/"
+cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
+cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
+cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
+rm -rf "$NEXT"
+
 if [ -f "$ROOT/compose/Caddyfile" ]; then
   mkdir -p /etc/caddy
   cp "$ROOT/compose/Caddyfile" /etc/caddy/Caddyfile
@@ -123,17 +175,50 @@ if [ -f "$ROOT/systemd/reelos.service" ]; then
   systemctl daemon-reload || true
 fi
 systemctl enable --now reelos || true
-if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
+
+probe() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    [ "$code" = "200" ] && return 0
+    sleep 1
+  done
+  return 1
+}
+
+if ! probe; then
+  log "probe failed — restoring previous app"
+  if [ -d "$ROOT.prev/app" ]; then
+    systemctl stop reelos 2>/dev/null || true
+    rm -rf "$ROOT/app"
+    cp -a "$ROOT.prev/app" "$ROOT/app"
+    [ -f "$ROOT.prev/VERSION" ] && cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION"
+    [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
+    systemctl start reelos 2>/dev/null || true
+  fi
+  exit 1
+fi
+
+load_env() {
   if [ -f "$ROOT/compose/.env" ]; then
     set -a
     # shellcheck disable=SC1091
     . "$ROOT/compose/.env"
     set +a
   fi
-  (cd "$ROOT/compose" && docker compose up -d --remove-orphans) || true
+}
+
+if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
+  load_env
+  (cd "$ROOT/compose" && docker compose up -d --remove-orphans) || log "compose up skipped"
+  (cd "$ROOT/compose" && docker compose up -d --force-recreate jellyfin decypharr) || true
 fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
-  python3 "$ROOT/bin/wire-engines.py" || true
+  python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
-echo "$NOTES"
+
+# Stamp VERSION only after the shell answered.
+echo "$REMOTE" >"$ROOT/VERSION"
+log "$NOTES"
+log "ReelOS $REMOTE applied."
 echo "ReelOS $REMOTE applied."
