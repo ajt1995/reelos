@@ -1,4 +1,5 @@
 import { Navigate } from "@tanstack/react-router";
+import { HomeView } from "@/components/home-view";
 import { Provision } from "@/components/provision";
 import { Shell } from "@/components/shell";
 import { Splash } from "@/components/splash";
@@ -17,22 +18,28 @@ export function Gate({
   const phase = useReelStore((s) => s.phase);
 
   if (!hydrated) return <Splash />;
-  if (!provisioned) return <Navigate to="/" />;
-  if (phase === "wizard") return <Wizard />;
+  if (!provisioned || phase === "wizard") return <Navigate to="/" />;
+  if (phase === "building") return <Provision />;
   if (!chrome) return children;
   return <Shell>{children}</Shell>;
 }
 
+/** `/` after hydrate. Never returns null — that was a white screen on the house box. */
 export function Boot() {
   const hydrated = useReelStore((s) => s.hydrated);
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
 
   if (!hydrated) return <Splash />;
-  if (provisioned && phase !== "wizard") {
-    return null;
-  }
   if (phase === "wizard") return <Wizard />;
-  if (phase === "building" || phase === "ready") return <Provision />;
-  return <Splash />;
+  if (phase === "building") return <Provision />;
+  if (phase === "ready" && !provisioned) return <Provision />;
+  if (provisioned) {
+    return (
+      <Shell>
+        <HomeView />
+      </Shell>
+    );
+  }
+  return <Wizard />;
 }
