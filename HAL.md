@@ -1,17 +1,16 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 17:13 CDT**. VERSION **1.2.15**. No 1.2.16. No ISO. No tracker roster.
+Updated **2026-09-06 17:34 CDT**. VERSION **1.2.15**.
 
-## Still broken for first movie
+**Parked:** `FACELIFT.md` is 1.3 Light (visuals only). Not this apply. Do not build it. Do not stamp 1.2.16 for paint.
 
-Prowlarr stock schema often has **no** TorBox indexer. `ensure_provider_indexer` then logs `no first-party indexer` and returns. Request stays empty. Doctor must not go green.
+House still applies 1.2.15 once:
 
-## Fix
+```
+curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
+```
 
-1. If schema has no match for `torbox` / `real-debrid` / etc, install the **vendor's official Prowlarr definition** (TorBox publishes `torbox-prowlarr-indexers`). Drop the YML into Prowlarr's custom Definitions folder, restart Prowlarr, then add `ReelOS-torbox` with `answers.apiKey`. Same idea for RD if a first-party/official definition exists. Do not scrape random sites. Do not ship a list of trackers.
-2. If add still fails, Doctor `releases` stays red and wire.log has the line. Never silent.
-3. After a successful grab (`downloaded`), `POST` Jellyfin `/Library/Refresh` so Watch is not dead for ten minutes.
-4. `/api/provision` compose timeout 180s is too short on a cold pull. Wait or pre-pull images; fail with the compose log, not a hang.
+## Closed (do not reopen for paint)
 
-Then freeze. Same apply curl.
+Provider indexer via official TorBox Prowlarr YML. Doctor `releases` red on add fail. Jellyfin `/Library/Refresh` after downloaded. Provision `compose pull` then `up`. Wizard Finish is `/api/provision`. Validate is `/api/ping`. Disks are `/api/disks`.
