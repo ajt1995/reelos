@@ -579,8 +579,11 @@ async function handleRequest(req, res) {
 }
 
 async function handleDoctor(_req, res) {
-  const script = "/opt/reelos/bin/reelos-doctor.py";
-  if (!existsSync(script)) {
+  const script = [
+    "/opt/reelos/bin/reelos-doctor.py",
+    "/workspace/daemon/reelos-doctor.py",
+  ].find((p) => existsSync(p));
+  if (!script) {
     send(res, 200, { ok: true, live: false, version: localVersion(), checks: [] });
     return;
   }
