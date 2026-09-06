@@ -1,4 +1,5 @@
-import { readFileSync, existsSync, appendFileSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 
 function xmlKey(file) {
@@ -13,6 +14,20 @@ function note(msg) {
   } catch {
     /* */
   }
+}
+
+function tailscaleBin() {
+  for (const p of ["/usr/bin/tailscale", "/usr/sbin/tailscale"]) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+function tailscaleRunning() {
+  const bin = tailscaleBin();
+  if (!bin) return false;
+  const r = spawnSync(bin, ["status"], { encoding: "utf8", timeout: 4000 });
+  return r.status === 0;
 }
 
 function ipv4() {
@@ -174,7 +189,48 @@ async function handleBox(_req, res) {
     adminName: a.adminName || "reelos",
     adminPassword: a.adminPassword || "reelos",
     tailscaleAuth,
+    tailscaleInstalled: Boolean(tailscaleBin()),
+    tailscaleUp: tailscaleRunning(),
   });
+}
+
+async function handleTailscaleInstall(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false, error: "POST only" });
+    return;
+  }
+  const a = answers();
+  a.access = "tailscale";
+  try {
+    writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+  } catch (e) {
+    send(res, 500, { ok: false, error: String(e) });
+    return;
+  }
+  const script = existsSync("/opt/reelos/bin/reelos-access.sh")
+    ? "/opt/reelos/bin/reelos-access.sh"
+    : "/opt/reelos/bin/reelos-access.sh";
+  const log = "/var/lib/reelos/tailscale-install.log";
+  const out = openSync(log, "a");
+  spawn("bash", [script], { detached: true, stdio: ["ignore", out, out] }).unref();
+  send(res, 200, { ok: true, started: true });
+}
+
+async function handleTailscaleCheck(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const up = tailscaleRunning();
+  if (up) {
+    try {
+      const { unlinkSync } = await import("node:fs");
+      if (existsSync("/var/lib/reelos/tailscale-auth.url")) unlinkSync("/var/lib/reelos/tailscale-auth.url");
+    } catch {
+      /* */
+    }
+  }
+  send(res, 200, { ok: true, up, installed: Boolean(tailscaleBin()) });
 }
 
 async function handleIndexer(req, res) {
@@ -232,6 +288,8 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
+          if (pathOnly === "/api/tailscale/install") return void (await handleTailscaleInstall(req, res));
+          if (pathOnly === "/api/tailscale/check") return void (await handleTailscaleCheck(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;

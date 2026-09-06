@@ -105,6 +105,7 @@ need src/lib/appliance.ts runTerminal
 need src/lib/catalog.ts rememberCatalogTitles
 need install/compose/docker-compose.yml rshared
 need src/components/connect-view.tsx 'Watch on the TV'
+need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
 need daemon/wire-engines.py use_webdav
 log "canaries ok"

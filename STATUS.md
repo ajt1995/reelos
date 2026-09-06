@@ -7,7 +7,7 @@ Dated **2026-09-06 04:12 CDT**.
 
 - `/opt/reelos/VERSION` was **1.2.2** after 1.2.3 probe rolled back (broken `store.ts`). Fixed. **1.2.4** is the apply to run.
 - Search Batman works via `GET /api/lookup`.
-- Jellyfin on 1.2.2 is still `127.0.0.1:8096`. **1.2.4 binds `0.0.0.0:8096` and Home/Connect have Open Jellyfin in this browser.**
+- **1.2.5** Connect → Away from home → **Install Tailscale on this box**. User-started apt, not OTA.
 
 ## 1.2.3 (this point update)
 

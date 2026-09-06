@@ -14,6 +14,8 @@ type Box = {
   adminName: string;
   adminPassword: string;
   tailscaleAuth: string | null;
+  tailscaleInstalled: boolean;
+  tailscaleUp: boolean;
 };
 
 const empty: Box = {
@@ -26,6 +28,8 @@ const empty: Box = {
   adminName: "reelos",
   adminPassword: "reelos",
   tailscaleAuth: null,
+  tailscaleInstalled: false,
+  tailscaleUp: false,
 };
 
 export function ConnectView({ onDone }: { onDone?: () => void }) {
@@ -38,6 +42,8 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   const [idxUrl, setIdxUrl] = useState("");
   const [idxKey, setIdxKey] = useState("");
   const [idxMsg, setIdxMsg] = useState("");
+  const [tsBusy, setTsBusy] = useState(false);
+  const [tsMsg, setTsMsg] = useState("");
 
   useEffect(() => {
     let stop = false;
@@ -155,13 +161,52 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
           </div>
           {away === "out" ? (
             <div className="mt-4 text-sm text-muted">
-              <p>Install Tailscale on the phone. Open the login link on this box, then tap I've signed in.</p>
-              {box.tailscaleAuth ? (
-                <a className="mt-2 block break-all text-gold" href={box.tailscaleAuth}>
-                  {box.tailscaleAuth}
-                </a>
+              {box.tailscaleUp ? (
+                <p className="text-foreground">This box is on Tailscale. Install the app on your phone and sign into the same account.</p>
               ) : (
-                <p className="mt-2">No login link yet. Tailscale may still be installing.</p>
+                <>
+                  <p>Install Tailscale on the phone too. First this box needs it — that was skipped on purpose during updates.</p>
+                  <Button
+                    className="mt-3"
+                    disabled={tsBusy}
+                    onClick={() => {
+                      setTsBusy(true);
+                      setTsMsg("Installing on the box. Apt can take a minute.");
+                      void fetch("/api/tailscale/install", { method: "POST" })
+                        .then((r) => r.json())
+                        .then((j: { ok?: boolean; error?: string }) => {
+                          setTsMsg(j.ok ? "Installing… watch for a login link below." : j.error || "Could not start");
+                        })
+                        .finally(() => setTsBusy(false));
+                    }}
+                  >
+                    Install Tailscale on this box
+                  </Button>
+                  {tsMsg ? <p className="mt-2">{tsMsg}</p> : null}
+                  {box.tailscaleAuth ? (
+                    <>
+                      <a className="mt-3 block break-all text-gold" href={box.tailscaleAuth}>
+                        {box.tailscaleAuth}
+                      </a>
+                      <img
+                        alt="Tailscale login"
+                        className="mt-3 size-40 rounded-xl bg-white p-2"
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(box.tailscaleAuth)}`}
+                      />
+                      <Button
+                        className="mt-3"
+                        variant="ghost"
+                        onClick={() => {
+                          void fetch("/api/tailscale/check", { method: "POST" });
+                        }}
+                      >
+                        I've signed in
+                      </Button>
+                    </>
+                  ) : box.tailscaleInstalled ? (
+                    <p className="mt-2">Installed. Waiting for a login.tailscale.com link…</p>
+                  ) : null}
+                </>
               )}
             </div>
           ) : null}

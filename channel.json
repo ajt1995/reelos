@@ -1,9 +1,9 @@
 {
-  "version": "1.2.4",
+  "version": "1.2.5",
   "channel": "stable",
   "notes": [
-    "Open Jellyfin in this browser at http://<ip>:8096.",
-    "Connect cards. Search on the box. OTA will not apt-get Chromium."
+    "Connect can install Tailscale on the box. Open Jellyfin in this browser.",
+    "Search on the box. OTA will not apt-get Chromium."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.4.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.5.tar.gz"
 }
