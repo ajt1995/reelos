@@ -40,7 +40,7 @@ export function SettingsView() {
   const removeUser = useReelStore((s) => s.removeUser);
   const adapter = useReelStore((s) => s.adapter);
   const [name, setName] = useState("");
-  const [panel, setPanel] = useState<string | null>(null);
+  const [panel, setPanel] = useState<string | null>("terminal");
   const profile = adapterProfile(answers.source, answers.frontend);
 
   return (
@@ -51,6 +51,10 @@ export function SettingsView() {
       </p>
 
       <div className="mt-8 grid gap-3">
+        <TerminalRow
+          open={panel === "terminal"}
+          onClick={() => setPanel(panel === "terminal" ? null : "terminal")}
+        />
         <Row
           icon={HardDrive}
           title="Library"
@@ -189,10 +193,6 @@ export function SettingsView() {
         <UpdatesRow
           open={panel === "updates"}
           onClick={() => setPanel(panel === "updates" ? null : "updates")}
-        />
-        <TerminalRow
-          open={panel === "terminal"}
-          onClick={() => setPanel(panel === "terminal" ? null : "terminal")}
         />
         <InstallRow
           open={panel === "install"}
