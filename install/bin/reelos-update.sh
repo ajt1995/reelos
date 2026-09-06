@@ -199,7 +199,7 @@ systemctl enable --now reelos || true
 
 probe() {
   local i
-  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  for i in $(seq 1 30); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
     [ "$code" = "200" ] && return 0
     sleep 1

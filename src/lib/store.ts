@@ -323,6 +323,8 @@ function labState(): Pick<
       autoUpdate: true,
       stackImages: false,
       connectDone: true,
+    },
+    update: idleUpdate(),
     adapter: {
       ...makeAdapter(demoAnswers),
       cacheHits: 3,
