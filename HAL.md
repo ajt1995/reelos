@@ -1,17 +1,18 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 12:37 CDT**. Owner out. HP 1.2.8. VERSION stays 1.2.15.
+Updated **2026-09-06 12:57 CDT**. VERSION stays 1.2.15. No 1.2.16.
 
-## Leftovers — then freeze again
+## Fresh-start blockers (do these, then freeze)
 
-Do not "fix everything." Do this list. Then stop committing until they apply.
+Wizard Finish still called `createServerFn` (`provisionAppliance`). That can run in the phone. Fake disks still came from `catalog.DISKS`. Validate-key could paint canned Premium copy on catch.
 
-1. Plex `0.0.0.0:32400` if the profile is on. Same rule as Jellyfin. Still say Plex is undone if first-run/claim is missing.
-2. Caddy probe: `/` on :80 must hit ReelOS, not stock Caddy. Probe :80 as well as :8080.
-3. Console card: IPv4 first, huge. Not reelos.local first.
-4. Empty Home: no fake posters. Search box only.
-5. After Reset, wizard + Connect must run. `/api/box` provisioned=false.
-6. Doctor names Decypharr restart loops, not just "red."
+Required on `main` before they apply:
 
-Then freeze. Write frozen in STATUS. No 1.2.16. No ISO. No APK. No README.
+1. `POST /api/provision` in `scripts/reelos-lookup-plugin.mjs` — write `answers.json`, compose `.env`, Decypharr config, `docker compose up -d`, spawn `wire-engines.py`, write `provisioned`. Return `{ok, simulated:false}`. Fail if compose fails.
+2. Wizard Finish `fetch("/api/provision")`. Do not call `provisionAppliance`. Alert on failure. Do not start the building theater unless `ok`.
+3. `POST /api/ping` — real provider HTTP. No canned success.
+4. Wizard Validate uses `/api/ping`. No `pingCopy` fallback.
+5. Storage step loads `/api/disks` (`lsblk`). No `DISKS` from catalog.
+
+Then freeze. Same apply curl. No ISO. No README.
