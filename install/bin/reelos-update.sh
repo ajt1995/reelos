@@ -107,7 +107,7 @@ need install/compose/docker-compose.yml rshared
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
-need daemon/reelos-lid.sh HandleLidSwitch
+need daemon/reelos-update.sh 'restore after failure'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
 need src/components/title-view.tsx '/api/request'
@@ -176,12 +176,30 @@ fi
 
 rm -rf "$ROOT.prev"
 mkdir -p "$ROOT.prev"
+log "backing up current app"
 [ -d "$ROOT/app" ] && cp -a "$ROOT/app" "$ROOT.prev/app"
 cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
 [ -f "$ROOT/compose/docker-compose.yml" ] && cp -a "$ROOT/compose/docker-compose.yml" "$ROOT.prev/docker-compose.yml" || true
 
+restore() {
+  log "restore after failure"
+  trap - ERR
+  if [ -d "$ROOT.prev/app" ]; then
+    systemctl stop reelos 2>/dev/null || true
+    rm -rf "$ROOT/app"
+    cp -a "$ROOT.prev/app" "$ROOT/app"
+    [ -f "$ROOT.prev/VERSION" ] && cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION"
+    [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl start reelos 2>/dev/null || true
+  fi
+}
+
 # Swap app/bin/compose yml. Phone blips for a few seconds, not minutes.
+trap restore ERR
+log "stopping shell"
 systemctl stop reelos 2>/dev/null || true
+log "swapping tree"
 rm -rf "$ROOT/app"
 cp -a "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
@@ -201,12 +219,14 @@ if [ -f "$ROOT/systemd/reelos.service" ]; then
   cp "$ROOT/systemd/reelos.service" /etc/systemd/system/reelos.service
   systemctl daemon-reload || true
 fi
+log "starting shell"
 systemctl enable --now reelos || true
 
 probe() {
   local i
-  for i in $(seq 1 30); do
+  for i in $(seq 1 45); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    log "probe $i $code"
     [ "$code" = "200" ] && return 0
     sleep 1
   done
@@ -215,16 +235,10 @@ probe() {
 
 if ! probe; then
   log "probe failed — restoring previous app"
-  if [ -d "$ROOT.prev/app" ]; then
-    systemctl stop reelos 2>/dev/null || true
-    rm -rf "$ROOT/app"
-    cp -a "$ROOT.prev/app" "$ROOT/app"
-    [ -f "$ROOT.prev/VERSION" ] && cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION"
-    [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
-    systemctl start reelos 2>/dev/null || true
-  fi
+  restore
   exit 1
 fi
+trap - ERR
 
 load_env() {
   if [ -f "$ROOT/compose/.env" ]; then

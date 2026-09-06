@@ -1,9 +1,9 @@
 {
-  "version": "1.2.11",
+  "version": "1.2.12",
   "channel": "stable",
   "notes": [
-    "Closing the lid does not sleep the box.",
-    "Jellyfin Movies library on /symlinks. Check only reads main."
+    "OTA restores the previous shell if swap dies mid-apply.",
+    "Lid ignore, Jellyfin /symlinks, Check reads main only."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.11.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.12.tar.gz"
 }
