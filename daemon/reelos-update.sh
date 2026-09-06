@@ -55,7 +55,6 @@ fetch_channel || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"l
 REMOTE=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')
 TARBALL=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json")).get("tarball") or "")')
 NOTES=$(python3 -c 'import json; print("\n".join(json.load(open("/tmp/reelos-ota/channel.json")).get("notes") or []))')
-cp /tmp/reelos-ota/channel.json "$WORK/channel.json"
 if [ -z "$TARBALL" ]; then
   TARBALL="https://github.com/ajt1995/reelos/archive/refs/tags/v${REMOTE}.tar.gz"
 fi
