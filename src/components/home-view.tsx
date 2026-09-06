@@ -6,7 +6,6 @@ import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle, searchTitles, TITLES } from "@/lib/catalog";
 import { titleInCache } from "@/lib/adapter";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
-import { lookupMedia } from "@/lib/appliance";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -48,15 +47,18 @@ export function HomeView() {
     }
     let cancelled = false;
     const t = window.setTimeout(() => {
-      void lookupMedia({ data: { q: term } })
+      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`lookup ${res.status}`);
+          return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
+        })
         .then((r) => {
           if (cancelled) return;
-          const bag = r as { titles?: Title[]; error?: string | null };
-          const titles = Array.isArray(bag?.titles) ? bag.titles : Array.isArray(r) ? (r as Title[]) : [];
+          const titles = Array.isArray(r?.titles) ? r.titles : [];
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
-          setLookupErr(bag?.error || (titles.length ? null : "Engine returned no titles"));
+          setLookupErr(r?.error || (titles.length ? null : "Engine returned no titles"));
         })
         .catch((e) => {
           if (!cancelled) {

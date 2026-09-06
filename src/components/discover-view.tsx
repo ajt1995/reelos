@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
-import { lookupMedia } from "@/lib/appliance";
 import { rememberCatalogTitles, searchTitles, TITLES } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
@@ -48,12 +47,14 @@ export function DiscoverView() {
     }
     let cancelled = false;
     const t = window.setTimeout(() => {
-      void lookupMedia({ data: { q: term } })
+      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+        .then((res) => res.json() as Promise<{ titles?: Title[] }>)
         .then((r) => {
           if (cancelled) return;
-          rememberCatalogTitles(r.titles);
-          rememberTitles?.(r.titles);
-          setRemoteHits(r.titles);
+          const titles = Array.isArray(r?.titles) ? r.titles : [];
+          rememberCatalogTitles(titles);
+          rememberTitles?.(titles);
+          setRemoteHits(titles);
         })
         .catch(() => {
           if (!cancelled) setRemoteHits([]);
