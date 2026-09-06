@@ -15,13 +15,32 @@ mkdir -p "$STATE" "$WORK"
 log() { echo "$*" | tee -a "$LOG" >/dev/stderr; }
 
 fetch_channel() {
-  local u
-  for u in "${CHANNEL_URLS[@]}"; do
-    if curl -fsSL --max-time 20 "$u" -o "$WORK/channel.json"; then
-      python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$WORK/channel.json" && return 0
-    fi
-  done
-  return 1
+  python3 - <<'PY'
+import json, urllib.request, sys
+urls = [
+  "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.2/channel.json",
+  "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
+  "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
+  "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+]
+best = None
+best_key = []
+for u in urls:
+    try:
+        req = urllib.request.Request(u, headers={"User-Agent": "reelos-ota", "Accept": "application/vnd.github.raw"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            raw = r.read().decode()
+        data = json.loads(raw)
+        ver = str(data.get("version") or "")
+        key = [int(x) for x in ver.split(".") if x.isdigit()]
+        if key > best_key:
+            best, best_key = data, key
+    except Exception:
+        continue
+if not best:
+    sys.exit(1)
+open("/tmp/reelos-ota/channel.json", "w").write(json.dumps(best, indent=2) + "\n")
+PY
 }
 
 json() {
@@ -33,9 +52,10 @@ MODE="${1:-check}"
 echo "---- $(date -Is) $MODE local=$LOCAL ----" >>"$LOG"
 
 fetch_channel || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
-REMOTE=$(json version)
-TARBALL=$(json tarball)
-NOTES=$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1])).get("notes") or []))' "$WORK/channel.json")
+REMOTE=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')
+TARBALL=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json")).get("tarball") or "")')
+NOTES=$(python3 -c 'import json; print("\n".join(json.load(open("/tmp/reelos-ota/channel.json")).get("notes") or []))')
+cp /tmp/reelos-ota/channel.json "$WORK/channel.json"
 if [ -z "$TARBALL" ]; then
   TARBALL="https://github.com/ajt1995/reelos/archive/refs/tags/v${REMOTE}.tar.gz"
 fi
