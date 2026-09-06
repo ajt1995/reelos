@@ -16,6 +16,7 @@ type Box = {
   tailscaleAuth: string | null;
   tailscaleInstalled: boolean;
   tailscaleUp: boolean;
+  tailnet: string | null;
 };
 
 const empty: Box = {
@@ -30,6 +31,7 @@ const empty: Box = {
   tailscaleAuth: null,
   tailscaleInstalled: false,
   tailscaleUp: false,
+  tailnet: null,
 };
 
 export function ConnectView({ onDone }: { onDone?: () => void }) {
@@ -162,7 +164,9 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
           {away === "out" ? (
             <div className="mt-4 text-sm text-muted">
               {box.tailscaleUp ? (
-                <p className="text-foreground">This box is on Tailscale. Install the app on your phone and sign into the same account.</p>
+                <p className="text-foreground">
+                  Tailnet {box.tailnet || "paired"}. Survives reboot. Phone app, same account.
+                </p>
               ) : (
                 <>
                   <p>Install Tailscale on the phone too. First this box needs it — that was skipped on purpose during updates.</p>

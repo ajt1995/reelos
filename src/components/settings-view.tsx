@@ -91,7 +91,9 @@ export function SettingsView() {
               </button>
             ))}
           </div>
+          <DisksPanel />
         </Row>
+        <PwaRow />
         <Row
           icon={KeyRound}
           title="Source"
@@ -229,6 +231,62 @@ export function SettingsView() {
           Factory reset
         </Button>
       </div>
+    </div>
+  );
+}
+
+function DisksPanel() {
+  const [disks, setDisks] = useState<{ name: string; size: string; model: string; mount: string; os: boolean }[]>([]);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    void fetch("/api/disks", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { disks?: typeof disks }) => setDisks(j.disks || []));
+  }, []);
+  return (
+    <div className="mt-4">
+      <p className="text-sm text-muted">Extra disks. Will not mount over /srv/media.</p>
+      <ul className="mt-2 space-y-2">
+        {disks.map((d) => (
+          <li key={d.name} className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              /dev/{d.name} · {d.size} {d.os ? "(OS)" : ""}
+              {d.mount ? ` · ${d.mount}` : ""}
+            </span>
+            {!d.os ? (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void fetch("/api/storage", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ disk: d.name }),
+                  })
+                    .then((r) => r.json())
+                    .then((j: { ok?: boolean; dest?: string; error?: string }) => {
+                      setMsg(j.ok ? `Mounted at ${j.dest}` : j.error || "Mount failed");
+                    });
+                }}
+              >
+                Use this disk
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      {msg ? <p className="mt-2 text-xs text-muted">{msg}</p> : null}
+    </div>
+  );
+}
+
+function PwaRow() {
+  return (
+    <div className="mt-3 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <p className="font-display font-medium">Add to Home Screen</p>
+      <p className="mt-1 text-sm text-muted">
+        Browser menu → Add to Home Screen. This page is already a PWA. Not an APK.
+      </p>
     </div>
   );
 }

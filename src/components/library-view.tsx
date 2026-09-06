@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TitleCard } from "@/components/title-card";
-import { getTitle } from "@/lib/catalog";
+import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import type { Kind } from "@/lib/types";
+import type { Kind, Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: "all" | Kind; label: string }[] = [
@@ -16,15 +16,37 @@ const TABS: { id: "all" | Kind; label: string }[] = [
 
 export function LibraryView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
-  const library = useReelStore((s) => s.library);
+  const [items, setItems] = useState<Title[]>([]);
+  const [err, setErr] = useState<string | null>(null);
   const intent = useReelStore((s) => s.answers.intent);
-  const items = useMemo(
-    () =>
-      library
-        .map((id) => getTitle(id))
-        .filter((t): t is NonNullable<typeof t> => Boolean(t))
-        .filter((t) => (tab === "all" ? true : t.kind === tab)),
-    [library, tab],
+
+  useEffect(() => {
+    let stop = false;
+    const load = () => {
+      void fetch("/api/library", { cache: "no-store" })
+        .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
+        .then((j) => {
+          if (stop) return;
+          const titles = Array.isArray(j.titles) ? j.titles : [];
+          rememberCatalogTitles(titles);
+          setItems(titles);
+          setErr(j.error || null);
+        })
+        .catch((e) => {
+          if (!stop) setErr(String(e));
+        });
+    };
+    load();
+    const id = window.setInterval(load, 15000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const shown = useMemo(
+    () => items.filter((t) => (tab === "all" ? true : t.kind === tab)),
+    [items, tab],
   );
 
   const tabs = TABS.filter((t) => {
@@ -40,9 +62,7 @@ export function LibraryView() {
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Library</h1>
-      <p className="mt-2 text-sm text-muted">
-        Files under /srv/media. Play opens the media server, not a custom TV OS.
-      </p>
+      <p className="mt-2 text-sm text-muted">What Jellyfin has. If it is not there, it is not on this row.</p>
       <div className="mt-6 flex flex-wrap gap-2">
         {tabs.map((t) => (
           <button
@@ -58,11 +78,11 @@ export function LibraryView() {
           </button>
         ))}
       </div>
-      {items.length === 0 ? (
-        <p className="mt-12 text-sm text-muted">Nothing here yet. Request a title from Discover.</p>
+      {shown.length === 0 ? (
+        <p className="mt-12 text-sm text-muted">{err ?? "Nothing in Jellyfin yet. Request a title from Home."}</p>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-          {items.map((t) => (
+          {shown.map((t) => (
             <TitleCard key={t.id} title={t} className="w-auto" />
           ))}
         </div>

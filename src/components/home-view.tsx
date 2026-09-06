@@ -3,8 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
-import { getTitle, searchTitles, TITLES } from "@/lib/catalog";
-import { titleInCache } from "@/lib/adapter";
+import { getTitle, searchTitles } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -94,22 +93,8 @@ export function HomeView() {
     .map(([id, v]) => ({ t: getTitle(id), v }))
     .filter((x) => x.t && library.includes(x.t.id));
 
-  const discover = TITLES.filter((t) => {
-    if (t.kind === "anime" && !intent.anime) return false;
-    if (t.kind === "kids" && !intent.kids) return false;
-    if (t.kind === "music" && !intent.music) return false;
-    if (t.kind === "movie" && !intent.movies) return false;
-    if (t.kind === "tv" && !intent.tv) return false;
-    return !library.includes(t.id);
-  }).slice(0, 14);
-
-  const cachedNow =
-    source === "local-vpn"
-      ? []
-      : TITLES.filter((t) => titleInCache(t) && !library.includes(t.id) && !requests.some((r) => r.titleId === t.id)).slice(
-          0,
-          10,
-        );
+  const discover = remoteHits.filter((t) => !library.includes(t.id)).slice(0, 14);
+  const cachedNow: Title[] = [];
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">

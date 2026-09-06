@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
@@ -20,6 +20,60 @@ export function RequestsView() {
   const requests = useReelStore((s) => s.requests);
   const retry = useReelStore((s) => s.retryRequest);
   const cancel = useReelStore((s) => s.cancelRequest);
+
+  useEffect(() => {
+    let stop = false;
+    const tick = async () => {
+      const live = useReelStore.getState().requests;
+      for (const r of live) {
+        const q = r.titleId.startsWith("tmdb-")
+          ? `tmdb=${r.titleId.slice(5)}`
+          : r.titleId.startsWith("tvdb-")
+            ? `tvdb=${r.titleId.slice(5)}`
+            : `id=${encodeURIComponent(r.titleId)}`;
+        try {
+          const j = (await fetch(`/api/request?${q}`, { cache: "no-store" }).then((res) => res.json())) as {
+            status?: string;
+          };
+          if (stop) return;
+          const mapped =
+            j.status === "downloaded"
+              ? "available"
+              : j.status === "grabbing"
+                ? "downloading"
+                : j.status === "failed"
+                  ? "failed"
+                  : j.status === "queued"
+                    ? "waiting"
+                    : r.status;
+          if (mapped !== r.status) {
+            if (mapped === "available" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+              try {
+                new Notification(`${getTitle(r.titleId)?.title || "Title"} is in the library`);
+              } catch {
+                /* */
+              }
+            }
+            useReelStore.setState((s) => ({
+              requests: s.requests.map((x) =>
+                x.id === r.id ? { ...x, status: mapped as typeof x.status, progress: mapped === "available" ? 100 : 0 } : x,
+              ),
+              library:
+                mapped === "available" && !s.library.includes(r.titleId) ? [...s.library, r.titleId] : s.library,
+            }));
+          }
+        } catch {
+          /* */
+        }
+      }
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 8000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, []);
 
   const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
 
@@ -62,7 +116,7 @@ export function RequestsView() {
                 <p className="mt-1 text-xs text-muted">
                   {r.requester} · {formatWhen(r.createdAt)}
                 </p>
-                {r.status === "downloading" ? (
+                {r.status === "downloading" && r.progress > 0 ? (
                   <div className="mt-2 h-1 max-w-xs overflow-hidden rounded-full bg-card-2">
                     <div className="h-full bg-gold" style={{ width: `${r.progress}%` }} />
                   </div>

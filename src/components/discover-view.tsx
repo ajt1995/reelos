@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
-import { rememberCatalogTitles, searchTitles, TITLES } from "@/lib/catalog";
+import { rememberCatalogTitles, searchTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 
@@ -14,20 +14,9 @@ export function DiscoverView() {
   const intent = useReelStore((s) => s.answers.intent);
   const library = useReelStore((s) => s.library);
 
-  const visible = useMemo(
-    () =>
-      TITLES.filter((t) => {
-        if (t.kind === "anime" && !intent.anime) return false;
-        if (t.kind === "kids" && !intent.kids) return false;
-        if (t.kind === "music" && !intent.music) return false;
-        if (t.kind === "movie" && !intent.movies) return false;
-        if (t.kind === "tv" && !intent.tv) return false;
-        return true;
-      }),
-    [intent],
-  );
+  const visible = useMemo(() => remoteHits, [remoteHits]);
 
-  const catalogHits = q.trim().length >= 2 ? searchTitles(q).filter((t) => visible.includes(t)) : [];
+  const catalogHits: Title[] = [];
   const hits = useMemo(() => {
     const seen = new Set<string>();
     const out: Title[] = [];

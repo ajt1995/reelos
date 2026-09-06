@@ -23,6 +23,19 @@ function tailscaleBin() {
   return null;
 }
 
+function tailnetName() {
+  const bin = tailscaleBin();
+  if (!bin) return null;
+  const r = spawnSync(bin, ["status", "--json"], { encoding: "utf8", timeout: 4000 });
+  if (r.status !== 0) return null;
+  try {
+    const j = JSON.parse(r.stdout || "{}");
+    return j.CurrentTailnet?.Name || j.Self?.DNSName || null;
+  } catch {
+    return null;
+  }
+}
+
 function tailscaleRunning() {
   const bin = tailscaleBin();
   if (!bin) return false;
@@ -289,6 +302,7 @@ async function handleBox(_req, res) {
     tailscaleAuth: tailscaleAuthUrl(),
     tailscaleInstalled: Boolean(tailscaleBin()),
     tailscaleUp: tailscaleRunning(),
+    tailnet: tailnetName(),
   });
 }
 
@@ -321,6 +335,7 @@ async function handleTailscaleCheck(req, res) {
   }
   const up = tailscaleRunning();
   if (up) {
+    spawnSync("systemctl", ["enable", "--now", "tailscaled"], { timeout: 8000 });
     try {
       const { unlinkSync } = await import("node:fs");
       if (existsSync("/var/lib/reelos/tailscale-auth.url")) unlinkSync("/var/lib/reelos/tailscale-auth.url");
@@ -328,7 +343,7 @@ async function handleTailscaleCheck(req, res) {
       /* */
     }
   }
-  send(res, 200, { ok: true, up, installed: Boolean(tailscaleBin()) });
+  send(res, 200, { ok: true, up, installed: Boolean(tailscaleBin()), tailnet: tailnetName() });
 }
 
 async function handleIndexer(req, res) {
@@ -925,6 +940,111 @@ systemctl restart reelos || true
   send(res, 200, { ok: true, started: true });
 }
 
+async function handleLibrary(_req, res) {
+  const a = answers();
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (!auth?.token) {
+    send(res, 200, { titles: [], error: "Jellyfin has no matching user/PIN" });
+    return;
+  }
+  try {
+    const r = await fetch(
+      "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Overview,ProviderIds&ImageTypeLimit=1",
+      { headers: { "X-Emby-Token": auth.token } },
+    );
+    if (!r.ok) {
+      send(res, 200, { titles: [], error: `Jellyfin ${r.status}` });
+      return;
+    }
+    const data = await r.json();
+    const items = Array.isArray(data.Items) ? data.Items : [];
+    const ip = ipv4();
+    const titles = items.map((it) => {
+      const tmdb = it.ProviderIds?.Tmdb;
+      const tvdb = it.ProviderIds?.Tvdb;
+      const kind = it.Type === "Series" ? "tv" : "movie";
+      const id = tmdb ? `tmdb-${tmdb}` : tvdb ? `tvdb-${tvdb}` : `jf-${it.Id}`;
+      const poster = ip && it.Id ? `http://${ip}:8096/Items/${it.Id}/Images/Primary` : "";
+      return {
+        id,
+        kind,
+        title: String(it.Name || "Untitled"),
+        year: Number(it.ProductionYear) || 0,
+        overview: String(it.Overview || ""),
+        poster,
+        jellyfinId: it.Id,
+        maxQuality: "4k",
+        popularity: 50,
+        genres: [],
+      };
+    });
+    send(res, 200, { titles, error: null });
+  } catch (e) {
+    send(res, 200, { titles: [], error: String(e) });
+  }
+}
+
+async function handleDisks(_req, res) {
+  const r = spawnSync("lsblk", ["-J", "-o", "NAME,SIZE,TYPE,MOUNTPOINT,MODEL,FSTYPE"], {
+    encoding: "utf8",
+    timeout: 8000,
+  });
+  let disks = [];
+  try {
+    const parsed = JSON.parse(r.stdout || "{}");
+    disks = (parsed.blockdevices || [])
+      .filter((d) => d.type === "disk")
+      .map((d) => ({
+        name: d.name,
+        size: d.size,
+        model: d.model || "",
+        mount: d.mountpoint || (d.children || []).map((c) => c.mountpoint).find(Boolean) || "",
+        os: Boolean(
+          d.mountpoint === "/" || (d.children || []).some((c) => c.mountpoint === "/" || c.mountpoint === "/boot"),
+        ),
+      }));
+  } catch {
+    disks = [];
+  }
+  send(res, 200, { disks, error: r.status === 0 ? null : r.stderr || "lsblk failed" });
+}
+
+async function handleStorage(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const disk = String(body.disk || "").replace(/[^a-z0-9]/gi, "");
+  if (!disk || disk === "nvme0n1") {
+    send(res, 400, { ok: false, error: "Pick a data disk, not the OS disk" });
+    return;
+  }
+  const dest = `/srv/media/${disk}`;
+  if (dest === "/srv/media" || dest === "/") {
+    send(res, 400, { ok: false, error: "Will not eat /srv/media" });
+    return;
+  }
+  mkdirSync(dest, { recursive: true });
+  const dev = existsSync(`/dev/${disk}1`) ? `/dev/${disk}1` : `/dev/${disk}`;
+  const m = spawnSync("mount", [dev, dest], { encoding: "utf8", timeout: 15000 });
+  send(res, 200, {
+    ok: m.status === 0,
+    dest,
+    error: m.status === 0 ? null : (m.stderr || m.stdout || "mount failed").slice(0, 300),
+  });
+}
+
+async function handleTranscode(_req, res) {
+  const dri = existsSync("/dev/dri");
+  const override = existsSync("/opt/reelos/compose/compose.override.yml");
+  send(res, 200, {
+    dri,
+    override,
+    hint: dri ? "VAAPI/QSV node present" : "No /dev/dri — CPU encode",
+  });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -947,6 +1067,10 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
           if (pathOnly === "/api/reset") return void (await handleReset(req, res));
+          if (pathOnly === "/api/library") return void (await handleLibrary(req, res));
+          if (pathOnly === "/api/disks") return void (await handleDisks(req, res));
+          if (pathOnly === "/api/storage") return void (await handleStorage(req, res));
+          if (pathOnly === "/api/transcode") return void (await handleTranscode(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
