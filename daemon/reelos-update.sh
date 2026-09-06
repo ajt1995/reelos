@@ -123,6 +123,15 @@ if [ -f "$ROOT/systemd/reelos.service" ]; then
   systemctl daemon-reload || true
 fi
 systemctl enable --now reelos || true
+if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
+  if [ -f "$ROOT/compose/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    . "$ROOT/compose/.env"
+    set +a
+  fi
+  (cd "$ROOT/compose" && docker compose up -d --remove-orphans) || true
+fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   python3 "$ROOT/bin/wire-engines.py" || true
 fi
