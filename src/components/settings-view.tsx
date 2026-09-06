@@ -4,6 +4,7 @@ import {
   Bell,
   Check,
   ChevronRight,
+  Cpu,
   HardDrive,
   KeyRound,
   LoaderCircle,
@@ -101,6 +102,7 @@ export function SettingsView() {
           <DisksPanel />
         </Row>
         <PwaRow />
+        <PerformanceRow />
         <Row
           icon={KeyRound}
           title="Source"
@@ -294,6 +296,50 @@ function PwaRow() {
       <p className="mt-1 text-sm text-muted">
         Browser menu → Add to Home Screen. This page is already a PWA. Not an APK.
       </p>
+    </div>
+  );
+}
+
+function PerformanceRow() {
+  const [low, setLow] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void fetch("/api/performance", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ low?: boolean }>)
+      .then((j) => setLow(j.low !== false))
+      .catch(() => {});
+  }, []);
+  const toggle = async () => {
+    setBusy(true);
+    const next = !low;
+    try {
+      const r = await fetch("/api/performance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ low: next }),
+      });
+      const j = (await r.json()) as { low?: boolean };
+      setLow(j.low !== false);
+    } catch {
+      /* */
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <div className="flex items-start gap-3">
+        <Cpu className="mt-0.5 size-5 text-muted" />
+        <div>
+          <p className="font-display font-medium">Low performance mode</p>
+          <p className="mt-1 text-sm text-muted">
+            Trickplay and chapter images off. Default on for this box.
+          </p>
+        </div>
+      </div>
+      <Button variant={low ? "gold" : "ghost"} onClick={() => void toggle()} disabled={busy}>
+        {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+        {low ? "On" : "Off"}
+      </Button>
     </div>
   );
 }

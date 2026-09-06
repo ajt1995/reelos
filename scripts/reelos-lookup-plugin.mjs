@@ -1247,6 +1247,52 @@ async function handlePing(req, res) {
   }
 }
 
+function performancePath() {
+  return "/var/lib/reelos/performance.json";
+}
+
+function readPerformance() {
+  try {
+    if (existsSync(performancePath())) {
+      return JSON.parse(readFileSync(performancePath(), "utf8"));
+    }
+  } catch {
+    /* */
+  }
+  return { low: true };
+}
+
+function applyPerformance() {
+  const root = process.env.REELOS_ROOT || "/opt/reelos";
+  const wire = existsSync(`${root}/bin/wire-engines.py`)
+    ? `${root}/bin/wire-engines.py`
+    : "/workspace/daemon/wire-engines.py";
+  if (!existsSync(wire)) return;
+  spawn("python3", [wire, "--performance"], { detached: true, stdio: "ignore" }).unref();
+}
+
+async function handlePerformance(req, res) {
+  mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "GET") {
+    const cur = readPerformance();
+    if (!existsSync(performancePath())) {
+      writeFileSync(performancePath(), JSON.stringify({ low: true }) + "\n");
+    }
+    send(res, 200, { low: cur.low !== false });
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const low = body.low !== false;
+  writeFileSync(performancePath(), JSON.stringify({ low }) + "\n");
+  applyPerformance();
+  send(res, 200, { ok: true, low });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -1275,6 +1321,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/transcode") return void (await handleTranscode(req, res));
           if (pathOnly === "/api/provision") return void (await handleProvision(req, res));
           if (pathOnly === "/api/ping") return void (await handlePing(req, res));
+          if (pathOnly === "/api/performance") return void (await handlePerformance(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });

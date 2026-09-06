@@ -467,6 +467,83 @@ def log_wire(msg: str) -> None:
         pass
 
 
+def performance_low() -> bool:
+    p = STATE / "performance.json"
+    if not p.exists():
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            p.write_text(json.dumps({"low": True}) + "\n")
+        except OSError:
+            return True
+        return True
+    try:
+        return bool(json.loads(p.read_text()).get("low", True))
+    except json.JSONDecodeError:
+        return True
+
+
+def apply_jellyfin_performance(token: str | None = None) -> None:
+    token = token or jellyfin_token()
+    if not token:
+        log_wire("performance: jellyfin auth failed")
+        return
+    low = performance_low()
+    flags = {
+        "EnableTrickplayImageExtraction": not low,
+        "ExtractTrickplayImagesDuringLibraryScan": not low,
+        "EnableChapterImageExtraction": not low,
+        "ExtractChapterImagesDuringLibraryScan": not low,
+        "DummyChapterDuration": 0 if low else 300,
+    }
+    hdr = {"X-Emby-Token": token}
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance folders {e}")
+        folders = []
+    for folder in folders if isinstance(folders, list) else []:
+        fid = folder.get("ItemId") or folder.get("Guid") or folder.get("Id")
+        if not fid:
+            continue
+        opts = dict(folder.get("LibraryOptions") or {})
+        opts.update(flags)
+        try:
+            call(
+                "http://127.0.0.1:8096/Library/VirtualFolders/LibraryOptions",
+                method="POST",
+                body={"Id": fid, "LibraryOptions": opts},
+                headers=hdr,
+            )
+            log_wire(f"performance library {folder.get('Name')} low={low}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance library {folder.get('Name')} {e}")
+    try:
+        tasks = call("http://127.0.0.1:8096/ScheduledTasks", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance tasks {e}")
+        tasks = []
+    for task in tasks if isinstance(tasks, list) else []:
+        name = str(task.get("Name") or "")
+        if "Trickplay" not in name and "Chapter Image" not in name and "Chapter Images" not in name:
+            continue
+        tid = task.get("Id")
+        if not tid:
+            continue
+        try:
+            if low:
+                call(
+                    f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
+                    method="POST",
+                    body=[],
+                    headers=hdr,
+                )
+                log_wire(f"performance disabled task {name}")
+            else:
+                log_wire(f"performance left task {name} (flags restored)")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance task {name} {e}")
+
+
 def bootstrap_jellyfin() -> None:
     deadline = time.time() + 90
     info = None
@@ -539,6 +616,11 @@ def bootstrap_jellyfin() -> None:
                 body={
                     "LibraryOptions": {
                         "EnableRealtimeMonitor": True,
+                        "EnableTrickplayImageExtraction": False,
+                        "ExtractTrickplayImagesDuringLibraryScan": False,
+                        "EnableChapterImageExtraction": False,
+                        "ExtractChapterImagesDuringLibraryScan": False,
+                        "DummyChapterDuration": 0,
                         "PathInfos": [{"Path": p} for p in paths],
                     }
                 },
@@ -547,6 +629,7 @@ def bootstrap_jellyfin() -> None:
             log_wire(f"jellyfin library {name}")
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
             log_wire(f"jellyfin library {name} {e}")
+    apply_jellyfin_performance(token)
     try:
         call(
             "http://127.0.0.1:8096/Library/Refresh",
@@ -694,4 +777,7 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if "--performance" in sys.argv:
+        apply_jellyfin_performance()
+        raise SystemExit(0)
     raise SystemExit(main())
