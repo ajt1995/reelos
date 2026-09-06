@@ -57,23 +57,39 @@ export const checkChannel = createServerFn({ method: "GET" }).handler(async () =
       : "1.2.0";
   try {
     const urls = [
-      "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+      "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
+      "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.3/channel.json",
       CHANNEL_URL,
       "https://github.com/ajt1995/reelos/raw/main/channel.json",
+      "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
     ];
-    let ch: { version: string; notes?: string[] } | null = null;
+    let best: { version: string; notes?: string[] } | null = null;
+    let bestKey: number[] = [];
+    const keyOf = (v: string) => v.split(".").map((n) => parseInt(n, 10) || 0);
+    const cmp = (a: number[], b: number[]) => {
+      const n = Math.max(a.length, b.length);
+      for (let i = 0; i < n; i++) {
+        const d = (a[i] || 0) - (b[i] || 0);
+        if (d) return d;
+      }
+      return 0;
+    };
     for (const url of urls) {
       try {
         const res = await fetch(url, { cache: "no-store" });
-        if (res.ok) {
-          ch = (await res.json()) as { version: string; notes?: string[] };
-          break;
+        if (!res.ok) continue;
+        const ch = (await res.json()) as { version: string; notes?: string[] };
+        const k = keyOf(ch.version || "0");
+        if (!best || cmp(k, bestKey) > 0) {
+          best = ch;
+          bestKey = k;
         }
       } catch {
         /* try next */
       }
     }
-    if (!ch) throw new Error("channel unreachable");
+    if (!best) throw new Error("channel unreachable");
+    const ch = best;
     return {
       ok: true as const,
       local,
