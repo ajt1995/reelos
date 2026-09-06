@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
@@ -27,7 +27,13 @@ export function TitleView({ id }: { id: string }) {
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
-  const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
+  const [inJellyfin, setInJellyfin] = useState(false);
+  useEffect(() => {
+    void fetch("/api/library", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ titles?: { id: string }[] }>)
+      .then((j) => setInJellyfin((j.titles || []).some((t) => t.id === id)))
+      .catch(() => {});
+  }, [id]);
 
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
     setReqErr(null);
@@ -61,7 +67,8 @@ export function TitleView({ id }: { id: string }) {
     );
   }
 
-  const available = inLibrary || request?.status === "available";
+  const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
+  const available = inJellyfin || inLibrary || request?.status === "available";
   const blocked =
     (title.kind === "music" && !intent.music) ||
     (title.kind === "anime" && !intent.anime) ||
@@ -144,9 +151,7 @@ export function TitleView({ id }: { id: string }) {
               <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
                 {request.via === "cache"
                   ? "Cache hit · importing"
-                  : request.via === "uncached"
-                    ? `Transferring ${Math.round(request.progress)}%`
-                    : `Downloading ${Math.round(request.progress)}%`}
+                  : "Grabbing"}
               </span>
             ) : request?.status === "waiting" ? (
               <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">

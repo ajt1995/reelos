@@ -496,5 +496,5 @@ export function titlesForKind(kind: Kind) {
   return TITLES.filter((t) => t.kind === kind).sort((a, b) => b.popularity - a.popularity);
 }
 
-export const LAN_IP = "192.168.1.42";
+export const LAN_IP = "";
 export const HOSTNAME = "reelos.local";

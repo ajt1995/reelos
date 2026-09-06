@@ -1049,6 +1049,176 @@ async function handleTranscode(_req, res) {
   });
 }
 
+function composeProfiles(a) {
+  const p = ["indexers"];
+  const intent = a.intent || {};
+  if (intent.movies) p.push("movies");
+  if (intent.tv || intent.anime) p.push("tv");
+  if (intent.music) p.push("music");
+  if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
+  if (a.frontend === "jellyfin" || a.frontend === "both") p.push("jellyfin");
+  if (a.frontend === "plex" || a.frontend === "both") p.push("plex");
+  if (a.source === "local-vpn") p.push("localvpn");
+  else p.push("debrid");
+  return p;
+}
+
+async function handleProvision(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false, simulated: false });
+    return;
+  }
+  const answers = await readBody(req);
+  const a = answers.answers || answers;
+  const root = process.env.REELOS_ROOT || "/opt/reelos";
+  const composeDir = existsSync(`${root}/compose/docker-compose.yml`)
+    ? `${root}/compose`
+    : "/workspace/install/compose";
+  try {
+    mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+    mkdirSync(`${composeDir}/configs/decypharr`, { recursive: true });
+    writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+    const profiles = composeProfiles(a).join(",");
+    const envLines = [
+      "PUID=1000",
+      "PGID=1000",
+      "TZ=UTC",
+      `RD_API_KEY=${a.source === "local-vpn" ? "" : String(a.apiKey || "").trim()}`,
+      `SOURCE=${a.source || "torbox"}`,
+      `COMPOSE_PROFILES=${profiles}`,
+      `PLEX_CLAIM=${String(a.plexClaim || "").trim()}`,
+      `VPN_SERVICE_PROVIDER=${a.vpnProvider || "custom"}`,
+    ];
+    writeFileSync(`${composeDir}/.env`, envLines.join("\n") + "\n", { mode: 0o600 });
+    if (a.source !== "local-vpn") {
+      const provider =
+        a.source === "torbox"
+          ? "torbox"
+          : a.source === "alldebrid"
+            ? "alldebrid"
+            : a.source === "premiumize"
+              ? "premiumize"
+              : "realdebrid";
+      const cfg = {
+        debrids: [
+          {
+            provider,
+            name: provider,
+            api_key: String(a.apiKey || "").trim(),
+            folder: "/mnt/debrid",
+            use_webdav: false,
+          },
+        ],
+        qbittorrent: { download_folder: "/mnt/symlinks", categories: ["sonarr", "radarr", "lidarr"] },
+        use_auth: false,
+        log_level: "info",
+        port: "8282",
+      };
+      writeFileSync(`${composeDir}/configs/decypharr/config.json`, JSON.stringify(cfg, null, 2) + "\n", {
+        mode: 0o600,
+      });
+    }
+  } catch (e) {
+    send(res, 200, { ok: false, simulated: false, error: String(e) });
+    return;
+  }
+  const up = spawnSync("docker", ["compose", "up", "-d"], {
+    cwd: composeDir,
+    env: { ...process.env, COMPOSE_PROFILES: composeProfiles(a).join(",") },
+    encoding: "utf8",
+    timeout: 180000,
+  });
+  if (up.status !== 0) {
+    send(res, 200, {
+      ok: false,
+      simulated: false,
+      error: (up.stderr || up.stdout || `compose ${up.status}`).slice(0, 400),
+    });
+    return;
+  }
+  const wire = existsSync(`${root}/bin/wire-engines.py`)
+    ? `${root}/bin/wire-engines.py`
+    : "/workspace/daemon/wire-engines.py";
+  if (existsSync(wire)) {
+    spawn("python3", [wire], { detached: true, stdio: "ignore" }).unref();
+  }
+  writeFileSync("/var/lib/reelos/provisioned", "1\n");
+  send(res, 200, { ok: true, simulated: false });
+}
+
+async function handlePing(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const source = String(body.source || "");
+  const key = String(body.key || "").trim();
+  if (source === "local-vpn") {
+    send(res, 200, { ok: true, message: "VPN path. No debrid key." });
+    return;
+  }
+  if (key.length < 10) {
+    send(res, 200, { ok: false, error: "Provider rejected this key." });
+    return;
+  }
+  try {
+    if (source === "real-debrid") {
+      const r = await fetch("https://api.real-debrid.com/rest/1.0/user", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) {
+        send(res, 200, { ok: false, error: `Real-Debrid ${r.status}` });
+        return;
+      }
+      const j = await r.json();
+      send(res, 200, { ok: true, message: `Real-Debrid ${j.username || "ok"}` });
+      return;
+    }
+    if (source === "torbox") {
+      const r = await fetch("https://api.torbox.app/v1/api/user/me", {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) {
+        send(res, 200, { ok: false, error: `TorBox ${r.status}` });
+        return;
+      }
+      send(res, 200, { ok: true, message: "TorBox key accepted" });
+      return;
+    }
+    if (source === "alldebrid") {
+      const url = new URL("https://api.alldebrid.com/v4/user");
+      url.searchParams.set("agent", "ReelOS");
+      url.searchParams.set("apikey", key);
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const j = await r.json();
+      if (j.status !== "success") {
+        send(res, 200, { ok: false, error: "AllDebrid rejected this key." });
+        return;
+      }
+      send(res, 200, { ok: true, message: `AllDebrid ${j.data?.user?.username || "ok"}` });
+      return;
+    }
+    if (source === "premiumize") {
+      const url = new URL("https://www.premiumize.me/api/account/info");
+      url.searchParams.set("apikey", key);
+      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const j = await r.json();
+      if (j.status !== "success") {
+        send(res, 200, { ok: false, error: "Premiumize rejected this key." });
+        return;
+      }
+      send(res, 200, { ok: true, message: "Premiumize key accepted" });
+      return;
+    }
+    send(res, 200, { ok: false, error: "Unknown source." });
+  } catch (e) {
+    send(res, 200, { ok: false, error: String(e) });
+  }
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -1075,6 +1245,8 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/disks") return void (await handleDisks(req, res));
           if (pathOnly === "/api/storage") return void (await handleStorage(req, res));
           if (pathOnly === "/api/transcode") return void (await handleTranscode(req, res));
+          if (pathOnly === "/api/provision") return void (await handleProvision(req, res));
+          if (pathOnly === "/api/ping") return void (await handlePing(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });

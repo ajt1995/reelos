@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Check, ChevronDown, LoaderCircle } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { ConnectView } from "@/components/connect-view";
@@ -16,6 +17,26 @@ function Building() {
   const done = build.filter((s) => s.status === "done").length;
   const total = build.length || 1;
   const current = build.find((s) => s.status === "running");
+  const setPhase = useReelStore((s) => s.setPhase);
+
+  useEffect(() => {
+    let stop = false;
+    const tick = () => {
+      void fetch("/api/box", { cache: "no-store" })
+        .then((r) => r.json() as Promise<{ provisioned?: boolean; jellyfin?: { state?: string } }>)
+        .then((b) => {
+          if (stop) return;
+          if (b.provisioned) setPhase("ready");
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 3000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [setPhase]);
 
   return (
     <div className="relative min-h-dvh bg-background px-6 py-8 md:px-10">
@@ -27,10 +48,7 @@ function Building() {
       <div className="mx-auto mt-12 max-w-lg">
         <p className="font-display text-xs tracking-[0.22em] text-gold uppercase">Building your stack</p>
         <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">Standing up ReelOS</h1>
-        <p className="mt-3 text-sm text-muted">
-          {done} of {total}
-          {current ? ` · ${current.label}` : ""}
-        </p>
+        <p className="mt-3 text-sm text-muted">Waiting for engines. Libraries are not claimed until the box says so.</p>
         <div className="mt-6 h-1 overflow-hidden rounded-full bg-card-2">
           <div
             className="h-full bg-gold transition-[width] duration-500 ease-out"

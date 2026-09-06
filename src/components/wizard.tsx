@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Check,
   ChevronLeft,
@@ -11,10 +11,7 @@ import {
 } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { DISKS, SOURCES } from "@/lib/catalog";
-import { pingCopy } from "@/lib/adapter";
-import { pingSource } from "@/lib/ping-source";
-import { provisionAppliance } from "@/lib/provision-appliance";
+import { SOURCES } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type {
   AccessMode,
@@ -31,8 +28,32 @@ export function Wizard() {
   const answers = useReelStore((s) => s.answers);
   const setStep = useReelStore((s) => s.setWizardStep);
   const startBuild = useReelStore((s) => s.startBuild);
+  const [finishErr, setFinishErr] = useState("");
+  const [finishing, setFinishing] = useState(false);
 
   const go = (n: number) => setStep(Math.min(TOTAL, Math.max(1, n)));
+
+  const finish = async () => {
+    setFinishErr("");
+    setFinishing(true);
+    try {
+      const r = await fetch("/api/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      });
+      const j = (await r.json()) as { ok?: boolean; simulated?: boolean; error?: string };
+      if (!j.ok || j.simulated) {
+        setFinishErr(j.error || "Compose did not start");
+        setFinishing(false);
+        return;
+      }
+      startBuild();
+    } catch (e) {
+      setFinishErr(String(e));
+      setFinishing(false);
+    }
+  };
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background">
@@ -71,17 +92,16 @@ export function Wizard() {
           <Button
             onClick={() => {
               if (step < TOTAL) go(step + 1);
-              else {
-                void provisionAppliance({ data: { answers } }).catch(() => null);
-                startBuild();
-              }
+              else void finish();
             }}
-            disabled={!canContinue(step, answers)}
+            disabled={!canContinue(step, answers) || finishing}
           >
+            {finishing ? <LoaderCircle className="size-4 animate-spin" /> : null}
             {step === TOTAL ? "Finish" : "Continue"}
             <ChevronRight className="size-4" />
           </Button>
         </div>
+        {finishErr ? <p className="mx-auto mt-2 max-w-3xl text-sm text-danger">{finishErr}</p> : null}
       </footer>
     </div>
   );
@@ -161,6 +181,12 @@ function StepStorage() {
   const selected = useReelStore((s) => s.answers.selectedDisks);
   const format = useReelStore((s) => s.answers.formatDisks);
   const patch = useReelStore((s) => s.patchAnswers);
+  const [disks, setDisks] = useState<{ name: string; size: string; os: boolean; model: string }[]>([]);
+  useEffect(() => {
+    void fetch("/api/disks", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j: { disks?: typeof disks }) => setDisks(j.disks || []));
+  }, []);
 
   const options: { id: StorageMode; title: string; body: string; icon: typeof Cloud }[] = [
     {
@@ -206,20 +232,23 @@ function StepStorage() {
         <div className="mt-8">
           <p className="mb-3 text-sm font-medium text-muted">Disks for /srv/media</p>
           <div className="grid gap-2">
-            {DISKS.map((d) => {
-              const on = selected.includes(d.id);
+            {disks.length === 0 ? (
+              <p className="text-sm text-muted">No extra disks. That is fine.</p>
+            ) : (
+              disks.map((d) => {
+              const on = selected.includes(d.name);
               return (
                 <div
-                  key={d.id}
+                  key={d.name}
                   className={cn(
                     "flex flex-wrap items-center justify-between gap-3 rounded-xl bg-card px-4 py-3 shadow-[var(--shadow-border)]",
                     d.os && "opacity-60",
                   )}
                 >
                   <div>
-                    <p className="font-mono text-sm">{d.label}</p>
+                    <p className="font-mono text-sm">/dev/{d.name}</p>
                     <p className="text-xs text-muted">
-                      {d.size} · {d.kind}
+                      {d.size} {d.model} {d.os ? "· OS" : ""}
                     </p>
                   </div>
                   {d.os ? (
@@ -230,11 +259,11 @@ function StepStorage() {
                         <input
                           type="checkbox"
                           className="size-4 accent-gold"
-                          checked={format.includes(d.id)}
+                          checked={format.includes(d.name)}
                           onChange={() => {
-                            const next = format.includes(d.id)
-                              ? format.filter((x) => x !== d.id)
-                              : [...format, d.id];
+                            const next = format.includes(d.name)
+                              ? format.filter((x) => x !== d.name)
+                              : [...format, d.name];
                             patch({ formatDisks: next });
                           }}
                         />
@@ -244,7 +273,7 @@ function StepStorage() {
                         size="sm"
                         variant={on ? "gold" : "ghost"}
                         onClick={() => {
-                          const next = on ? selected.filter((x) => x !== d.id) : [...selected, d.id];
+                          const next = on ? selected.filter((x) => x !== d.name) : [...selected, d.name];
                           patch({ selectedDisks: next });
                         }}
                       >
@@ -254,7 +283,8 @@ function StepStorage() {
                   )}
                 </div>
               );
-            })}
+            })
+            )}
           </div>
           {format.length > 0 ? (
             <p className="mt-3 flex items-start gap-2 text-sm text-gold-bright">
@@ -281,22 +311,22 @@ function StepSource() {
     setErr("");
     const key = answers.apiKey.trim();
     try {
-      const result = await pingSource({ data: { source: answers.source, key } });
+      const r = await fetch("/api/ping", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: answers.source, key }),
+      });
+      const result = (await r.json()) as { ok?: boolean; message?: string; error?: string };
       if (result.ok) {
         setOk(true);
-        setErr(result.message);
+        setErr(result.message || "Key accepted");
       } else {
         setOk(false);
-        setErr(result.error);
+        setErr(result.error || "Provider rejected this key.");
       }
-    } catch {
-      if (key.toLowerCase().includes("invalid") || key.length < 10) {
-        setOk(false);
-        setErr("Provider rejected this key.");
-      } else {
-        setOk(true);
-        setErr(pingCopy(answers.source, answers.frontend));
-      }
+    } catch (e) {
+      setOk(false);
+      setErr(String(e));
     }
     setChecking(false);
   };
@@ -378,7 +408,7 @@ function StepSource() {
             </Button>
           </div>
           {ok === true ? (
-            <p className="mt-2 text-sm text-success">{err || pingCopy(answers.source, answers.frontend)}</p>
+            <p className="mt-2 text-sm text-success">{err}</p>
           ) : null}
           {ok === false && err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
         </div>

@@ -19,6 +19,37 @@ def ok(label: str, detail: str, good: bool = True) -> dict:
     return {"ok": good, "label": label, "detail": detail}
 
 
+def last_log(name: str) -> str:
+    try:
+        out = subprocess.check_output(
+            ["docker", "logs", "--tail", "1", name],
+            text=True,
+            timeout=4,
+            stderr=subprocess.STDOUT,
+        )
+        return (out or "").strip().splitlines()[-1][:120] if out.strip() else ""
+    except Exception:
+        return ""
+
+
+def container_hop(name: str, label: str, port: int) -> dict:
+    status = ""
+    try:
+        status = subprocess.check_output(
+            ["docker", "ps", "-a", "--filter", f"name={name}", "--format", "{{.Status}}"],
+            text=True,
+            timeout=4,
+        ).strip()
+    except Exception:
+        status = ""
+    if "Restarting" in status:
+        line = last_log(name)
+        return ok(label, f"{name} restarting" + (f" — {line}" if line else ""), False)
+    if listening(port) or status.startswith("Up"):
+        return ok(label, f"{name} up", True)
+    return ok(label, f"{name} dead {status}"[:80], False)
+
+
 def api_key(xml: Path) -> bool:
     if not xml.exists():
         return False
@@ -131,35 +162,12 @@ def main() -> int:
     radarr_up = listening(7878) and api_key(COMPOSE / "configs" / "radarr" / "config.xml")
     checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
 
-    decy = False
-    detail = "decypharr dead"
-    if listening(8282):
-        decy = True
-        detail = "Decypharr :8282"
-    else:
-        try:
-            out = subprocess.check_output(
-                ["docker", "ps", "--filter", "name=decypharr", "--format", "{{.Status}}"],
-                text=True,
-                timeout=4,
-            )
-            if "Restarting" in out:
-                detail = "Decypharr restarting"
-                decy = False
-            elif "Up" in out:
-                decy = True
-                detail = "Decypharr up"
-            elif out.strip():
-                detail = f"Decypharr {out.strip()[:80]}"
-        except Exception:
-            pass
-    checks.append(ok("Decypharr hop", detail, decy))
+    checks.append(container_hop("decypharr", "Decypharr hop", 8282))
 
     prow = listening(9696) and api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")
     checks.append(ok("Prowlarr hop", "Prowlarr accepts indexers" if prow else "indexers dead — Prowlarr", prow))
 
-    jf = listening(8096)
-    checks.append(ok("Jellyfin hop", "Jellyfin :8096" if jf else "jellyfin dead", jf))
+    checks.append(container_hop("reelos-jellyfin-1", "Jellyfin hop", 8096))
 
     print(json.dumps({"version": version, "checks": checks}))
     return 0

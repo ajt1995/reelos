@@ -1,27 +1,22 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 12:42 CDT**.
+Xorriso. Dated **2026-09-06 13:08 CDT**.
 
 # 1.2.15 frozen
 
-VERSION **1.2.15**. No 1.2.16. No ISO. **Stop committing** unless Home is broken after they apply.
+VERSION **1.2.15**. No 1.2.16. No ISO. No APK. No README. **Stop committing.**
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-## Closed this pass
+## This pass (1–18)
 
-- Plex bind `0.0.0.0:32400` when profile is on. First-run/claim still **not Plex done**.
-- Probe `:80` and `:8080`. Stock Caddy welcome on :80 fails the probe.
-- Console card: LAN IPv4 first, large. `reelos.local` optional, last.
-- Empty Home: search only. No fake TITLES row.
-- Reset → `provisioned` false → wizard, then Connect.
-- Doctor: “Decypharr restarting” when the container is in a restart loop.
+A. `POST /api/provision` writes answers + compose, `{ok:true,simulated:false}` only if compose 0. Finish is that fetch. Fail stays on wizard. `POST /api/ping` is the real provider. Disks from `GET /api/disks`. Reset → provisioned false → wizard.
 
-## Already closed
+B. wire-engines roots `/symlinks` + `/mnt/symlinks`. Jellyfin user/PIN + `/symlinks` libraries. Doctor: restarting + last log, never green. Kids is not a library. Lidarr only if music. Plex bind done, claim not. Indexers = Connect paste → Prowlarr 2xx.
 
-SHA apply, dual `/symlinks`, library canary.
+C. Home/Discover = lookup/library. Lookup without keys is an error string. Request has no fake %. Watch when Jellyfin has the title. Building waits on `/api/box`. `LAN_IP` is not `192.168.1.42`.
 
 ## HP
 

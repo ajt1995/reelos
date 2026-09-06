@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HOSTNAME, LAN_IP } from "@/lib/catalog";
+import { HOSTNAME } from "@/lib/catalog";
 import { adapterProfile } from "@/lib/adapter";
 import {
   accessLabel,
@@ -30,6 +30,13 @@ import {
 import { cn, formatWhen } from "@/lib/utils";
 
 export function SettingsView() {
+  const [lan, setLan] = useState("");
+  useEffect(() => {
+    void fetch("/api/box", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ ipv4?: string | null }>)
+      .then((b) => setLan(b.ipv4 || ""))
+      .catch(() => {});
+  }, []);
   const answers = useReelStore((s) => s.answers);
   const users = useReelStore((s) => s.users);
   const settings = useReelStore((s) => s.settings);
@@ -171,7 +178,7 @@ export function SettingsView() {
         >
           <p className="font-mono text-sm">
             {HOSTNAME}
-            <span className="ml-3 text-muted">{LAN_IP}</span>
+            <span className="ml-3 text-muted">{lan || "no LAN yet"}</span>
           </p>
           <p className="mt-2 text-sm text-muted">Watching: {frontendLabel[answers.frontend]}</p>
         </Row>
