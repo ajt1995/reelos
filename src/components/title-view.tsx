@@ -34,7 +34,14 @@ export function TitleView({ id }: { id: string }) {
     void fetch("/api/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        titleId: payload.titleId,
+        title: title?.title,
+        tmdb: payload.titleId.startsWith("tmdb-") ? payload.titleId.slice(5) : undefined,
+        tvdb: payload.titleId.startsWith("tvdb-") ? payload.titleId.slice(5) : undefined,
+        season: payload.season,
+        hash: payload.hash,
+      }),
     })
       .then((r) => r.json())
       .then((j: { ok?: boolean; error?: string }) => {

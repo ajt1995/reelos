@@ -181,21 +181,35 @@ async function handleLookup(req, res) {
   send(res, 200, { titles, error });
 }
 
-async function jellyfinState() {
+async function probeJson(url, ms = 3000) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), ms);
   try {
-    const ac = new AbortController();
-    const t = setTimeout(() => ac.abort(), 3000);
-    const res = await fetch("http://127.0.0.1:8096/System/Info/Public", { signal: ac.signal });
-    clearTimeout(t);
-    if (!res.ok) return { state: "red", detail: "Can't start" };
-    const j = await res.json().catch(() => ({}));
-    if (j.StartupWizardCompleted === false) {
-      return { state: "amber", detail: "Jellyfin setup is not finished" };
-    }
-    return { state: "green", detail: "Jellyfin is up" };
+    const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
+    const json = await res.json().catch(() => null);
+    return { ok: res.ok, json };
   } catch {
-    return { state: "amber", detail: "Still starting" };
+    return { ok: false, json: null };
+  } finally {
+    clearTimeout(t);
   }
+}
+
+async function jellyfinState(ip) {
+  const lanUrl = ip ? `http://${ip}:8096/System/Info/Public` : null;
+  const loopUrl = "http://127.0.0.1:8096/System/Info/Public";
+  const lan = lanUrl ? await probeJson(lanUrl) : { ok: false, json: null };
+  if (lan.ok) {
+    if (lan.json?.StartupWizardCompleted === false) {
+      return { state: "amber", detail: `Jellyfin on http://${ip}:8096 — setup not finished` };
+    }
+    return { state: "green", detail: `Jellyfin on http://${ip}:8096` };
+  }
+  const loop = await probeJson(loopUrl);
+  if (loop.ok) {
+    return { state: "amber", detail: "Jellyfin answers on localhost only, not the LAN" };
+  }
+  return { state: "amber", detail: "Still starting" };
 }
 
 function tailscaleAuthUrl() {
@@ -222,7 +236,7 @@ function tailscaleAuthUrl() {
 async function handleBox(_req, res) {
   const a = answers();
   const ip = ipv4();
-  const jellyfin = await jellyfinState();
+  const jellyfin = await jellyfinState(ip);
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     ipv4: ip,
@@ -293,10 +307,17 @@ async function handleIndexer(req, res) {
   }
   const prow = xmlKey("/opt/reelos/compose/configs/prowlarr/config.xml");
   if (!prow) {
-    send(res, 503, { ok: false, error: "Indexers engine not ready" });
+    send(res, 503, { ok: false, error: "Prowlarr has no API key" });
     return;
   }
   try {
+    const ping = await fetch("http://127.0.0.1:9696/api/v1/system/status", {
+      headers: { "X-Api-Key": prow },
+    });
+    if (!ping.ok) {
+      send(res, 503, { ok: false, error: `Prowlarr not answering (${ping.status})` });
+      return;
+    }
     const r = await fetch("http://127.0.0.1:9696/api/v1/indexer", {
       method: "POST",
       headers: { "X-Api-Key": prow, "Content-Type": "application/json" },
@@ -315,10 +336,14 @@ async function handleIndexer(req, res) {
         ],
       }),
     });
-    if (!r.ok) throw new Error(`prowlarr ${r.status}`);
-    send(res, 200, { ok: true });
+    const text = await r.text();
+    if (!r.ok) {
+      send(res, 502, { ok: false, error: `Prowlarr ${r.status}: ${text.slice(0, 200)}` });
+      return;
+    }
+    send(res, 200, { ok: true, engine: "prowlarr" });
   } catch (e) {
-    send(res, 500, { ok: false, error: String(e) });
+    send(res, 502, { ok: false, error: `Prowlarr ${e}` });
   }
 }
 
@@ -503,9 +528,13 @@ async function handleRequest(req, res) {
     return;
   }
   const body = await readBody(req);
-  const titleId = String(body.titleId || body.data?.titleId || "").trim();
+  const tmdb = String(body.tmdb || body.tmdbId || "").trim();
+  const tvdb = String(body.tvdb || body.tvdbId || "").trim();
+  let titleId = String(body.titleId || body.data?.titleId || body.id || "").trim();
+  if (!titleId && tmdb) titleId = `tmdb-${tmdb}`;
+  if (!titleId && tvdb) titleId = `tvdb-${tvdb}`;
   const season = body.season ?? body.data?.season;
-  note(`request ${titleId}`);
+  note(`request ${titleId} title=${body.title || ""}`);
   if (!titleId) {
     send(res, 400, { ok: false, error: "No title" });
     return;

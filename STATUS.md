@@ -1,151 +1,41 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 11:36 CDT**. Proof is curl, not a card.
+Xorriso. Dated **2026-09-06 11:42 CDT**.
 
-VERSION **1.2.15**. Tarball `main.tar.gz`. No 1.2.16. No new tag.
+**1.2.15 is not done.** No 1.2.16. Owner out. One apply on `192.168.1.233` when they get home.
 
-Door (HP, still 1.2.8):
+Door:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-These curls ran **2026-09-06 16:35 UTC** against the live 1.2.15 tree (`127.0.0.1:8080` in Build, plus GitHub).
+Tarball is `main.tar.gz`. VERSION stays 1.2.15.
 
-## Channel / mailman
+## Sandbox (these curls ran)
 
-```
-curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json
-```
+Routes exist. This machine has no Radarr, Prowlarr, or Jellyfin. Table is sandbox only.
 
-```
-{"version":"1.2.15","tarball":"https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"}
-```
+| Hop | Curl | Result |
+|---|---|---|
+| Home | `GET /` | 200 |
+| Lookup empty | `GET /api/lookup?q=x` | `{"titles":[],"error":null}` |
+| Lookup no key | `GET /api/lookup?q=Batman` | `error: Movies/TV engines have no API key yet` |
+| Request `{tmdb}` | `POST /api/request {"title":"The Batman","tmdb":"414906"}` | `Movies engine has no API key` |
+| Indexer paste | `POST /api/indexer` with url+key | `Prowlarr has no API key` (talks to Prowlarr, not field-only) |
+| Box | `GET /api/box` | jellyfin amber Still starting (nothing on `:8096` here) |
+| Doctor | `GET /api/doctor` | hops named; engines dead |
+| Indexer `{}` | `POST /api/indexer` | `Need URL and API key` |
+| Tailscale | `POST /api/tailscale/check` | `up:false, installed:false` |
 
-```
-curl -sSI https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz | head -5
-```
+## Wiring on main (not proven on the HP)
 
-`HTTP/2 302` → `codeload.github.com/ajt1995/reelos/tar.gz/refs/heads/main`
+- Lookup returns mapped titles when Radarr/Sonarr keys exist. Missing key → that error. Unchanged contract.
+- Request accepts `{ titleId }` or `{ title, tmdb }` / `{ tvdb }` and POSTs Radarr/Sonarr add+search.
+- `/api/box` probes `http://<LAN IPv4>:8096/System/Info/Public` first. Localhost-only Jellyfin is amber, not green.
+- Indexer POST pings Prowlarr `/api/v1/system/status` then POSTs `/api/v1/indexer`. Field-only `{}` still 400. No key → 503 `Prowlarr has no API key`.
+- Tailscale is still a Connect button. OTA does not apt.
 
-```
-curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | head -3
-```
+## HP curls
 
-```
-#!/bin/bash
-# ReelOS OTA. Stage in .next while :8080 keeps serving. mv, then probe, then stamp VERSION.
-# Rollback is rename .prev. Never apt Chromium or Tailscale.
-```
-
-## 1. Connect + Jellyfin probe
-
-```
-curl -sS http://127.0.0.1:8080/api/box
-```
-
-```
-{"provisioned":false,"ipv4":"172.16.0.2","watch":"http://172.16.0.2:8096","jellyfin":{"state":"amber","detail":"Still starting"},"adminName":"reelos","adminPassword":"reelos","tailscaleAuth":null,"tailscaleInstalled":false,"tailscaleUp":false}
-```
-
-Amber = not pretending live. Red would lock TV/phone cards. After apply on the HP (Jellyfin up):
-
-```
-curl -sS http://127.0.0.1:8080/api/box
-curl -sS http://127.0.0.1:8096/System/Info/Public
-```
-
-Expect `jellyfin.state=green` and `watch=http://192.168.1.233:8096` (not docker0).
-
-## 2. Lookup titles
-
-```
-curl -sS 'http://127.0.0.1:8080/api/lookup?q=x'
-# {"titles":[],"error":null}
-
-curl -sS 'http://127.0.0.1:8080/api/lookup?q=Batman'
-# {"titles":[],"error":"Movies/TV engines have no API key yet"}
-```
-
-Hop is real. This sandbox has no Radarr. After apply on the HP:
-
-```
-curl -sS 'http://127.0.0.1:8080/api/lookup?q=Batman'
-```
-
-Expect `titles[0].title` (The Batman) and `id` like `tmdb-414906`.
-
-## 3. Request + Doctor hops
-
-```
-curl -sS -X POST http://127.0.0.1:8080/api/request -H 'Content-Type: application/json' -d '{}'
-# {"ok":false,"error":"No title"}
-```
-
-```
-curl -sS http://127.0.0.1:8080/api/doctor
-```
-
-Hops present: **Lookup hop**, **Request hop**, **Decypharr hop**, **Jellyfin hop**. Here they are dead (no Docker). That is the truth, not a green card.
-
-On the HP after apply:
-
-```
-curl -sS http://127.0.0.1:8080/api/doctor | python3 -m json.tool
-curl -sS -X POST http://127.0.0.1:8080/api/request \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"tmdb-414906","kind":"movie","title":"The Batman"}'
-```
-
-## 4. Jellyfin library + PIN
-
-From `/api/box`: `adminName` / `adminPassword` / `watch`. This sandbox has no `:8096`. HP:
-
-```
-curl -sS http://127.0.0.1:8096/System/Info/Public
-curl -sS http://127.0.0.1:8080/api/box | python3 -c 'import json,sys; b=json.load(sys.stdin); print(b.get("watch"), b.get("adminName"))'
-```
-
-Library is `/symlinks` via `wire-engines` (`Startup/Configuration` + `Library/VirtualFolders`). Prove on HP after apply:
-
-```
-# after Jellyfin login token
-curl -sS -H "X-Emby-Token: $TOKEN" http://127.0.0.1:8096/Library/VirtualFolders
-```
-
-## 5. Tailscale QR / I've signed in
-
-```
-curl -sS -X POST http://127.0.0.1:8080/api/tailscale/check
-# {"ok":true,"up":false,"installed":false}
-```
-
-OTA does not apt. Install is `POST /api/tailscale/install`. Auth URL from log / `tailscale-auth.url`. HP after tapping Install:
-
-```
-curl -sS http://127.0.0.1:8080/api/box | python3 -c 'import json,sys; print(json.load(sys.stdin).get("tailscaleAuth"))'
-curl -sS -X POST http://127.0.0.1:8080/api/tailscale/check
-```
-
-Not paired. Do not claim remote works.
-
-## 6. Indexer paste / Skip
-
-```
-curl -sS -X POST http://127.0.0.1:8080/api/indexer -H 'Content-Type: application/json' -d '{}'
-# {"ok":false,"error":"Need URL and API key"}
-```
-
-Skip is UI (`setIdxMsg("Skipped")`) — no POST. Paste without URL/key is rejected. No seed list.
-
-## Home
-
-```
-curl -sS -o /dev/null -w "GET / %{http_code}\n" http://127.0.0.1:8080/
-# GET / 200
-```
-
-```
-curl -sS http://127.0.0.1:8080/api/update/check
-# {"ok":true,"local":"0","remote":"1.2.15","available":true}
-```
+Not run. Owner is not on `192.168.1.233`. Do not paste house-box output here until those curls exist.
