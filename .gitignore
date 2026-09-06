@@ -1,4 +1,12 @@
 node_modules/
-public/install/*.iso
 *.iso
-.DS_Store
+public/install/*.iso
+public/install/*.zip
+.env
+.env.*
+*.pyc
+__pycache__/
+.vercel/
+.grok/
+dist/
+.cache/
