@@ -54,7 +54,7 @@ function seriesHit(h) {
 
 async function pull(url, key) {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 12000);
+  const t = setTimeout(() => ac.abort(), 45000);
   try {
     const res = await fetch(url, { headers: { "X-Api-Key": key }, signal: ac.signal });
     if (!res.ok) throw new Error(`${res.status}`);
@@ -105,7 +105,7 @@ export function reelosLookupPlugin() {
             }
           }
         } catch (e) {
-          error = String(e);
+          error = String(e?.name === "AbortError" || String(e).includes("abort") ? "Radarr timed out (45s)" : e);
           note(`err ${error}`);
         }
         res.statusCode = 200;
