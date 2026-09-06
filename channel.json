@@ -1,9 +1,9 @@
 {
-  "version": "1.2.13",
+  "version": "1.2.14",
   "channel": "stable",
   "notes": [
-    "Last kitchen-sink OTA: Watch, Request, Jellyfin library, lid, restore-on-fail.",
-    "Apply once. Check after should say 1.2.13 up to date."
+    "OTA keeps 8080 up until the new tree is ready, then mv. Rollback is seconds.",
+    "Watch, Request, Jellyfin library, lid. Do not Apply the old 1.2.13 script."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.13.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.14.tar.gz"
 }

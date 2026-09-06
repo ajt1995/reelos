@@ -114,6 +114,7 @@ need install/compose/docker-compose.yml '0.0.0.0:8096'
 need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
 need daemon/reelos-update.sh 'restore after failure'
+need daemon/reelos-update.sh 'stopping shell for mv'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
 need src/components/title-view.tsx '/api/request'
@@ -180,34 +181,34 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
   }
 fi
 
-rm -rf "$ROOT.prev"
+# NEXT is fully ready. 8080 is still serving. Do not copy after stop.
+if [ -d "$ROOT.prev" ]; then
+  log "dropping old backup (8080 still up)"
+  rm -rf "$ROOT.prev"
+fi
 mkdir -p "$ROOT.prev"
-log "backing up current app"
-[ -d "$ROOT/app" ] && cp -a "$ROOT/app" "$ROOT.prev/app"
 cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
 [ -f "$ROOT/compose/docker-compose.yml" ] && cp -a "$ROOT/compose/docker-compose.yml" "$ROOT.prev/docker-compose.yml" || true
 
 restore() {
   log "restore after failure"
   trap - ERR
+  systemctl stop reelos 2>/dev/null || true
   if [ -d "$ROOT.prev/app" ]; then
-    systemctl stop reelos 2>/dev/null || true
     rm -rf "$ROOT/app"
-    cp -a "$ROOT.prev/app" "$ROOT/app"
+    mv "$ROOT.prev/app" "$ROOT/app"
     [ -f "$ROOT.prev/VERSION" ] && cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION"
     [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
-    systemctl daemon-reload 2>/dev/null || true
-    systemctl start reelos 2>/dev/null || true
   fi
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl start reelos 2>/dev/null || true
 }
 
-# Swap app/bin/compose yml. Phone blips for a few seconds, not minutes.
 trap restore ERR
-log "stopping shell"
+log "stopping shell for mv (seconds, not minutes)"
 systemctl stop reelos 2>/dev/null || true
-log "swapping tree"
-rm -rf "$ROOT/app"
-cp -a "$NEXT/app" "$ROOT/app"
+mv "$ROOT/app" "$ROOT.prev/app"
+mv "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
 cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
