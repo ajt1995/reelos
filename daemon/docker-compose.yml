@@ -1,0 +1,163 @@
+name: reelos
+
+# Profiles pick what the wizard asked for.
+# Debrid path: decypharr only. localvpn path: gluetun + qBittorrent, no Decypharr.
+
+services:
+  jellyfin:
+    profiles: ["jellyfin"]
+    image: jellyfin/jellyfin:latest
+    restart: unless-stopped
+    # Official image as root so /config can be created. linuxserver PUID fights this image.
+    volumes:
+      - ./configs/jellyfin:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/symlinks
+    ports:
+      - "127.0.0.1:8096:8096"
+    environment:
+      TZ: ${TZ:-UTC}
+
+  plex:
+    profiles: ["plex"]
+    image: lscr.io/linuxserver/plex:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+      VERSION: docker
+      PLEX_CLAIM: ${PLEX_CLAIM:-}
+    volumes:
+      - ./configs/plex:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/symlinks
+    ports:
+      - "127.0.0.1:32400:32400"
+
+  prowlarr:
+    profiles: ["indexers"]
+    image: lscr.io/linuxserver/prowlarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/prowlarr:/config
+    ports:
+      - "127.0.0.1:9696:9696"
+
+  radarr:
+    profiles: ["movies"]
+    image: lscr.io/linuxserver/radarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/radarr:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/mnt/symlinks
+    ports:
+      - "127.0.0.1:7878:7878"
+
+  sonarr:
+    profiles: ["tv"]
+    image: lscr.io/linuxserver/sonarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/sonarr:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/mnt/symlinks
+    ports:
+      - "127.0.0.1:8989:8989"
+
+  lidarr:
+    profiles: ["music"]
+    image: lscr.io/linuxserver/lidarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/lidarr:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/mnt/symlinks
+    ports:
+      - "127.0.0.1:8686:8686"
+
+  bazarr:
+    profiles: ["subtitles"]
+    image: lscr.io/linuxserver/bazarr:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/bazarr:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/symlinks
+    ports:
+      - "127.0.0.1:6767:6767"
+
+  decypharr:
+    profiles: ["debrid"]
+    image: cy01/blackhole:latest
+    container_name: decypharr
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      UMASK: "002"
+    volumes:
+      - ./configs/decypharr:/app
+      - /mnt:/mnt:rshared
+    ports:
+      - "127.0.0.1:8282:8282"
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - apparmor:unconfined
+
+  gluetun:
+    profiles: ["localvpn"]
+    image: qmcgaw/gluetun:latest
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER:-custom}
+      VPN_TYPE: ${VPN_TYPE:-openvpn}
+      OPENVPN_USER: ${VPN_USER:-}
+      OPENVPN_PASSWORD: ${VPN_PASSWORD:-}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "127.0.0.1:8085:8085"
+    restart: unless-stopped
+
+  qbittorrent:
+    profiles: ["localvpn"]
+    image: lscr.io/linuxserver/qbittorrent:latest
+    network_mode: "service:gluetun"
+    depends_on:
+      - gluetun
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+      WEBUI_PORT: 8085
+    volumes:
+      - ./configs/qbittorrent:/config
+      - /srv/media/downloads:/downloads
+    restart: unless-stopped

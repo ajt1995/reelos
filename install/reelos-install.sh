@@ -74,14 +74,47 @@ if ! apt-get install -y --no-install-recommends caddy; then
   apt-get install -y caddy
 fi
 
+# Point Caddy at ReelOS before the rest of the install. A half-finished
+# box must never serve the factory welcome page on reelos.local.
+apply_caddy() {
+  local src=""
+  if [ -f "$HERE/compose/Caddyfile" ]; then
+    src="$HERE/compose/Caddyfile"
+  elif [ -f "$ROOT/compose/Caddyfile" ]; then
+    src="$ROOT/compose/Caddyfile"
+  fi
+  mkdir -p /etc/caddy
+  if [ -n "$src" ]; then
+    cp "$src" /etc/caddy/Caddyfile
+  elif [ ! -f /etc/caddy/Caddyfile ]; then
+    cat >/etc/caddy/Caddyfile <<'CADDY'
+:80 {
+	encode gzip
+	handle {
+		reverse_proxy 127.0.0.1:8080
+	}
+}
+CADDY
+  fi
+  if systemd_live; then
+    systemctl enable --now caddy >/dev/null 2>&1 || true
+    systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
+  fi
+}
+apply_caddy
+
 if ! command -v docker >/dev/null 2>&1; then
-  curl -fsSL https://get.docker.com | sh
+  curl -fsSL https://get.docker.com | sh || true
 fi
 enable_unit docker
 
-if ! command -v node >/dev/null 2>&1 || ! node -v | grep -qE 'v2[2-9]'; then
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  apt-get install -y nodejs
+# apt nodejs+npm first (fixes ExecStart 127). Nodesource only if still missing.
+if ! command -v npm >/dev/null 2>&1; then
+  apt-get install -y nodejs npm || true
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - || true
+  apt-get install -y nodejs || true
 fi
 
 hostnamectl set-hostname reelos 2>/dev/null || hostname reelos
@@ -131,13 +164,12 @@ if [ -d "$HERE/bin" ]; then
   chmod 755 /opt/reelos/bin/* || true
 fi
 
-if [ -f "$HERE/compose/Caddyfile" ]; then
-  mkdir -p /etc/caddy
-  cp "$HERE/compose/Caddyfile" /etc/caddy/Caddyfile
-fi
+apply_caddy
 
 cd "$ROOT/app"
-npm ci --no-audit --no-fund
+if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
+  npm ci --no-audit --no-fund || npm install --no-audit --no-fund || true
+fi
 chown -R 1000:1000 "$MEDIA" /mnt/debrid /mnt/symlinks || true
 
 ufw allow 80/tcp || true
@@ -152,8 +184,13 @@ ufw deny 51413/udp || true
 if systemd_live; then
   systemctl daemon-reload || true
 fi
-enable_unit reelos
-enable_unit caddy
+if command -v npm >/dev/null 2>&1 && [ -d "$ROOT/app/node_modules" ]; then
+  systemctl enable --now reelos || enable_unit reelos
+else
+  echo "npm or node_modules missing — reelos.service not started."
+  enable_unit reelos
+fi
+systemctl enable --now caddy 2>/dev/null || enable_unit caddy
 if systemd_live; then
   systemctl reload caddy || systemctl restart caddy || true
 fi
@@ -177,3 +214,4 @@ echo "ReelOS is up."
 echo "From another device on this network, open http://reelos.local"
 echo "First boot is the seven-question wizard. Paste a Real-Debrid key to ping the live account."
 echo "This installer does not seed indexers and does not fetch copyrighted media."
+

@@ -1,10 +1,10 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "channel": "stable",
   "notes": [
-    "Live installer Wi-Fi before apt. No extra packages that abort the disc.",
-    "Request and paste go to Radarr / Decypharr. Indexers you add go to Prowlarr.",
-    "OTA from GitHub. Stack image pulls are a toggle, default off."
+    "Search goes through Radarr and Sonarr. Real titles, not the demo catalog.",
+    "Jellyfin and Decypharr stay up. Your wizard answers are kept.",
+    "Doctor, engine wiring, and Settings → Updates."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
