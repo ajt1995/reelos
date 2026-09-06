@@ -221,7 +221,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
         <div className="w-full">
           <p className="font-display font-medium">Indexers</p>
           <p className="mt-1 text-sm text-muted">
-            URL + API key. Skip is fine — search still finds titles. Request waits on no release.
+            Optional extra Torznab. Skip is valid — the provider is already the first release source.
           </p>
           <input
             className="mt-3 h-11 w-full rounded-xl bg-raised px-3 text-sm"

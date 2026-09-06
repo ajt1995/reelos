@@ -60,6 +60,44 @@ def api_key(xml: Path) -> bool:
     return bool(node is not None and node.text)
 
 
+def xml_key_text(xml: Path) -> str:
+    if not xml.exists():
+        return ""
+    try:
+        node = ET.parse(xml).getroot().find("ApiKey")
+    except ET.ParseError:
+        return ""
+    return (node.text or "").strip() if node is not None else ""
+
+
+def releases_hop(answers: dict) -> dict:
+    src = answers.get("source") or ""
+    want = f"ReelOS-{src}"
+    key = xml_key_text(COMPOSE / "configs" / "prowlarr" / "config.xml")
+    if not key:
+        return ok("releases", "No release source. Provider indexer missing.", False)
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(
+            "http://127.0.0.1:9696/api/v1/indexer",
+            headers={"X-Api-Key": key},
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode() or "[]")
+    except Exception:
+        return ok("releases", "No release source. Provider indexer missing.", False)
+    rows = data if isinstance(data, list) else []
+    if src == "local-vpn":
+        if any(ix.get("enable") for ix in rows):
+            return ok("releases", "Indexer enabled", True)
+        return ok("releases", "No release source. Provider indexer missing.", False)
+    for ix in rows:
+        if ix.get("name") == want and ix.get("enable"):
+            return ok("releases", want, True)
+    return ok("releases", "No release source. Provider indexer missing.", False)
+
+
 def listening(port: int) -> bool:
     s = socket.socket()
     s.settimeout(0.4)
@@ -120,7 +158,8 @@ def main() -> int:
     if intent.get("music"):
         checks.append(ok("Music engine", "Lidarr API key" if api_key(COMPOSE / "configs" / "lidarr" / "config.xml") else "Lidarr not ready", api_key(COMPOSE / "configs" / "lidarr" / "config.xml")))
 
-    checks.append(ok("Indexers", "Prowlarr ready (empty until you add one)", api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")))
+    checks.append(ok("Indexers", "Prowlarr API key" if api_key(COMPOSE / "configs" / "prowlarr" / "config.xml") else "Prowlarr not ready", api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")))
+    checks.append(releases_hop(answers))
 
     if frontend in ("jellyfin", "both"):
         checks.append(ok("Jellyfin", "Responding" if listening(8096) else "Not up", listening(8096)))

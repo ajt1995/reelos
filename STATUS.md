@@ -1,23 +1,33 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 13:08 CDT**.
+Xorriso. Dated **2026-09-06 17:08 CDT**.
 
 # 1.2.15 frozen
 
-VERSION **1.2.15**. No 1.2.16. No ISO. No APK. No README. **Stop committing.**
+VERSION **1.2.15**. No 1.2.16. No ISO. No indexer roster. **Stop committing.**
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-## This pass (1–18)
+## Hole closed
 
-A. `POST /api/provision` writes answers + compose, `{ok:true,simulated:false}` only if compose 0. Finish is that fetch. Fail stays on wizard. `POST /api/ping` is the real provider. Disks from `GET /api/disks`. Reset → provisioned false → wizard.
+`wire-engines.py` adds **one** Prowlarr indexer `ReelOS-<provider>` from wizard `source` + `apiKey`, using Prowlarr’s first-party schema for that provider’s official API. Idempotent. `local-vpn` does not invent a debrid indexer. Connect paste still works. Skip is valid.
 
-B. wire-engines roots `/symlinks` + `/mnt/symlinks`. Jellyfin user/PIN + `/symlinks` libraries. Doctor: restarting + last log, never green. Kids is not a library. Lidarr only if music. Plex bind done, claim not. Indexers = Connect paste → Prowlarr 2xx.
+Doctor hop `releases`: green when that indexer is enabled; red `No release source. Provider indexer missing.`
 
-C. Home/Discover = lookup/library. Lookup without keys is an error string. Request has no fake %. Watch when Jellyfin has the title. Building waits on `/api/box`. `LAN_IP` is not `192.168.1.42`.
+## Sandbox curls (no engines)
+
+```
+curl -sS http://127.0.0.1:8080/api/doctor
+# releases: No release source. Provider indexer missing.
+
+curl -sS http://127.0.0.1:8080/api/lookup?q=batman
+# {"titles":[],"error":"Movies/TV engines have no API key yet"}
+```
+
+No fake HP curls. No FlareSolverr.
 
 ## HP
 
-Not applied. No fake house curls.
+Not applied.

@@ -229,6 +229,91 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
         pass
 
 
+PROVIDER_HINTS = {
+    "torbox": ("torbox",),
+    "real-debrid": ("real-debrid", "realdebrid", "real debrid"),
+    "alldebrid": ("alldebrid", "all-debrid", "all debrid"),
+    "premiumize": ("premiumize",),
+}
+
+
+def _schema_blob(schema: dict) -> str:
+    parts = [
+        str(schema.get("implementation") or ""),
+        str(schema.get("implementationName") or ""),
+        str(schema.get("name") or ""),
+        str(schema.get("infoLink") or ""),
+    ]
+    for f in schema.get("fields") or []:
+        if f.get("name") in ("definitionFile", "definitionName"):
+            parts.append(str(f.get("value") or ""))
+    return " ".join(parts).lower()
+
+
+def ensure_provider_indexer(prow_key: str) -> None:
+    """One first-party debrid indexer. Not a tracker roster. Skip local-vpn."""
+    src = source()
+    if src == "local-vpn":
+        log_wire("provider indexer skipped (local-vpn)")
+        return
+    key = (answers().get("apiKey") or "").strip()
+    if not key:
+        log_wire("provider indexer skipped (no apiKey)")
+        return
+    name = f"ReelOS-{src}"
+    url = "http://127.0.0.1:9696/api/v1/indexer"
+    try:
+        have = call(url, prow_key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"provider indexer list {e}")
+        return
+    for ix in have if isinstance(have, list) else []:
+        if ix.get("name") == name:
+            log_wire(f"provider indexer exists {name}")
+            return
+    hints = PROVIDER_HINTS.get(src, (src,))
+    try:
+        schemas = call(f"{url}/schema", prow_key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"provider indexer schema {e}")
+        return
+    hit = None
+    for schema in schemas if isinstance(schemas, list) else []:
+        blob = _schema_blob(schema)
+        if any(h in blob for h in hints):
+            hit = schema
+            break
+    if not hit:
+        log_wire(f"no first-party indexer in Prowlarr for {src}")
+        return
+    fields = []
+    for f in hit.get("fields") or []:
+        item = dict(f)
+        n = str(item.get("name") or "")
+        if n.lower() in ("apikey", "api_key", "api-key", "token"):
+            item["value"] = key
+        fields.append(item)
+    body = {
+        "enable": True,
+        "appProfileId": hit.get("appProfileId") or 1,
+        "priority": hit.get("priority") or 25,
+        "name": name,
+        "protocol": hit.get("protocol") or "torrent",
+        "implementation": hit.get("implementation"),
+        "implementationName": hit.get("implementationName"),
+        "configContract": hit.get("configContract"),
+        "fields": fields,
+    }
+    try:
+        call(url, prow_key, method="POST", body=body)
+        log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:200] if e.fp else str(e)
+        log_wire(f"provider indexer POST {e.code} {err}")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+        log_wire(f"provider indexer POST {e}")
+
+
 def transcode_override() -> None:
     dri = Path("/dev/dri")
     override = COMPOSE / "compose.override.yml"
@@ -519,6 +604,8 @@ def main() -> int:
     sonarr_key = wait_key(sonarr_xml) if intent.get("tv") or intent.get("anime") else None
     lidarr_key = wait_key(lidarr_xml) if intent.get("music") else None
     prow_key = wait_key(prow_xml)
+    if prow_key:
+        ensure_provider_indexer(prow_key)
 
     engine: dict = {"wiredAt": int(time.time()), "quality": a.get("quality")}
 
