@@ -1,5 +1,4 @@
 # ui/
 
-ReelOS shell (wizard + daily UI).
-
-Canonical copy for the 1.2 USB OTA unpacker is still repo-root `src/` + `package.json`. Keep both in sync.
+The ReelOS shell lives at the repo root (`src/`, `vite.config.ts`, `package.json`).
+OTA applies that tree onto `/opt/reelos/app`. This folder is a pointer, not a second copy.
