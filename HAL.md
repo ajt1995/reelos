@@ -1,25 +1,17 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 17:03 CDT**. VERSION stays **1.2.15**. No 1.2.16. No ISO. No README. No indexer roster.
+Updated **2026-09-06 17:13 CDT**. VERSION **1.2.15**. No 1.2.16. No ISO. No tracker roster.
 
-1.2.15 freeze is open for **one hole**: Request cannot grab a release. Lookup finds Batman. Prowlarr has zero indexers. Decypharr + TorBox only fetch a hash someone else already found. Fresh start would be a brick.
+## Still broken for first movie
+
+Prowlarr stock schema often has **no** TorBox indexer. `ensure_provider_indexer` then logs `no first-party indexer` and returns. Request stays empty. Doctor must not go green.
 
 ## Fix
 
-After Prowlarr has an API key, `wire-engines.py` adds **one** release source built from wizard answers:
+1. If schema has no match for `torbox` / `real-debrid` / etc, install the **vendor's official Prowlarr definition** (TorBox publishes `torbox-prowlarr-indexers`). Drop the YML into Prowlarr's custom Definitions folder, restart Prowlarr, then add `ReelOS-torbox` with `answers.apiKey`. Same idea for RD if a first-party/official definition exists. Do not scrape random sites. Do not ship a list of trackers.
+2. If add still fails, Doctor `releases` stays red and wire.log has the line. Never silent.
+3. After a successful grab (`downloaded`), `POST` Jellyfin `/Library/Refresh` so Watch is not dead for ten minutes.
+4. `/api/provision` compose timeout 180s is too short on a cold pull. Wait or pre-pull images; fail with the compose log, not a hang.
 
-- source `torbox` / `real-debrid` / `alldebrid` / `premiumize` → Prowlarr indexer that talks to **that provider's official API** using `answers.apiKey`
-- Use Prowlarr's first-party implementation for that provider if it exists. Do not scrape random sites. Do not ship names of third-party trackers.
-- Enable it. Sync to Radarr/Sonarr (already hooked).
-- `local-vpn` path: do not invent a debrid indexer. They still paste or use qBittorrent.
-
-Idempotent. If the indexer named `ReelOS-<provider>` already exists, leave it.
-
-Doctor hop: `releases`. Red = "No release source. Provider indexer missing." Green = Prowlarr has that one indexer enabled.
-
-Connect Indexers paste stays. Skip is now allowed because the provider is the first indexer.
-
-Prove in STATUS with sandbox curls (no keys → honest error). No fake HP curls. No FlareSolverr. No 1.2.16.
-
-Then freeze again. Same apply curl.
+Then freeze. Same apply curl.
