@@ -1,9 +1,9 @@
 {
-  "version": "1.2.3",
+  "version": "1.2.4",
   "channel": "stable",
   "notes": [
-    "Connect: TV uses http://<ip>:8096. Jellyfin is on the LAN.",
-    "Search is /api/lookup on the box. OTA will not apt-get Chromium."
+    "Open Jellyfin in this browser at http://<ip>:8096.",
+    "Connect cards. Search on the box. OTA will not apt-get Chromium."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.3.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.4.tar.gz"
 }

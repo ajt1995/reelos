@@ -56,12 +56,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.3";
-export const SHIPPED_VERSION = "1.2.3";
+export const LATEST_VERSION = "1.2.4";
+export const SHIPPED_VERSION = "1.2.4";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Connect: TV address is http://<ip>:8096. Jellyfin is on the LAN.",
+  "Open Jellyfin in this browser. TV uses http://<ip>:8096.",
   "Search talks to Radarr on the box. OTA will not install Chromium.",
   "New browser hydrates from the box. Do not re-run the wizard.",
 ];

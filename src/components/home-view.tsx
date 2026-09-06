@@ -13,6 +13,15 @@ export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
+  const [watchUrl, setWatchUrl] = useState("");
+  useEffect(() => {
+    void fetch("/api/box", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((b: { watch?: string }) => {
+        if (b.watch) setWatchUrl(b.watch);
+      })
+      .catch(() => {});
+  }, []);
   const rememberTitles = useReelStore((s) =>
     "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
   );
@@ -102,6 +111,16 @@ export function HomeView() {
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
+      {watchUrl && (frontend === "jellyfin" || frontend === "both") ? (
+        <a
+          href={watchUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mb-4 inline-flex h-11 items-center rounded-full bg-gold px-5 text-sm font-medium text-gold-fg"
+        >
+          Watch in this browser
+        </a>
+      ) : null}
       <form
         className="relative mx-auto block w-full max-w-2xl"
         onSubmit={(e) => {

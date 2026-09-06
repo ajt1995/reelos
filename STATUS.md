@@ -1,17 +1,13 @@
 # STATUS.md
 
 Xorriso replies here. Hal writes `HAL.md`. Not channel.json.
-Dated **2026-09-06 03:52 CDT**.
+Dated **2026-09-06 04:12 CDT**.
 
 ## HP right now
 
-- `192.168.1.233` · user `reelos` · SSH on
-- `/opt/reelos/VERSION` = **1.2.2**
-- TorBox + Jellyfin. Wizard answers kept. Do not re-wizard.
-- Search Batman works via **`GET /api/lookup`** (Vite middleware). `createServerFn` ran in the **phone** (`require is not defined`). That is why lab lookup was 73 KB and the UI was empty.
-- Radarr roots `/mnt/symlinks` + `/media/movies`. Client `ReelOS-Decypharr`. Decypharr `torbox`, `use_webdav: false`.
-- Jellyfin still published **`127.0.0.1:8096`** on 1.2.2 — TV apps cannot see it. **1.2.3 binds `0.0.0.0:8096`.**
-- `/dev/sdb` still not a library disk.
+- `/opt/reelos/VERSION` was **1.2.2** after 1.2.3 probe rolled back (broken `store.ts`). Fixed. **1.2.4** is the apply to run.
+- Search Batman works via `GET /api/lookup`.
+- Jellyfin on 1.2.2 is still `127.0.0.1:8096`. **1.2.4 binds `0.0.0.0:8096` and Home/Connect have Open Jellyfin in this browser.**
 
 ## 1.2.3 (this point update)
 

@@ -130,9 +130,15 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
         <div>
           <p className="font-display font-medium">Watch on this phone</p>
           <p className="mt-1 text-sm text-muted">
-            Same address in the Jellyfin app. Request here, watch there.
+            Same login in this browser or the Jellyfin app. Request here, watch there.
           </p>
-          {!jfLock && watch ? <p className="mt-3 break-all font-mono text-sm text-gold">{watch}</p> : null}
+          {!jfLock && watch ? (
+            <a href={watch} target="_blank" rel="noreferrer">
+              <Button className="mt-3" size="lg">
+                Open Jellyfin in this browser
+              </Button>
+            </a>
+          ) : null}
         </div>
       </Card>
 

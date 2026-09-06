@@ -100,6 +100,7 @@ need() {
 }
 need src/components/settings-view.tsx 'title="Terminal"'
 need src/components/home-view.tsx '/api/lookup'
+need src/components/home-view.tsx 'Watch in this browser'
 need src/lib/appliance.ts runTerminal
 need src/lib/catalog.ts rememberCatalogTitles
 need install/compose/docker-compose.yml rshared
