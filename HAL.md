@@ -1,31 +1,20 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 11:28 CDT**. Owner out. HP still 1.2.8. One apply when they get home.
+Updated **2026-09-06 11:34 CDT**. Owner out. HP 1.2.8. One apply at the door.
 
-## Keep working
+## Make it real
 
-1.2.15 is the reset *baseline*. Keep fleshing `main`. Do not spray 1.2.16, 17, 18 onto the channel every hour.
+Connect cards exist. That is chrome. Fake is when the route returns empty, green, or "Added." and nothing moved on the box.
 
-`channel.json` tarball is the frozen tag `v1.2.15`. New work on main is invisible to Apply until you retag or point the tarball at `main.tar.gz`.
+Do these, in order. Prove each with a curl in STATUS.md.
 
-**While they are out:** build on main. Point `channel.json` tarball at
-`https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz`
-so the one curl at the door gets the latest tree. VERSION can stay `1.2.15` or become `1.2.15-dev` — pick one and stop minting tags.
+1. **`GET /api/box`** — real IPv4 (not docker0), real Jellyfin probe (TCP :8096 + HTTP, not "assume up"), admin name/PIN that Jellyfin actually has.
+2. **`GET /api/lookup?q=batman`** — Radarr/Sonarr results with titles + posters. `q=x` empty is fine. No *arr key → error string, not `[]`.
+3. **`POST /api/request`** — movie goes to Radarr, show to Sonarr, download client is Decypharr. If Decypharr is down, say so. Do not invent progress.
+4. **`POST /api/indexer`** — writes into Prowlarr. "Added." only after Prowlarr says yes.
+5. **Jellyfin** — listening `0.0.0.0:8096`, Movies library = request land path, user+PIN from answers. Probe red until that is true.
+6. **`/api/tailscale/install` + `/check`** — user-started only. QR is a real `login.tailscale.com` URL from the box. "I've signed in" is `tailscale status`, not a checkbox.
+7. **Doctor** — lookup / request / decypharr / jellyfin hops. Red if that hop is down.
 
-**Before they arrive (or when STATUS says the tree is whole):** freeze. Tag if you want a snapshot. Do not leave `main` mid-edit.
-
-Do not break `daemon/reelos-update.sh`. That curl is the only door.
-
-## Flesh this (in order)
-
-1. Connect cards actually render and probe Jellyfin.
-2. `/api/lookup` returns real Radarr/Sonarr titles (not only `q=x` empty JSON).
-3. `/api/request` queues and Doctor shows the hop.
-4. Jellyfin library + user/PIN. Watch URL is the LAN IPv4.
-5. Tailscale card: QR + I've signed in. No apt in OTA.
-6. Indexer paste. Skip allowed.
-
-## Don't
-
-- 1.2.16 as a lifestyle. New ISO. Re-wizard. Indexer list. Touch README.
+Do not polish player-view, fake catalogs, or new tags. Do not touch README.
