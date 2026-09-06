@@ -108,6 +108,7 @@ need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
 need daemon/wire-engines.py use_webdav
+need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 log "canaries ok"
 
 NEXT="$ROOT.next"

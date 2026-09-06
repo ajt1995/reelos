@@ -1,9 +1,9 @@
 {
-  "version": "1.2.5",
+  "version": "1.2.6",
   "channel": "stable",
   "notes": [
-    "Connect can install Tailscale on the box. Open Jellyfin in this browser.",
-    "Search on the box. OTA will not apt-get Chromium."
+    "Settings Check and Apply run on the box, not in the phone.",
+    "Jellyfin in the browser. Tailscale install from Connect."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.5.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.6.tar.gz"
 }

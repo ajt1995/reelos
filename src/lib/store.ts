@@ -56,8 +56,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.5";
-export const SHIPPED_VERSION = "1.2.5";
+export const LATEST_VERSION = "1.2.6";
+export const SHIPPED_VERSION = "1.2.6";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
@@ -594,17 +594,18 @@ export const useReelStore = create<ReelState>()(
             checkedAt: Date.now(),
           },
         });
-        void import("./appliance").then(({ checkChannel }) =>
-          checkChannel().then((r) => {
+        void fetch("/api/update/check", { cache: "no-store" })
+          .then((r) => r.json())
+          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; error?: string }) => {
             const cur = get();
             if (r.ok && r.available) {
               set({
                 update: {
                   ...cur.update,
                   status: "available",
-                  current: r.local,
-                  target: r.remote,
-                  notes: r.notes.length ? r.notes : UPDATE_NOTES,
+                  current: r.local || cur.update.current,
+                  target: r.remote || null,
+                  notes: r.notes?.length ? r.notes : UPDATE_NOTES,
                   checkedAt: Date.now(),
                 },
               });
@@ -613,32 +614,91 @@ export const useReelStore = create<ReelState>()(
                 update: {
                   ...cur.update,
                   status: r.ok ? "current" : "error",
-                  current: r.local,
+                  current: r.local || cur.update.current,
                   target: null,
                   notes: r.ok ? [] : [r.error ?? "Channel unreachable"],
                   checkedAt: Date.now(),
                 },
               });
             }
-          }),
-        );
+          })
+          .catch((e) => {
+            const cur = get();
+            set({
+              update: {
+                ...cur.update,
+                status: "error",
+                notes: [String(e)],
+                checkedAt: Date.now(),
+              },
+            });
+          });
       },
       startUpdate: () => {
         const s = get();
         if (s.update.status !== "available") return;
         const steps = updatePlan();
         if (steps[0]) steps[0].status = "running";
+        const target = s.update.target;
         set({
           update: { ...s.update, status: "applying", steps },
         });
-        void import("./appliance").then(({ applyChannel, pullStackImages }) =>
-          applyChannel().then(async (r) => {
-            if (get().settings.stackImages) await pullStackImages();
-            if (!r.ok) {
-              /* preview: keep simulated tick path */
+        void fetch("/api/update/apply", { method: "POST" })
+          .then((r) => r.json())
+          .then((j: { ok?: boolean; error?: string }) => {
+            if (!j.ok) {
+              const cur = get();
+              set({
+                update: { ...cur.update, status: "error", notes: [j.error || "apply did not start"] },
+              });
+              return;
             }
-          }),
-        );
+            const tick = () => {
+              void fetch("/api/update/status", { cache: "no-store" })
+                .then((r) => r.json())
+                .then((st: { running?: boolean; local?: string; log?: string }) => {
+                  const cur = get();
+                  const steps2 = (cur.update.steps || []).map((x) => ({ ...x }));
+                  if (steps2[0]) {
+                    steps2[0].status = "running";
+                    steps2[0].log = st.log || "";
+                  }
+                  if (st.running) {
+                    set({ update: { ...cur.update, status: "applying", steps: steps2 } });
+                    window.setTimeout(tick, 2500);
+                    return;
+                  }
+                  if (st.local && target && st.local === target) {
+                    set({
+                      update: {
+                        ...cur.update,
+                        status: "current",
+                        current: st.local,
+                        target: null,
+                        steps: steps2.map((x) => ({ ...x, status: "done" })),
+                        notes: [],
+                      },
+                    });
+                    return;
+                  }
+                  set({
+                    update: {
+                      ...cur.update,
+                      status: "error",
+                      current: st.local || cur.update.current,
+                      notes: [st.log || "Apply ended. Version did not change."],
+                      steps: steps2,
+                    },
+                  });
+                })
+                .catch(() => window.setTimeout(tick, 4000));
+            };
+            window.setTimeout(tick, 2000);
+          })
+          .catch((e) => {
+            const cur = get();
+            set({ update: { ...cur.update, status: "error", notes: [String(e)] } });
+          });
       },
       pingAdapter: () => {
         const s = get();

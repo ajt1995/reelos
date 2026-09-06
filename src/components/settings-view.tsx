@@ -323,8 +323,8 @@ function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
       <p className="mt-2 text-sm text-muted">
         Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put.
       </p>
-      {update.checkedAt ? (
-        <p className="mt-2 text-xs text-faint">Last checked {formatWhen(update.checkedAt)}</p>
+      {update.status === "error" && update.notes[0] ? (
+        <p className="mt-2 text-sm text-danger">{update.notes[0]}</p>
       ) : null}
 
       {update.status === "available" ? (

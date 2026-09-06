@@ -277,6 +277,116 @@ async function handleIndexer(req, res) {
   }
 }
 
+function versionKey(v) {
+  return String(v || "0")
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+}
+
+function cmpVer(a, b) {
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const d = (a[i] || 0) - (b[i] || 0);
+    if (d) return d;
+  }
+  return 0;
+}
+
+function localVersion() {
+  try {
+    if (existsSync("/opt/reelos/VERSION")) return readFileSync("/opt/reelos/VERSION", "utf8").trim();
+  } catch {
+    /* */
+  }
+  return "0";
+}
+
+async function handleUpdateCheck(_req, res) {
+  const local = localVersion();
+  const urls = [
+    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
+    "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.6/channel.json",
+    "https://github.com/ajt1995/reelos/raw/main/channel.json",
+    "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+  ];
+  let best = null;
+  let bestK = [];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: "no-store" });
+      if (!r.ok) continue;
+      const ch = await r.json();
+      const k = versionKey(ch.version);
+      if (!best || cmpVer(k, bestK) > 0) {
+        best = ch;
+        bestK = k;
+      }
+    } catch {
+      /* */
+    }
+  }
+  if (!best) {
+    send(res, 200, { ok: false, local, remote: local, available: false, notes: [], error: "channel unreachable" });
+    return;
+  }
+  send(res, 200, {
+    ok: true,
+    local,
+    remote: best.version,
+    notes: best.notes || [],
+    available: best.version !== local,
+  });
+}
+
+async function handleUpdateApply(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  try {
+    const urls = [
+      "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
+      "https://raw.githubusercontent.com/ajt1995/reelos/v1.2.6/daemon/reelos-update.sh",
+    ];
+    let body = "";
+    for (const u of urls) {
+      try {
+        const r = await fetch(u, { cache: "no-store" });
+        if (r.ok) {
+          body = await r.text();
+          break;
+        }
+      } catch {
+        /* */
+      }
+    }
+    if (!body.includes("ReelOS")) {
+      send(res, 500, { ok: false, error: "could not download updater" });
+      return;
+    }
+    writeFileSync("/tmp/reelos-update.sh", body, { mode: 0o755 });
+    const log = openSync("/var/lib/reelos/ota.log", "a");
+    spawn("bash", ["/tmp/reelos-update.sh", "apply"], { detached: true, stdio: ["ignore", log, log] }).unref();
+    send(res, 200, { ok: true, started: true });
+  } catch (e) {
+    send(res, 500, { ok: false, error: String(e) });
+  }
+}
+
+async function handleUpdateStatus(_req, res) {
+  const running = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" }).status === 0;
+  let log = "";
+  try {
+    if (existsSync("/var/lib/reelos/ota.log")) {
+      const t = readFileSync("/var/lib/reelos/ota.log", "utf8");
+      log = t.trim().split("\n").slice(-8).join("\n");
+    }
+  } catch {
+    /* */
+  }
+  send(res, 200, { ok: true, local: localVersion(), running, log });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
@@ -290,6 +400,9 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/install") return void (await handleTailscaleInstall(req, res));
           if (pathOnly === "/api/tailscale/check") return void (await handleTailscaleCheck(req, res));
+          if (pathOnly === "/api/update/check") return void (await handleUpdateCheck(req, res));
+          if (pathOnly === "/api/update/apply") return void (await handleUpdateApply(req, res));
+          if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;
