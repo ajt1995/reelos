@@ -1,10 +1,10 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.1.1",
   "channel": "stable",
   "notes": [
-    "Search goes through Radarr and Sonarr. Real titles, not the demo catalog.",
-    "Jellyfin and Decypharr stay up. Your wizard answers are kept.",
-    "Doctor, engine wiring, and Settings → Updates."
+    "Settings terminal. Paste a command from your phone; it runs on the box.",
+    "Search goes through Radarr and Sonarr. Jellyfin and Decypharr stay up.",
+    "Wizard answers are kept."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

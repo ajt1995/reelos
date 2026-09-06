@@ -56,9 +56,23 @@ export const checkChannel = createServerFn({ method: "GET" }).handler(async () =
       ? fs.readFileSync("/workspace/VERSION", "utf8").trim()
       : "1.2.0";
   try {
-    const res = await fetch(CHANNEL_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error(String(res.status));
-    const ch = (await res.json()) as { version: string; notes?: string[] };
+    const urls = [
+      CHANNEL_URL,
+      "https://cdn.jsdelivr.net/gh/ajt1995/reelos@main/channel.json",
+    ];
+    let ch: { version: string; notes?: string[] } | null = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        if (res.ok) {
+          ch = (await res.json()) as { version: string; notes?: string[] };
+          break;
+        }
+      } catch {
+        /* try next */
+      }
+    }
+    if (!ch) throw new Error("channel unreachable");
     return {
       ok: true as const,
       local,
@@ -291,7 +305,7 @@ export const runDoctor = createServerFn({ method: "GET" }).handler(async () => {
   const fs = await import("node:fs");
   const script = "/opt/reelos/bin/reelos-doctor.py";
   if (!APPLIANCE || !fs.existsSync(script)) {
-    return { ok: true as const, live: false as const, version: "1.2.1", checks: [] as { ok: boolean; label: string; detail: string }[] };
+    return { ok: true as const, live: false as const, version: "1.2.1.1", checks: [] as { ok: boolean; label: string; detail: string }[] };
   }
   const raw: string = await new Promise((resolve) => {
     const chunks: Buffer[] = [];
@@ -307,6 +321,94 @@ export const runDoctor = createServerFn({ method: "GET" }).handler(async () => {
     };
     return { ok: true as const, live: true as const, ...parsed };
   } catch {
-    return { ok: false as const, live: true as const, version: "1.2.1", checks: [] };
+    return { ok: false as const, live: true as const, version: "1.2.1.1", checks: [] };
   }
 });
+
+const TERM_DIR = APPLIANCE ? "/var/lib/reelos" : "/tmp/reelos-term";
+const TERM_LOG = `${TERM_DIR}/term.log`;
+const TERM_PID = `${TERM_DIR}/term.pid`;
+const TERM_CWD = APPLIANCE ? "/home/reelos" : "/workspace";
+
+function termAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const runTerminal = createServerFn({ method: "POST" })
+  .validator((data: { command?: string; kill?: boolean }) => data)
+  .handler(async ({ data }) => {
+    const fs = await import("node:fs");
+    const { spawn } = await import("node:child_process");
+    fs.mkdirSync(TERM_DIR, { recursive: true });
+
+    const pidRaw = fs.existsSync(TERM_PID) ? fs.readFileSync(TERM_PID, "utf8").trim() : "";
+    const pid = Number(pidRaw) || 0;
+    let running = pid > 0 && termAlive(pid);
+
+    if (data.kill && running) {
+      try {
+        process.kill(-pid, "SIGTERM");
+      } catch {
+        try {
+          process.kill(pid, "SIGTERM");
+        } catch {
+          /* gone */
+        }
+      }
+      running = false;
+      fs.appendFileSync(TERM_LOG, "\n^C\n");
+    }
+
+    if (data.command && data.command.trim()) {
+      if (running) {
+        const output = fs.existsSync(TERM_LOG) ? fs.readFileSync(TERM_LOG, "utf8") : "";
+        return { ok: false as const, running: true, output, cwd: TERM_CWD, error: "already running" };
+      }
+      const command = data.command.replace(/\r\n/g, "\n").slice(0, 32_000);
+      const stamp = new Date().toISOString().slice(11, 19);
+      fs.writeFileSync(
+        TERM_LOG,
+        `reelos# ${command.split("\n").join("\n> ")}\n`,
+      );
+      const out = fs.openSync(TERM_LOG, "a");
+      const child = spawn("bash", ["-lc", command], {
+        cwd: fs.existsSync(TERM_CWD) ? TERM_CWD : "/",
+        env: { ...process.env, HOME: APPLIANCE ? "/home/reelos" : process.env.HOME, TERM: "xterm-256color" },
+        detached: true,
+        stdio: ["ignore", out, out],
+      });
+      fs.closeSync(out);
+      if (child.pid) {
+        fs.writeFileSync(TERM_PID, String(child.pid));
+        child.on("exit", (code, signal) => {
+          try {
+            fs.appendFileSync(
+              TERM_LOG,
+              `\n[${stamp} exit ${code ?? signal ?? "?"}] \n`,
+            );
+            if (fs.existsSync(TERM_PID) && fs.readFileSync(TERM_PID, "utf8").trim() === String(child.pid)) {
+              fs.unlinkSync(TERM_PID);
+            }
+          } catch {
+            /* log gone */
+          }
+        });
+        child.unref();
+        running = true;
+      } else {
+        fs.appendFileSync(TERM_LOG, "failed to spawn\n");
+        running = false;
+      }
+    }
+
+    const livePid = Number(fs.existsSync(TERM_PID) ? fs.readFileSync(TERM_PID, "utf8").trim() : "") || 0;
+    running = livePid > 0 && termAlive(livePid);
+    let output = fs.existsSync(TERM_LOG) ? fs.readFileSync(TERM_LOG, "utf8") : "";
+    if (output.length > 200_000) output = output.slice(-200_000);
+    return { ok: true as const, running, output, cwd: TERM_CWD };
+  });

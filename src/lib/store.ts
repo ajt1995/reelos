@@ -55,16 +55,15 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.1";
-export const SHIPPED_VERSION = "1.2.1";
+export const LATEST_VERSION = "1.2.1.1";
+export const SHIPPED_VERSION = "1.2.1.1";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Intent-driven stack. Jellyfin libraries. Doctor. Search goes through the engines.",
-  "Decypharr provider field. Extra disks. Tailscale / Cloudflare from the wizard.",
-  "Local + VPN only when you pick it. Debrid path still has no torrent client.",
+  "Settings terminal. Paste a command from your phone; it runs on the box.",
+  "Search goes through Radarr and Sonarr. Jellyfin and Decypharr stay up.",
+  "Wizard answers are kept. No torrent client on the debrid path.",
 ];
-
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);
   const healthy = answers.source === "local-vpn" || answers.apiKey.trim().length >= 10;
