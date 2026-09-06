@@ -107,7 +107,7 @@ need install/compose/docker-compose.yml rshared
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need install/compose/docker-compose.yml '0.0.0.0:8096'
-need daemon/wire-engines.py Startup/Configuration
+need daemon/reelos-lid.sh HandleLidSwitch
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need src/components/title-view.tsx 'Play in Jellyfin'
 need src/components/title-view.tsx '/api/request'
@@ -244,7 +244,11 @@ if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; the
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
 
-# Stamp VERSION only after the shell answered.
+if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
+  bash "$ROOT/bin/reelos-lid.sh" || log "lid ignore non-fatal"
+elif [ -x "$WORK/src/daemon/reelos-lid.sh" ]; then
+  bash "$WORK/src/daemon/reelos-lid.sh" || true
+fi
 echo "$REMOTE" >"$ROOT/VERSION"
 log "$NOTES"
 log "ReelOS $REMOTE applied."

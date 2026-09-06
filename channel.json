@@ -1,9 +1,9 @@
 {
-  "version": "1.2.10",
+  "version": "1.2.11",
   "channel": "stable",
   "notes": [
-    "Jellyfin first-run + Movies library on /symlinks so Watch can see requests.",
-    "Check only reads main. Terminal on the box."
+    "Closing the lid does not sleep the box.",
+    "Jellyfin Movies library on /symlinks. Check only reads main."
   ],
-  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.10.tar.gz"
+  "tarball": "https://github.com/ajt1995/reelos/archive/refs/tags/v1.2.11.tar.gz"
 }
