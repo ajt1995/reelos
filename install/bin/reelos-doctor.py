@@ -143,11 +143,14 @@ def main() -> int:
                 text=True,
                 timeout=4,
             )
-            if "Up" in out:
+            if "Restarting" in out:
+                detail = "Decypharr restarting"
+                decy = False
+            elif "Up" in out:
                 decy = True
                 detail = "Decypharr up"
             elif out.strip():
-                detail = "decypharr dead"
+                detail = f"Decypharr {out.strip()[:80]}"
         except Exception:
             pass
     checks.append(ok("Decypharr hop", detail, decy))

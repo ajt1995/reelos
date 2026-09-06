@@ -96,7 +96,7 @@ function ResetAppliance() {
         return;
       }
       useReelStore.getState().factoryReset();
-      setMsg("Resetting. The wizard will load when the shell comes back.");
+      setMsg("Resetting. Wizard, then Connect.");
       window.setTimeout(() => window.location.reload(), 4000);
     } catch (e) {
       setMsg(String(e));

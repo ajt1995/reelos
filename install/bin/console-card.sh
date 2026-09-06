@@ -1,5 +1,5 @@
 #!/bin/bash
-# ReelOS tty1 card — IPv4 URL first. Not a desktop.
+# ReelOS tty1 card — IPv4 first, large. Not reelos.local first.
 set -eu
 STATE=/var/lib/reelos
 mkdir -p "$STATE"
@@ -13,12 +13,12 @@ has_net() {
   ip route get 1.1.1.1 >/dev/null 2>&1
 }
 
-addrs() {
-  ip -4 -br addr show | awk '$2 ~ /UP|UNKNOWN/ && $1 !~ /lo/ {print $1, $3}'
-}
-
-ipv4_urls() {
-  ip -4 -br addr show | awk '$2 ~ /UP|UNKNOWN/ && $1 !~ /lo/{split($3,a,"/"); print "  http://" a[1]}'
+lan_ip() {
+  ip -4 -br addr show | awk '
+    $2 ~ /UP|UNKNOWN/ && $1 !~ /^(lo|docker|br-|veth|cni)/ {
+      split($3,a,"/")
+      if (a[1] !~ /^172\.(1[7-9]|2[0-9]|3[01])\./) { print a[1]; exit }
+    }'
 }
 
 join_wifi() {
@@ -56,6 +56,10 @@ join_wifi() {
 }
 
 draw() {
+  local ip url
+  ip=$(lan_ip)
+  url=""
+  [ -n "$ip" ] && url="http://${ip}"
   clear
   echo "========================================"
   echo "  ReelOS"
@@ -63,33 +67,22 @@ draw() {
   echo
   echo "This screen is setup. Daily use is on another device."
   echo
-  echo "Hostname:  $(hostname)"
-  if has_net; then
-    echo "Network:   up"
-    addrs | sed 's/^/  /'
+  if [ -n "$url" ]; then
+    echo
+    echo "  On your phone:"
+    echo
+    echo "      ${url}"
+    echo
   else
-    echo "Network:   down — join Wi-Fi from this keyboard."
+    echo "  No LAN address yet — join Wi-Fi (1)."
+    echo
   fi
+  echo "  (optional) http://reelos.local"
   echo
-  if [ -f "$STATE/stack-installed" ]; then
-    echo "Stack:     installed"
-  else
-    echo "Stack:     finishing after network is up"
+  if command -v qrencode >/dev/null 2>&1 && [ -n "$url" ]; then
+    qrencode -t ansiutf8 "$url" 2>/dev/null || true
+    echo
   fi
-  echo
-  echo "On your phone, open:"
-  if ipv4_urls | grep -q .; then
-    ipv4_urls
-  else
-    echo "  (no address yet — join Wi-Fi)"
-  fi
-  echo "  http://reelos.local"
-  echo
-  if command -v qrencode >/dev/null 2>&1; then
-    url=$(ip -4 -br addr show | awk '$2 ~ /UP|UNKNOWN/ && $1 !~ /lo/{split($3,a,"/"); print "http://" a[1]; exit}')
-    [ -n "${url:-}" ] && qrencode -t ansiutf8 "$url" 2>/dev/null || true
-  fi
-  echo
   echo "1  Join Wi-Fi"
   echo "2  Refresh"
   echo "3  Login shell"

@@ -33,7 +33,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
     ports:
-      - "127.0.0.1:32400:32400"
+      - "0.0.0.0:32400:32400"
 
   prowlarr:
     profiles: ["indexers"]

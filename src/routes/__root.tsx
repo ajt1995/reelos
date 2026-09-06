@@ -77,6 +77,9 @@ function Runtime({ children }: { children: React.ReactNode }) {
               s.patchAnswers(box.answers as Parameters<typeof s.patchAnswers>[0]);
             }
             if (!s.provisioned || s.phase === "wizard") s.openReelOS();
+          } else {
+            const s = useReelStore.getState();
+            if (s.provisioned || s.phase !== "wizard") s.factoryReset();
           }
         } catch {
           /* preview / no box */

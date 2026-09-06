@@ -3,7 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
-import { getTitle, searchTitles } from "@/lib/catalog";
+import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,7 @@ export function HomeView() {
   const intent = useReelStore((s) => s.answers.intent);
   const downloading = requests.filter((r) => r.status === "downloading").length;
 
-  const catalogHits = useMemo(() => (q.trim().length >= 2 ? searchTitles(q) : []), [q]);
+  const catalogHits: Title[] = [];
   const hits = useMemo(() => {
     const seen = new Set<string>();
     const out: Title[] = [];
@@ -182,11 +182,15 @@ export function HomeView() {
         </Row>
       ) : null}
 
-      <Row label="Discover">
-        {discover.map((t) => (
-          <TitleCard key={t.id} title={t} />
-        ))}
-      </Row>
+      {discover.length > 0 ? (
+        <Row label="Discover">
+          {discover.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : q.trim().length < 2 ? (
+        <p className="mt-16 text-center text-sm text-muted">Search. Nothing is preloaded.</p>
+      ) : null}
     </div>
   );
 }

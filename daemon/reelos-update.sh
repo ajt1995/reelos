@@ -262,12 +262,20 @@ systemctl enable --now reelos || true
 systemctl restart reelos || true
 
 probe() {
-  local i code body
+  local i code body code80 page80
   for i in $(seq 1 45); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
     body=$(curl -sS --max-time 5 "http://127.0.0.1:8080/api/lookup?q=x" || true)
-    log "probe $i home=$code lookup=${body:0:40}"
-    if [ "$code" = "200" ] && echo "$body" | grep -q 'titles'; then
+    code80=$(curl -sS -o /tmp/reelos-ota-80.html -w "%{http_code}" --max-time 3 http://127.0.0.1/ || true)
+    page80=$(head -c 400 /tmp/reelos-ota-80.html 2>/dev/null || true)
+    log "probe $i home=$code :80=$code80 lookup=${body:0:40}"
+    if echo "$page80" | grep -qiE 'Caddy works|Welcome to Caddy'; then
+      log "probe $i stock Caddy on :80 — not ReelOS"
+      systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
+      sleep 1
+      continue
+    fi
+    if [ "$code" = "200" ] && [ "$code80" = "200" ] && echo "$body" | grep -q 'titles'; then
       return 0
     fi
     systemctl start reelos 2>/dev/null || true
