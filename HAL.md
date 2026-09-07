@@ -1,19 +1,16 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 18:59 CDT**. VERSION **1.2.15**.
+Updated **2026-09-06 19:10 CDT**. VERSION **1.2.15**.
 
-Apply waiting at the house:
+House apply still pulls **`main`**:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-**Do not start parked work.** Full list and rules: [`ROADMAP.md`](ROADMAP.md).
+**`main` is frozen** except mailbox files (`HAL.md`, `STATUS.md`, `ROADMAP.md`, `FACELIFT.md`).
 
-- `FACELIFT.md` — 1.3 Light
-- #2 Jellyfin Request
-- #3 Ebooks to Android
-- #4 Finish music
+You may cut the feature branches in [`ROADMAP.md`](ROADMAP.md) and work them. **Do not merge. Do not touch `channel.json` / `VERSION` / the updater.**
 
-#1 already shipped in this tree. No version assigned to the rest until the owner says so.
+If you need a default order while waiting: `#4` then `#3` then `#2` then facelift. Still branches only.
