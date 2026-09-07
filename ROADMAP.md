@@ -24,4 +24,5 @@ A title plays in Jellyfin on the TV.
 | #3 | Ebooks | `feature/3-books` |
 | #4 | Music | `feature/4-music` |
 | #7 | Tailscale login | `feature/7-tailscale` |
-| #8 | [UI shows new VERSION before Apply finishes](https://github.com/ajt1995/reelos/issues/8) | `feature/8-version-chrome` |
+| #8 | [UI version ahead of Apply](https://github.com/ajt1995/reelos/issues/8) | `feature/8-version-chrome` |
+| #9 | [TorBox movies/TV, local disk music/books](https://github.com/ajt1995/reelos/issues/9) | `feature/9-local-library-disk` |
