@@ -104,6 +104,33 @@ if ! newer "$REMOTE" "$LOCAL"; then
 fi
 
 log "ReelOS $LOCAL → $REMOTE"
+
+# Phone Apply is a child of reelos.service. systemctl stop reelos kills this
+# cgroup. Move to a transient unit before we touch the shell.
+if [ "${REELOS_OTA_UNIT:-}" != "1" ] && command -v systemd-run >/dev/null 2>&1; then
+  log "detach updater into reelos-ota.service (survives stop reelos)"
+  systemctl reset-failed reelos-ota 2>/dev/null || true
+  systemctl stop reelos-ota 2>/dev/null || true
+  cp -a "$0" /tmp/reelos-update.sh 2>/dev/null || true
+  chmod 755 /tmp/reelos-update.sh
+  systemd-run --unit=reelos-ota --collect --service-type=oneshot \
+    --property=TimeoutStartSec=infinity \
+    --setenv=REELOS_OTA_UNIT=1 \
+    --setenv=REELOS_OTA_REEXEC="${REELOS_OTA_REEXEC:-}" \
+    --setenv=REELOS_ROOT="$ROOT" \
+    /bin/bash /tmp/reelos-update.sh apply
+  if [ -t 1 ]; then
+    log "waiting on reelos-ota.service"
+    for _i in $(seq 1 180); do
+      systemctl is-active --quiet reelos-ota || break
+      sleep 2
+    done
+    tail -8 "$LOG" 2>/dev/null || true
+    cat "$ROOT/VERSION" 2>/dev/null || true
+  fi
+  exit 0
+fi
+
 curl -fL --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
 rm -rf "$WORK/src"
 mkdir -p "$WORK/src"
@@ -157,7 +184,7 @@ need compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'jellyfin config reset'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
-need daemon/reelos-update.sh 'caddy parked on updating page'
+need daemon/reelos-update.sh 'detach updater into reelos-ota.service'
 log "canaries ok"
 
 NEXT="$ROOT.next"

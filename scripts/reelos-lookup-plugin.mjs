@@ -513,8 +513,26 @@ async function handleUpdateApply(req, res) {
       return;
     }
     writeFileSync("/tmp/reelos-update.sh", body, { mode: 0o755 });
-    const log = openSync("/var/lib/reelos/ota.log", "a");
-    spawn("bash", ["/tmp/reelos-update.sh", "apply"], { detached: true, stdio: ["ignore", log, log] }).unref();
+    spawnSync("systemctl", ["reset-failed", "reelos-ota"], { encoding: "utf8" });
+    spawnSync("systemctl", ["stop", "reelos-ota"], { encoding: "utf8" });
+    const run = spawnSync(
+      "systemd-run",
+      [
+        "--unit=reelos-ota",
+        "--collect",
+        "--service-type=oneshot",
+        "--property=TimeoutStartSec=infinity",
+        "--setenv=REELOS_OTA_UNIT=1",
+        "/bin/bash",
+        "/tmp/reelos-update.sh",
+        "apply",
+      ],
+      { encoding: "utf8" },
+    );
+    if (run.status !== 0) {
+      send(res, 500, { ok: false, error: (run.stderr || run.stdout || "systemd-run failed").slice(0, 200) });
+      return;
+    }
     send(res, 200, { ok: true, started: true });
   } catch (e) {
     send(res, 500, { ok: false, error: String(e) });

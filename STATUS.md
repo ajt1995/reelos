@@ -1,15 +1,15 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 21:02 CDT**.
+Xorriso. Dated **2026-09-06 21:10 CDT**.
 
-# 1.2.18 frozen
+# 1.2.19 frozen
 
-VERSION **1.2.18**. One apply.
+VERSION **1.2.19**. House 1.2.18 Apply died because `systemctl stop reelos` kills the updater (same cgroup as the UI).
 
 ## This stamp
 
-1. `install/compose/docker-compose.yml` **and** `compose/docker-compose.yml` have `dns: 1.1.1.1/8.8.8.8` and `extra_hosts` for `search-api.torbox.app` + `api.torbox.app` on Prowlarr/Radarr/Sonarr/Decypharr. OTA copies from tarball then `compose up --force-recreate` with those profiles. Wire patches the on-box yml if extra_hosts is missing and recreates if the running container does not have them.
-2. `ReelOS-torbox` is added after that (official YML and/or torznab). `Name does not resolve` recreates arrs and retries. Still missing → `STAMP FAIL` in wire.log.
-3. Doctor `releases` is green only if that indexer is enabled **and** Prowlarr `/indexer/test` is not a resolve-error. Lookup hop timeout is **15s**.
+OTA runs as `reelos-ota.service` (`systemd-run`, oneshot) **before** the shell is stopped. Phone Apply returns 200; the unit keeps going. SSH Apply waits on that unit.
 
-No ISO. No other tickets.
+1.2.18 work stays (compose DNS/extra_hosts, force-recreate, ReelOS-torbox, doctor 15s).
+
+House right now: recover Home, then one SSH apply. Do not tap Apply on the phone until Home is 200.

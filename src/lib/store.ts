@@ -56,13 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.18";
-export const SHIPPED_VERSION = "1.2.18";
+export const LATEST_VERSION = "1.2.19";
+export const SHIPPED_VERSION = "1.2.19";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "TorBox indexer. DNS in compose, not a hosts poke.",
-  "Doctor releases is real. Lookup hop 15s.",
+  "Apply no longer dies when the shell stops.",
+  "TorBox DNS + indexer from 1.2.18.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);
