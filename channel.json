@@ -1,8 +1,8 @@
 {
-  "version": "1.2.38",
+  "version": "1.2.39",
   "channel": "stable",
   "notes": [
-    "1.2.38: VERSION stamps as soon as Home is up. No Prowlarr sit. SSH on :22. Terminal on Settings. Jellyfin remounts. Home is the real library."
+    "1.2.39: Quality, collections, ping, activity, play, and daily-update toggles hit the box — not localStorage."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

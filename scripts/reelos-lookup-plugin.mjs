@@ -969,10 +969,27 @@ async function handlePassword(req, res) {
   send(res, 200, { ok: true, jellyfin, boxUser: box.status === 0 });
 }
 
-async function handleQuality(_req, res) {
+async function handleQuality(req, res) {
+  const wantMap = { "1080p": "HD-1080p", hybrid: "Ultra-HD", "4k": "Ultra-HD", custom: "Any" };
+  if ((req.method || "GET").toUpperCase() === "POST") {
+    const body = await readBody(req);
+    const q = String(body.quality || "");
+    if (!["1080p", "hybrid", "4k", "custom"].includes(q)) {
+      send(res, 400, { ok: false, error: "quality must be 1080p, hybrid, or 4k" });
+      return;
+    }
+    const a = answers();
+    a.quality = q;
+    try {
+      mkdirSync("/var/lib/reelos", { recursive: true });
+      writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+    } catch (e) {
+      send(res, 500, { ok: false, error: String(e) });
+      return;
+    }
+  }
   const want = answers().quality || "hybrid";
-  const profile =
-    { "1080p": "HD-1080p", hybrid: "Ultra-HD", "4k": "Ultra-HD", custom: "Any" }[want] || "Ultra-HD";
+  const profile = wantMap[want] || "Ultra-HD";
   const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
   const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
   let radarr = null;
@@ -989,16 +1006,125 @@ async function handleQuality(_req, res) {
       sonarr = list.find((p) => p.name === profile)?.name || null;
     }
   } catch (e) {
-    send(res, 200, { wanted: want, profile, radarr, sonarr, error: String(e) });
+    send(res, 200, { ok: true, wanted: want, profile, radarr, sonarr, error: String(e) });
     return;
   }
   send(res, 200, {
+    ok: true,
     wanted: want,
     profile,
     radarr,
     sonarr,
     error: rk || sk ? null : "no engine keys",
   });
+}
+
+async function handleIntent(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 200, { ok: true, intent: answers().intent || {} });
+    return;
+  }
+  const body = await readBody(req);
+  const a = answers();
+  a.intent = { ...(a.intent || {}), ...(body.intent || body) };
+  try {
+    mkdirSync("/var/lib/reelos", { recursive: true });
+    writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+  } catch (e) {
+    send(res, 500, { ok: false, error: String(e) });
+    return;
+  }
+  const compose = "/opt/reelos/compose";
+  if (a.intent?.music) {
+    spawnSync("docker", ["compose", "--profile", "music", "up", "-d", "lidarr"], {
+      cwd: compose,
+      encoding: "utf8",
+      timeout: 60000,
+    });
+  } else {
+    spawnSync("docker", ["compose", "stop", "lidarr"], { cwd: compose, encoding: "utf8", timeout: 20000 });
+  }
+  send(res, 200, { ok: true, intent: a.intent });
+}
+
+async function handleActivity(_req, res) {
+  const events = [];
+  const push = (src, line) => {
+    const t = String(line || "").trim();
+    if (!t || t.startsWith("----")) return;
+    events.push({ id: `${src}-${events.length}`, at: Date.now(), message: t.slice(0, 240), src });
+  };
+  for (const line of tailFile("/var/lib/reelos/wire.log", 20).split("\n")) push("wire", line);
+  for (const line of tailFile("/var/lib/reelos/ota.log", 15).split("\n")) push("ota", line);
+  for (const line of shOut(["journalctl", "-u", "reelos", "-n", "12", "--no-pager", "-o", "cat"], 2500).split("\n")) {
+    push("shell", line);
+  }
+  send(res, 200, { events: events.slice(-40) });
+}
+
+function uiSettingsPath() {
+  return "/var/lib/reelos/ui-settings.json";
+}
+
+function readUiSettings() {
+  try {
+    return JSON.parse(readFileSync(uiSettingsPath(), "utf8"));
+  } catch {
+    return { autoUpdate: true, stackImages: false, notifyAvailable: true, notifyFailed: true, autoApprove: true };
+  }
+}
+
+function setAutoUpdateTimer(on) {
+  mkdirSync("/etc/systemd/system", { recursive: true });
+  writeFileSync(
+    "/etc/systemd/system/reelos-autoupdate.service",
+    `[Unit]
+Description=ReelOS daily Apply
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/reelos/bin/reelos-update.sh apply
+`,
+  );
+  writeFileSync(
+    "/etc/systemd/system/reelos-autoupdate.timer",
+    `[Unit]
+Description=ReelOS daily Apply timer
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target
+`,
+  );
+  spawnSync("systemctl", ["daemon-reload"], { encoding: "utf8" });
+  if (on) {
+    spawnSync("systemctl", ["enable", "--now", "reelos-autoupdate.timer"], { encoding: "utf8" });
+  } else {
+    spawnSync("systemctl", ["disable", "--now", "reelos-autoupdate.timer"], { encoding: "utf8" });
+  }
+}
+
+async function handleSettings(req, res) {
+  if ((req.method || "GET").toUpperCase() === "GET") {
+    send(res, 200, { ok: true, ...readUiSettings() });
+    return;
+  }
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const cur = readUiSettings();
+  const next = { ...cur, ...body };
+  mkdirSync("/var/lib/reelos", { recursive: true });
+  writeFileSync(uiSettingsPath(), JSON.stringify(next, null, 2) + "\n");
+  if ("autoUpdate" in body) setAutoUpdateTimer(Boolean(next.autoUpdate));
+  if ("stackImages" in body) {
+    const flag = "/var/lib/reelos/stack-images";
+    if (next.stackImages) writeFileSync(flag, "1\n");
+    else spawnSync("rm", ["-f", flag], { encoding: "utf8" });
+  }
+  send(res, 200, { ok: true, ...next });
 }
 
 async function handlePorts(_req, res) {
@@ -1307,6 +1433,12 @@ async function handleProvision(req, res) {
 }
 
 async function handlePing(req, res) {
+  if ((req.method || "GET").toUpperCase() === "GET") {
+    const t0 = Date.now();
+    const ok = await probe("http://127.0.0.1:8282/", 3000);
+    send(res, 200, { ok, pingMs: Date.now() - t0, target: "decypharr" });
+    return;
+  }
   if ((req.method || "GET").toUpperCase() !== "POST") {
     send(res, 405, { ok: false });
     return;
@@ -1448,6 +1580,9 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/request") return void (await handleRequest(req, res));
           if (pathOnly === "/api/password") return void (await handlePassword(req, res));
           if (pathOnly === "/api/quality") return void (await handleQuality(req, res));
+          if (pathOnly === "/api/intent") return void (await handleIntent(req, res));
+          if (pathOnly === "/api/activity") return void (await handleActivity(req, res));
+          if (pathOnly === "/api/settings") return void (await handleSettings(req, res));
           if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
           if (pathOnly === "/api/reset") return void (await handleReset(req, res));

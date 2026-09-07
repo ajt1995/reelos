@@ -185,7 +185,9 @@ need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs 'sonarr hits='
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
-need scripts/reelos-lookup-plugin.mjs '/api/update/run'
+need scripts/reelos-lookup-plugin.mjs '/api/activity'
+need scripts/reelos-lookup-plugin.mjs '/api/intent'
+need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
 need scripts/reelos-lookup-plugin.mjs '/api/library'
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
@@ -522,8 +524,9 @@ fi
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
-if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
-  bash "$ROOT/bin/reelos-lid.sh" || log "lid ignore non-fatal"
+if [ -f /var/lib/reelos/stack-images ]; then
+  log "stack images — docker compose pull"
+  (cd "$ROOT/compose" && docker compose pull) || log "compose pull non-fatal"
 fi
 
 indexer_canary() {

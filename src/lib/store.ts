@@ -56,8 +56,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.38";
-export const SHIPPED_VERSION = "1.2.38";
+export const LATEST_VERSION = "1.2.39";
+export const SHIPPED_VERSION = "1.2.39";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
@@ -586,20 +586,30 @@ export const useReelStore = create<ReelState>()(
           });
       },
       pingAdapter: () => {
-        const s = get();
-        const next = makeAdapter(s.answers);
-        next.cacheHits = s.adapter.cacheHits;
-        next.transfers = s.adapter.transfers;
-        next.daysLeft = s.adapter.daysLeft || next.daysLeft;
-        next.pingMs = 28 + Math.round(Math.random() * 24);
-        next.lastPing = Date.now();
-        set({
-          adapter: next,
-          activity: [
-            event("system", `${next.status === "healthy" ? "Adapter ping ok" : "Adapter offline"} · ${next.pingMs}ms`),
-            ...s.activity,
-          ].slice(0, 40),
-        });
+        void fetch("/api/ping", { cache: "no-store" })
+          .then((r) => r.json() as Promise<{ ok?: boolean; pingMs?: number }>)
+          .then((j) => {
+            const s = get();
+            set({
+              adapter: {
+                ...s.adapter,
+                pingMs: j.pingMs || 0,
+                lastPing: Date.now(),
+                status: j.ok ? "healthy" : "offline",
+              },
+              activity: [
+                event("system", j.ok ? `Decypharr ${j.pingMs}ms` : "Decypharr offline"),
+                ...s.activity,
+              ].slice(0, 40),
+            });
+          })
+          .catch(() => {
+            const s = get();
+            set({
+              adapter: { ...s.adapter, status: "offline", lastPing: Date.now() },
+              activity: [event("system", "Decypharr unreachable"), ...s.activity].slice(0, 40),
+            });
+          });
       },
       addIndexer: (name, url, key) => {
         const n = name.trim();

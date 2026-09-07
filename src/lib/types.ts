@@ -56,6 +56,7 @@ export interface Title {
   overview: string;
   director?: string;
   poster: string;
+  jellyfinId?: string;
   maxQuality: "1080p" | "4k";
   popularity: number;
 }

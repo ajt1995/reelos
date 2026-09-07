@@ -31,6 +31,14 @@ import {
 } from "@/lib/store";
 import { cn, formatWhen } from "@/lib/utils";
 
+function persistUi(p: Record<string, unknown>) {
+  void fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(p),
+  });
+}
+
 export function SettingsView() {
   const [lan, setLan] = useState("");
   useEffect(() => {
@@ -44,6 +52,7 @@ export function SettingsView() {
   const settings = useReelStore((s) => s.settings);
   const patchSettings = useReelStore((s) => s.patchSettings);
   const patchIntent = useReelStore((s) => s.patchIntent);
+  const patchAnswers = useReelStore((s) => s.patchAnswers);
   const addUser = useReelStore((s) => s.addUser);
   const removeUser = useReelStore((s) => s.removeUser);
   const adapter = useReelStore((s) => s.adapter);
@@ -90,7 +99,15 @@ export function SettingsView() {
               <button
                 key={k}
                 type="button"
-                onClick={() => patchIntent({ [k]: !answers.intent[k] })}
+                onClick={() => {
+                  const next = { [k]: !answers.intent[k] };
+                  patchIntent(next);
+                  void fetch("/api/intent", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ intent: { ...answers.intent, ...next } }),
+                  });
+                }}
                 className={cn(
                   "h-9 rounded-full px-4 text-sm",
                   answers.intent[k] ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
@@ -120,9 +137,29 @@ export function SettingsView() {
           open={panel === "quality"}
           onClick={() => setPanel(panel === "quality" ? null : "quality")}
         >
-          <p className="text-sm text-muted">
-            This house is {qualityLabel[answers.quality]}. Radarr/Sonarr already use that floor.
-          </p>
+          <p className="text-sm text-muted">New requests use this floor in Radarr/Sonarr.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["1080p", "hybrid", "4k"] as const).map((q) => (
+              <button
+                key={q}
+                type="button"
+                onClick={() => {
+                  patchAnswers({ quality: q });
+                  void fetch("/api/quality", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ quality: q }),
+                  });
+                }}
+                className={cn(
+                  "h-9 rounded-full px-4 text-sm",
+                  answers.quality === q ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+                )}
+              >
+                {qualityLabel[q]}
+              </button>
+            ))}
+          </div>
         </Row>
         <Row
           icon={Users}
@@ -168,7 +205,10 @@ export function SettingsView() {
             Auto-approve requests
             <Toggle
               on={settings.autoApprove}
-              onChange={(v) => patchSettings({ autoApprove: v })}
+              onChange={(v) => {
+                patchSettings({ autoApprove: v });
+                persistUi({ autoApprove: v });
+              }}
             />
           </label>
         </Row>
@@ -197,14 +237,22 @@ export function SettingsView() {
             When a title becomes available
             <Toggle
               on={settings.notifyAvailable}
-              onChange={(v) => patchSettings({ notifyAvailable: v })}
+              onChange={(v) => {
+                patchSettings({ notifyAvailable: v });
+                persistUi({ notifyAvailable: v });
+                if (v && typeof Notification !== "undefined") void Notification.requestPermission();
+              }}
             />
           </label>
           <label className="mt-3 flex items-center justify-between text-sm">
             When a request fails
             <Toggle
               on={settings.notifyFailed}
-              onChange={(v) => patchSettings({ notifyFailed: v })}
+              onChange={(v) => {
+                patchSettings({ notifyFailed: v });
+                persistUi({ notifyFailed: v });
+                if (v && typeof Notification !== "undefined") void Notification.requestPermission();
+              }}
             />
           </label>
         </Row>
@@ -533,11 +581,23 @@ function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
 
       <label className="mt-4 flex items-center justify-between text-sm">
         Check the stable channel daily
-        <Toggle on={autoUpdate} onChange={(v) => patchSettings({ autoUpdate: v })} />
+        <Toggle
+          on={autoUpdate}
+          onChange={(v) => {
+            patchSettings({ autoUpdate: v });
+            persistUi({ autoUpdate: v });
+          }}
+        />
       </label>
       <label className="mt-3 flex items-center justify-between text-sm">
         Also pull Jellyfin / engine images
-        <Toggle on={stackImages} onChange={(v) => patchSettings({ stackImages: v })} />
+        <Toggle
+          on={stackImages}
+          onChange={(v) => {
+            patchSettings({ stackImages: v });
+            persistUi({ stackImages: v });
+          }}
+        />
       </label>
     </Row>
   );

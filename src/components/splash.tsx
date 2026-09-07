@@ -7,7 +7,6 @@ export function Splash({ compact = false }: { compact?: boolean }) {
     useReelStore.getState().setPhase("wizard");
     useReelStore.getState().setWizardStep(1);
   };
-  const lab = () => useReelStore.getState().loadLab();
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
@@ -31,13 +30,6 @@ export function Splash({ compact = false }: { compact?: boolean }) {
             <Button size="lg" onClick={begin}>
               Begin setup
             </Button>
-            <button
-              type="button"
-              onClick={lab}
-              className="text-sm text-faint transition-colors hover:text-muted"
-            >
-              Enter a running lab
-            </button>
           </div>
         </>
       )}
