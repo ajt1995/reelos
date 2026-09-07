@@ -59,6 +59,16 @@ def api_key(xml_path: Path) -> str | None:
     return node.text.strip()
 
 
+NET_ERR = (
+    urllib.error.URLError,
+    urllib.error.HTTPError,
+    TimeoutError,
+    json.JSONDecodeError,
+    ConnectionError,
+    OSError,
+)
+
+
 def call(url: str, key: str | None = None, method: str = "GET", body: dict | None = None, headers: dict | None = None):
     data = None if body is None else json.dumps(body).encode()
     hdrs = {"Content-Type": "application/json"}
@@ -67,9 +77,14 @@ def call(url: str, key: str | None = None, method: str = "GET", body: dict | Non
     if headers:
         hdrs.update(headers)
     req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        raw = resp.read()
-        return json.loads(raw.decode()) if raw else None
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            return json.loads(raw.decode()) if raw else None
+    except urllib.error.HTTPError:
+        raise
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+        raise urllib.error.URLError(e)
 
 
 def wait_key(xml: Path, seconds: int = 90) -> str | None:
@@ -319,7 +334,7 @@ def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
 def indexer_enabled(prow_key: str, name: str) -> bool:
     try:
         have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+    except NET_ERR:
         return False
     for ix in have if isinstance(have, list) else []:
         if ix.get("name") == name and ix.get("enable"):
@@ -328,7 +343,14 @@ def indexer_enabled(prow_key: str, name: str) -> bool:
 
 
 def ensure_provider_indexer(prow_key: str) -> None:
-    """One official provider indexer. Not a tracker roster. Skip local-vpn. Retry until enabled."""
+    """One official provider indexer. Failure is a log line, never a crash."""
+    try:
+        _ensure_provider_indexer(prow_key)
+    except Exception as e:
+        log_wire(f"provider indexer {type(e).__name__} {e}")
+
+
+def _ensure_provider_indexer(prow_key: str) -> None:
     src = source()
     if src == "local-vpn":
         log_wire("provider indexer skipped (local-vpn)")
@@ -343,7 +365,7 @@ def ensure_provider_indexer(prow_key: str) -> None:
     while time.time() < deadline:
         try:
             have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        except NET_ERR as e:
             log_wire(f"provider indexer list retry {e}")
             time.sleep(4)
             continue
@@ -364,12 +386,12 @@ def ensure_provider_indexer(prow_key: str) -> None:
                 )
                 log_wire(f"provider indexer enabled {name}")
                 return
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            except NET_ERR as e:
                 log_wire(f"provider indexer enable failed {e}")
         hit = None
         try:
             hit = _find_schema(prow_key, src)
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        except NET_ERR as e:
             log_wire(f"provider indexer schema retry {e}")
         if not hit and not yml_tried:
             log_wire(f"no first-party indexer in Prowlarr for {src} — installing official yml")
@@ -379,7 +401,7 @@ def ensure_provider_indexer(prow_key: str) -> None:
                 prow_key = wait_key(prow_xml, 60) or prow_key
                 try:
                     hit = _find_schema(prow_key, src)
-                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+                except NET_ERR as e:
                     log_wire(f"provider indexer schema after yml failed {e}")
         if not hit:
             log_wire(f"provider indexer missing after official yml for {src}")
@@ -390,7 +412,7 @@ def ensure_provider_indexer(prow_key: str) -> None:
         except urllib.error.HTTPError as e:
             err = e.read().decode()[:240] if e.fp else str(e)
             log_wire(f"provider indexer POST failed {e.code} {err}")
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+        except NET_ERR as e:
             log_wire(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
             return
@@ -457,18 +479,22 @@ def _mount_extra_disks() -> None:
             pass
         mnt = Path("/srv/media") / name
         mnt.mkdir(parents=True, exist_ok=True)
-        if name in format_ok:
-            # only if nothing is mounted and no filesystem
-            mounted = subprocess.run(["findmnt", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
-            has_fs = subprocess.run(["blkid", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
-            if not mounted and not has_fs:
-                subprocess.run(["mkfs.ext4", "-F", "-L", f"reelos-{name}", str(dev)], check=False)
-        line = f"{dev} {mnt} auto defaults,nofail 0 2"
-        fstab = Path("/etc/fstab")
-        text = fstab.read_text() if fstab.exists() else ""
-        if str(dev) not in text:
-            fstab.write_text(text.rstrip() + "\n" + line + "\n")
-        subprocess.run(["mount", str(mnt)], check=False)
+        try:
+            if name in format_ok and not str(name).startswith("sdb"):
+                mounted = subprocess.run(["findmnt", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                has_fs = subprocess.run(["blkid", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                if not mounted and not has_fs:
+                    subprocess.run(["mkfs.ext4", "-F", "-L", f"reelos-{name}", str(dev)], check=False)
+            line = f"{dev} {mnt} auto defaults,nofail 0 2"
+            fstab = Path("/etc/fstab")
+            text = fstab.read_text() if fstab.exists() else ""
+            if str(dev) not in text:
+                fstab.write_text(text.rstrip() + "\n" + line + "\n")
+            r = subprocess.run(["mount", str(mnt)], check=False, capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"wire-engines: mount {dev} skipped: {(r.stderr or r.stdout or '').strip()}", file=sys.stderr)
+        except Exception as exc:
+            print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
 
 
 def jellyfin_token() -> str | None:
@@ -489,7 +515,7 @@ def jellyfin_token() -> str | None:
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode())
             return data.get("AccessToken")
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError, ConnectionError, OSError):
         return None
 
 
@@ -624,7 +650,7 @@ def complete_jellyfin_startup(user: str, password: str) -> None:
         call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
         log_wire("jellyfin startup complete")
         time.sleep(3)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+    except NET_ERR as e:
         log_wire(f"jellyfin startup {e}")
 
 
@@ -700,7 +726,7 @@ def bootstrap_jellyfin() -> None:
             with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3) as resp:
                 info = json.loads(resp.read().decode())
             break
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
             time.sleep(2)
     if not info:
         log_wire("jellyfin not up")
@@ -746,7 +772,7 @@ def bootstrap_jellyfin() -> None:
             except urllib.error.HTTPError as e:
                 err = e.read().decode()[:240] if e.fp else str(e)
                 log_wire(f"jellyfin library {name} {e.code} {err}")
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            except NET_ERR as e:
                 log_wire(f"jellyfin library {name} {e}")
         time.sleep(3)
     if not token:
@@ -764,7 +790,7 @@ def bootstrap_jellyfin() -> None:
             headers={"X-Emby-Token": token},
         )
         log_wire("jellyfin refresh")
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+    except NET_ERR as e:
         log_wire(f"jellyfin refresh {e}")
 
 
@@ -848,12 +874,24 @@ def main() -> int:
         Path(d).mkdir(parents=True, exist_ok=True)
     mount_extra_disks()
     if source() != "local-vpn":
-        patch_decypharr()
-    transcode_override()
+        try:
+            patch_decypharr()
+        except Exception as e:
+            log_wire(f"decypharr {type(e).__name__} {e}")
+    try:
+        transcode_override()
+    except Exception as e:
+        log_wire(f"transcode {type(e).__name__} {e}")
 
     a = answers()
     intent = a.get("intent") or {}
     frontend = a.get("frontend") or "jellyfin"
+
+    if frontend in ("jellyfin", "both"):
+        try:
+            bootstrap_jellyfin()
+        except Exception as e:
+            log_wire(f"jellyfin bootstrap {type(e).__name__} {e}")
 
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
@@ -864,32 +902,39 @@ def main() -> int:
     sonarr_key = wait_key(sonarr_xml) if intent.get("tv") or intent.get("anime") else None
     lidarr_key = wait_key(lidarr_xml) if intent.get("music") else None
     prow_key = wait_key(prow_xml)
-    if prow_key:
-        ensure_provider_indexer(prow_key)
+    try:
+        if prow_key:
+            ensure_provider_indexer(prow_key)
+    except Exception as e:
+        log_wire(f"provider indexer {type(e).__name__} {e}")
 
     engine: dict = {"wiredAt": int(time.time()), "quality": a.get("quality")}
 
-    if radarr_key:
-        ensure_roots("http://127.0.0.1:7878/api/v3", radarr_key, "movie")
-        engine["radarrQuality"] = quality_id("http://127.0.0.1:7878/api/v3", radarr_key)
-        if prow_key:
-            ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
-    if sonarr_key:
-        kind = "anime" if intent.get("anime") and not intent.get("tv") else "tv"
-        ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, kind)
-        if intent.get("anime"):
-            ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, "anime")
-        engine["sonarrQuality"] = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key)
-        if prow_key:
-            ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
-    if lidarr_key:
-        ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
-        if prow_key:
-            ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+    try:
+        if radarr_key:
+            ensure_roots("http://127.0.0.1:7878/api/v3", radarr_key, "movie")
+            engine["radarrQuality"] = quality_id("http://127.0.0.1:7878/api/v3", radarr_key)
+            if prow_key:
+                ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
+        if sonarr_key:
+            kind = "anime" if intent.get("anime") and not intent.get("tv") else "tv"
+            ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, kind)
+            if intent.get("anime"):
+                ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, "anime")
+            engine["sonarrQuality"] = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key)
+            if prow_key:
+                ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
+        if lidarr_key:
+            ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
+            if prow_key:
+                ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+    except Exception as e:
+        log_wire(f"arr wire {type(e).__name__} {e}")
 
-    if frontend in ("jellyfin", "both"):
-        bootstrap_jellyfin()
-    wire_bazarr(radarr_key, sonarr_key)
+    try:
+        wire_bazarr(radarr_key, sonarr_key)
+    except Exception as e:
+        log_wire(f"bazarr {type(e).__name__} {e}")
     extra_access()
 
     (STATE / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")
