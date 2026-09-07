@@ -177,7 +177,7 @@ need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
-need daemon/wire-engines.py 'search-api extra_hosts skipped'
+need daemon/wire-engines.py 'ensure_public_indexers'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'indexer canary FAIL'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
@@ -411,9 +411,6 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
     cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
     log "compose yml from tarball"
   fi
-  if ! grep -q 'search-api.torbox.app' "$ROOT/compose/docker-compose.yml"; then
-    log "STAMP FAIL compose extra_hosts missing"
-  fi
   (cd "$ROOT/compose" && docker compose \
     --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
     up -d --force-recreate --remove-orphans) || log "compose up skipped"
@@ -456,10 +453,9 @@ if envp.exists():
         if line.startswith("SOURCE=") and not src:
             src = line.split("=", 1)[1].strip()
 debrid = {"torbox", "real-debrid", "alldebrid", "premiumize", "realdebrid"}
-if src not in debrid:
+if src == "local-vpn":
     print("skip")
     sys.exit(0)
-want = f"ReelOS-{src}"
 errp = state / "releases-error.txt"
 err = errp.read_text().strip()[:400] if errp.exists() else ""
 xml = root / "compose" / "configs" / "prowlarr" / "config.xml"
@@ -480,26 +476,28 @@ try:
 except Exception as e:
     print(err or f"{type(e).__name__}: {e}")
     sys.exit(1)
-hit = next((ix for ix in (rows or []) if ix.get("name") == want and ix.get("enable")), None)
-if not hit:
-    print(err or f"{want} not enabled in Prowlarr")
+ok_names = []
+last = err
+for ix in rows or []:
+    if not ix.get("enable"):
+        continue
+    req = urllib.request.Request(
+        "http://127.0.0.1:9696/api/v1/indexer/test",
+        data=json.dumps(ix).encode(),
+        method="POST",
+        headers={"X-Api-Key": key, "Content-Type": "application/json"},
+    )
+    try:
+        urllib.request.urlopen(req, timeout=25).read()
+        ok_names.append(str(ix.get("name")))
+    except urllib.error.HTTPError as e:
+        last = e.read().decode()[:300] if e.fp else str(e)
+    except Exception as e:
+        last = f"{type(e).__name__}: {e}"
+if not ok_names:
+    print(last or "no indexer passed test")
     sys.exit(1)
-req = urllib.request.Request(
-    "http://127.0.0.1:9696/api/v1/indexer/test",
-    data=json.dumps(hit).encode(),
-    method="POST",
-    headers={"X-Api-Key": key, "Content-Type": "application/json"},
-)
-try:
-    urllib.request.urlopen(req, timeout=25).read()
-except urllib.error.HTTPError as e:
-    body = e.read().decode()[:400] if e.fp else str(e)
-    print(body or err or f"Prowlarr test {e.code}")
-    sys.exit(1)
-except Exception as e:
-    print(err or f"{type(e).__name__}: {e}")
-    sys.exit(1)
-print(want)
+print(",".join(ok_names))
 sys.exit(0)
 PY
 }

@@ -1,8 +1,8 @@
 {
-  "version": "1.2.23",
+  "version": "1.2.24",
   "channel": "stable",
   "notes": [
-    "1.2.23: no fake extra_hosts. Wait for Prowlarr API. Canary fails on 530."
+    "1.2.24: public Prowlarr indexers so Request can grab while TorBox search DNS is dead."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

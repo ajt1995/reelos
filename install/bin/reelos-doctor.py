@@ -98,31 +98,29 @@ def releases_hop(answers: dict) -> dict:
     except Exception as e:
         return ok("releases", last_releases_error() or f"{type(e).__name__}: {e}", False)
     rows = data if isinstance(data, list) else []
-    if src == "local-vpn":
-        if any(ix.get("enable") for ix in rows):
-            return ok("releases", "Indexer enabled", True)
+    enabled = [ix for ix in rows if ix.get("enable")]
+    if not enabled:
         return ok("releases", last_releases_error() or "No indexer enabled", False)
-    hit = next((ix for ix in rows if ix.get("name") == want and ix.get("enable")), None)
-    if not hit:
-        return ok("releases", last_releases_error() or f"{want} not in Prowlarr", False)
-    try:
-        import urllib.error
-        import urllib.request
+    last = last_releases_error()
+    for hit in enabled:
+        try:
+            import urllib.error
+            import urllib.request
 
-        req = urllib.request.Request(
-            "http://127.0.0.1:9696/api/v1/indexer/test",
-            data=json.dumps(hit).encode(),
-            method="POST",
-            headers={"X-Api-Key": key, "Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            resp.read()
-        return ok("releases", want, True)
-    except urllib.error.HTTPError as e:
-        err = e.read().decode()[:240] if e.fp else str(e)
-        return ok("releases", err or f"Prowlarr test {e.code}", False)
-    except Exception as e:
-        return ok("releases", f"{type(e).__name__}: {e}", False)
+            req = urllib.request.Request(
+                "http://127.0.0.1:9696/api/v1/indexer/test",
+                data=json.dumps(hit).encode(),
+                method="POST",
+                headers={"X-Api-Key": key, "Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=20) as resp:
+                resp.read()
+            return ok("releases", str(hit.get("name") or "indexer"), True)
+        except urllib.error.HTTPError as e:
+            last = e.read().decode()[:240] if e.fp else str(e)
+        except Exception as e:
+            last = f"{type(e).__name__}: {e}"
+    return ok("releases", last or "Indexer test failed", False)
 
 
 def listening(port: int) -> bool:

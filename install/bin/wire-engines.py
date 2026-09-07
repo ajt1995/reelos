@@ -608,6 +608,65 @@ def indexer_enabled(prow_key: str, name: str) -> bool:
     return False
 
 
+# Prowlarr first-party public defs. Owner ordered EvoSeedbox-style fallback
+# after search-api.torbox.app has no DNS.
+PUBLIC_INDEXERS = (
+    ("ReelOS-1337x", ("1337x",)),
+    ("ReelOS-tpb", ("thepiratebay", "the pirate bay")),
+    ("ReelOS-yts", ("yts", "yify")),
+    ("ReelOS-eztv", ("eztv",)),
+)
+
+
+def ensure_public_indexers(prow_key: str) -> None:
+    wait_prowlarr_api(prow_key, 60)
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"public indexers list {e}")
+        return
+    if not isinstance(schemas, list):
+        schemas = []
+    rows = have if isinstance(have, list) else []
+    names = {ix.get("name") for ix in rows}
+    for name, hints in PUBLIC_INDEXERS:
+        if name in names:
+            log_wire(f"public indexer exists {name}")
+            continue
+        hit = next((s for s in schemas if any(h in _schema_blob(s) for h in hints)), None)
+        if not hit:
+            log_wire(f"public indexer no schema {name}")
+            continue
+        try:
+            _add_from_schema(prow_key, name, "", hit)
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:300] if e.fp else str(e)
+            log_wire(f"public indexer {name} {e.code}: {err}")
+        except NET_ERR as e:
+            log_wire(f"public indexer {name} {e}")
+    tested = []
+    try:
+        have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        return
+    for ix in have2 if isinstance(have2, list) else []:
+        if not ix.get("enable"):
+            continue
+        ok_t, terr = indexer_test(prow_key, ix)
+        n = ix.get("name")
+        if ok_t:
+            tested.append(str(n))
+            log_wire(f"public indexer test ok {n}")
+        else:
+            log_wire(f"public indexer test fail {n} {terr[:200]}")
+    if tested:
+        clear_releases_error()
+        log_wire("releases via " + ",".join(tested))
+    elif not (STATE / "releases-error.txt").exists():
+        set_releases_error("No public indexer passed Prowlarr test")
+
+
 def ensure_provider_indexer(prow_key: str) -> None:
     """One official provider indexer. Failure is a log line, never a crash."""
     try:
@@ -1286,6 +1345,7 @@ def main() -> int:
     try:
         if prow_key:
             ensure_provider_indexer(prow_key)
+            ensure_public_indexers(prow_key)
     except Exception as e:
         log_wire(f"provider indexer {type(e).__name__} {e}")
 
