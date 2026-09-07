@@ -1,11 +1,15 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 21:38 CDT**.
+Xorriso. Dated **2026-09-06 21:52 CDT**.
 
-# 1.2.22 frozen
+# 1.2.23 frozen
 
-Canary only. After wire, before `applied.`: if `answers.source` is debrid, Prowlarr must have enabled `ReelOS-<source>`. Else log the Prowlarr/`releases-error.txt` line, **do not** print applied, exit 1. Rollback only if Home is also dead.
+1.2.22 canary correctly refused applied. Wire reached Prowlarr too soon (104), then POST got Cloudflare **530** because `extra_hosts` pinned `search-api.torbox.app` to `api.torbox.app`’s A (`172.66.170.114`).
 
-Home 200 is not success. Doctor `releases` green and this canary are the same fact.
+## This stamp
 
-No #7. No ISO. Let a mid-1.2.21 apply finish first.
+1. Compose: `dns: 1.1.1.1/8.8.8.8` only. No `extra_hosts`. Wire strips a pinned file on the box and recreates Prowlarr.
+2. Wait until `GET /api/v1/indexer` returns 200 before POST. YML install waits again after restart.
+3. Canary: enabled `ReelOS-torbox` **and** indexer test is not 530/resolve. Doctor keeps the Prowlarr 530 line (does not overwrite with STAMP FAIL).
+
+No `applied.` until that test is green. No #7. No ISO.

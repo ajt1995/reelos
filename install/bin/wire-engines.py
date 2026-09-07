@@ -359,33 +359,30 @@ def torbox_search_ip() -> str:
 DNS_HOSTS = """    dns:
       - 1.1.1.1
       - 8.8.8.8
-    extra_hosts:
-      - "search-api.torbox.app:172.66.170.114"
-      - "api.torbox.app:172.66.170.114"
 """
 
 
 def ensure_compose_dns() -> None:
-    """Persist DNS + extra_hosts in compose yml, then recreate arrs so it sticks."""
+    """Persist Docker DNS. Do not pin search-api to another hostname's A."""
     p = COMPOSE / "docker-compose.yml"
     if not p.exists():
         log_wire("compose yml missing")
         return
+    stripped = strip_compose_extra_hosts()
     text = p.read_text()
-    if "1.1.1.1" not in text or "search-api.torbox.app" not in text:
+    if "1.1.1.1" not in text:
         for port in ("9696:9696", "7878:7878", "8989:8989", "8282:8282"):
             old = f'      - "127.0.0.1:{port}"\n'
             new = f'      - "127.0.0.1:{port}"\n{DNS_HOSTS}'
-            if old in text and "search-api.torbox.app" not in text[text.find(old):text.find(old)+400]:
+            if old in text:
                 text = text.replace(old, new, 1)
         p.write_text(text)
-        log_wire("compose dns/extra_hosts written")
-        recreate_arrs()
+        log_wire("compose dns written")
+        recreate_prowlarr()
         return
-    log_wire("compose already has extra_hosts")
-    if not prowlarr_has_hosts():
-        log_wire("running Prowlarr missing extra_hosts — recreating")
-        recreate_arrs()
+    if stripped or prowlarr_has_hosts():
+        log_wire("dropping pinned extra_hosts")
+        recreate_prowlarr()
 
 
 def recreate_arrs() -> None:
@@ -435,31 +432,46 @@ def prowlarr_has_hosts() -> bool:
 
 
 def inject_search_api_hosts() -> None:
-    ip = torbox_search_ip()
-    line = f"{ip} search-api.torbox.app"
-    names = (
-        "reelos-prowlarr-1",
-        "prowlarr",
-        "reelos-radarr-1",
-        "reelos-sonarr-1",
-        "decypharr",
-    )
-    for name in names:
-        r = subprocess.run(
-            [
-                "docker",
-                "exec",
-                name,
-                "sh",
-                "-c",
-                f"grep -q search-api.torbox.app /etc/hosts || echo '{line}' >> /etc/hosts",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        if r.returncode == 0:
-            log_wire(f"search-api extra_hosts {name} {ip}")
+    """1.2.23: do not pin search-api.torbox.app to api.torbox.app's A."""
+    log_wire("search-api extra_hosts skipped (use container DNS)")
+
+
+def wait_prowlarr_api(prow_key: str, seconds: int = 90) -> bool:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            call("http://127.0.0.1:9696/api/v1/indexer", prow_key)
+            log_wire("prowlarr api ready")
+            return True
+        except NET_ERR as e:
+            log_wire(f"prowlarr api wait {e}")
+            time.sleep(3)
+    set_releases_error("Prowlarr API never returned 200 after recreate")
+    return False
+
+
+def strip_compose_extra_hosts() -> bool:
+    """Do not pin search-api to api.torbox.app's IP."""
+    p = COMPOSE / "docker-compose.yml"
+    if not p.exists():
+        return False
+    text = p.read_text()
+    if "extra_hosts:" not in text:
+        return False
+    out = []
+    skip = 0
+    for line in text.splitlines(True):
+        if skip:
+            if line.startswith("      - ") and "torbox.app" in line:
+                continue
+            skip = 0
+        if line.strip() == "extra_hosts:":
+            skip = 1
+            continue
+        out.append(line)
+    p.write_text("".join(out))
+    log_wire("stripped extra_hosts from compose")
+    return True
 
 
 def set_releases_error(msg: str) -> None:
@@ -569,6 +581,22 @@ def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
         return False
 
 
+def indexer_test(prow_key: str, ix: dict) -> tuple[bool, str]:
+    try:
+        call(
+            "http://127.0.0.1:9696/api/v1/indexer/test",
+            prow_key,
+            method="POST",
+            body=ix,
+        )
+        return True, ""
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:400] if e.fp else str(e)
+        return False, err or f"Prowlarr test {e.code}"
+    except NET_ERR as e:
+        return False, f"indexer test {e}"
+
+
 def indexer_enabled(prow_key: str, name: str) -> bool:
     try:
         have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
@@ -602,8 +630,9 @@ def _ensure_provider_indexer(prow_key: str) -> None:
     recreate_prowlarr()
     prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
     prow_key = wait_key(prow_xml, 90) or prow_key
+    wait_prowlarr_api(prow_key, 90)
     inject_search_api_hosts()
-    deadline = time.time() + 90
+    deadline = time.time() + 120
     yml_tried = False
     torznab_tried = False
     while time.time() < deadline:
@@ -616,27 +645,34 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         rows = have if isinstance(have, list) else []
         existing = next((ix for ix in rows if ix.get("name") == name), None)
         if existing:
-            if existing.get("enable"):
+            if not existing.get("enable"):
+                try:
+                    existing["enable"] = True
+                    iid = existing.get("id")
+                    call(
+                        f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
+                        prow_key,
+                        method="PUT",
+                        body=existing,
+                    )
+                    log_wire(f"provider indexer enabled {name}")
+                except urllib.error.HTTPError as e:
+                    err = e.read().decode()[:400] if e.fp else str(e)
+                    set_releases_error(f"Prowlarr enable {e.code}: {err}")
+                    time.sleep(4)
+                    continue
+                except NET_ERR as e:
+                    set_releases_error(f"provider indexer enable failed {e}")
+                    time.sleep(4)
+                    continue
+            ok_t, terr = indexer_test(prow_key, existing)
+            if ok_t:
                 log_wire(f"provider indexer exists {name}")
                 clear_releases_error()
                 return
-            try:
-                existing["enable"] = True
-                iid = existing.get("id")
-                call(
-                    f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
-                    prow_key,
-                    method="PUT",
-                    body=existing,
-                )
-                log_wire(f"provider indexer enabled {name}")
-                clear_releases_error()
-                return
-            except urllib.error.HTTPError as e:
-                err = e.read().decode()[:400] if e.fp else str(e)
-                set_releases_error(f"Prowlarr enable {e.code}: {err}")
-            except NET_ERR as e:
-                set_releases_error(f"provider indexer enable failed {e}")
+            set_releases_error(terr)
+            time.sleep(4)
+            continue
         hit = None
         try:
             hit = _find_schema(prow_key, src)
@@ -648,6 +684,7 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                 yml_tried = True
                 prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
                 prow_key = wait_key(prow_xml, 60) or prow_key
+                wait_prowlarr_api(prow_key, 60)
                 try:
                     hit = _find_schema(prow_key, src)
                 except NET_ERR as e:
@@ -656,9 +693,20 @@ def _ensure_provider_indexer(prow_key: str) -> None:
             if src == "torbox" and not torznab_tried:
                 torznab_tried = True
                 add_torbox_torznab(prow_key, name, key)
-                if indexer_enabled(prow_key, name):
-                    clear_releases_error()
-                    return
+                ix = next(
+                    (
+                        r
+                        for r in (call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or [])
+                        if r.get("name") == name and r.get("enable")
+                    ),
+                    None,
+                )
+                if ix:
+                    ok_t, terr = indexer_test(prow_key, ix)
+                    if ok_t:
+                        clear_releases_error()
+                        return
+                    set_releases_error(terr)
             set_releases_error(f"{name} not in Prowlarr — no first-party schema")
             time.sleep(4)
             continue
@@ -675,8 +723,14 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         except NET_ERR as e:
             set_releases_error(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
-            clear_releases_error()
-            return
+            have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            ix = next((r for r in have2 if r.get("name") == name), None)
+            if ix:
+                ok_t, terr = indexer_test(prow_key, ix)
+                if ok_t:
+                    clear_releases_error()
+                    return
+                set_releases_error(terr)
         if src == "torbox" and not torznab_tried:
             torznab_tried = True
             add_torbox_torznab(prow_key, name, key)
@@ -684,6 +738,14 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                 clear_releases_error()
                 return
         time.sleep(4)
+    err_now = ""
+    try:
+        err_now = (STATE / "releases-error.txt").read_text()
+    except OSError:
+        err_now = ""
+    if "530" in err_now or "resolv" in err_now.lower():
+        log_wire("STAMP FAIL keeping Prowlarr error")
+        return
     set_releases_error(f"STAMP FAIL {name} missing after retry")
 
 

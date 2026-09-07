@@ -1,8 +1,8 @@
 {
-  "version": "1.2.22",
+  "version": "1.2.23",
   "channel": "stable",
   "notes": [
-    "1.2.22: no applied. unless ReelOS-torbox is enabled in Prowlarr."
+    "1.2.23: no fake extra_hosts. Wait for Prowlarr API. Canary fails on 530."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

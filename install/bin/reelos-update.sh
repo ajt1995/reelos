@@ -175,13 +175,15 @@ need src/components/library-view.tsx '/api/library'
 need scripts/reelos-lookup-plugin.mjs '/api/library'
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
-need install/compose/docker-compose.yml 'search-api.torbox.app'
-need install/compose/docker-compose.yml 'api.torbox.app'
-need compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
+need daemon/wire-engines.py 'search-api extra_hosts skipped'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'indexer canary FAIL'
+if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
+  log "canary fail pinned extra_hosts"
+  exit 1
+fi
 log "canaries ok"
 
 NEXT="$ROOT.next"
@@ -435,7 +437,7 @@ fi
 
 indexer_canary() {
   python3 - <<'PY'
-import json, os, re, sys, urllib.request
+import json, os, re, sys, urllib.error, urllib.request
 from pathlib import Path
 root = Path(os.environ.get("REELOS_ROOT", "/opt/reelos"))
 state = Path("/var/lib/reelos")
@@ -481,6 +483,21 @@ except Exception as e:
 hit = next((ix for ix in (rows or []) if ix.get("name") == want and ix.get("enable")), None)
 if not hit:
     print(err or f"{want} not enabled in Prowlarr")
+    sys.exit(1)
+req = urllib.request.Request(
+    "http://127.0.0.1:9696/api/v1/indexer/test",
+    data=json.dumps(hit).encode(),
+    method="POST",
+    headers={"X-Api-Key": key, "Content-Type": "application/json"},
+)
+try:
+    urllib.request.urlopen(req, timeout=25).read()
+except urllib.error.HTTPError as e:
+    body = e.read().decode()[:400] if e.fp else str(e)
+    print(body or err or f"Prowlarr test {e.code}")
+    sys.exit(1)
+except Exception as e:
+    print(err or f"{type(e).__name__}: {e}")
     sys.exit(1)
 print(want)
 sys.exit(0)
