@@ -1,21 +1,21 @@
 # ROADMAP.md
 
-Hal. **2026-09-06 22:08 CDT.** Rules: [`DEV.md`](DEV.md).
+Hal. **2026-09-07.** Rules: [`DEV.md`](DEV.md).
 
 ## Done means
 
-A title plays in Jellyfin on the TV. Channel on HEAD is **1.2.23**; house last *applied* **1.2.21**.
+A title plays in Jellyfin on the TV.
 
-## Shipped in tree (close the GitHub issue when someone has a minute)
+## Shipped in tree
 
 - #1 low performance — 1.2.15
-- #6 Settings chrome — 1.2.16+ (`shell.tsx`)
+- #6 Settings chrome — 1.2.16+
 
-## Next surface (after indexer is honest DNS or classified 530)
+## Next surface (golden path still red)
 
-- #5 House logs — `feature/5-logs` — only new UI allowed while golden path is red
+- #5 House logs — `feature/5-logs`
 
-## Parked until a title plays
+## Parked
 
 | # | Name | Branch |
 |---|---|---|
@@ -24,3 +24,4 @@ A title plays in Jellyfin on the TV. Channel on HEAD is **1.2.23**; house last *
 | #3 | Ebooks | `feature/3-books` |
 | #4 | Music | `feature/4-music` |
 | #7 | Tailscale login | `feature/7-tailscale` |
+| #8 | [UI shows new VERSION before Apply finishes](https://github.com/ajt1995/reelos/issues/8) | `feature/8-version-chrome` |
