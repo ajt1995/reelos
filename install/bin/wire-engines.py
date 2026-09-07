@@ -141,13 +141,20 @@ def patch_decypharr() -> None:
     if answers().get("apiKey"):
         entry["api_key"] = answers()["apiKey"].strip()
     entry.setdefault("folder", "/mnt")
-    entry["folder"] = "/mnt"
+    entry["folder"] = "/mnt/debrid"
     entry["use_webdav"] = True
     cfg["debrids"] = [entry]
+    Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
+    Path("/opt/reelos/compose/configs/decypharr/cache/dfs").mkdir(parents=True, exist_ok=True)
     cfg["mount"] = {
         "type": "dfs",
-        "mount_path": "/mnt",
-        "dfs": {"uid": 1000, "gid": 1000, "umask": "002"},
+        "mount_path": "/mnt/debrid",
+        "dfs": {
+            "cache_dir": "/app/cache/dfs",
+            "uid": 1000,
+            "gid": 1000,
+            "umask": "002",
+        },
     }
     cfg.setdefault(
         "qbittorrent",

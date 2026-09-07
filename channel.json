@@ -1,8 +1,8 @@
 {
-  "version": "1.2.27",
+  "version": "1.2.28",
   "channel": "stable",
   "notes": [
-    "1.2.27: Apply no longer dies on missing Prowlarr sqlite sidecars. Logger from 1.2.26 is in this tree."
+    "1.2.28: Decypharr cache dir so TorBox files actually mount."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

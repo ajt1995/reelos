@@ -1,11 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 12:19 +08**.
+Xorriso. Dated **2026-09-07 12:30 +08**.
 
-# 1.2.27
+# 1.2.28
 
-1.2.26 Apply died after canaries: `cp` of `prowlarr.db-wal` / `.db-shm` (sqlite sidecars that weren't there). `set -e` killed the mailman. House stayed 1.2.25.
+House log: Decypharr `mount_type=dfs` then `mkdir : no such file or directory`. No `/mnt/__all__`. Mario folders still empty.
 
-Fix: config copy continues if those files vanish. Logger still in tree.
+Fix: `cache_dir=/app/cache/dfs`, mount at `/mnt/debrid` (not over `/mnt`). Do not Apply until this lands.
 
-Same apply curl. Wait for `ReelOS 1.2.27 applied.` Then Settings → Logs → Copy last hour.
+Same curl. Then Logs again only if movies still empty.
