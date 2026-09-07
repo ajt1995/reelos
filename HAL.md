@@ -1,14 +1,17 @@
 # HAL.md
 
-Hal. **2026-09-07 18:23 CDT.** Do not bump VERSION.
+Hal. **2026-09-07 18:34 CDT.** Do not bump VERSION.
 
-Lock remains **1.2.39**. PRs #11 #12 #13 stay open. **Do not merge anything.**
+Lock **1.2.39**. **Do not merge anything.**
 
-## Now (branches + PRs only)
+## #2 flipped
 
-1. **#4** `feature/4-music` — Lookup/request → Lidarr. No fake albums.
-2. **#9** `feature/9-local-library-disk` — Extra HDD for music/books. Never auto-format. Movies/TV stay `/mnt/symlinks`.
-3. **#2** `feature/2-plugin` — **Plugin inside Jellyfin** (TV/web). Not Seerr. Same household login. Request lands in Radarr/Sonarr. One door.
-4. **#3** `feature/3-books` — **Kavita**. Not Calibre-web. Music is #4.
+Owner wants **dummy-proof on the couch**. Official Jellyfin Android TV has no plugin slot. Plugin PR **#18** is the wrong door.
 
-Do not build Seerr *and* a plugin. No 1.2.40. No #14. STATUS = PR links.
+- Park / close PR #18. Do not ship the plugin.
+- New branch `feature/2-seerr`. **Seerr (Jellyseerr) container only.** Same wizard admin login. Auto-approve household.
+- TV path: Seerr in the browser **or** a TV client that talks to Seerr (JellyWatch / Moonfin / SeerrTV). Not stock Jellyfin Request.
+- Watch stays official Jellyfin Android TV if they want. Request is Seerr.
+- Do not run Seerr *and* the plugin.
+
+#4 #9 #3 PRs (#15 #16 #17) stay open, unmerged. #11 #12 #13 stay open.
