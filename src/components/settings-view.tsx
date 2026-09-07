@@ -212,6 +212,10 @@ export function SettingsView() {
           open={panel === "updates"}
           onClick={() => setPanel(panel === "updates" ? null : "updates")}
         />
+        <LogsRow
+          open={panel === "logs"}
+          onClick={() => setPanel(panel === "logs" ? null : "logs")}
+        />
         <InstallRow
           open={panel === "install"}
           onClick={() => setPanel(panel === "install" ? null : "install")}
@@ -231,7 +235,6 @@ export function SettingsView() {
         </Link>
       ) : null}
 
-      <LogsCard />
       <Doctor />
 
       <div className="mt-8 flex flex-wrap gap-3">
@@ -756,34 +759,57 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
-function LogsCard() {
+function LogsRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [text, setText] = useState("");
+  const loaded = useRef(false);
+
   const grab = async () => {
-    const r = await fetch("/api/logs", { cache: "no-store", signal: AbortSignal.timeout(20000) });
+    const r = await fetch("/api/logs", { cache: "no-store", signal: AbortSignal.timeout(15000) });
     const j = (await r.json()) as { ok?: boolean; text?: string; error?: string };
     if (!j.text) throw new Error(j.error || "No logs");
-    return j.text as string;
+    return j.text;
   };
-  const copy = async () => {
+
+  const load = async () => {
     setBusy(true);
     setMsg("Collecting…");
     try {
-      const text = await grab();
-      await navigator.clipboard.writeText(text);
-      setMsg("Copied last hour. Paste that here.");
+      const t = await grab();
+      setText(t);
+      loaded.current = true;
+      setMsg(`${t.split("\n").length} lines`);
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Collect failed");
+    }
+    setBusy(false);
+  };
+
+  useEffect(() => {
+    if (open && !loaded.current && !busy) void load();
+  }, [open]);
+
+  const copy = async () => {
+    setBusy(true);
+    try {
+      const t = text || (await grab());
+      if (!text) setText(t);
+      await navigator.clipboard.writeText(t);
+      setMsg("Copied. Paste that here.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Copy failed");
     }
     setBusy(false);
   };
+
   const download = async () => {
     setBusy(true);
-    setMsg("Collecting…");
     try {
-      const text = await grab();
+      const t = text || (await grab());
+      if (!text) setText(t);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      a.href = URL.createObjectURL(new Blob([t], { type: "text/plain" }));
       a.download = "reelos-house.txt";
       a.click();
       setMsg("Downloaded reelos-house.txt");
@@ -792,28 +818,32 @@ function LogsCard() {
     }
     setBusy(false);
   };
+
   return (
-    <div className="mt-8 rounded-2xl bg-card p-5 shadow-[var(--shadow-border)]">
-      <div className="flex items-start gap-3">
-        <ScrollText className="mt-0.5 size-5 text-muted" />
-        <div className="min-w-0 flex-1">
-          <p className="font-display font-medium">Logs</p>
-          <p className="mt-1 text-sm text-muted">
-            Last hour of Doctor, OTA, wire, mount, and journal. Keys stripped. Paste that — not a screenshot.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button onClick={() => void copy()} disabled={busy}>
-              {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
-              Copy last hour
-            </Button>
-            <Button variant="ghost" onClick={() => void download()} disabled={busy}>
-              Download
-            </Button>
-          </div>
-          {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
-        </div>
+    <Row icon={ScrollText} title="Logs" hint={msg || "Last hour on this box"} open={open} onClick={onClick}>
+      <p className="text-sm text-muted">
+        On-screen dump from this machine. Keys stripped. Copy and paste here — not a screenshot.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => void load()} disabled={busy}>
+          {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+          Refresh
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void copy()} disabled={busy}>
+          Copy
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void download()} disabled={busy}>
+          Download
+        </Button>
       </div>
-    </div>
+      {text ? (
+        <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-raised p-3 font-mono text-[11px] leading-4 text-muted">
+          {text}
+        </pre>
+      ) : (
+        <p className="mt-3 text-sm text-faint">{busy ? "Collecting from the box…" : "Open this row to load."}</p>
+      )}
+    </Row>
   );
 }
 

@@ -1,8 +1,8 @@
 {
-  "version": "1.2.34",
+  "version": "1.2.35",
   "channel": "stable",
   "notes": [
-    "1.2.34: Settings Apply is a real systemd unit, not a child of the UI. Check does not dump the OTA log in red."
+    "1.2.35: Settings → Logs shows the last hour on screen. Copy/Download still there. No SSH."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
