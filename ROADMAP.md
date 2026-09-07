@@ -1,29 +1,24 @@
 # ROADMAP.md
 
-Hal. **2026-09-07.** Rules: [`DEV.md`](DEV.md).
+Hal. **2026-09-07 18:02 CDT.** Lock: **1.2.39**. Rules: [`DEV.md`](DEV.md) [`HAL.md`](HAL.md).
 
-## Done means
+## Close if UI already has it
 
-A title plays in Jellyfin on the TV.
+- #1 low performance
+- #6 Settings chrome
+- #5 Logs (confirm, do not rebuild)
 
-## Shipped in tree
+## Work now (branches, PR, do not merge)
 
-- #1 low performance — 1.2.15
-- #6 Settings chrome — 1.2.16+
+1. #8 version chrome — `feature/8-version-chrome`
+2. #7 Tailscale — `feature/7-tailscale`
+3. #10 quality upgrades **or** #4 music — one at a time
 
-## Next surface (golden path still red)
+## Waiting on owner pick
 
-- #5 House logs — `feature/5-logs`
+- #2 Seerr vs plugin
+- #3 Kavita vs Calibre-web
 
 ## Parked
 
-| # | Name | Branch |
-|---|---|---|
-| — | [`FACELIFT.md`](FACELIFT.md) | `feature/1.3-light` |
-| #2 | Request inside Jellyfin | `feature/2-seerr` |
-| #3 | Ebooks | `feature/3-books` |
-| #4 | Music | `feature/4-music` |
-| #7 | Tailscale login | `feature/7-tailscale` |
-| #8 | [UI version ahead of Apply](https://github.com/ajt1995/reelos/issues/8) | `feature/8-version-chrome` |
-| #9 | [TorBox movies/TV, local disk music/books](https://github.com/ajt1995/reelos/issues/9) | `feature/9-local-library-disk` |
-| #10 | [Upgrade when better quality appears](https://github.com/ajt1995/reelos/issues/10) | `feature/10-quality-upgrades` |
+- FACELIFT, #9 storage split (after #3/#4)
