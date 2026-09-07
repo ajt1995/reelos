@@ -1,6 +1,6 @@
 # ROADMAP.md
 
-Hal. **2026-09-07 18:15 CDT.** Lock: **1.2.39**. Rules: [`DEV.md`](DEV.md) [`HAL.md`](HAL.md).
+Hal. **2026-09-07 18:19 CDT.** Lock: **1.2.39**. Rules: [`DEV.md`](DEV.md) [`HAL.md`](HAL.md).
 
 ## In the 1.2.39 tree (closed)
 
@@ -36,3 +36,4 @@ House still has to apply 1.2.39 for these to be *on the HP*.
 
 - FACELIFT
 - #9 after #3/#4
+- [#14 idea drawer](https://github.com/ajt1995/reelos/issues/14) — 18 later features. Do not implement.
