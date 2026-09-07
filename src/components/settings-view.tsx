@@ -12,6 +12,7 @@ import {
   Shield,
   SlidersHorizontal,
   SquareTerminal,
+  ScrollText,
   TriangleAlert,
   Usb,
   Users,
@@ -230,6 +231,7 @@ export function SettingsView() {
         </Link>
       ) : null}
 
+      <LogsCard />
       <Doctor />
 
       <div className="mt-8 flex flex-wrap gap-3">
@@ -751,6 +753,67 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
         )}
       />
     </button>
+  );
+}
+
+function LogsCard() {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const grab = async () => {
+    const r = await fetch("/api/logs", { cache: "no-store" });
+    const j = (await r.json()) as { ok?: boolean; text?: string; error?: string };
+    if (!j.text) throw new Error(j.error || "No logs");
+    return j.text as string;
+  };
+  const copy = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const text = await grab();
+      await navigator.clipboard.writeText(text);
+      setMsg("Copied last hour. Paste that here.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Copy failed");
+    }
+    setBusy(false);
+  };
+  const download = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const text = await grab();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      a.download = "reelos-house.txt";
+      a.click();
+      setMsg("Downloaded reelos-house.txt");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Download failed");
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="mt-8 rounded-2xl bg-card p-5 shadow-[var(--shadow-border)]">
+      <div className="flex items-start gap-3">
+        <ScrollText className="mt-0.5 size-5 text-muted" />
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-medium">Logs</p>
+          <p className="mt-1 text-sm text-muted">
+            Last hour of Doctor, OTA, wire, mount, and journal. Keys stripped. Paste that — not a screenshot.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={() => void copy()} disabled={busy}>
+              {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              Copy last hour
+            </Button>
+            <Button variant="ghost" onClick={() => void download()} disabled={busy}>
+              Download
+            </Button>
+          </div>
+          {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
+        </div>
+      </div>
+    </div>
   );
 }
 

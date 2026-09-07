@@ -800,6 +800,76 @@ async function handleDoctor(_req, res) {
   }
 }
 
+function redactLogs(s) {
+  let t = String(s || "");
+  t = t.replace(/(<ApiKey>)[^<]+/gi, "$1***");
+  t = t.replace(/(Authorization:\s*)\S+/gi, "$1***");
+  t = t.replace(/Bearer\s+\S+/gi, "Bearer ***");
+  t = t.replace(/("?(?:apiKey|api_key|adminPassword|password|token)"?\s*[:=]\s*"?)([^"\s,}\\]+)/gi, "$1***");
+  return t;
+}
+
+function tailFile(p, n) {
+  try {
+    if (!existsSync(p)) return `(missing ${p})\n`;
+    const lines = readFileSync(p, "utf8").split(/\r?\n/);
+    return `${lines.slice(-n).join("\n")}\n`;
+  } catch (e) {
+    return `(unreadable ${p}: ${e})\n`;
+  }
+}
+
+function shOut(args, timeout = 8000) {
+  try {
+    const r = spawnSync(args[0], args.slice(1), { encoding: "utf8", timeout });
+    return `${r.stdout || ""}${r.stderr || ""}`;
+  } catch (e) {
+    return `${e}\n`;
+  }
+}
+
+async function handleLogs(_req, res) {
+  const ver = existsSync("/opt/reelos/VERSION")
+    ? readFileSync("/opt/reelos/VERSION", "utf8").trim()
+    : localVersion();
+  const sha = existsSync("/var/lib/reelos/applied-sha")
+    ? readFileSync("/var/lib/reelos/applied-sha", "utf8").trim()
+    : "";
+  const script = ["/opt/reelos/bin/reelos-doctor.py", "/workspace/daemon/reelos-doctor.py"].find((p) =>
+    existsSync(p),
+  );
+  let doctor = "";
+  if (script) {
+    const r = spawnSync("python3", [script], { encoding: "utf8", timeout: 20000 });
+    doctor = r.stdout || r.stderr || "";
+  }
+  const blob = [
+    `ReelOS ${ver}`,
+    `applied-sha ${sha}`,
+    `time ${new Date().toISOString()}`,
+    "=== doctor ===",
+    doctor.trim() || "(no doctor)",
+    "=== mount ===",
+    shOut(["bash", "-lc", "ls -la /mnt /mnt/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -60"]).trim(),
+    "=== decypharr ===",
+    shOut(["docker", "logs", "decypharr", "--tail", "40"], 12000).trim(),
+    "=== releases-error ===",
+    tailFile("/var/lib/reelos/releases-error.txt", 40).trim(),
+    "=== ota.log (last 80) ===",
+    tailFile("/var/lib/reelos/ota.log", 80).trim(),
+    "=== wire.log (last 80) ===",
+    tailFile("/var/lib/reelos/wire.log", 80).trim(),
+    "=== services ===",
+    shOut(["systemctl", "is-active", "reelos", "caddy", "docker"]).trim(),
+    "=== docker ps ===",
+    shOut(["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"]).trim(),
+    "=== journalctl reelos (1h) ===",
+    shOut(["journalctl", "-u", "reelos", "--since", "1 hour ago", "--no-pager", "-n", "40"], 12000).trim(),
+    "",
+  ].join("\n");
+  send(res, 200, { ok: true, text: redactLogs(blob) });
+}
+
 let termCwd = "/home/reelos";
 let termOut = "";
 
@@ -1371,6 +1441,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/ping") return void (await handlePing(req, res));
           if (pathOnly === "/api/performance") return void (await handlePerformance(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
+          if (pathOnly === "/api/logs") return void (await handleLogs(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;

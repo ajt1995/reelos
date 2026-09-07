@@ -1,8 +1,8 @@
 {
-  "version": "1.2.25",
+  "version": "1.2.26",
   "channel": "stable",
   "notes": [
-    "1.2.25: mount TorBox files so cache hits land as real movies, not empty folders."
+    "1.2.26: Settings → Logs. Copy last hour, keys stripped. Paste that instead of SSH."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

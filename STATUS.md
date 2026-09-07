@@ -1,11 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 22:55 CDT**.
+Xorriso. Dated **2026-09-07 12:16 +08**.
 
-# 1.2.25
+# 1.2.26
 
-House: Mario + Jurassic grabbed. Decypharr logged “downloaded.” Folders under `/mnt/symlinks/radarr/` were empty. `/mnt/__all__` did not exist. `mount_type=` blank. `use_webdav` was forced false.
+Owner: still nothing on 1.2.25, ship the logger.
 
-Wire now: DFS mount at `/mnt`, WebDAV on, bind+rshared `/mnt`. Radarr/Jellyfin get `/mnt:rslave`.
+Settings → **Copy last hour** → `GET /api/logs` → clipboard / `reelos-house.txt`. Keys stripped. Includes mount + decypharr tail so we stop the SSH scavenger hunt.
 
-Apply once. Then those two should import. No ISO. #5 parked.
+Apply 1.2.26 once. Then Settings → Logs → Copy last hour → paste here. No extra curls.
