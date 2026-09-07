@@ -104,6 +104,28 @@ function movieHit(h) {
   };
 }
 
+function albumHit(h) {
+  const mbid = h.foreignAlbumId || h.mbId || h.id;
+  if (!mbid) return null;
+  const artist = h.artist?.artistName || h.artist?.name || h.artistName || "";
+  const poster =
+    String(h.remotePoster || "") ||
+    String((h.images || []).find((i) => i?.coverType === "cover" || i?.coverType === "poster")?.remoteUrl || "");
+  return {
+    id: `mbid-${mbid}`,
+    kind: "music",
+    title: artist ? `${artist} — ${h.title || "Untitled"}` : String(h.title || "Untitled"),
+    year: Number(String(h.releaseDate || h.year || "").slice(0, 4)) || 0,
+    overview: String(h.overview || ""),
+    poster,
+    rating: Number(h.ratings?.value || 0),
+    genres: Array.isArray(h.genres) ? h.genres.map(String) : [],
+    maxQuality: "1080p",
+    popularity: 40,
+    tracks: Number(h.mediumCount || h.albumType ? 0 : 0) || undefined,
+  };
+}
+
 function seriesHit(h) {
   const tvdb = h.tvdbId ?? h.ids?.tvdb;
   if (!tvdb) return null;
@@ -161,9 +183,10 @@ async function handleLookup(req, res) {
   let error = null;
   const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
   const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
-  note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
-  if (q.length >= 2 && !rk && !sk) {
-    error = "Movies/TV engines have no API key yet";
+  const lk = xmlKey("/opt/reelos/compose/configs/lidarr/config.xml");
+  note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"} lidarr=${lk ? "yes" : "NO"}`);
+  if (q.length >= 2 && !rk && !sk && !lk) {
+    error = "Engines have no API key yet";
   }
   const jobs = [];
   if (q.length >= 2 && rk) {
@@ -195,6 +218,22 @@ async function handleLookup(req, res) {
         .catch((e) => {
           error = error || `shows ${e}`;
           note(`sonarr ${e}`);
+        }),
+    );
+  }
+  if (q.length >= 2 && lk) {
+    jobs.push(
+      pull(`http://127.0.0.1:8686/api/v1/album/lookup?term=${encodeURIComponent(q)}`, lk)
+        .then((hits) => {
+          for (const h of (hits || []).slice(0, 8)) {
+            const t = albumHit(h);
+            if (t) titles.push(t);
+          }
+          note(`lidarr hits=${(hits || []).length}`);
+        })
+        .catch((e) => {
+          error = error || `music ${e}`;
+          note(`lidarr ${e}`);
         }),
     );
   }
@@ -704,7 +743,33 @@ async function handleRequestStatus(req, res) {
       send(res, 200, { status, engine: "sonarr", title: show.title });
       return;
     }
-    send(res, 400, { status: "unknown", error: "Need tmdb or tvdb id" });
+    if (id.startsWith("mbid-")) {
+      const lk = xmlKey("/opt/reelos/compose/configs/lidarr/config.xml");
+      if (!lk) {
+        send(res, 200, { status: "unknown", engine: "lidarr", error: "Music engine has no API key" });
+        return;
+      }
+      const mbid = id.slice(5);
+      const albums = await arrGet(
+        `http://127.0.0.1:8686/api/v1/album?foreignAlbumId=${encodeURIComponent(mbid)}`,
+        lk,
+      );
+      const album = Array.isArray(albums) ? albums[0] : null;
+      if (!album) {
+        send(res, 200, { status: "unknown", engine: "lidarr", error: "Not in Lidarr" });
+        return;
+      }
+      const queue = await arrGet("http://127.0.0.1:8686/api/v1/queue", lk);
+      const records = Array.isArray(queue) ? queue : queue?.records || [];
+      const q = records.find((x) => x.albumId === album.id);
+      let status = "queued";
+      if (album.grabbed || album.statistics?.percentOfTracks === 100) status = "downloaded";
+      else if (q) status = queueStatus(q);
+      if (status === "downloaded") await jellyfinRefresh(id);
+      send(res, 200, { status, engine: "lidarr", title: album.title });
+      return;
+    }
+    send(res, 400, { status: "unknown", error: "Need tmdb, tvdb, or mbid" });
   } catch (e) {
     send(res, 200, { status: "unknown", error: String(e) });
   }
@@ -721,9 +786,11 @@ async function handleRequest(req, res) {
   const body = await readBody(req);
   const tmdb = String(body.tmdb || body.tmdbId || "").trim();
   const tvdb = String(body.tvdb || body.tvdbId || "").trim();
+  const mbid = String(body.mbid || body.foreignAlbumId || "").trim();
   let titleId = String(body.titleId || body.data?.titleId || body.id || "").trim();
   if (!titleId && tmdb) titleId = `tmdb-${tmdb}`;
   if (!titleId && tvdb) titleId = `tvdb-${tvdb}`;
+  if (!titleId && mbid) titleId = `mbid-${mbid}`;
   const season = body.season ?? body.data?.season;
   note(`request ${titleId} title=${body.title || ""}`);
   if (!titleId) {
@@ -790,7 +857,49 @@ async function handleRequest(req, res) {
       send(res, 200, { ok: true, engine: "sonarr", added: added.ok, title: series.title || titleId });
       return;
     }
-    send(res, 400, { ok: false, error: "That title is not from the movie/TV engines. Search again, then request." });
+    if (titleId.startsWith("mbid-")) {
+      const lk = xmlKey("/opt/reelos/compose/configs/lidarr/config.xml");
+      if (!lk) {
+        send(res, 503, { ok: false, error: "Music engine has no API key" });
+        return;
+      }
+      const foreign = titleId.slice(5);
+      const hits = await arrGet(
+        `http://127.0.0.1:8686/api/v1/album/lookup?term=${encodeURIComponent(`lidarr:${foreign}`)}`,
+        lk,
+      );
+      let album = Array.isArray(hits) ? hits.find((x) => String(x.foreignAlbumId) === foreign) || hits[0] : null;
+      if (!album) {
+        const hits2 = await arrGet(
+          `http://127.0.0.1:8686/api/v1/album/lookup?term=${encodeURIComponent(body.title || foreign)}`,
+          lk,
+        );
+        album = Array.isArray(hits2) ? hits2[0] : null;
+      }
+      if (!album) {
+        send(res, 404, { ok: false, error: "Lidarr did not find that album" });
+        return;
+      }
+      const root = await firstRoot("http://127.0.0.1:8686/api/v1", lk, "/media/music");
+      const qs = await arrGet("http://127.0.0.1:8686/api/v1/qualityprofile", lk);
+      const qlist = Array.isArray(qs) ? qs : [];
+      const profileId = qlist[0]?.id || 1;
+      const md = await arrGet("http://127.0.0.1:8686/api/v1/metadataprofile", lk);
+      const mdlist = Array.isArray(md) ? md : [];
+      const metadataProfileId = mdlist[0]?.id || 1;
+      const added = await arrPost("http://127.0.0.1:8686/api/v1/album", lk, {
+        ...album,
+        qualityProfileId: album.qualityProfileId || profileId,
+        metadataProfileId: album.metadataProfileId || metadataProfileId,
+        rootFolderPath: root,
+        monitored: true,
+        addOptions: { searchForNewAlbum: true },
+      });
+      note(`lidarr add ${added.status} root=${root}`);
+      send(res, 200, { ok: true, engine: "lidarr", added: added.ok, title: album.title || titleId });
+      return;
+    }
+    send(res, 400, { ok: false, error: "Search again, then request." });
   } catch (e) {
     const error = String(e?.name === "AbortError" ? "Engine timed out" : e);
     note(`request err ${error}`);

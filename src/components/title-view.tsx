@@ -45,6 +45,7 @@ export function TitleView({ id }: { id: string }) {
         title: title?.title,
         tmdb: payload.titleId.startsWith("tmdb-") ? payload.titleId.slice(5) : undefined,
         tvdb: payload.titleId.startsWith("tvdb-") ? payload.titleId.slice(5) : undefined,
+        mbid: payload.titleId.startsWith("mbid-") ? payload.titleId.slice(5) : undefined,
         season: payload.season,
         hash: payload.hash,
       }),
