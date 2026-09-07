@@ -18,4 +18,4 @@ VERSION file last seen **1.2.31**. 1.2.39 is the channel, not proven on the HP t
 | #3 Kavita | https://github.com/ajt1995/reelos/pull/17 |
 | #2 Seerr (plugin PR #18 parked) | https://github.com/ajt1995/reelos/pull/19 |
 
-#2 is the plugin. No Seerr container.
+#2 is Seerr. Plugin PR #18 parked. Do not merge.
