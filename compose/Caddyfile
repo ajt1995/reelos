@@ -1,3 +1,7 @@
+{
+	auto_https off
+	admin off
+}
 :80 {
 	encode gzip
 	handle /play* {

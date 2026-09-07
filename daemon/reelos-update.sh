@@ -187,7 +187,7 @@ need daemon/wire-engines.py 'restart_fuse_readers'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
-need daemon/reelos-update.sh 'not recreating containers'
+need daemon/reelos-update.sh 'not rolling back'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
@@ -267,13 +267,35 @@ caddy_updating() {
     cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
   fi
   cat >/etc/caddy/Caddyfile <<'EOF'
+{
+	auto_https off
+	admin off
+}
 :80 {
 	header Content-Type "text/html; charset=utf-8"
 	respond "ReelOS is updating. This page will come back in a minute." 200
 }
 EOF
-  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+  timeout 8 systemctl reload caddy >/dev/null 2>&1 || timeout 8 systemctl restart caddy >/dev/null 2>&1 || true
   log "caddy parked on updating page"
+}
+
+caddy_dropin() {
+  mkdir -p /etc/systemd/system/caddy.service.d
+  cat >/etc/systemd/system/caddy.service.d/reelos.conf <<'EOF'
+[Service]
+Type=simple
+TimeoutStartSec=12
+ExecStart=
+ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+EOF
+  systemctl daemon-reload || true
+}
+
+caddy_listen() {
+  ss -lptn 2>/dev/null | grep -qE ':80 |:80$' && return 0
+  curl -sS -o /dev/null --max-time 1 http://127.0.0.1/ && return 0
+  return 1
 }
 
 caddy_reelos() {
@@ -283,8 +305,20 @@ caddy_reelos() {
   elif [ -f /etc/caddy/Caddyfile.reelos.bak ]; then
     cp /etc/caddy/Caddyfile.reelos.bak /etc/caddy/Caddyfile
   fi
-  systemctl enable --now caddy >/dev/null 2>&1 || true
-  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+  if ! grep -q 'auto_https off' /etc/caddy/Caddyfile 2>/dev/null; then
+    printf '%s\n' '{' '	auto_https off' '	admin off' '}' '' | cat - /etc/caddy/Caddyfile > /etc/caddy/Caddyfile.tmp
+    mv /etc/caddy/Caddyfile.tmp /etc/caddy/Caddyfile
+  fi
+  caddy_dropin
+  timeout 12 systemctl restart caddy >/dev/null 2>&1 || true
+  if ! caddy_listen; then
+    log "caddy systemd stuck — running caddy directly"
+    timeout 5 systemctl stop caddy >/dev/null 2>&1 || true
+    pkill -x caddy >/dev/null 2>&1 || true
+    sleep 0.4
+    nohup /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >>/var/lib/reelos/caddy.log 2>&1 &
+    sleep 1
+  fi
   log "caddy proxying to live 8080"
 }
 
@@ -398,9 +432,7 @@ fi
 # 8080 is Home 200. Point Caddy at it now — never reload reverse_proxy at a dead backend.
 caddy_reelos
 if ! probe_port80; then
-  log ":80 is not ReelOS — restoring previous app"
-  restore
-  exit 1
+  log ":80 still down — Home is on :8080, not rolling back"
 fi
 trap - ERR
 

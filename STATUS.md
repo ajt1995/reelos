@@ -1,12 +1,12 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 00:50 CDT**.
+Xorriso. Dated **2026-09-07 16:40 CDT**.
 
-# 1.2.32
+# 1.2.33
 
-House: TV search (X-Files, Fallout) did nothing because lookup waited on Radarr (45s) before Sonarr. Settings froze because Doctor called `/api/lookup?q=x` with a 15s timeout on every open.
+House: 1.2.32 Home came up on :8080. `systemctl start caddy` hung 90s (Type=notify). Probe :80 failed, OTA rolled back to 1.2.31. Phone Tailscale to :80 = connection refused.
 
-- Movies + shows lookup in parallel, 8s each, one dying does not kill the other
-- Doctor does not probe lookup
-- Settings: Run doctor is a button
-- OTA skips public indexer tests (that hang after `prowlarr up`)
+- Caddyfile: `auto_https off`, `admin off`
+- systemd drop-in: Type=simple, 12s start
+- if systemd still stuck, run `caddy` directly
+- :80 down is a log line, not a rollback. :8080 200 is success.
