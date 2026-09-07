@@ -181,7 +181,7 @@ need compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
-need daemon/reelos-update.sh 'detach updater into reelos-ota.service'
+need daemon/reelos-update.sh 'indexer canary FAIL'
 log "canaries ok"
 
 NEXT="$ROOT.next"
@@ -431,6 +431,74 @@ if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; the
 fi
 if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
   bash "$ROOT/bin/reelos-lid.sh" || log "lid ignore non-fatal"
+fi
+
+indexer_canary() {
+  python3 - <<'PY'
+import json, os, re, sys, urllib.request
+from pathlib import Path
+root = Path(os.environ.get("REELOS_ROOT", "/opt/reelos"))
+state = Path("/var/lib/reelos")
+src = ""
+answers = {}
+ap = state / "answers.json"
+if ap.exists():
+    try:
+        answers = json.loads(ap.read_text())
+        src = str(answers.get("source") or "").strip()
+    except json.JSONDecodeError:
+        src = ""
+envp = root / "compose" / ".env"
+if envp.exists():
+    for line in envp.read_text().splitlines():
+        if line.startswith("SOURCE=") and not src:
+            src = line.split("=", 1)[1].strip()
+debrid = {"torbox", "real-debrid", "alldebrid", "premiumize", "realdebrid"}
+if src not in debrid:
+    print("skip")
+    sys.exit(0)
+want = f"ReelOS-{src}"
+errp = state / "releases-error.txt"
+err = errp.read_text().strip()[:400] if errp.exists() else ""
+xml = root / "compose" / "configs" / "prowlarr" / "config.xml"
+key = None
+if xml.exists():
+    m = re.search(r"<ApiKey>([^<]+)</ApiKey>", xml.read_text())
+    key = m.group(1) if m else None
+if not key:
+    print(err or "Prowlarr has no API key")
+    sys.exit(1)
+req = urllib.request.Request(
+    "http://127.0.0.1:9696/api/v1/indexer",
+    headers={"X-Api-Key": key},
+)
+try:
+    with urllib.request.urlopen(req, timeout=15) as r:
+        rows = json.load(r)
+except Exception as e:
+    print(err or f"{type(e).__name__}: {e}")
+    sys.exit(1)
+hit = next((ix for ix in (rows or []) if ix.get("name") == want and ix.get("enable")), None)
+if not hit:
+    print(err or f"{want} not enabled in Prowlarr")
+    sys.exit(1)
+print(want)
+sys.exit(0)
+PY
+}
+
+if [ -f /var/lib/reelos/provisioned ]; then
+  CANARY_OUT=$(indexer_canary) || {
+    log "indexer canary FAIL ${CANARY_OUT:-} — not printing applied"
+    [ -f "$STATE/releases-error.txt" ] && log "$(head -c 400 "$STATE/releases-error.txt")"
+    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    if [ "$code" != "200" ]; then
+      log "Home dead after indexer fail — restoring"
+      restore
+    fi
+    exit 1
+  }
+  log "indexer canary ok ${CANARY_OUT}"
 fi
 
 echo "$REMOTE" >"$ROOT/VERSION"

@@ -1,15 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 21:26 CDT**.
+Xorriso. Dated **2026-09-06 21:38 CDT**.
 
-# 1.2.21 frozen
+# 1.2.22 frozen
 
-House 1.2.20 still had no `ReelOS-torbox`. extra_hosts in compose was not the missing piece — wire never POSTed the indexer when Prowlarr had no first-party TorBox schema (`continue` skipped Torznab).
+Canary only. After wire, before `applied.`: if `answers.source` is debrid, Prowlarr must have enabled `ReelOS-<source>`. Else log the Prowlarr/`releases-error.txt` line, **do not** print applied, exit 1. Rollback only if Home is also dead.
 
-## This stamp
+Home 200 is not success. Doctor `releases` green and this canary are the same fact.
 
-1. Apply force-recreates Prowlarr + Decypharr (`--no-deps`) and waits on `:9696`.
-2. Wire force-recreates those two, then POSTs `ReelOS-torbox` (official yml **or** generic Torznab at `search-api.torbox.app`). Enables if it already exists.
-3. Last Prowlarr error → `/var/lib/reelos/releases-error.txt`. Doctor `releases` detail is that error (or `{want} not in Prowlarr`), not “Provider indexer missing.”
-
-No 1.2.22 until a house box with a TorBox key lists that indexer enabled. No ISO. #7 stays on `feature/7-tailscale`.
+No #7. No ISO. Let a mid-1.2.21 apply finish first.

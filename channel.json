@@ -1,8 +1,8 @@
 {
-  "version": "1.2.21",
+  "version": "1.2.22",
   "channel": "stable",
   "notes": [
-    "1.2.21: force-recreate Prowlarr, add ReelOS-torbox, Doctor shows Prowlarr errors."
+    "1.2.22: no applied. unless ReelOS-torbox is enabled in Prowlarr."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
