@@ -35,6 +35,7 @@ export interface WizardAnswers {
   vpnProvider: string;
   intent: Intent;
   quality: QualityFloor;
+  upgradeCutoff?: boolean;
   frontend: Frontend;
   plexClaim: string;
   adminName: string;

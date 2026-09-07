@@ -160,6 +160,23 @@ export function SettingsView() {
               </button>
             ))}
           </div>
+          <label className="mt-4 flex items-center justify-between text-sm">
+            Upgrade to cutoff when a better copy appears
+            <Toggle
+              on={answers.upgradeCutoff !== false}
+              onChange={(v) => {
+                patchAnswers({ upgradeCutoff: v });
+                void fetch("/api/quality", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ upgradeCutoff: v }),
+                });
+              }}
+            />
+          </label>
+          <p className="mt-2 text-xs text-faint">
+            Off: first grab is final unless you Request again. On: Radarr/Sonarr may replace the file; Watch still hits Jellyfin.
+          </p>
         </Row>
         <Row
           icon={Users}

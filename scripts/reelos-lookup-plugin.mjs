@@ -969,17 +969,43 @@ async function handlePassword(req, res) {
   send(res, 200, { ok: true, jellyfin, boxUser: box.status === 0 });
 }
 
+async function applyCutoff(base, key, profileName, upgrade) {
+  const qs = await arrGet(`${base}/qualityprofile`, key);
+  const list = Array.isArray(qs) ? qs : [];
+  const p = list.find((x) => x.name === profileName);
+  if (!p?.id) return null;
+  p.upgradeAllowed = Boolean(upgrade);
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 15000);
+  try {
+    const res = await fetch(`${base}/qualityprofile/${p.id}`, {
+      method: "PUT",
+      headers: { "X-Api-Key": key, "Content-Type": "application/json" },
+      body: JSON.stringify(p),
+      signal: ac.signal,
+    });
+    return res.ok ? profileName : `${profileName} ${res.status}`;
+  } catch (e) {
+    return String(e);
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function handleQuality(req, res) {
   const wantMap = { "1080p": "HD-1080p", hybrid: "Ultra-HD", "4k": "Ultra-HD", custom: "Any" };
   if ((req.method || "GET").toUpperCase() === "POST") {
     const body = await readBody(req);
-    const q = String(body.quality || "");
-    if (!["1080p", "hybrid", "4k", "custom"].includes(q)) {
-      send(res, 400, { ok: false, error: "quality must be 1080p, hybrid, or 4k" });
-      return;
-    }
     const a = answers();
-    a.quality = q;
+    if (body.quality) {
+      const q = String(body.quality || "");
+      if (!["1080p", "hybrid", "4k", "custom"].includes(q)) {
+        send(res, 400, { ok: false, error: "quality must be 1080p, hybrid, or 4k" });
+        return;
+      }
+      a.quality = q;
+    }
+    if ("upgradeCutoff" in body) a.upgradeCutoff = body.upgradeCutoff !== false;
     try {
       mkdirSync("/var/lib/reelos", { recursive: true });
       writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
@@ -988,31 +1014,26 @@ async function handleQuality(req, res) {
       return;
     }
   }
-  const want = answers().quality || "hybrid";
+  const a = answers();
+  const want = a.quality || "hybrid";
   const profile = wantMap[want] || "Ultra-HD";
+  const upgrade = a.upgradeCutoff !== false;
   const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
   const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
   let radarr = null;
   let sonarr = null;
   try {
-    if (rk) {
-      const qs = await arrGet("http://127.0.0.1:7878/api/v3/qualityprofile", rk);
-      const list = Array.isArray(qs) ? qs : [];
-      radarr = list.find((p) => p.name === profile)?.name || null;
-    }
-    if (sk) {
-      const qs = await arrGet("http://127.0.0.1:8989/api/v3/qualityprofile", sk);
-      const list = Array.isArray(qs) ? qs : [];
-      sonarr = list.find((p) => p.name === profile)?.name || null;
-    }
+    if (rk) radarr = await applyCutoff("http://127.0.0.1:7878/api/v3", rk, profile, upgrade);
+    if (sk) sonarr = await applyCutoff("http://127.0.0.1:8989/api/v3", sk, profile, upgrade);
   } catch (e) {
-    send(res, 200, { ok: true, wanted: want, profile, radarr, sonarr, error: String(e) });
+    send(res, 200, { ok: true, wanted: want, profile, upgrade, radarr, sonarr, error: String(e) });
     return;
   }
   send(res, 200, {
     ok: true,
     wanted: want,
     profile,
+    upgrade,
     radarr,
     sonarr,
     error: rk || sk ? null : "no engine keys",
