@@ -70,12 +70,21 @@ def xml_key_text(xml: Path) -> str:
     return (node.text or "").strip() if node is not None else ""
 
 
+def last_releases_error() -> str:
+    p = STATE / "releases-error.txt"
+    try:
+        t = p.read_text().strip()
+    except OSError:
+        return ""
+    return t[:240]
+
+
 def releases_hop(answers: dict) -> dict:
     src = answers.get("source") or ""
     want = f"ReelOS-{src}"
     key = xml_key_text(COMPOSE / "configs" / "prowlarr" / "config.xml")
     if not key:
-        return ok("releases", "No release source. Provider indexer missing.", False)
+        return ok("releases", last_releases_error() or "Prowlarr has no API key", False)
     try:
         import urllib.error
         import urllib.request
@@ -86,16 +95,16 @@ def releases_hop(answers: dict) -> dict:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode() or "[]")
-    except Exception:
-        return ok("releases", "No release source. Provider indexer missing.", False)
+    except Exception as e:
+        return ok("releases", last_releases_error() or f"{type(e).__name__}: {e}", False)
     rows = data if isinstance(data, list) else []
     if src == "local-vpn":
         if any(ix.get("enable") for ix in rows):
             return ok("releases", "Indexer enabled", True)
-        return ok("releases", "No release source. Provider indexer missing.", False)
+        return ok("releases", last_releases_error() or "No indexer enabled", False)
     hit = next((ix for ix in rows if ix.get("name") == want and ix.get("enable")), None)
     if not hit:
-        return ok("releases", "No release source. Provider indexer missing.", False)
+        return ok("releases", last_releases_error() or f"{want} not in Prowlarr", False)
     try:
         import urllib.error
         import urllib.request
@@ -110,12 +119,10 @@ def releases_hop(answers: dict) -> dict:
             resp.read()
         return ok("releases", want, True)
     except urllib.error.HTTPError as e:
-        err = e.read().decode()[:200] if e.fp else str(e)
-        if "resolv" in err.lower() or "name does not resolve" in err.lower():
-            return ok("releases", "No release source. Name does not resolve.", False)
-        return ok("releases", f"No release source. {err[:80]}", False)
+        err = e.read().decode()[:240] if e.fp else str(e)
+        return ok("releases", err or f"Prowlarr test {e.code}", False)
     except Exception as e:
-        return ok("releases", f"No release source. {type(e).__name__}", False)
+        return ok("releases", f"{type(e).__name__}: {e}", False)
 
 
 def listening(port: int) -> bool:

@@ -179,7 +179,7 @@ need install/compose/docker-compose.yml 'search-api.torbox.app'
 need install/compose/docker-compose.yml 'api.torbox.app'
 need compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
-need daemon/wire-engines.py 'jellyfin config reset'
+need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'detach updater into reelos-ota.service'
 log "canaries ok"
@@ -415,6 +415,16 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   (cd "$ROOT/compose" && docker compose \
     --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
     up -d --force-recreate --remove-orphans) || log "compose up skipped"
+  (cd "$ROOT/compose" && docker compose --profile indexers --profile debrid \
+    up -d --force-recreate --no-deps prowlarr decypharr) || log "prowlarr recreate skipped"
+  log "waiting for Prowlarr :9696"
+  for _i in $(seq 1 40); do
+    if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:9696/; then
+      log "prowlarr up"
+      break
+    fi
+    sleep 1
+  done
 fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"

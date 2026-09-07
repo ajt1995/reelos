@@ -1,11 +1,15 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 21:14 CDT**.
+Xorriso. Dated **2026-09-06 21:26 CDT**.
 
-# 1.2.20 frozen
+# 1.2.21 frozen
 
-1.2.19 SSH apply failed: `curl | bash` has `$0=bash`, copied the bash binary into `reelos-ota.service`.
+House 1.2.20 still had no `ReelOS-torbox`. extra_hosts in compose was not the missing piece — wire never POSTed the indexer when Prowlarr had no first-party TorBox schema (`continue` skipped Torznab).
 
-SSH is not in the `reelos.service` cgroup. Detach only when we *are*. `--no-block` on the phone path.
+## This stamp
 
-House: `sudo REELOS_OTA_UNIT=1 bash -s apply` still works on the 1.2.19 mailman.
+1. Apply force-recreates Prowlarr + Decypharr (`--no-deps`) and waits on `:9696`.
+2. Wire force-recreates those two, then POSTs `ReelOS-torbox` (official yml **or** generic Torznab at `search-api.torbox.app`). Enables if it already exists.
+3. Last Prowlarr error → `/var/lib/reelos/releases-error.txt`. Doctor `releases` detail is that error (or `{want} not in Prowlarr`), not “Provider indexer missing.”
+
+No 1.2.22 until a house box with a TorBox key lists that indexer enabled. No ISO. #7 stays on `feature/7-tailscale`.

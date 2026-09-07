@@ -462,41 +462,96 @@ def inject_search_api_hosts() -> None:
             log_wire(f"search-api extra_hosts {name} {ip}")
 
 
+def set_releases_error(msg: str) -> None:
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "releases-error.txt").write_text(msg[:800] + "\n")
+    except OSError:
+        pass
+    log_wire(msg)
+
+
+def clear_releases_error() -> None:
+    try:
+        p = STATE / "releases-error.txt"
+        if p.exists():
+            p.unlink()
+    except OSError:
+        pass
+
+
+def recreate_prowlarr() -> None:
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--no-deps",
+        "prowlarr",
+        "decypharr",
+    ]
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"force-recreate prowlarr+decypharr rc={r.returncode}")
+    time.sleep(8)
+
+
 def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
-    """Official TorBox torznab if Cardigann cannot resolve search-api."""
+    """Generic Torznab at search-api.torbox.app. Schema optional."""
+    impl = {
+        "implementation": "Torznab",
+        "implementationName": "Torznab",
+        "configContract": "TorznabSettings",
+        "appProfileId": 1,
+        "protocol": "torrent",
+    }
+    fields = None
     try:
         schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
     except NET_ERR as e:
         log_wire(f"torznab schema {e}")
-        return False
-    hit = None
+        schemas = []
     for schema in schemas if isinstance(schemas, list) else []:
         if str(schema.get("implementation") or "").lower() == "torznab":
-            hit = schema
+            impl = schema
+            fields = []
+            for f in schema.get("fields") or []:
+                item = dict(f)
+                n = str(item.get("name") or "").lower()
+                if n in ("baseurl", "base_url"):
+                    item["value"] = "https://search-api.torbox.app"
+                elif n in ("apipath", "api_path"):
+                    item["value"] = "/torznab"
+                elif n in ("apikey", "api_key"):
+                    item["value"] = key
+                fields.append(item)
             break
-    if not hit:
-        log_wire("torznab schema missing")
-        return False
-    fields = []
-    for f in hit.get("fields") or []:
-        item = dict(f)
-        n = str(item.get("name") or "").lower()
-        if n in ("baseurl", "base_url"):
-            item["value"] = "https://search-api.torbox.app"
-        elif n in ("apipath", "api_path"):
-            item["value"] = "/torznab"
-        elif n in ("apikey", "api_key"):
-            item["value"] = key
-        fields.append(item)
+    if not fields:
+        fields = [
+            {"name": "baseUrl", "value": "https://search-api.torbox.app"},
+            {"name": "apiPath", "value": "/torznab"},
+            {"name": "apiKey", "value": key},
+        ]
     body = {
         "enable": True,
-        "appProfileId": hit.get("appProfileId") or 1,
+        "appProfileId": impl.get("appProfileId") or 1,
         "priority": 25,
         "name": name,
-        "protocol": "torrent",
-        "implementation": hit.get("implementation"),
-        "implementationName": hit.get("implementationName"),
-        "configContract": hit.get("configContract"),
+        "protocol": impl.get("protocol") or "torrent",
+        "implementation": impl.get("implementation") or "Torznab",
+        "implementationName": impl.get("implementationName") or "Torznab",
+        "configContract": impl.get("configContract") or "TorznabSettings",
         "fields": fields,
     }
     try:
@@ -504,11 +559,13 @@ def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
         log_wire(f"provider indexer added {name} via Torznab search-api")
         return True
     except urllib.error.HTTPError as e:
-        err = e.read().decode()[:240] if e.fp else str(e)
-        log_wire(f"torznab POST failed {e.code} {err}")
+        err = e.read().decode()[:400] if e.fp else str(e)
+        set_releases_error(f"Prowlarr {e.code}: {err}")
+        if e.code == 400 and name.lower() in err.lower():
+            return indexer_enabled(prow_key, name)
         return False
     except NET_ERR as e:
-        log_wire(f"torznab POST failed {e}")
+        set_releases_error(f"torznab POST failed {e}")
         return False
 
 
@@ -528,7 +585,7 @@ def ensure_provider_indexer(prow_key: str) -> None:
     try:
         _ensure_provider_indexer(prow_key)
     except Exception as e:
-        log_wire(f"provider indexer {type(e).__name__} {e}")
+        set_releases_error(f"provider indexer {type(e).__name__} {e}")
 
 
 def _ensure_provider_indexer(prow_key: str) -> None:
@@ -542,8 +599,9 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         return
     name = f"ReelOS-{src}"
     ensure_compose_dns()
+    recreate_prowlarr()
     prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
-    prow_key = wait_key(prow_xml, 60) or prow_key
+    prow_key = wait_key(prow_xml, 90) or prow_key
     inject_search_api_hosts()
     deadline = time.time() + 90
     yml_tried = False
@@ -552,7 +610,7 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         try:
             have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
         except NET_ERR as e:
-            log_wire(f"provider indexer list retry {e}")
+            set_releases_error(f"Prowlarr list {e}")
             time.sleep(4)
             continue
         rows = have if isinstance(have, list) else []
@@ -560,6 +618,7 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         if existing:
             if existing.get("enable"):
                 log_wire(f"provider indexer exists {name}")
+                clear_releases_error()
                 return
             try:
                 existing["enable"] = True
@@ -571,9 +630,13 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                     body=existing,
                 )
                 log_wire(f"provider indexer enabled {name}")
+                clear_releases_error()
                 return
+            except urllib.error.HTTPError as e:
+                err = e.read().decode()[:400] if e.fp else str(e)
+                set_releases_error(f"Prowlarr enable {e.code}: {err}")
             except NET_ERR as e:
-                log_wire(f"provider indexer enable failed {e}")
+                set_releases_error(f"provider indexer enable failed {e}")
         hit = None
         try:
             hit = _find_schema(prow_key, src)
@@ -590,29 +653,38 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                 except NET_ERR as e:
                     log_wire(f"provider indexer schema after yml failed {e}")
         if not hit:
-            log_wire(f"provider indexer missing after official yml for {src}")
+            if src == "torbox" and not torznab_tried:
+                torznab_tried = True
+                add_torbox_torznab(prow_key, name, key)
+                if indexer_enabled(prow_key, name):
+                    clear_releases_error()
+                    return
+            set_releases_error(f"{name} not in Prowlarr — no first-party schema")
             time.sleep(4)
             continue
         try:
             _add_from_schema(prow_key, name, key, hit)
         except urllib.error.HTTPError as e:
-            err = e.read().decode()[:240] if e.fp else str(e)
-            log_wire(f"provider indexer POST failed {e.code} {err}")
+            err = e.read().decode()[:400] if e.fp else str(e)
+            set_releases_error(f"Prowlarr {e.code}: {err}")
             if "resolv" in err.lower():
-                log_wire("STAMP FAIL Name does not resolve — recreating arrs")
-                recreate_arrs()
+                log_wire("Name does not resolve — recreating Prowlarr")
+                recreate_prowlarr()
+                prow_key = wait_key(prow_xml, 60) or prow_key
                 inject_search_api_hosts()
         except NET_ERR as e:
-            log_wire(f"provider indexer POST failed {e}")
+            set_releases_error(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
+            clear_releases_error()
             return
         if src == "torbox" and not torznab_tried:
             torznab_tried = True
             add_torbox_torznab(prow_key, name, key)
             if indexer_enabled(prow_key, name):
+                clear_releases_error()
                 return
         time.sleep(4)
-    log_wire(f"STAMP FAIL provider indexer missing after retry for {src}")
+    set_releases_error(f"STAMP FAIL {name} missing after retry")
 
 
 def transcode_override() -> None:
