@@ -1,27 +1,32 @@
 # ROADMAP.md
 
-Hal. Updated **2026-09-06 18:59 CDT**.
+Hal. Updated **2026-09-06 19:10 CDT**.
 
-These are **not** the 1.2.15 apply. No version numbers assigned. Owner will say which issue + which stamp when they want it. Until HAL names one issue as the job, **do not implement**.
+Parked work. Owner picks issue + stamp later.
 
 ## Already in 1.2.15 (do not reopen)
 
-- Issue #1 — Low performance mode (trickplay/chapter extract off, Settings toggle)
+- Issue #1 — Low performance mode
 
-## Parked — pick later
+## Parked
 
-| # | Name | What it is |
+| # | Name | Branch if you work it |
 |---|---|---|
-| — | [`FACELIFT.md`](FACELIFT.md) | **1.3 Light** visuals only. Same screens. Paint, type, motion. |
-| #2 | [Request inside Jellyfin](https://github.com/ajt1995/reelos/issues/2) | Seerr **or** a plugin. Same household login. Not both. TV can Request. |
-| #3 | [Ebooks to Android](https://github.com/ajt1995/reelos/issues/3) | Wizard Books. Kavita *or* Calibre-web. Phone reads. No ReelOS book player. |
-| #4 | [Finish music](https://github.com/ajt1995/reelos/issues/4) | Lidarr in `/api/lookup` + `/api/request`. Home only real Jellyfin Music. |
+| — | [`FACELIFT.md`](FACELIFT.md) | `feature/1.3-light` |
+| #2 | [Request inside Jellyfin](https://github.com/ajt1995/reelos/issues/2) | `feature/2-seerr` |
+| #3 | [Ebooks to Android](https://github.com/ajt1995/reelos/issues/3) | `feature/3-books` |
+| #4 | [Finish music](https://github.com/ajt1995/reelos/issues/4) | `feature/4-music` |
 
-That's four slices (facelift + three issues). Music is its own ticket so it is not buried in books.
+## Branch law (this is the lock)
 
-## Rules for the builder
+`main` is the house apply. Channel is `main.tar.gz`. Same VERSION + new SHA still overlays the HP.
 
-- VERSION stays **1.2.15** until the owner names a new stamp.
-- One issue per pass. Do not combine facelift with Seerr with books.
-- No indexer roster. No new ISO unless asked.
-- When starting: write the issue number at the top of STATUS.md, implement only that, freeze.
+- Do **not** implement parked tickets on `main`.
+- One issue → one branch named above. PR against `main`. **Do not merge.**
+- Do not touch `channel.json`, `VERSION`, `daemon/reelos-update.sh` on any branch unless the owner says that stamp is the job.
+- STATUS.md: which branch, what's done, **not merged**.
+- No indexer roster. No ISO unless asked.
+
+Not bumping VERSION is not a lock. Staying off `main` is.
+
+Merge happens when HAL names **one** issue and a version number.
