@@ -1,32 +1,23 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 20:16 CDT**.
+Updated **2026-09-06 20:30 CDT**.
 
-## Ship **1.2.16** on `main`. Then they Apply once.
+## Ship **1.2.17**. One apply.
 
-House is done typing. Do the work in the OTA.
+1.2.16 is on the channel. House hit **502** during/after swap (`reelos.service` changed on disk). They will not babysit systemd.
 
-Bump `VERSION` and `channel.json` to **1.2.16** so Settings Check lights up.
+Keep everything already in 1.2.16 (Jellyfin owner, TorBox DNS, Settings chrome). Add this to the updater. Bump `VERSION` + `channel.json` to **1.2.17**.
 
-### 1. Jellyfin auth + libraries
+### OTA must not leave 502
 
-Wire loops `jellyfin auth retry` because `StartupWizardCompleted` is true and `answers.json` password does not match the Jellyfin owner. Libraries never get created.
+`daemon/reelos-update.sh` today: stop reelos → mv → copy unit → daemon-reload → start. Phone talks to Caddy :80 the whole time. Empty upstream = Chrome 502. Probe can also fail because lookup times out even when Home is 200.
 
-- Try `answers` user/pass, then `reelos` / `reelos`, then any other local combo you can detect.
-- If still no token: reset **only** Jellyfin config (keep images, keep `/symlinks` files), complete startup with `answers` name+password, create Movies/Shows on `/symlinks`.
-- They will not use the Jellyfin wizard. Auth retry must not block the rest of `main()`.
+Required:
+1. Copy `reelos.service` + **daemon-reload before** `systemctl stop`. Never start on a stale unit.
+2. Probe success = Home **200** on `:8080` **and** `:80` is ReelOS (not stock Caddy). Do **not** require `/api/lookup` to succeed. Lookup timeout is not a failed OTA.
+3. After start, if `:8080` is down, `daemon-reload` + `restart` and keep probing (already 45s — make sure npm actually starts; log `journalctl -u reelos` on fail).
+4. Caddy during stop: do not advertise an empty proxy as a mystery 502 if you can help it. A static "updating" page is fine. Reloading Caddy mid-swap is how you get 502 with no backend.
+5. Print `ReelOS 1.2.17 applied.` only after `:80` serves ReelOS. Rollback still restores `.prev` if Home never comes back.
 
-### 2. TorBox indexer DNS
-
-`search-api.torbox.app` does not resolve via the box `getent`. `api.torbox.app` does (Cloudflare IPv4). Prowlarr 400 `Name does not resolve`. `/mnt/symlinks` has no movies.
-
-- Compose DNS for Prowlarr/Radarr/Sonarr/Decypharr: `1.1.1.1` and `8.8.8.8`.
-- Make `ReelOS-torbox` add succeed from this network. If the search host still has no DNS, use a working TorBox API/Torznab base that resolves (`api.torbox.app` / official torznab) or `extra_hosts` for `search-api.torbox.app` to a live IPv4. Do not invent other indexers.
-- Doctor `releases` must be able to go green on this HP.
-
-### 3. Settings in chrome
-
-Issue #6: no Settings control. Add a visible Settings link in the shell. `/settings` stays valid.
-
-No parked-branch merges. No ISO. One apply after you stamp 1.2.16.
+Then freeze. No ISO. No #2–#5.
