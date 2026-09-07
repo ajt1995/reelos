@@ -1348,6 +1348,52 @@ def wire_bazarr(radarr_key: str | None, sonarr_key: str | None) -> None:
             pass
 
 
+def inject_reelos_request() -> None:
+    """Drop ReelOS Request into Jellyfin web. Not Seerr. Native TV apps ignore web JS."""
+    src = ROOT / "jellyfin" / "reelos-request.js"
+    if not src.exists():
+        log_wire("reelos-request.js missing")
+        return
+    names = ["reelos-jellyfin-1", "jellyfin"]
+    for name in names:
+        cp = subprocess.run(
+            ["docker", "cp", str(src), f"{name}:/jellyfin/jellyfin-web/reelos-request.js"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if cp.returncode:
+            subprocess.run(
+                ["docker", "cp", str(src), f"{name}:/usr/share/jellyfin/web/reelos-request.js"],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        inj = subprocess.run(
+            [
+                "docker",
+                "exec",
+                name,
+                "sh",
+                "-c",
+                """
+for f in /jellyfin/jellyfin-web/index.html /usr/share/jellyfin/web/index.html; do
+  [ -f "$f" ] || continue
+  grep -q reelos-request.js "$f" && continue
+  sed -i 's#</body>#<script src="reelos-request.js"></script></body>#' "$f"
+done
+""",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if inj.returncode == 0:
+            log_wire("injected reelos-request.js into Jellyfin web")
+            return
+    log_wire("jellyfin request inject skipped")
+
+
 def extra_access() -> None:
     if os.environ.get("REELOS_OTA") == "1":
         return
@@ -1407,6 +1453,7 @@ def main() -> int:
     if frontend in ("jellyfin", "both"):
         try:
             bootstrap_jellyfin()
+            inject_reelos_request()
         except Exception as e:
             log_wire(f"jellyfin bootstrap {type(e).__name__} {e}")
 
