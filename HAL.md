@@ -1,23 +1,20 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 20:30 CDT**.
+Updated **2026-09-06 20:55 CDT**.
 
-## Ship **1.2.17**. One apply.
+## Ship **1.2.18**. One apply. They will not debug DNS.
 
-1.2.16 is on the channel. House hit **502** during/after swap (`reelos.service` changed on disk). They will not babysit systemd.
+House is on **1.2.17**. Factory reset fixed Jellyfin. Doctor still:
+- `releases` yellow — Provider indexer missing
+- Lookup hop TimeoutError (3s probe — false alarm)
 
-Keep everything already in 1.2.16 (Jellyfin owner, TorBox DNS, Settings chrome). Add this to the updater. Bump `VERSION` + `channel.json` to **1.2.17**.
+`docker-compose.yml` on `main` still has **no** `dns:` / `extra_hosts` on Prowlarr. Wire poking `/etc/hosts` inside the container does not survive and did not make `ReelOS-torbox` exist.
 
-### OTA must not leave 502
+### Do this
 
-`daemon/reelos-update.sh` today: stop reelos → mv → copy unit → daemon-reload → start. Phone talks to Caddy :80 the whole time. Empty upstream = Chrome 502. Probe can also fail because lookup times out even when Home is 200.
+1. Compose for Prowlarr, Radarr, Sonarr, Decypharr: `dns: [1.1.1.1, 8.8.8.8]` and `extra_hosts` for `search-api.torbox.app` (and `api.torbox.app` if needed) to a live Cloudflare IPv4. Must be in the compose file so `compose up` keeps it.
+2. After up, `ReelOS-torbox` must exist in Prowlarr. Official YML and/or torznab `https://search-api.torbox.app/torznab` with their key. 400 Name does not resolve is a failed stamp, not a log line you ignore.
+3. Doctor `releases` is green only when Prowlarr has that indexer **and** a test/search does not return resolve-error. Lookup hop must not use a 3s timeout — 15s or drop that hop.
 
-Required:
-1. Copy `reelos.service` + **daemon-reload before** `systemctl stop`. Never start on a stale unit.
-2. Probe success = Home **200** on `:8080` **and** `:80` is ReelOS (not stock Caddy). Do **not** require `/api/lookup` to succeed. Lookup timeout is not a failed OTA.
-3. After start, if `:8080` is down, `daemon-reload` + `restart` and keep probing (already 45s — make sure npm actually starts; log `journalctl -u reelos` on fail).
-4. Caddy during stop: do not advertise an empty proxy as a mystery 502 if you can help it. A static "updating" page is fine. Reloading Caddy mid-swap is how you get 502 with no backend.
-5. Print `ReelOS 1.2.17 applied.` only after `:80` serves ReelOS. Rollback still restores `.prev` if Home never comes back.
-
-Then freeze. No ISO. No #2–#5.
+Bump `VERSION` + `channel.json` to **1.2.18**. No ISO. No other tickets.
