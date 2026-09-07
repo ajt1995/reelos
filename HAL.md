@@ -1,20 +1,19 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 21:23 CDT**.
+Updated **2026-09-06 21:34 CDT**.
 
-## Ship **1.2.21**. Prove it on the logic, not the notes.
+## QC canary — next stamp after 1.2.21 lands (or patch 1.2.21 if they have not applied yet)
 
-House applied **1.2.20**. Doctor:
-- Version 1.2.20
-- `releases` yellow — Provider indexer missing
-- Lookup hop TimeoutError
-- Tailscale still `tailscale binary` (ignore, #7)
+House is done being the test rig.
 
-Compose on `main` already has `dns` + `extra_hosts`. The indexer **row** `ReelOS-torbox` is not in Prowlarr. Doctor looks for that exact enabled name. Missing name = you failed 1.2.18.
+`daemon/reelos-update.sh` after wire, before `echo applied`:
 
-1. Apply must `docker compose up -d --force-recreate` Prowlarr (and Decypharr) so extra_hosts exist in the running container.
-2. Wire must POST `ReelOS-torbox` and leave it enabled. If add/test fails, Doctor detail is the Prowlarr error, not the generic missing string.
-3. After this stamp, a box with answers.source=torbox + apiKey must list that indexer. No 1.2.22 until that is true.
+If `answers.source` is a debrid provider (torbox / real-debrid / …):
+1. Prowlarr must list an **enabled** indexer named `ReelOS-<source>` (`ReelOS-torbox` on this house).
+2. If it does not: **do not print** `ReelOS x.x.x applied.` Log the Prowlarr/`releases-error.txt` line. Exit non-zero (or rollback shell if Home is also dead). Yellow `releases` is a **failed OTA**, not a footnote.
+3. Home 200 is not enough. That was 1.2.20.
 
-Bump `VERSION` + `channel.json` to **1.2.21**. No ISO. No ticket pile.
+If they are mid-1.2.21 apply, let it finish. Then this canary is **1.2.22** and nothing else — no #7 merge, no ISO.
+
+Doctor `releases` green and this canary are the same fact.
