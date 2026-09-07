@@ -958,6 +958,34 @@ systemctl restart reelos || true
   send(res, 200, { ok: true, started: true });
 }
 
+function otaRunning() {
+  if (process.env.REELOS_OTA === "1") return true;
+  const ota = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" });
+  return ota.status === 0;
+}
+
+async function handleWire(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  if (otaRunning()) {
+    send(res, 409, { ok: false, error: "Wire does not run during OTA" });
+    return;
+  }
+  const wire = existsSync("/opt/reelos/bin/wire-engines.py")
+    ? "/opt/reelos/bin/wire-engines.py"
+    : "/workspace/daemon/wire-engines.py";
+  if (!existsSync(wire)) {
+    send(res, 500, { ok: false, error: "wire-engines.py missing" });
+    return;
+  }
+  mkdirSync("/var/lib/reelos", { recursive: true });
+  const log = openSync("/var/lib/reelos/wire.log", "a");
+  spawn("python3", [wire], { detached: true, stdio: ["ignore", log, log] }).unref();
+  send(res, 200, { ok: true, started: true });
+}
+
 async function handleLibrary(_req, res) {
   const a = answers();
   const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
@@ -1315,6 +1343,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
           if (pathOnly === "/api/reset") return void (await handleReset(req, res));
+          if (pathOnly === "/api/wire") return void (await handleWire(req, res));
           if (pathOnly === "/api/library") return void (await handleLibrary(req, res));
           if (pathOnly === "/api/disks") return void (await handleDisks(req, res));
           if (pathOnly === "/api/storage") return void (await handleStorage(req, res));

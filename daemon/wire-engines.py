@@ -316,8 +316,19 @@ def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
     log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
 
 
+def indexer_enabled(prow_key: str, name: str) -> bool:
+    try:
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return False
+    for ix in have if isinstance(have, list) else []:
+        if ix.get("name") == name and ix.get("enable"):
+            return True
+    return False
+
+
 def ensure_provider_indexer(prow_key: str) -> None:
-    """One official provider indexer. Not a tracker roster. Skip local-vpn."""
+    """One official provider indexer. Not a tracker roster. Skip local-vpn. Retry until enabled."""
     src = source()
     if src == "local-vpn":
         log_wire("provider indexer skipped (local-vpn)")
@@ -327,41 +338,64 @@ def ensure_provider_indexer(prow_key: str) -> None:
         log_wire("provider indexer failed: no apiKey")
         return
     name = f"ReelOS-{src}"
-    url = "http://127.0.0.1:9696/api/v1/indexer"
-    try:
-        have = call(url, prow_key) or []
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-        log_wire(f"provider indexer list failed {e}")
-        return
-    for ix in have if isinstance(have, list) else []:
-        if ix.get("name") == name:
-            log_wire(f"provider indexer exists {name}")
-            return
-    try:
-        hit = _find_schema(prow_key, src)
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-        log_wire(f"provider indexer schema failed {e}")
-        return
-    if not hit:
-        log_wire(f"no first-party indexer in Prowlarr for {src} — installing official yml")
-        if install_official_yml(src):
-            prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
-            prow_key = wait_key(prow_xml, 60) or prow_key
-            try:
-                hit = _find_schema(prow_key, src)
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-                log_wire(f"provider indexer schema after yml failed {e}")
+    deadline = time.time() + 90
+    yml_tried = False
+    while time.time() < deadline:
+        try:
+            have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"provider indexer list retry {e}")
+            time.sleep(4)
+            continue
+        rows = have if isinstance(have, list) else []
+        existing = next((ix for ix in rows if ix.get("name") == name), None)
+        if existing:
+            if existing.get("enable"):
+                log_wire(f"provider indexer exists {name}")
                 return
-    if not hit:
-        log_wire(f"provider indexer missing after official yml for {src}")
-        return
-    try:
-        _add_from_schema(prow_key, name, key, hit)
-    except urllib.error.HTTPError as e:
-        err = e.read().decode()[:240] if e.fp else str(e)
-        log_wire(f"provider indexer POST failed {e.code} {err}")
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
-        log_wire(f"provider indexer POST failed {e}")
+            try:
+                existing["enable"] = True
+                iid = existing.get("id")
+                call(
+                    f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
+                    prow_key,
+                    method="PUT",
+                    body=existing,
+                )
+                log_wire(f"provider indexer enabled {name}")
+                return
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+                log_wire(f"provider indexer enable failed {e}")
+        hit = None
+        try:
+            hit = _find_schema(prow_key, src)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"provider indexer schema retry {e}")
+        if not hit and not yml_tried:
+            log_wire(f"no first-party indexer in Prowlarr for {src} — installing official yml")
+            if install_official_yml(src):
+                yml_tried = True
+                prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+                prow_key = wait_key(prow_xml, 60) or prow_key
+                try:
+                    hit = _find_schema(prow_key, src)
+                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+                    log_wire(f"provider indexer schema after yml failed {e}")
+        if not hit:
+            log_wire(f"provider indexer missing after official yml for {src}")
+            time.sleep(4)
+            continue
+        try:
+            _add_from_schema(prow_key, name, key, hit)
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"provider indexer POST failed {e.code} {err}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+            log_wire(f"provider indexer POST failed {e}")
+        if indexer_enabled(prow_key, name):
+            return
+        time.sleep(4)
+    log_wire(f"provider indexer missing after retry for {src}")
 
 
 def transcode_override() -> None:
@@ -544,8 +578,122 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
             log_wire(f"performance task {name} {e}")
 
 
+def jellyfin_folders(token: str):
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers={"X-Emby-Token": token}) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return []
+    return folders if isinstance(folders, list) else []
+
+
+def folder_has_symlinks(folder: dict) -> bool:
+    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or [])]
+    opts = folder.get("LibraryOptions") or {}
+    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or [])]
+    return "/symlinks" in locs + paths
+
+
+def complete_jellyfin_startup(user: str, password: str) -> None:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=5) as resp:
+            info = json.loads(resp.read().decode())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return
+    if info.get("StartupWizardCompleted"):
+        return
+    try:
+        call(
+            "http://127.0.0.1:8096/Startup/Configuration",
+            method="POST",
+            body={
+                "UICulture": "en-US",
+                "MetadataCountryCode": "US",
+                "PreferredMetadataLanguage": "en",
+            },
+        )
+        call(
+            "http://127.0.0.1:8096/Startup/RemoteAccess",
+            method="POST",
+            body={"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
+        )
+        call(
+            "http://127.0.0.1:8096/Startup/User",
+            method="POST",
+            body={"Name": user, "Password": password},
+        )
+        call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
+        log_wire("jellyfin startup complete")
+        time.sleep(3)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"jellyfin startup {e}")
+
+
+def ensure_host_symlinks() -> None:
+    Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    try:
+        os.chmod("/mnt/symlinks", 0o777)
+    except OSError:
+        pass
+    for name in ("reelos-jellyfin-1", "jellyfin"):
+        r = subprocess.run(
+            ["docker", "exec", name, "mkdir", "-p", "/symlinks"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if r.returncode == 0:
+            break
+
+
+def create_jellyfin_library(token: str, name: str, ctype: str) -> None:
+    q = urllib.parse.urlencode(
+        {
+            "name": name,
+            "collectionType": ctype,
+            "refreshLibrary": "true",
+            "paths": "/symlinks",
+        }
+    )
+    body = {
+        "LibraryOptions": {
+            "EnableRealtimeMonitor": True,
+            "EnableTrickplayImageExtraction": False,
+            "ExtractTrickplayImagesDuringLibraryScan": False,
+            "EnableChapterImageExtraction": False,
+            "ExtractChapterImagesDuringLibraryScan": False,
+            "DummyChapterDuration": 0,
+            "PathInfos": [{"Path": "/symlinks"}],
+        }
+    }
+    call(
+        f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
+        method="POST",
+        body=body,
+        headers={"X-Emby-Token": token},
+    )
+
+
+def add_jellyfin_path(token: str, name: str) -> None:
+    q = urllib.parse.urlencode({"refreshLibrary": "true"})
+    call(
+        f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
+        method="POST",
+        body={"Name": name, "Path": "/symlinks", "PathInfo": {"Path": "/symlinks"}},
+        headers={"X-Emby-Token": token},
+    )
+
+
+def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
+    by_name = {str(f.get("Name") or ""): f for f in folders}
+    for name, _ctype in want:
+        folder = by_name.get(name)
+        if not folder or not folder_has_symlinks(folder):
+            return False
+    return True
+
+
 def bootstrap_jellyfin() -> None:
-    deadline = time.time() + 90
+    deadline = time.time() + 120
     info = None
     while time.time() < deadline:
         try:
@@ -562,73 +710,52 @@ def bootstrap_jellyfin() -> None:
     password = a.get("adminPassword") or "reelos"
     for path in ("/mnt/symlinks", "/srv/media/movies", "/srv/media/tv"):
         Path(path).mkdir(parents=True, exist_ok=True)
-    if not info.get("StartupWizardCompleted"):
-        try:
-            call(
-                "http://127.0.0.1:8096/Startup/Configuration",
-                method="POST",
-                body={
-                    "UICulture": "en-US",
-                    "MetadataCountryCode": "US",
-                    "PreferredMetadataLanguage": "en",
-                },
-            )
-            call(
-                "http://127.0.0.1:8096/Startup/RemoteAccess",
-                method="POST",
-                body={"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
-            )
-            call(
-                "http://127.0.0.1:8096/Startup/User",
-                method="POST",
-                body={"Name": user, "Password": password},
-            )
-            call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
-            log_wire("jellyfin startup complete")
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-            log_wire(f"jellyfin startup {e}")
-    token = jellyfin_token()
+    ensure_host_symlinks()
+    complete_jellyfin_startup(user, password)
+    intent = a.get("intent") or {}
+    want: list[tuple[str, str]] = []
+    if intent.get("movies", True):
+        want.append(("Movies", "movies"))
+    if intent.get("tv") or intent.get("anime"):
+        want.append(("Shows", "tvshows"))
+    if intent.get("music"):
+        want.append(("Music", "music"))
+    token = None
+    ready = False
+    while time.time() < deadline:
+        complete_jellyfin_startup(user, password)
+        token = jellyfin_token()
+        if not token:
+            log_wire("jellyfin auth retry")
+            time.sleep(3)
+            continue
+        folders = jellyfin_folders(token)
+        if libraries_ready(folders, want):
+            ready = True
+            break
+        by_name = {str(f.get("Name") or ""): f for f in folders}
+        for name, ctype in want:
+            folder = by_name.get(name)
+            try:
+                if folder is None:
+                    create_jellyfin_library(token, name, ctype)
+                    log_wire(f"jellyfin library {name}")
+                elif not folder_has_symlinks(folder):
+                    add_jellyfin_path(token, name)
+                    log_wire(f"jellyfin path {name} /symlinks")
+            except urllib.error.HTTPError as e:
+                err = e.read().decode()[:240] if e.fp else str(e)
+                log_wire(f"jellyfin library {name} {e.code} {err}")
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+                log_wire(f"jellyfin library {name} {e}")
+        time.sleep(3)
     if not token:
         log_wire("jellyfin auth failed")
         return
-    intent = a.get("intent") or {}
-    libs = []
-    if intent.get("movies", True):
-        libs.append(("Movies", "movies", ["/symlinks"]))
-    if intent.get("tv") or intent.get("anime"):
-        libs.append(("Shows", "tvshows", ["/symlinks"]))
-    if intent.get("music"):
-        libs.append(("Music", "music", ["/symlinks"]))
-    existing = []
-    try:
-        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers={"X-Emby-Token": token}) or []
-        existing = [str(x.get("Name") or "") for x in folders]
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
-        existing = []
-    for name, ctype, paths in libs:
-        if name in existing:
-            continue
-        q = urllib.parse.urlencode({"name": name, "collectionType": ctype, "refreshLibrary": "true"})
-        try:
-            call(
-                f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
-                method="POST",
-                body={
-                    "LibraryOptions": {
-                        "EnableRealtimeMonitor": True,
-                        "EnableTrickplayImageExtraction": False,
-                        "ExtractTrickplayImagesDuringLibraryScan": False,
-                        "EnableChapterImageExtraction": False,
-                        "ExtractChapterImagesDuringLibraryScan": False,
-                        "DummyChapterDuration": 0,
-                        "PathInfos": [{"Path": p} for p in paths],
-                    }
-                },
-                headers={"X-Emby-Token": token},
-            )
-            log_wire(f"jellyfin library {name}")
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
-            log_wire(f"jellyfin library {name} {e}")
+    if not ready:
+        log_wire("jellyfin libraries missing after retry")
+    else:
+        log_wire("jellyfin libraries ready")
     apply_jellyfin_performance(token)
     try:
         call(

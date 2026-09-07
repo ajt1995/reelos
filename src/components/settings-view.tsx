@@ -761,15 +761,32 @@ function Doctor() {
   const adapter = useReelStore((s) => s.adapter);
   const profile = adapterProfile(answers.source, answers.frontend);
   const [live, setLive] = useState<{ ok: boolean; label: string; detail: string }[] | null>(null);
+  const [wireMsg, setWireMsg] = useState("");
 
-  useEffect(() => {
+  const load = () => {
     void fetch("/api/doctor", { cache: "no-store" })
       .then((r) => r.json())
       .then((r: { live?: boolean; checks?: { ok: boolean; label: string; detail: string }[] }) => {
         if (r.live && r.checks?.length) setLive(r.checks);
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    load();
   }, []);
+
+  const rewire = async () => {
+    setWireMsg("Rewiring…");
+    const r = await fetch("/api/wire", { method: "POST" });
+    if (r.status === 409) {
+      setWireMsg("OTA is running. Wait.");
+      return;
+    }
+    const j = (await r.json()) as { ok?: boolean; error?: string };
+    setWireMsg(j.ok ? "Wire started. Doctor will refresh." : j.error || "Wire failed");
+    window.setTimeout(load, 8000);
+  };
 
   const fallback = [
     { ok: true, label: "Docker engine", detail: "Compose project reelos" },
@@ -798,6 +815,12 @@ function Doctor() {
   return (
     <div className="mt-8 rounded-2xl bg-card p-5 shadow-[var(--shadow-border)]">
       <p className="font-display font-medium">Doctor</p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button variant="ghost" onClick={() => void rewire()}>
+          Rewire engines
+        </Button>
+        {wireMsg ? <p className="text-sm text-muted">{wireMsg}</p> : null}
+      </div>
       <ul className="mt-4 space-y-3">
         {checks.map((c) => (
           <li key={c.label} className="flex items-start gap-3 text-sm">
