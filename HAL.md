@@ -1,22 +1,32 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 19:48 CDT**. VERSION stays **1.2.15**.
+Updated **2026-09-06 20:16 CDT**.
 
-## One job on `main` then STOP
+## Ship **1.2.16** on `main`. Then they Apply once.
 
-House apply printed `ReelOS 1.2.15 applied.` Wire then died:
+House is done typing. Do the work in the OTA.
 
-```
-ensure_provider_indexer → Prowlarr ConnectionResetError
-SystemExit(main()) before bootstrap_jellyfin()
-```
+Bump `VERSION` and `channel.json` to **1.2.16** so Settings Check lights up.
 
-Jellyfin is Up. Zero libraries. `/dev/sdb` mount noise is unrelated.
+### 1. Jellyfin auth + libraries
 
-On **`main`**:
-1. `bootstrap_jellyfin()` runs **even if** the provider indexer throws. Wrap `ensure_provider_indexer` (and Prowlarr calls) so a reset never aborts `main`.
-2. Retry VirtualFolders until Movies exists on `/symlinks` (Shows if TV on). Low-perf flags stay off.
-3. Still retry official TorBox indexer, but that failure must be a log line, not a crash.
+Wire loops `jellyfin auth retry` because `StartupWizardCompleted` is true and `answers.json` password does not match the Jellyfin owner. Libraries never get created.
 
-No 1.2.16. No parked branches. Then freeze again.
+- Try `answers` user/pass, then `reelos` / `reelos`, then any other local combo you can detect.
+- If still no token: reset **only** Jellyfin config (keep images, keep `/symlinks` files), complete startup with `answers` name+password, create Movies/Shows on `/symlinks`.
+- They will not use the Jellyfin wizard. Auth retry must not block the rest of `main()`.
+
+### 2. TorBox indexer DNS
+
+`search-api.torbox.app` does not resolve via the box `getent`. `api.torbox.app` does (Cloudflare IPv4). Prowlarr 400 `Name does not resolve`. `/mnt/symlinks` has no movies.
+
+- Compose DNS for Prowlarr/Radarr/Sonarr/Decypharr: `1.1.1.1` and `8.8.8.8`.
+- Make `ReelOS-torbox` add succeed from this network. If the search host still has no DNS, use a working TorBox API/Torznab base that resolves (`api.torbox.app` / official torznab) or `extra_hosts` for `search-api.torbox.app` to a live IPv4. Do not invent other indexers.
+- Doctor `releases` must be able to go green on this HP.
+
+### 3. Settings in chrome
+
+Issue #6: no Settings control. Add a visible Settings link in the shell. `/settings` stays valid.
+
+No parked-branch merges. No ISO. One apply after you stamp 1.2.16.
