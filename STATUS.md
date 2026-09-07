@@ -16,6 +16,6 @@ VERSION file last seen **1.2.31**. 1.2.39 is the channel, not proven on the HP t
 | #4 music / Lidarr | https://github.com/ajt1995/reelos/pull/15 |
 | #9 extra HDD | https://github.com/ajt1995/reelos/pull/16 |
 | #3 Kavita | https://github.com/ajt1995/reelos/pull/17 |
-| #2 Jellyfin plugin (not Seerr) | https://github.com/ajt1995/reelos/pull/18 |
+| #2 Seerr (plugin PR #18 parked) | https://github.com/ajt1995/reelos/pull/19 |
 
 #2 is the plugin. No Seerr container.
