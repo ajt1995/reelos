@@ -305,7 +305,9 @@ function DisksPanel() {
   }, []);
   return (
     <div className="mt-4">
-      <p className="text-sm text-muted">Extra disks. Will not mount over /srv/media.</p>
+      <p className="text-sm text-muted">
+        Extra HDD for music and books at /srv/media/hdd. Never formats. Movies and TV stay on /mnt/symlinks.
+      </p>
       <ul className="mt-2 space-y-2">
         {disks.map((d) => (
           <li key={d.name} className="flex items-center justify-between gap-3 text-sm">
@@ -324,8 +326,8 @@ function DisksPanel() {
                     body: JSON.stringify({ disk: d.name }),
                   })
                     .then((r) => r.json())
-                    .then((j: { ok?: boolean; dest?: string; error?: string }) => {
-                      setMsg(j.ok ? `Mounted at ${j.dest}` : j.error || "Mount failed");
+                    .then((j: { ok?: boolean; dest?: string; error?: string; note?: string }) => {
+                      setMsg(j.ok ? j.note || `Mounted at ${j.dest}` : j.error || "Mount failed");
                     });
                 }}
               >

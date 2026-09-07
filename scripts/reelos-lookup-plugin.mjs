@@ -1292,22 +1292,56 @@ async function handleStorage(req, res) {
   }
   const body = await readBody(req);
   const disk = String(body.disk || "").replace(/[^a-z0-9]/gi, "");
-  if (!disk || disk === "nvme0n1") {
+  if (!disk || disk === "nvme0n1" || disk === "sda") {
     send(res, 400, { ok: false, error: "Pick a data disk, not the OS disk" });
     return;
   }
-  const dest = `/srv/media/${disk}`;
-  if (dest === "/srv/media" || dest === "/") {
-    send(res, 400, { ok: false, error: "Will not eat /srv/media" });
-    return;
-  }
-  mkdirSync(dest, { recursive: true });
+  const dest = "/srv/media/hdd";
+  mkdirSync(`${dest}/music`, { recursive: true });
+  mkdirSync(`${dest}/books`, { recursive: true });
   const dev = existsSync(`/dev/${disk}1`) ? `/dev/${disk}1` : `/dev/${disk}`;
   const m = spawnSync("mount", [dev, dest], { encoding: "utf8", timeout: 15000 });
+  if (m.status !== 0) {
+    const err = (m.stderr || m.stdout || "mount failed").slice(0, 300);
+    send(res, 200, {
+      ok: false,
+      dest,
+      error: `Not formatting. Mount failed: ${err}`,
+    });
+    return;
+  }
+  mkdirSync(`${dest}/music`, { recursive: true });
+  mkdirSync(`${dest}/books`, { recursive: true });
+  mkdirSync("/var/lib/reelos", { recursive: true });
+  writeFileSync(
+    "/var/lib/reelos/library-disk.json",
+    JSON.stringify({ dev, mount: dest, music: `${dest}/music`, books: `${dest}/books` }, null, 2) + "\n",
+  );
+  try {
+    writeFileSync(
+      "/etc/systemd/system/srv-media-hdd.mount",
+      `[Unit]
+Description=ReelOS music/books disk
+[Mount]
+What=${dev}
+Where=${dest}
+Type=auto
+Options=defaults,nofail
+[Install]
+WantedBy=multi-user.target
+`,
+    );
+    spawnSync("systemctl", ["daemon-reload"], { encoding: "utf8" });
+    spawnSync("systemctl", ["enable", "--now", "srv-media-hdd.mount"], { encoding: "utf8" });
+  } catch {
+    /* */
+  }
   send(res, 200, {
-    ok: m.status === 0,
+    ok: true,
     dest,
-    error: m.status === 0 ? null : (m.stderr || m.stdout || "mount failed").slice(0, 300),
+    music: `${dest}/music`,
+    books: `${dest}/books`,
+    note: "Movies and TV stay on /mnt/symlinks. This disk is music/books only.",
   });
 }
 
