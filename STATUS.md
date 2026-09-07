@@ -1,14 +1,13 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 12:44 +08**.
+Xorriso. Dated **2026-09-07 12:54 +08**.
 
-# 1.2.29 launched
+# 1.2.30
 
-House 1.2.28: `fusermount: user has no write access to mountpoint /mnt/debrid` (`root:root 755`). Mario folders still empty.
+House: FUSE is up, Guardians file is ready, Watch tries and fails. Jellyfin was started before `/mnt/debrid` mounted, so the container cannot read the mkv.
 
-This stamp:
-- chmod 777 / chown 1000 `/mnt/debrid`
-- restart Decypharr to remount
-- fast Apply: one tarball, no force-recreate of healthy engines, no Jellyfin wipe, no Prowlarr bounce on DNS 400
+Fix: after Decypharr mounts, restart Jellyfin/Radarr/Sonarr. OTA skips the TorBox indexer 2-minute wait.
 
-Same apply curl. Then Logs only if Mario still empty.
+Play now without waiting for this stamp:
+`sudo docker restart reelos-jellyfin-1 reelos-radarr-1`
+then Watch again in ~20s.

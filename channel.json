@@ -1,8 +1,8 @@
 {
-  "version": "1.2.29",
+  "version": "1.2.30",
   "channel": "stable",
   "notes": [
-    "1.2.29: faster Apply. Fix /mnt/debrid permissions so TorBox files can mount."
+    "1.2.30: restart Jellyfin after TorBox mounts so Watch can actually read the file."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

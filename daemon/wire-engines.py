@@ -169,9 +169,24 @@ def patch_decypharr() -> None:
     if text == prev:
         log_wire("decypharr config unchanged — restart to remount")
         subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
+        time.sleep(5)
+        restart_fuse_readers()
         return
     DECYPHARR.write_text(text)
     compose("up", "-d", "--force-recreate", "decypharr")
+    time.sleep(5)
+    restart_fuse_readers()
+
+
+def restart_fuse_readers() -> None:
+    """Containers started before FUSE cannot see /mnt/debrid. Restart after mount."""
+    if not Path("/mnt/debrid/version.txt").exists() and not Path("/mnt/debrid/__all__").exists():
+        log_wire("fuse not up — skip reader restart")
+        return
+    for name in ("reelos-jellyfin-1", "reelos-radarr-1", "reelos-sonarr-1"):
+        r = subprocess.run(["docker", "restart", name], capture_output=True, text=True, check=False)
+        log_wire(f"restart {name} rc={r.returncode}")
+
 
 
 def root_paths(kind: str) -> list[str]:
@@ -708,6 +723,9 @@ def _ensure_provider_indexer(prow_key: str) -> None:
     src = source()
     if src == "local-vpn":
         log_wire("provider indexer skipped (local-vpn)")
+        return
+    if os.environ.get("REELOS_OTA"):
+        log_wire("OTA: skip torbox indexer wait")
         return
     key = (answers().get("apiKey") or "").strip()
     if not key:
