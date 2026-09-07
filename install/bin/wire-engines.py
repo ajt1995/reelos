@@ -164,7 +164,12 @@ def patch_decypharr() -> None:
     cfg.setdefault("log_level", "info")
     cfg.setdefault("port", "8282")
     DECYPHARR.parent.mkdir(parents=True, exist_ok=True)
-    DECYPHARR.write_text(json.dumps(cfg, indent=2) + "\n")
+    text = json.dumps(cfg, indent=2) + "\n"
+    prev = DECYPHARR.read_text() if DECYPHARR.exists() else ""
+    if text == prev:
+        log_wire("decypharr config unchanged")
+        return
+    DECYPHARR.write_text(text)
     compose("up", "-d", "--force-recreate", "decypharr")
 
 
@@ -506,6 +511,16 @@ def clear_releases_error() -> None:
 
 
 def recreate_prowlarr() -> None:
+    if os.environ.get("REELOS_OTA") and not prowlarr_has_hosts():
+        running = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", "reelos-prowlarr-1"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "true" in (running.stdout or ""):
+            log_wire("prowlarr already up — skip recreate")
+            return
     cmd = [
         "docker",
         "compose",
@@ -699,7 +714,8 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         return
     name = f"ReelOS-{src}"
     ensure_compose_dns()
-    recreate_prowlarr()
+    if not os.environ.get("REELOS_OTA"):
+        recreate_prowlarr()
     prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
     prow_key = wait_key(prow_xml, 90) or prow_key
     wait_prowlarr_api(prow_key, 90)
@@ -788,10 +804,13 @@ def _ensure_provider_indexer(prow_key: str) -> None:
             err = e.read().decode()[:400] if e.fp else str(e)
             set_releases_error(f"Prowlarr {e.code}: {err}")
             if "resolv" in err.lower():
-                log_wire("Name does not resolve — recreating Prowlarr")
-                recreate_prowlarr()
-                prow_key = wait_key(prow_xml, 60) or prow_key
-                inject_search_api_hosts()
+                if os.environ.get("REELOS_OTA"):
+                    log_wire("Name does not resolve — skip recreate during OTA")
+                else:
+                    log_wire("Name does not resolve — recreating Prowlarr")
+                    recreate_prowlarr()
+                    prow_key = wait_key(prow_xml, 60) or prow_key
+                    inject_search_api_hosts()
         except NET_ERR as e:
             set_releases_error(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
@@ -1220,6 +1239,9 @@ def bootstrap_jellyfin() -> None:
         want.append(("Music", "music"))
     token = jellyfin_token()
     if not token:
+        if os.environ.get("REELOS_OTA"):
+            log_wire("jellyfin auth mismatch — not resetting during OTA")
+            return
         log_wire("jellyfin auth mismatch — resetting jellyfin config")
         reset_jellyfin_config()
         if not wait_jellyfin(90):

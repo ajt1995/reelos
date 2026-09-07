@@ -128,10 +128,14 @@ if [ "${REELOS_OTA_UNIT:-}" != "1" ] && in_reelos_unit && command -v systemd-run
   exit 0
 fi
 
-curl -fL --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
-rm -rf "$WORK/src"
-mkdir -p "$WORK/src"
-tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
+if [ "${REELOS_OTA_REEXEC:-}" = "1" ] && [ -f "$WORK/src/VERSION" ]; then
+  log "tarball already extracted — skip second download"
+else
+  curl -fL --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
+  rm -rf "$WORK/src"
+  mkdir -p "$WORK/src"
+  tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
+fi
 GOT=$(cat "$WORK/src/VERSION" 2>/dev/null || true)
 if [ "$GOT" != "$REMOTE" ]; then
   log "tarball VERSION '$GOT' != channel $REMOTE"
@@ -182,7 +186,8 @@ need src/components/settings-view.tsx 'Copy last hour'
 need daemon/wire-engines.py '/app/cache/dfs'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
-need daemon/reelos-update.sh 'vanished sqlite sidecars'
+need daemon/reelos-update.sh 'skip second download'
+need daemon/reelos-update.sh 'not recreating containers'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
@@ -414,14 +419,16 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   load_env
   if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
-    cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
-    log "compose yml from tarball"
+    if cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null; then
+      log "compose yml unchanged — not recreating containers"
+    else
+      cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
+      log "compose yml from tarball"
+    fi
   fi
   (cd "$ROOT/compose" && docker compose \
     --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
-    up -d --force-recreate --remove-orphans) || log "compose up skipped"
-  (cd "$ROOT/compose" && docker compose --profile indexers --profile debrid \
-    up -d --force-recreate --no-deps prowlarr decypharr) || log "prowlarr recreate skipped"
+    up -d --remove-orphans) || log "compose up skipped"
   log "waiting for Prowlarr :9696"
   for _i in $(seq 1 40); do
     if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:9696/; then
