@@ -827,17 +827,13 @@ function Doctor() {
   const [wireMsg, setWireMsg] = useState("");
 
   const load = () => {
-    void fetch("/api/doctor", { cache: "no-store" })
+    void fetch("/api/doctor", { cache: "no-store", signal: AbortSignal.timeout(8000) })
       .then((r) => r.json())
       .then((r: { live?: boolean; checks?: { ok: boolean; label: string; detail: string }[] }) => {
         if (r.live && r.checks?.length) setLive(r.checks);
       })
       .catch(() => {});
   };
-
-  useEffect(() => {
-    load();
-  }, []);
 
   const rewire = async () => {
     setWireMsg("Rewiring…");
@@ -879,6 +875,9 @@ function Doctor() {
     <div className="mt-8 rounded-2xl bg-card p-5 shadow-[var(--shadow-border)]">
       <p className="font-display font-medium">Doctor</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button variant="ghost" onClick={() => load()}>
+          Run doctor
+        </Button>
         <Button variant="ghost" onClick={() => void rewire()}>
           Rewire engines
         </Button>

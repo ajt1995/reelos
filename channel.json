@@ -1,8 +1,8 @@
 {
-  "version": "1.2.31",
+  "version": "1.2.32",
   "channel": "stable",
   "notes": [
-    "1.2.31: Logs copy/download skip Doctor so they return in seconds. Jellyfin still restarted after FUSE (1.2.30)."
+    "1.2.32: TV search (Sonarr) in parallel with movies. Settings no longer auto-runs Doctor."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

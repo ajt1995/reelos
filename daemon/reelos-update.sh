@@ -171,7 +171,7 @@ need install/compose/docker-compose.yml '0.0.0.0:8096'
 need install/compose/docker-compose.yml rshared
 need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
-need scripts/reelos-lookup-plugin.mjs '/api/lookup'
+need scripts/reelos-lookup-plugin.mjs 'sonarr hits='
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'

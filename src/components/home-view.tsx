@@ -141,7 +141,7 @@ export function HomeView() {
           </ul>
         ) : q.trim().length >= 2 ? (
           <p className="mt-2 text-xs text-muted">
-            {lookupErr ?? "Looking up through the movie engine…"}
+            {lookupErr ?? "Looking up movies and shows…"}
           </p>
         ) : null}
       </form>

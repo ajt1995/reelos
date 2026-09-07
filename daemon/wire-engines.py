@@ -663,6 +663,9 @@ PUBLIC_INDEXERS = (
 
 
 def ensure_public_indexers(prow_key: str) -> None:
+    if os.environ.get("REELOS_OTA"):
+        log_wire("OTA: skip public indexer tests")
+        return
     wait_prowlarr_api(prow_key, 60)
     try:
         schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []

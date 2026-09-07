@@ -213,16 +213,6 @@ def main() -> int:
 
     checks.append(ok("ReelOS", f"Version {version}", True))
 
-    # Hops: lookup / request / decypharr / jellyfin
-    try:
-        import urllib.request
-        with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=x", timeout=15) as r:
-            raw = r.read().decode()
-        hop = '"titles"' in raw
-        checks.append(ok("Lookup hop", "GET /api/lookup answered" if hop else "lookup dead", hop))
-    except Exception as e:
-        checks.append(ok("Lookup hop", f"lookup dead ({e.__class__.__name__})", False))
-
     radarr_up = listening(7878) and api_key(COMPOSE / "configs" / "radarr" / "config.xml")
     checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
 

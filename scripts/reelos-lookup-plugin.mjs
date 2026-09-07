@@ -105,7 +105,7 @@ function movieHit(h) {
 }
 
 function seriesHit(h) {
-  const tvdb = h.tvdbId;
+  const tvdb = h.tvdbId ?? h.ids?.tvdb;
   if (!tvdb) return null;
   const poster =
     String(h.remotePoster || "") ||
@@ -125,9 +125,9 @@ function seriesHit(h) {
   };
 }
 
-async function pull(url, key) {
+async function pull(url, key, ms = 8000) {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 45000);
+  const t = setTimeout(() => ac.abort(), ms);
   try {
     const res = await fetch(url, { headers: { "X-Api-Key": key }, signal: ac.signal });
     if (!res.ok) throw new Error(`${res.status}`);
@@ -159,38 +159,46 @@ async function handleLookup(req, res) {
   const q = new URL(raw, "http://reelos.local").searchParams.get("q")?.trim() || "";
   const titles = [];
   let error = null;
-  try {
-    const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
-    const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
-    note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
-    if (q.length >= 2 && !rk && !sk) {
-      error = "Movies/TV engines have no API key yet";
-    }
-    if (q.length >= 2 && rk) {
-      const hits = await pull(
-        `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`,
-        rk,
-      );
-      for (const h of (hits || []).slice(0, 8)) {
-        const t = movieHit(h);
-        if (t) titles.push(t);
-      }
-      note(`radarr hits=${(hits || []).length} mapped=${titles.length}`);
-    }
-    if (q.length >= 2 && sk) {
-      const hits = await pull(
-        `http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`,
-        sk,
-      );
-      for (const h of (hits || []).slice(0, 6)) {
-        const t = seriesHit(h);
-        if (t) titles.push(t);
-      }
-    }
-  } catch (e) {
-    error = String(e?.name === "AbortError" || String(e).includes("abort") ? "Radarr timed out (45s)" : e);
-    note(`err ${error}`);
+  const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
+  const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+  note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
+  if (q.length >= 2 && !rk && !sk) {
+    error = "Movies/TV engines have no API key yet";
   }
+  const jobs = [];
+  if (q.length >= 2 && rk) {
+    jobs.push(
+      pull(`http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`, rk)
+        .then((hits) => {
+          for (const h of (hits || []).slice(0, 8)) {
+            const t = movieHit(h);
+            if (t) titles.push(t);
+          }
+          note(`radarr hits=${(hits || []).length}`);
+        })
+        .catch((e) => {
+          error = error || `movies ${e}`;
+          note(`radarr ${e}`);
+        }),
+    );
+  }
+  if (q.length >= 2 && sk) {
+    jobs.push(
+      pull(`http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`, sk)
+        .then((hits) => {
+          for (const h of (hits || []).slice(0, 8)) {
+            const t = seriesHit(h);
+            if (t) titles.push(t);
+          }
+          note(`sonarr hits=${(hits || []).length}`);
+        })
+        .catch((e) => {
+          error = error || `shows ${e}`;
+          note(`sonarr ${e}`);
+        }),
+    );
+  }
+  await Promise.all(jobs);
   send(res, 200, { titles, error });
 }
 
