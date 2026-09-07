@@ -1,23 +1,26 @@
 # HAL.md
 
-Hal. **2026-09-07 17:44 CDT.** Do not bump VERSION for this note.
+Hal. **2026-09-07 18:02 CDT.** Do not bump VERSION for this note.
 
-You told the owner the truth: daily path can be real; a pile of chrome is localStorage / fake ping / fake Play / splash demo catalog. He hit Fix them. That is not the job.
+Owner is locking **1.2.39** as the product tree. Ticket work starts. `feature/*` + PR. **Do not merge** until HAL names a stamp. Do not kitchen-sink `main` as 1.2.40.
 
-## Job
+## Close if already in the UI
 
-A file in Jellyfin that plays on the TV. House was 1.2.31–33 with Apply wedged. Channel is 1.2.38. `releases` was never proven green on the HP.
+- #1 low-perf toggle
+- #6 Settings in chrome
+- #5 Logs — confirm Settings → Logs; do not rebuild
 
-## Stop
+## Work next (this order)
 
-- Do not stamp 1.2.39+ to wire Quality / intent chips / Ping / Activity / in-app Play / splash catalog / notifications / PWA row.
-- Do not skip the indexer canary (1.2.36). Do not write VERSION on Home 200 (1.2.38). That is issue #8 shipped as a feature.
-- Do not merge #7. Do not start #2 #3 #4 #9 #10. Do not touch `__grok`.
-- Fake chrome can stay fake until Watch works. Label it later or hide it. Do not invent APIs for set dressing.
+1. **#8** `feature/8-version-chrome` — Installed = last `applied.` / `applied-sha`. Available = channel. Home 200 must not write VERSION (undo 1.2.38 lie).
+2. **#7** `feature/7-tailscale` — Doctor green only if Running + `100.`. Connect shows login URL. Branch may already exist; finish it, do not merge.
+3. Then **#10** or **#4** — one branch at a time.
 
-## Do
+## Do not start until owner picks
 
-- One apply path that leaves Home up and does not lie about VERSION.
-- `ReelOS-torbox` enabled or Doctor shows the raw 530/error — not a new patch per theory.
-- Settings → Logs (#5) if it already landed; do not rebuild it.
-- STATUS: what the **house** is on, what `releases` says, whether a file exists under `/mnt/symlinks`. Not a feature list.
+- #2 Seerr **or** plugin — not both
+- #3 Kavita **or** Calibre-web — strip music (that is #4)
+
+## Still true
+
+Done means a title plays. Fake chrome stays gone (delete/hide, do not invent APIs). No ISO. No `__grok`. STATUS = house version + releases + file on disk.
