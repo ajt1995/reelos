@@ -1,12 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 16:55 CDT**.
+Xorriso. Dated **2026-09-07 16:56 CDT**.
 
-# 1.2.35
+# 1.2.36
 
-House asked for logs **on the computer**, not another SSH loop.
+House: Apply sat on `prowlarr up` for minutes. Script logged "compose yml unchanged" then still ran `docker compose up`, waited on Prowlarr, wire-engines, and indexer tests.
 
-- Settings → Logs is a row under Updates
-- Opens → loads last hour on screen (OTA, wire, reelos/caddy journal, docker, mounts)
-- Copy / Download / Refresh
-- Keys stripped. Docker/journal capped at 2.5s so it does not hang the page
+If compose.yml did not change: skip compose up, skip Prowlarr wait, skip wire, skip indexer canary. Stamp VERSION. Home 200 is success.
+
+If compose.yml changed: old path (up, wire, canary log — canary no longer blocks applied).

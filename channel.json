@@ -1,8 +1,8 @@
 {
-  "version": "1.2.35",
+  "version": "1.2.36",
   "channel": "stable",
   "notes": [
-    "1.2.35: Settings → Logs shows the last hour on screen. Copy/Download still there. No SSH."
+    "1.2.36: UI-only Apply skips compose, Prowlarr, wire, and indexer tests. Seconds, not minutes."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

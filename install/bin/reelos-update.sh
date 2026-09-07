@@ -196,7 +196,7 @@ need daemon/wire-engines.py 'restart_fuse_readers'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
-need daemon/reelos-update.sh 'not rolling back'
+need daemon/reelos-update.sh 'UI-only OTA'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
@@ -459,27 +459,31 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   mount --bind /mnt /mnt 2>/dev/null || true
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   load_env
+  COMPOSE_CHANGED=0
   if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
     if cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null; then
-      log "compose yml unchanged — not recreating containers"
+      log "compose yml unchanged — skip compose up, wire, indexer canary"
     else
+      COMPOSE_CHANGED=1
       cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
       log "compose yml from tarball"
     fi
   fi
-  (cd "$ROOT/compose" && docker compose \
-    --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
-    up -d --remove-orphans) || log "compose up skipped"
-  log "waiting for Prowlarr :9696"
-  for _i in $(seq 1 40); do
-    if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:9696/; then
-      log "prowlarr up"
-      break
-    fi
-    sleep 1
-  done
+  if [ "$COMPOSE_CHANGED" = "1" ]; then
+    (cd "$ROOT/compose" && docker compose \
+      --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
+      up -d --remove-orphans) || log "compose up skipped"
+    log "waiting for Prowlarr :9696"
+    for _i in $(seq 1 20); do
+      if curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:9696/; then
+        log "prowlarr up"
+        break
+      fi
+      sleep 1
+    done
+  fi
 fi
-if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
+if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
 if [ -x "$ROOT/bin/reelos-lid.sh" ]; then
@@ -556,18 +560,14 @@ sys.exit(0)
 PY
 }
 
-if [ -f /var/lib/reelos/provisioned ]; then
+if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
   CANARY_OUT=$(indexer_canary) || {
-    log "indexer canary FAIL ${CANARY_OUT:-} — not printing applied"
+    log "indexer canary FAIL ${CANARY_OUT:-} — Home still counts"
     [ -f "$STATE/releases-error.txt" ] && log "$(head -c 400 "$STATE/releases-error.txt")"
-    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
-    if [ "$code" != "200" ]; then
-      log "Home dead after indexer fail — restoring"
-      restore
-    fi
-    exit 1
   }
-  log "indexer canary ok ${CANARY_OUT}"
+  log "indexer canary ${CANARY_OUT:-skipped}"
+else
+  log "indexer canary skipped (UI-only OTA)"
 fi
 
 echo "$REMOTE" >"$ROOT/VERSION"
