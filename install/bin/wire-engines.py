@@ -167,7 +167,8 @@ def patch_decypharr() -> None:
     text = json.dumps(cfg, indent=2) + "\n"
     prev = DECYPHARR.read_text() if DECYPHARR.exists() else ""
     if text == prev:
-        log_wire("decypharr config unchanged")
+        log_wire("decypharr config unchanged — restart to remount")
+        subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
         return
     DECYPHARR.write_text(text)
     compose("up", "-d", "--force-recreate", "decypharr")
@@ -1337,12 +1338,20 @@ def extra_access() -> None:
 def share_mnt() -> None:
     Path("/mnt").mkdir(parents=True, exist_ok=True)
     Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
     subprocess.run(["mount", "--bind", "/mnt", "/mnt"], check=False, capture_output=True)
     r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
     if r.returncode:
         log_wire(f"rshared /mnt skipped: {(r.stderr or r.stdout or '')[:160]}")
     else:
         log_wire("rshared /mnt")
+    for p in ("/mnt/debrid", "/mnt/symlinks"):
+        try:
+            os.chmod(p, 0o777)
+            os.chown(p, 1000, 1000)
+        except OSError as e:
+            log_wire(f"chmod {p} {e}")
+    log_wire("fuse mountpoint writable")
 
 
 def main() -> int:

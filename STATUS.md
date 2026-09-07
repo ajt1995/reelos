@@ -1,11 +1,14 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 12:30 +08**.
+Xorriso. Dated **2026-09-07 12:44 +08**.
 
-# 1.2.28
+# 1.2.29 launched
 
-House log: Decypharr `mount_type=dfs` then `mkdir : no such file or directory`. No `/mnt/__all__`. Mario folders still empty.
+House 1.2.28: `fusermount: user has no write access to mountpoint /mnt/debrid` (`root:root 755`). Mario folders still empty.
 
-Fix: `cache_dir=/app/cache/dfs`, mount at `/mnt/debrid` (not over `/mnt`). Do not Apply until this lands.
+This stamp:
+- chmod 777 / chown 1000 `/mnt/debrid`
+- restart Decypharr to remount
+- fast Apply: one tarball, no force-recreate of healthy engines, no Jellyfin wipe, no Prowlarr bounce on DNS 400
 
-Same curl. Then Logs again only if movies still empty.
+Same apply curl. Then Logs only if Mario still empty.

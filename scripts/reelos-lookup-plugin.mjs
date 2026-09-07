@@ -850,7 +850,7 @@ async function handleLogs(_req, res) {
     "=== doctor ===",
     doctor.trim() || "(no doctor)",
     "=== mount ===",
-    shOut(["bash", "-lc", "ls -la /mnt /mnt/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -60"]).trim(),
+    shOut(["bash", "-lc", "ls -la /mnt /mnt/debrid /mnt/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -80"]).trim(),
     "=== decypharr ===",
     shOut(["docker", "logs", "decypharr", "--tail", "40"], 12000).trim(),
     "=== releases-error ===",
