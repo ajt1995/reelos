@@ -1088,7 +1088,7 @@ async function handleWire(req, res) {
   send(res, 200, { ok: true, started: true });
 }
 
-async function handleLibrary(_req, res) {
+async function handleLibrary(req, res) {
   const a = answers();
   const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
   if (!auth?.token) {
@@ -1097,7 +1097,7 @@ async function handleLibrary(_req, res) {
   }
   try {
     const r = await fetch(
-      "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Overview,ProviderIds&ImageTypeLimit=1",
+      "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Overview,ProviderIds&ImageTypeLimit=1&SortBy=DateCreated&SortOrder=Descending",
       { headers: { "X-Emby-Token": auth.token } },
     );
     if (!r.ok) {
@@ -1106,13 +1106,15 @@ async function handleLibrary(_req, res) {
     }
     const data = await r.json();
     const items = Array.isArray(data.Items) ? data.Items : [];
-    const ip = ipv4();
+    const host = String(req.headers.host || "")
+      .split(":")[0]
+      .replace(/[^a-zA-Z0-9.-]/g, "") || ipv4() || "127.0.0.1";
     const titles = items.map((it) => {
       const tmdb = it.ProviderIds?.Tmdb;
       const tvdb = it.ProviderIds?.Tvdb;
       const kind = it.Type === "Series" ? "tv" : "movie";
       const id = tmdb ? `tmdb-${tmdb}` : tvdb ? `tvdb-${tvdb}` : `jf-${it.Id}`;
-      const poster = ip && it.Id ? `http://${ip}:8096/Items/${it.Id}/Images/Primary` : "";
+      const poster = it.Id ? `http://${host}:8096/Items/${it.Id}/Images/Primary` : "";
       return {
         id,
         kind,

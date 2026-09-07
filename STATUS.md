@@ -1,11 +1,12 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 16:56 CDT**.
+Xorriso. Dated **2026-09-07 17:08 CDT**.
 
-# 1.2.36
+# 1.2.37
 
-House: Apply sat on `prowlarr up` for minutes. Script logged "compose yml unchanged" then still ran `docker compose up`, waited on Prowlarr, wire-engines, and indexer tests.
+House: Home said “Search. Nothing is preloaded.” Discover had empty Trending rows. ISO download 404.
 
-If compose.yml did not change: skip compose up, skip Prowlarr wait, skip wire, skip indexer canary. Stamp VERSION. Home 200 is success.
-
-If compose.yml changed: old path (up, wire, canary log — canary no longer blocks applied).
+- Home / Discover / Library share `/api/library` (Jellyfin Movies + Series)
+- Posters use the host you opened (Tailscale or LAN), not LAN-only
+- No fake TITLES on those rows
+- Settings no longer offers a missing ISO

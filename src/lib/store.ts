@@ -56,8 +56,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.36";
-export const SHIPPED_VERSION = "1.2.36";
+export const LATEST_VERSION = "1.2.37";
+export const SHIPPED_VERSION = "1.2.37";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
@@ -112,6 +112,8 @@ export interface ReelState {
   provisioned: boolean;
   requests: MediaRequest[];
   library: string[];
+  shelf: Title[];
+  shelfError: string | null;
   watchProgress: Record<string, number>;
   activity: ActivityEvent[];
   users: HouseholdUser[];
@@ -145,6 +147,7 @@ export interface ReelState {
   removeIndexer: (id: string) => void;
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
+  hydrateShelf: () => void;
 }
 
 function uid(prefix: string) {
@@ -298,6 +301,8 @@ function labState(): Pick<
       }),
     ],
     library: ["night-harbor", "ember-season", "glass-orchard", "iron-parish", "paper-moons", "maple-pilot"],
+    shelf: [] as Title[],
+    shelfError: null as string | null,
     watchProgress: { "night-harbor": 0.42, "ember-season": 0.18, "iron-parish": 0.71 },
     activity: [
       event("import", "Cache hit — Night Harbor on Real-Debrid", "night-harbor"),
@@ -346,6 +351,8 @@ const initial = {
   provisioned: false,
   requests: [] as MediaRequest[],
   library: [] as string[],
+  shelf: [] as Title[],
+  shelfError: null as string | null,
   watchProgress: {} as Record<string, number>,
   activity: [] as ActivityEvent[],
   users: [] as HouseholdUser[],
@@ -637,6 +644,21 @@ export const useReelStore = create<ReelState>()(
         if (!extra.length) return;
         rememberCatalogTitles(extra);
         set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
+      },
+      hydrateShelf: () => {
+        if (get().shelf.length) return;
+        void fetch("/api/library", { cache: "no-store" })
+          .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
+          .then((j) => {
+            const titles = Array.isArray(j.titles) ? j.titles : [];
+            rememberCatalogTitles(titles);
+            set({
+              shelf: titles,
+              shelfError: j.error || null,
+              library: titles.map((t) => t.id),
+            });
+          })
+          .catch((e) => set({ shelfError: String(e) }));
       },
     }),
     {

@@ -1,32 +1,32 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
-import { rememberCatalogTitles, searchTitles } from "@/lib/catalog";
+import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 
 export function DiscoverView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
-  const rememberTitles = useReelStore((s) =>
-    "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
-  );
-  const intent = useReelStore((s) => s.answers.intent);
-  const library = useReelStore((s) => s.library);
+  const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
+  const shelf = useReelStore((s) => s.shelf);
+  const shelfError = useReelStore((s) => s.shelfError);
 
-  const visible = useMemo(() => remoteHits, [remoteHits]);
+  useEffect(() => {
+    hydrateShelf();
+  }, [hydrateShelf]);
 
-  const catalogHits: Title[] = [];
   const hits = useMemo(() => {
     const seen = new Set<string>();
     const out: Title[] = [];
-    for (const t of [...remoteHits, ...catalogHits]) {
+    for (const t of remoteHits) {
       if (seen.has(t.id)) continue;
       seen.add(t.id);
       out.push(t);
     }
     return out;
-  }, [catalogHits, remoteHits]);
+  }, [remoteHits]);
 
   useEffect(() => {
     const term = q.trim();
@@ -55,10 +55,8 @@ export function DiscoverView() {
     };
   }, [q, rememberTitles]);
 
-  const trending = [...visible].sort((a, b) => b.popularity - a.popularity).slice(0, 12);
-  const movies = visible.filter((t) => t.kind === "movie").slice(0, 12);
-  const tv = visible.filter((t) => t.kind === "tv" || t.kind === "anime").slice(0, 12);
-  const fresh = visible.filter((t) => !library.includes(t.id)).slice(0, 12);
+  const movies = shelf.filter((t) => t.kind === "movie").slice(0, 16);
+  const tv = shelf.filter((t) => t.kind === "tv" || t.kind === "anime").slice(0, 16);
 
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
@@ -80,36 +78,29 @@ export function DiscoverView() {
             ))}
           </Row>
         ) : (
-          <p className="mt-10 text-sm text-muted">
-            No titles yet. The movie engine looks this up on TMDB — wait a few seconds after first boot.
-          </p>
+          <p className="mt-10 text-sm text-muted">No titles from the movie engine for that search.</p>
         )
       ) : (
         <>
-          <Row label="Trending this week">
-            {trending.map((t) => (
-              <TitleCard key={t.id} title={t} />
-            ))}
-          </Row>
           {movies.length > 0 ? (
-            <Row label="Movies">
+            <Row label="Movies on this box">
               {movies.map((t) => (
                 <TitleCard key={t.id} title={t} />
               ))}
             </Row>
           ) : null}
           {tv.length > 0 ? (
-            <Row label="Television">
+            <Row label="Shows on this box">
               {tv.map((t) => (
                 <TitleCard key={t.id} title={t} />
               ))}
             </Row>
           ) : null}
-          <Row label="Not in your library">
-            {fresh.map((t) => (
-              <TitleCard key={t.id} title={t} />
-            ))}
-          </Row>
+          {shelf.length === 0 ? (
+            <p className="mt-10 text-sm text-muted">
+              {shelfError || "Nothing in Jellyfin yet. Search above, then Request."}
+            </p>
+          ) : null}
         </>
       )}
     </div>

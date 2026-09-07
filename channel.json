@@ -1,8 +1,8 @@
 {
-  "version": "1.2.36",
+  "version": "1.2.37",
   "channel": "stable",
   "notes": [
-    "1.2.36: UI-only Apply skips compose, Prowlarr, wire, and indexer tests. Seconds, not minutes."
+    "1.2.37: Home and Discover are the Jellyfin library. No fake trending. Fake ISO download row gone."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

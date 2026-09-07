@@ -23,9 +23,10 @@ export function HomeView() {
       })
       .catch(() => {});
   }, []);
-  const rememberTitles = useReelStore((s) =>
-    "rememberTitles" in s ? (s as { rememberTitles?: (t: Title[]) => void }).rememberTitles : undefined,
-  );
+  const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
+  const shelf = useReelStore((s) => s.shelf);
+  const shelfError = useReelStore((s) => s.shelfError);
   const navigate = useNavigate();
   const requests = useReelStore((s) => s.requests);
   const library = useReelStore((s) => s.library);
@@ -33,8 +34,11 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
-  const intent = useReelStore((s) => s.answers.intent);
   const downloading = requests.filter((r) => r.status === "downloading").length;
+
+  useEffect(() => {
+    hydrateShelf();
+  }, [hydrateShelf]);
 
   const catalogHits: Title[] = [];
   const hits = useMemo(() => {
@@ -92,9 +96,6 @@ export function HomeView() {
     .filter(([, v]) => v > 0.03 && v < 0.96)
     .map(([id, v]) => ({ t: getTitle(id), v }))
     .filter((x) => x.t && library.includes(x.t.id));
-
-  const discover = remoteHits.filter((t) => !library.includes(t.id)).slice(0, 14);
-  const cachedNow: Title[] = [];
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
@@ -174,22 +175,16 @@ export function HomeView() {
         </Row>
       ) : null}
 
-      {cachedNow.length > 0 ? (
-        <Row label={`Cached on ${sourceLabel[source]}`}>
-          {cachedNow.map((t) => (
-            <TitleCard key={t.id} title={t} />
-          ))}
-        </Row>
-      ) : null}
-
-      {discover.length > 0 ? (
-        <Row label="Discover">
-          {discover.map((t) => (
+      {shelf.length > 0 ? (
+        <Row label="On this box">
+          {shelf.slice(0, 24).map((t) => (
             <TitleCard key={t.id} title={t} />
           ))}
         </Row>
       ) : q.trim().length < 2 ? (
-        <p className="mt-16 text-center text-sm text-muted">Search. Nothing is preloaded.</p>
+        <p className="mt-16 text-center text-sm text-muted">
+          {shelfError || "Nothing in Jellyfin yet. Search and Request — it lands here."}
+        </p>
       ) : null}
     </div>
   );

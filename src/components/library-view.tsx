@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { TitleCard } from "@/components/title-card";
-import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import type { Kind, Title } from "@/lib/types";
+import type { Kind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const TABS: { id: "all" | Kind; label: string }[] = [
@@ -16,33 +15,14 @@ const TABS: { id: "all" | Kind; label: string }[] = [
 
 export function LibraryView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
-  const [items, setItems] = useState<Title[]>([]);
-  const [err, setErr] = useState<string | null>(null);
+  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
+  const items = useReelStore((s) => s.shelf);
+  const err = useReelStore((s) => s.shelfError);
   const intent = useReelStore((s) => s.answers.intent);
 
   useEffect(() => {
-    let stop = false;
-    const load = () => {
-      void fetch("/api/library", { cache: "no-store" })
-        .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
-        .then((j) => {
-          if (stop) return;
-          const titles = Array.isArray(j.titles) ? j.titles : [];
-          rememberCatalogTitles(titles);
-          setItems(titles);
-          setErr(j.error || null);
-        })
-        .catch((e) => {
-          if (!stop) setErr(String(e));
-        });
-    };
-    load();
-    const id = window.setInterval(load, 15000);
-    return () => {
-      stop = true;
-      window.clearInterval(id);
-    };
-  }, []);
+    hydrateShelf();
+  }, [hydrateShelf]);
 
   const shown = useMemo(
     () => items.filter((t) => (tab === "all" ? true : t.kind === tab)),

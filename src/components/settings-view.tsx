@@ -121,7 +121,7 @@ export function SettingsView() {
           onClick={() => setPanel(panel === "quality" ? null : "quality")}
         >
           <p className="text-sm text-muted">
-            Re-run the wizard to change the floor. Anime profiles stay attached when Anime is on.
+            This house is {qualityLabel[answers.quality]}. Radarr/Sonarr already use that floor.
           </p>
         </Row>
         <Row
@@ -215,10 +215,6 @@ export function SettingsView() {
         <LogsRow
           open={panel === "logs"}
           onClick={() => setPanel(panel === "logs" ? null : "logs")}
-        />
-        <InstallRow
-          open={panel === "install"}
-          onClick={() => setPanel(panel === "install" ? null : "install")}
         />
       </div>
 
