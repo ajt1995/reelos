@@ -760,14 +760,14 @@ function LogsCard() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const grab = async () => {
-    const r = await fetch("/api/logs", { cache: "no-store" });
+    const r = await fetch("/api/logs", { cache: "no-store", signal: AbortSignal.timeout(20000) });
     const j = (await r.json()) as { ok?: boolean; text?: string; error?: string };
     if (!j.text) throw new Error(j.error || "No logs");
     return j.text as string;
   };
   const copy = async () => {
     setBusy(true);
-    setMsg("");
+    setMsg("Collecting…");
     try {
       const text = await grab();
       await navigator.clipboard.writeText(text);
@@ -779,7 +779,7 @@ function LogsCard() {
   };
   const download = async () => {
     setBusy(true);
-    setMsg("");
+    setMsg("Collecting…");
     try {
       const text = await grab();
       const a = document.createElement("a");

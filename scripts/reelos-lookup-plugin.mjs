@@ -835,36 +835,24 @@ async function handleLogs(_req, res) {
   const sha = existsSync("/var/lib/reelos/applied-sha")
     ? readFileSync("/var/lib/reelos/applied-sha", "utf8").trim()
     : "";
-  const script = ["/opt/reelos/bin/reelos-doctor.py", "/workspace/daemon/reelos-doctor.py"].find((p) =>
-    existsSync(p),
-  );
-  let doctor = "";
-  if (script) {
-    const r = spawnSync("python3", [script], { encoding: "utf8", timeout: 20000 });
-    doctor = r.stdout || r.stderr || "";
-  }
   const blob = [
     `ReelOS ${ver}`,
     `applied-sha ${sha}`,
     `time ${new Date().toISOString()}`,
-    "=== doctor ===",
-    doctor.trim() || "(no doctor)",
     "=== mount ===",
-    shOut(["bash", "-lc", "ls -la /mnt /mnt/debrid /mnt/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -80"]).trim(),
+    shOut(["bash", "-lc", "ls -la /mnt /mnt/debrid /mnt/debrid/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -80"], 4000).trim(),
+    "=== files ===",
+    shOut(["bash", "-lc", "find /mnt/symlinks -maxdepth 3 -type f -o -type l 2>/dev/null | head -40"], 4000).trim(),
     "=== decypharr ===",
-    shOut(["docker", "logs", "decypharr", "--tail", "40"], 12000).trim(),
-    "=== releases-error ===",
-    tailFile("/var/lib/reelos/releases-error.txt", 40).trim(),
-    "=== ota.log (last 80) ===",
-    tailFile("/var/lib/reelos/ota.log", 80).trim(),
-    "=== wire.log (last 80) ===",
-    tailFile("/var/lib/reelos/wire.log", 80).trim(),
-    "=== services ===",
-    shOut(["systemctl", "is-active", "reelos", "caddy", "docker"]).trim(),
+    shOut(["docker", "logs", "decypharr", "--tail", "40"], 5000).trim(),
+    "=== jellyfin ===",
+    shOut(["docker", "logs", "reelos-jellyfin-1", "--tail", "40"], 5000).trim(),
+    "=== ota.log (last 40) ===",
+    tailFile("/var/lib/reelos/ota.log", 40).trim(),
+    "=== wire.log (last 40) ===",
+    tailFile("/var/lib/reelos/wire.log", 40).trim(),
     "=== docker ps ===",
-    shOut(["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"]).trim(),
-    "=== journalctl reelos (1h) ===",
-    shOut(["journalctl", "-u", "reelos", "--since", "1 hour ago", "--no-pager", "-n", "40"], 12000).trim(),
+    shOut(["docker", "ps", "--format", "table {{.Names}}\t{{.Status}}"], 4000).trim(),
     "",
   ].join("\n");
   send(res, 200, { ok: true, text: redactLogs(blob) });

@@ -1,8 +1,8 @@
 {
-  "version": "1.2.30",
+  "version": "1.2.31",
   "channel": "stable",
   "notes": [
-    "1.2.30: restart Jellyfin after TorBox mounts so Watch can actually read the file."
+    "1.2.31: Logs copy/download skip Doctor so they return in seconds. Jellyfin still restarted after FUSE (1.2.30)."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

@@ -1,13 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 12:54 +08**.
+Xorriso. Dated **2026-09-07 13:02 +08**.
 
-# 1.2.30
+# 1.2.31
 
-House: FUSE is up, Guardians file is ready, Watch tries and fails. Jellyfin was started before `/mnt/debrid` mounted, so the container cannot read the mkv.
+House: Logs Download hung. `/api/logs` ran Doctor, which waits 15s on lookup TimeoutError.
 
-Fix: after Decypharr mounts, restart Jellyfin/Radarr/Sonarr. OTA skips the TorBox indexer 2-minute wait.
+Logs now skip Doctor, cap subprocesses at 5s, include Jellyfin log + files under `/mnt/symlinks`.
 
-Play now without waiting for this stamp:
-`sudo docker restart reelos-jellyfin-1 reelos-radarr-1`
-then Watch again in ~20s.
+If a dump is already in flight on 1.2.29, let it finish — don’t Apply over it.
