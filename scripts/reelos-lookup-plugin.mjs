@@ -767,7 +767,7 @@ async function handleDoctor(_req, res) {
     send(res, 200, { ok: true, live: false, version: localVersion(), checks: [] });
     return;
   }
-  const r = spawnSync("python3", [script], { encoding: "utf8", timeout: 25000 });
+  const r = spawnSync("python3", [script], { encoding: "utf8", timeout: 60000 });
   try {
     const parsed = JSON.parse(r.stdout || "{}");
     send(res, 200, {

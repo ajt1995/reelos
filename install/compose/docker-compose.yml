@@ -52,6 +52,7 @@ services:
       - 8.8.8.8
     extra_hosts:
       - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   radarr:
     profiles: ["movies"]
@@ -73,6 +74,7 @@ services:
       - 8.8.8.8
     extra_hosts:
       - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   sonarr:
     profiles: ["tv"]
@@ -94,6 +96,7 @@ services:
       - 8.8.8.8
     extra_hosts:
       - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   lidarr:
     profiles: ["music"]
@@ -145,6 +148,7 @@ services:
       - 8.8.8.8
     extra_hosts:
       - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
     devices:
       - /dev/fuse:/dev/fuse:rwm
     cap_add:

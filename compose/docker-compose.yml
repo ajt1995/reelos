@@ -47,6 +47,12 @@ services:
       - ./configs/prowlarr:/config
     ports:
       - "127.0.0.1:9696:9696"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    extra_hosts:
+      - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   radarr:
     profiles: ["movies"]
@@ -63,6 +69,12 @@ services:
       - /mnt/symlinks:/symlinks
     ports:
       - "127.0.0.1:7878:7878"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    extra_hosts:
+      - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   sonarr:
     profiles: ["tv"]
@@ -79,6 +91,12 @@ services:
       - /mnt/symlinks:/symlinks
     ports:
       - "127.0.0.1:8989:8989"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    extra_hosts:
+      - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
 
   lidarr:
     profiles: ["music"]
@@ -125,6 +143,12 @@ services:
       - /mnt:/mnt:rshared
     ports:
       - "127.0.0.1:8282:8282"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    extra_hosts:
+      - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
     devices:
       - /dev/fuse:/dev/fuse:rwm
     cap_add:

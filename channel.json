@@ -1,9 +1,9 @@
 {
-  "version": "1.2.17",
+  "version": "1.2.18",
   "channel": "stable",
   "notes": [
-    "1.2.17: OTA does not 502. Home probe, no lookup timeout.",
-    "Keeps 1.2.16 Jellyfin, TorBox DNS, Settings."
+    "1.2.18: TorBox indexer on this network. Compose DNS persists.",
+    "Doctor releases is real. Lookup hop is 15s."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

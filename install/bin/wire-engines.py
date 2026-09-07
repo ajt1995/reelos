@@ -356,6 +356,84 @@ def torbox_search_ip() -> str:
     return "172.66.170.114"
 
 
+DNS_HOSTS = """    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+    extra_hosts:
+      - "search-api.torbox.app:172.66.170.114"
+      - "api.torbox.app:172.66.170.114"
+"""
+
+
+def ensure_compose_dns() -> None:
+    """Persist DNS + extra_hosts in compose yml, then recreate arrs so it sticks."""
+    p = COMPOSE / "docker-compose.yml"
+    if not p.exists():
+        log_wire("compose yml missing")
+        return
+    text = p.read_text()
+    if "1.1.1.1" not in text or "search-api.torbox.app" not in text:
+        for port in ("9696:9696", "7878:7878", "8989:8989", "8282:8282"):
+            old = f'      - "127.0.0.1:{port}"\n'
+            new = f'      - "127.0.0.1:{port}"\n{DNS_HOSTS}'
+            if old in text and "search-api.torbox.app" not in text[text.find(old):text.find(old)+400]:
+                text = text.replace(old, new, 1)
+        p.write_text(text)
+        log_wire("compose dns/extra_hosts written")
+        recreate_arrs()
+        return
+    log_wire("compose already has extra_hosts")
+    if not prowlarr_has_hosts():
+        log_wire("running Prowlarr missing extra_hosts — recreating")
+        recreate_arrs()
+
+
+def recreate_arrs() -> None:
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "movies",
+        "--profile",
+        "tv",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--remove-orphans",
+        "prowlarr",
+        "radarr",
+        "sonarr",
+        "decypharr",
+    ]
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"compose recreate arrs rc={r.returncode}")
+    time.sleep(10)
+
+
+def prowlarr_has_hosts() -> bool:
+    for name in ("reelos-prowlarr-1", "prowlarr"):
+        r = subprocess.run(
+            ["docker", "inspect", "-f", "{{json .HostConfig.ExtraHosts}}", name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "search-api.torbox.app" in (r.stdout or ""):
+            return True
+    return False
+
+
 def inject_search_api_hosts() -> None:
     ip = torbox_search_ip()
     line = f"{ip} search-api.torbox.app"
@@ -463,6 +541,9 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         log_wire("provider indexer failed: no apiKey")
         return
     name = f"ReelOS-{src}"
+    ensure_compose_dns()
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+    prow_key = wait_key(prow_xml, 60) or prow_key
     inject_search_api_hosts()
     deadline = time.time() + 90
     yml_tried = False
@@ -517,6 +598,10 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         except urllib.error.HTTPError as e:
             err = e.read().decode()[:240] if e.fp else str(e)
             log_wire(f"provider indexer POST failed {e.code} {err}")
+            if "resolv" in err.lower():
+                log_wire("STAMP FAIL Name does not resolve — recreating arrs")
+                recreate_arrs()
+                inject_search_api_hosts()
         except NET_ERR as e:
             log_wire(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
@@ -527,7 +612,7 @@ def _ensure_provider_indexer(prow_key: str) -> None:
             if indexer_enabled(prow_key, name):
                 return
         time.sleep(4)
-    log_wire(f"provider indexer missing after retry for {src}")
+    log_wire(f"STAMP FAIL provider indexer missing after retry for {src}")
 
 
 def transcode_override() -> None:

@@ -152,6 +152,8 @@ need scripts/reelos-lookup-plugin.mjs '/api/library'
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
 need install/compose/docker-compose.yml 'search-api.torbox.app'
+need install/compose/docker-compose.yml 'api.torbox.app'
+need compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'jellyfin config reset'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
@@ -379,8 +381,16 @@ load_env() {
 
 if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
   load_env
-  (cd "$ROOT/compose" && docker compose up -d --remove-orphans) || log "compose up skipped"
-  (cd "$ROOT/compose" && docker compose --profile jellyfin --profile debrid up -d jellyfin decypharr) || true
+  if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
+    cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
+    log "compose yml from tarball"
+  fi
+  if ! grep -q 'search-api.torbox.app' "$ROOT/compose/docker-compose.yml"; then
+    log "STAMP FAIL compose extra_hosts missing"
+  fi
+  (cd "$ROOT/compose" && docker compose \
+    --profile indexers --profile movies --profile tv --profile debrid --profile jellyfin --profile subtitles \
+    up -d --force-recreate --remove-orphans) || log "compose up skipped"
 fi
 if [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"

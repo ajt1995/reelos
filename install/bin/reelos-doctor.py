@@ -77,13 +77,14 @@ def releases_hop(answers: dict) -> dict:
     if not key:
         return ok("releases", "No release source. Provider indexer missing.", False)
     try:
+        import urllib.error
         import urllib.request
 
         req = urllib.request.Request(
             "http://127.0.0.1:9696/api/v1/indexer",
             headers={"X-Api-Key": key},
         )
-        with urllib.request.urlopen(req, timeout=6) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode() or "[]")
     except Exception:
         return ok("releases", "No release source. Provider indexer missing.", False)
@@ -92,10 +93,29 @@ def releases_hop(answers: dict) -> dict:
         if any(ix.get("enable") for ix in rows):
             return ok("releases", "Indexer enabled", True)
         return ok("releases", "No release source. Provider indexer missing.", False)
-    for ix in rows:
-        if ix.get("name") == want and ix.get("enable"):
-            return ok("releases", want, True)
-    return ok("releases", "No release source. Provider indexer missing.", False)
+    hit = next((ix for ix in rows if ix.get("name") == want and ix.get("enable")), None)
+    if not hit:
+        return ok("releases", "No release source. Provider indexer missing.", False)
+    try:
+        import urllib.error
+        import urllib.request
+
+        req = urllib.request.Request(
+            "http://127.0.0.1:9696/api/v1/indexer/test",
+            data=json.dumps(hit).encode(),
+            method="POST",
+            headers={"X-Api-Key": key, "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            resp.read()
+        return ok("releases", want, True)
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:200] if e.fp else str(e)
+        if "resolv" in err.lower() or "name does not resolve" in err.lower():
+            return ok("releases", "No release source. Name does not resolve.", False)
+        return ok("releases", f"No release source. {err[:80]}", False)
+    except Exception as e:
+        return ok("releases", f"No release source. {type(e).__name__}", False)
 
 
 def listening(port: int) -> bool:
@@ -191,7 +211,7 @@ def main() -> int:
     # Hops: lookup / request / decypharr / jellyfin
     try:
         import urllib.request
-        with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=x", timeout=4) as r:
+        with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=x", timeout=15) as r:
             raw = r.read().decode()
         hop = '"titles"' in raw
         checks.append(ok("Lookup hop", "GET /api/lookup answered" if hop else "lookup dead", hop))
