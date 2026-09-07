@@ -1,16 +1,16 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 19:22 CDT**. VERSION **1.2.15**.
+Updated **2026-09-06 19:38 CDT**. VERSION stays **1.2.15**.
 
-House apply still pulls **`main`**:
+## Exception — on `main` (house is live)
 
-```
-curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
-```
+HP is on 1.2.15. Jellyfin answers but has **zero libraries**. Doctor `releases` is red (`Provider indexer missing`). Lookup hop timed out once.
 
-**`main` is frozen** except mailbox files (`HAL.md`, `STATUS.md`, `ROADMAP.md`, `FACELIFT.md`).
+Do this on **`main`**. Then freeze again. No 1.2.16. Do not merge parked branches.
 
-You may cut the feature branches in [`ROADMAP.md`](ROADMAP.md) and work them. **Do not merge. Do not touch `channel.json` / `VERSION` / the updater.**
+1. `wire-engines.py` must **retry** Jellyfin VirtualFolders until Movies (and Shows if intent.tv) exist with path `/symlinks`. Complete Startup if needed. Low-perf flags stay off. Do not send them to the Jellyfin wizard.
+2. Same pass: retry `ReelOS-torbox` (official YML + add). Doctor `releases` must be able to go green.
+3. `POST /api/wire` runs `wire-engines.py` again (409 if OTA running). Settings can call it. House can `curl` it without a full Apply.
 
-Idle order: `#4` then `#3` then `#2` then `#5` then facelift. Still branches only.
+Parked tickets stay on feature branches.
