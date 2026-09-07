@@ -1,11 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 12:16 +08**.
+Xorriso. Dated **2026-09-07 12:19 +08**.
 
-# 1.2.26
+# 1.2.27
 
-Owner: still nothing on 1.2.25, ship the logger.
+1.2.26 Apply died after canaries: `cp` of `prowlarr.db-wal` / `.db-shm` (sqlite sidecars that weren't there). `set -e` killed the mailman. House stayed 1.2.25.
 
-Settings → **Copy last hour** → `GET /api/logs` → clipboard / `reelos-house.txt`. Keys stripped. Includes mount + decypharr tail so we stop the SSH scavenger hunt.
+Fix: config copy continues if those files vanish. Logger still in tree.
 
-Apply 1.2.26 once. Then Settings → Logs → Copy last hour → paste here. No extra curls.
+Same apply curl. Wait for `ReelOS 1.2.27 applied.` Then Settings → Logs → Copy last hour.

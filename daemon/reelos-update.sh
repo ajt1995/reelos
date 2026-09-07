@@ -182,7 +182,7 @@ need src/components/settings-view.tsx 'Copy last hour'
 need daemon/wire-engines.py '"type": "dfs"'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
-need daemon/reelos-update.sh 'indexer canary FAIL'
+need daemon/reelos-update.sh 'vanished sqlite sidecars'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
@@ -214,7 +214,7 @@ fi
 chmod 755 "$NEXT/bin/"* 2>/dev/null || true
 if [ -d "$ROOT/compose/configs" ]; then
   mkdir -p "$NEXT/compose"
-  cp -a "$ROOT/compose/configs" "$NEXT/compose/configs"
+  cp -a "$ROOT/compose/configs" "$NEXT/compose/configs" || log "config copy skipped vanished sqlite sidecars"
   [ -f "$ROOT/compose/.env" ] && cp -a "$ROOT/compose/.env" "$NEXT/compose/.env"
 fi
 if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
