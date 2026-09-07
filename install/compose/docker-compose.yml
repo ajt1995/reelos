@@ -13,6 +13,7 @@ services:
       - ./configs/jellyfin:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "0.0.0.0:8096:8096"
     environment:
@@ -32,6 +33,7 @@ services:
       - ./configs/plex:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "0.0.0.0:32400:32400"
 
@@ -64,6 +66,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:7878:7878"
     dns:
@@ -83,6 +86,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:8989:8989"
     dns:
@@ -102,6 +106,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:8686:8686"
 
@@ -117,6 +122,7 @@ services:
       - ./configs/bazarr:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:6767:6767"
 

@@ -13,6 +13,7 @@ services:
       - ./configs/jellyfin:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "0.0.0.0:8096:8096"
     environment:
@@ -32,6 +33,7 @@ services:
       - ./configs/plex:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "0.0.0.0:32400:32400"
 
@@ -47,6 +49,9 @@ services:
       - ./configs/prowlarr:/config
     ports:
       - "127.0.0.1:9696:9696"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
   radarr:
     profiles: ["movies"]
@@ -61,8 +66,12 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:7878:7878"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
   sonarr:
     profiles: ["tv"]
@@ -77,8 +86,12 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:8989:8989"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
 
   lidarr:
     profiles: ["music"]
@@ -93,6 +106,7 @@ services:
       - /srv/media:/media
       - /mnt/symlinks:/mnt/symlinks
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:8686:8686"
 
@@ -108,6 +122,7 @@ services:
       - ./configs/bazarr:/config
       - /srv/media:/media
       - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
     ports:
       - "127.0.0.1:6767:6767"
 
@@ -125,6 +140,9 @@ services:
       - /mnt:/mnt:rshared
     ports:
       - "127.0.0.1:8282:8282"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     devices:
       - /dev/fuse:/dev/fuse:rwm
     cap_add:

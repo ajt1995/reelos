@@ -140,9 +140,15 @@ def patch_decypharr() -> None:
     entry["name"] = slug
     if answers().get("apiKey"):
         entry["api_key"] = answers()["apiKey"].strip()
-    entry.setdefault("folder", "/mnt/debrid")
-    entry["use_webdav"] = False
+    entry.setdefault("folder", "/mnt")
+    entry["folder"] = "/mnt"
+    entry["use_webdav"] = True
     cfg["debrids"] = [entry]
+    cfg["mount"] = {
+        "type": "dfs",
+        "mount_path": "/mnt",
+        "dfs": {"uid": 1000, "gid": 1000, "umask": "002"},
+    }
     cfg.setdefault(
         "qbittorrent",
         {"download_folder": "/mnt/symlinks", "categories": ["sonarr", "radarr", "lidarr"]},
@@ -1299,8 +1305,20 @@ def extra_access() -> None:
         subprocess.run(["bash", str(script)], check=False)
 
 
+def share_mnt() -> None:
+    Path("/mnt").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    subprocess.run(["mount", "--bind", "/mnt", "/mnt"], check=False, capture_output=True)
+    r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
+    if r.returncode:
+        log_wire(f"rshared /mnt skipped: {(r.stderr or r.stdout or '')[:160]}")
+    else:
+        log_wire("rshared /mnt")
+
+
 def main() -> int:
     STATE.mkdir(parents=True, exist_ok=True)
+    share_mnt()
     for d in (
         "/srv/media/movies",
         "/srv/media/tv",

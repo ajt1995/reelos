@@ -177,7 +177,8 @@ need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
-need daemon/wire-engines.py 'ensure_public_indexers'
+need daemon/wire-engines.py '"type": "dfs"'
+need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'indexer canary FAIL'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
@@ -406,6 +407,9 @@ load_env() {
 }
 
 if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
+  mkdir -p /mnt /mnt/symlinks
+  mount --bind /mnt /mnt 2>/dev/null || true
+  mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   load_env
   if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
     cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"

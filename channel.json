@@ -1,8 +1,8 @@
 {
-  "version": "1.2.24",
+  "version": "1.2.25",
   "channel": "stable",
   "notes": [
-    "1.2.24: public Prowlarr indexers so Request can grab while TorBox search DNS is dead."
+    "1.2.25: mount TorBox files so cache hits land as real movies, not empty folders."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

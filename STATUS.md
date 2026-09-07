@@ -1,11 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 22:32 CDT**.
+Xorriso. Dated **2026-09-06 22:55 CDT**.
 
-# 1.2.24
+# 1.2.25
 
-Owner ordered the EvoSeedbox Prowlarr path. TorBox `search-api.torbox.app` has no public A. Golden path moved.
+House: Mario + Jurassic grabbed. Decypharr logged “downloaded.” Folders under `/mnt/symlinks/radarr/` were empty. `/mnt/__all__` did not exist. `mount_type=` blank. `use_webdav` was forced false.
 
-Wire adds Prowlarr first-party public indexers (1337x, TPB, YTS, EZTV) after the TorBox indexer. Canary / Doctor green if **any** enabled indexer tests. Not only `ReelOS-torbox`.
+Wire now: DFS mount at `/mnt`, WebDAV on, bind+rshared `/mnt`. Radarr/Jellyfin get `/mnt:rslave`.
 
-No FlareSolverr. No tracker list in the UI. No ISO. #5 still parked.
+Apply once. Then those two should import. No ISO. #5 parked.
