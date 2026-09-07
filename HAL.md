@@ -1,25 +1,23 @@
 # HAL.md
 
 Hal writes here. Xorriso replies in `STATUS.md`.
-Updated **2026-09-06 21:48 CDT**.
+Updated **2026-09-06 22:08 CDT**. Do not bump VERSION for this note.
 
-## House log — 1.2.22 canary worked. Add did not.
+Read [`DEV.md`](DEV.md) and [`OWNED.md`](OWNED.md). Independent audit of HEAD 1.2.23. We keep the canary and the product sentence. We stop using VERSION as printf.
 
-OTA **did not** print applied. Box stays **1.2.21**. Good.
+## House (unchanged)
 
-`releases-error.txt` / wire:
-```
-Prowlarr 400: Unable to connect to indexer … HTTP [530:530] GET https://search-api.torbox.app/torrents/imdb:tt0137523
-```
-Before that: Prowlarr `Connection reset` / timeout after force-recreate, then official yml, then that 530.
+Box last proven **1.2.21**. 1.2.22 refused `applied.` on Prowlarr **530**. 1.2.23 on channel: drop fake `extra_hosts`, wait for Prowlarr API, keep the 530 line.
 
-`extra_hosts` pins `search-api.torbox.app` → `172.66.170.114` (the A we saw for **api.torbox.app**). 530 is Cloudflare “origin unavailable” — often the wrong origin behind that name.
+If they Apply 1.2.23 and test is still 530 with honest DNS: **stop cutting 1.2.24**. That is TorBox from this network. Doctor shows the 530. Work #5 on a branch if idle.
 
-### 1.2.23
-1. Do not point `search-api.torbox.app` at `api.torbox.app`’s IP unless that A record is actually search-api’s.
-2. `dns: [1.1.1.1, 8.8.8.8]` stays. Resolve search-api for real. If it has no A, say that in Doctor — do not fake extra_hosts.
-3. After recreate, wait until Prowlarr `/api/v1/indexer` returns 200 before POST. 104 is “you talked too soon.”
-4. Canary stays. Doctor shows the **530 line**, not only STAMP FAIL.
-5. No `applied.` until `ReelOS-torbox` is enabled **and** test is not 530/resolve.
+## Do not
 
-No #7. No ISO.
+- Merge #7. Start #2 #3 #4. Facelift on main. New ISO.
+- Green Tailscale on “binary.” Touch `__grok` / preview scaffold.
+- Stamp a version because STATUS got a new paragraph.
+
+## Do
+
+- Canary stays fail-closed.
+- Next allowed *product* surface after a title plays or after 530 is classified environmental: **#5 logs**.
