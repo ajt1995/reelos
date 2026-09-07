@@ -19,6 +19,7 @@ const NAV = [
   { to: "/requests", label: "Requests", icon: Clapperboard },
   { to: "/library", label: "Library", icon: Library },
   { to: "/activity", label: "Activity", icon: Activity },
+  { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -101,15 +102,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
           >
             <Search className="size-5" />
           </Link>
+          <Link
+            to="/settings"
+            className="flex size-11 items-center justify-center rounded-xl text-muted"
+            aria-label="Settings"
+          >
+            <Settings className="size-5" />
+          </Link>
         </header>
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-background/90 backdrop-blur-md md:hidden">
-        {[
-          ...NAV.filter((n) => n.to !== "/activity"),
-          { to: "/settings", label: "Settings", icon: Settings },
-        ].map((n) => {
+        {NAV.filter((n) => n.to !== "/activity").map((n) => {
           const on = n.to === "/" ? path === "/" : path.startsWith(n.to);
           return (
             <Link

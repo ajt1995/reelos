@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -331,6 +333,107 @@ def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
     log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
 
 
+def torbox_search_ip() -> str:
+    for cmd in (
+        ["dig", "+short", "@1.1.1.1", "search-api.torbox.app", "A"],
+        ["dig", "+short", "@8.8.8.8", "search-api.torbox.app", "A"],
+        ["dig", "+short", "@1.1.1.1", "api.torbox.app", "A"],
+    ):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+        for line in (r.stdout or "").splitlines():
+            line = line.strip()
+            if line.count(".") == 3 and line[0].isdigit():
+                return line
+    try:
+        infos = socket.getaddrinfo("api.torbox.app", 443, socket.AF_INET)
+        if infos:
+            return str(infos[0][4][0])
+    except OSError:
+        pass
+    return "172.66.170.114"
+
+
+def inject_search_api_hosts() -> None:
+    ip = torbox_search_ip()
+    line = f"{ip} search-api.torbox.app"
+    names = (
+        "reelos-prowlarr-1",
+        "prowlarr",
+        "reelos-radarr-1",
+        "reelos-sonarr-1",
+        "decypharr",
+    )
+    for name in names:
+        r = subprocess.run(
+            [
+                "docker",
+                "exec",
+                name,
+                "sh",
+                "-c",
+                f"grep -q search-api.torbox.app /etc/hosts || echo '{line}' >> /etc/hosts",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if r.returncode == 0:
+            log_wire(f"search-api extra_hosts {name} {ip}")
+
+
+def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
+    """Official TorBox torznab if Cardigann cannot resolve search-api."""
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"torznab schema {e}")
+        return False
+    hit = None
+    for schema in schemas if isinstance(schemas, list) else []:
+        if str(schema.get("implementation") or "").lower() == "torznab":
+            hit = schema
+            break
+    if not hit:
+        log_wire("torznab schema missing")
+        return False
+    fields = []
+    for f in hit.get("fields") or []:
+        item = dict(f)
+        n = str(item.get("name") or "").lower()
+        if n in ("baseurl", "base_url"):
+            item["value"] = "https://search-api.torbox.app"
+        elif n in ("apipath", "api_path"):
+            item["value"] = "/torznab"
+        elif n in ("apikey", "api_key"):
+            item["value"] = key
+        fields.append(item)
+    body = {
+        "enable": True,
+        "appProfileId": hit.get("appProfileId") or 1,
+        "priority": 25,
+        "name": name,
+        "protocol": "torrent",
+        "implementation": hit.get("implementation"),
+        "implementationName": hit.get("implementationName"),
+        "configContract": hit.get("configContract"),
+        "fields": fields,
+    }
+    try:
+        call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+        log_wire(f"provider indexer added {name} via Torznab search-api")
+        return True
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:240] if e.fp else str(e)
+        log_wire(f"torznab POST failed {e.code} {err}")
+        return False
+    except NET_ERR as e:
+        log_wire(f"torznab POST failed {e}")
+        return False
+
+
 def indexer_enabled(prow_key: str, name: str) -> bool:
     try:
         have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
@@ -360,8 +463,10 @@ def _ensure_provider_indexer(prow_key: str) -> None:
         log_wire("provider indexer failed: no apiKey")
         return
     name = f"ReelOS-{src}"
+    inject_search_api_hosts()
     deadline = time.time() + 90
     yml_tried = False
+    torznab_tried = False
     while time.time() < deadline:
         try:
             have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
@@ -416,6 +521,11 @@ def _ensure_provider_indexer(prow_key: str) -> None:
             log_wire(f"provider indexer POST failed {e}")
         if indexer_enabled(prow_key, name):
             return
+        if src == "torbox" and not torznab_tried:
+            torznab_tried = True
+            add_torbox_torznab(prow_key, name, key)
+            if indexer_enabled(prow_key, name):
+                return
         time.sleep(4)
     log_wire(f"provider indexer missing after retry for {src}")
 
@@ -497,10 +607,7 @@ def _mount_extra_disks() -> None:
             print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
 
 
-def jellyfin_token() -> str | None:
-    a = answers()
-    user = a.get("adminName") or "reelos"
-    password = a.get("adminPassword") or "reelos"
+def jellyfin_authenticate(user: str, password: str) -> str | None:
     body = json.dumps({"Username": user, "Pw": password}).encode()
     req = urllib.request.Request(
         "http://127.0.0.1:8096/Users/AuthenticateByName",
@@ -517,6 +624,35 @@ def jellyfin_token() -> str | None:
             return data.get("AccessToken")
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError, ConnectionError, OSError):
         return None
+
+
+def jellyfin_token() -> str | None:
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    pw = (a.get("adminPassword") or "").strip()
+    names: list[str] = []
+    for n in (user, "reelos"):
+        if n and n not in names:
+            names.append(n)
+    try:
+        public = call("http://127.0.0.1:8096/Users/Public") or []
+        for row in public if isinstance(public, list) else []:
+            n = str(row.get("Name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+    except NET_ERR:
+        pass
+    pws: list[str] = []
+    for p in (pw, "reelos", user):
+        if p and p not in pws:
+            pws.append(p)
+    for n in names:
+        for p in pws:
+            tok = jellyfin_authenticate(n, p)
+            if tok:
+                log_wire(f"jellyfin auth as {n}")
+                return tok
+    return None
 
 
 def log_wire(msg: str) -> None:
@@ -718,47 +854,39 @@ def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
     return True
 
 
-def bootstrap_jellyfin() -> None:
-    deadline = time.time() + 120
-    info = None
+def reset_jellyfin_config() -> None:
+    cfg = COMPOSE / "configs" / "jellyfin"
+    log_wire("jellyfin config reset (keep images/volumes)")
+    compose("stop", "jellyfin")
+    if cfg.exists():
+        for child in list(cfg.iterdir()):
+            try:
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            except OSError as e:
+                log_wire(f"jellyfin reset skip {child.name} {e}")
+    compose("up", "-d", "jellyfin")
+
+
+def wait_jellyfin(seconds: int = 90) -> dict | None:
+    deadline = time.time() + seconds
     while time.time() < deadline:
         try:
             with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3) as resp:
-                info = json.loads(resp.read().decode())
-            break
+                return json.loads(resp.read().decode())
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
             time.sleep(2)
-    if not info:
-        log_wire("jellyfin not up")
-        return
-    a = answers()
-    user = a.get("adminName") or "reelos"
-    password = a.get("adminPassword") or "reelos"
-    for path in ("/mnt/symlinks", "/srv/media/movies", "/srv/media/tv"):
-        Path(path).mkdir(parents=True, exist_ok=True)
-    ensure_host_symlinks()
-    complete_jellyfin_startup(user, password)
-    intent = a.get("intent") or {}
-    want: list[tuple[str, str]] = []
-    if intent.get("movies", True):
-        want.append(("Movies", "movies"))
-    if intent.get("tv") or intent.get("anime"):
-        want.append(("Shows", "tvshows"))
-    if intent.get("music"):
-        want.append(("Music", "music"))
-    token = None
-    ready = False
+    return None
+
+
+def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
+    deadline = time.time() + 60
     while time.time() < deadline:
-        complete_jellyfin_startup(user, password)
-        token = jellyfin_token()
-        if not token:
-            log_wire("jellyfin auth retry")
-            time.sleep(3)
-            continue
         folders = jellyfin_folders(token)
         if libraries_ready(folders, want):
-            ready = True
-            break
+            return True
         by_name = {str(f.get("Name") or ""): f for f in folders}
         for name, ctype in want:
             folder = by_name.get(name)
@@ -775,9 +903,43 @@ def bootstrap_jellyfin() -> None:
             except NET_ERR as e:
                 log_wire(f"jellyfin library {name} {e}")
         time.sleep(3)
+    return libraries_ready(jellyfin_folders(token), want)
+
+
+def bootstrap_jellyfin() -> None:
+    info = wait_jellyfin(90)
+    if not info:
+        log_wire("jellyfin not up")
+        return
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    password = (a.get("adminPassword") or "reelos").strip() or "reelos"
+    for path in ("/mnt/symlinks", "/srv/media/movies", "/srv/media/tv"):
+        Path(path).mkdir(parents=True, exist_ok=True)
+    ensure_host_symlinks()
+    if not info.get("StartupWizardCompleted"):
+        complete_jellyfin_startup(user, password)
+    intent = a.get("intent") or {}
+    want: list[tuple[str, str]] = []
+    if intent.get("movies", True):
+        want.append(("Movies", "movies"))
+    if intent.get("tv") or intent.get("anime"):
+        want.append(("Shows", "tvshows"))
+    if intent.get("music"):
+        want.append(("Music", "music"))
+    token = jellyfin_token()
+    if not token:
+        log_wire("jellyfin auth mismatch — resetting jellyfin config")
+        reset_jellyfin_config()
+        if not wait_jellyfin(90):
+            log_wire("jellyfin not up after reset")
+            return
+        complete_jellyfin_startup(user, password)
+        token = jellyfin_token()
     if not token:
         log_wire("jellyfin auth failed")
         return
+    ready = ensure_jellyfin_libraries(token, want)
     if not ready:
         log_wire("jellyfin libraries missing after retry")
     else:

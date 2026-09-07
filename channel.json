@@ -1,9 +1,9 @@
 {
-  "version": "1.2.15",
+  "version": "1.2.16",
   "channel": "stable",
   "notes": [
-    "1.2.15 tree from main. One apply from 1.2.8.",
-    "Watch, Request, Connect, lid. Mailman first."
+    "1.2.16: Jellyfin owner match, TorBox DNS, Settings in chrome.",
+    "Apply once from the phone. No extra curls."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

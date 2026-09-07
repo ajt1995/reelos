@@ -150,6 +150,10 @@ need scripts/reelos-lookup-plugin.mjs '/api/terminal'
 need src/components/library-view.tsx '/api/library'
 need scripts/reelos-lookup-plugin.mjs '/api/library'
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
+need install/compose/docker-compose.yml '1.1.1.1'
+need install/compose/docker-compose.yml 'search-api.torbox.app'
+need src/components/shell.tsx 'to: "/settings"'
+need daemon/wire-engines.py 'jellyfin config reset'
 log "canaries ok"
 
 NEXT="$ROOT.next"

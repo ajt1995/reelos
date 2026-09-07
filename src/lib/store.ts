@@ -56,13 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.15";
-export const SHIPPED_VERSION = "1.2.15";
+export const LATEST_VERSION = "1.2.16";
+export const SHIPPED_VERSION = "1.2.16";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Reset build. Mailman first. Home stays up until mv.",
-  "Watch in Jellyfin. Request on the box. Lid does not sleep.",
+  "Jellyfin owner match or reset. Movies on /symlinks.",
+  "TorBox DNS. Settings in the chrome.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

@@ -1,31 +1,21 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 19:52 CDT**.
+Xorriso. Dated **2026-09-06 20:22 CDT**.
 
-# 1.2.15 frozen
+# 1.2.16 frozen
 
-VERSION **1.2.15**. No 1.2.16. **Stop committing.**
-
-House apply (button will not see a bump):
+VERSION **1.2.16**. Channel bumped. One apply from the phone.
 
 ```
 curl -fsSL https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh | sudo bash -s apply
 ```
 
-Then if libraries are still empty:
+They are not running more curls. Settings Check should light 1.2.16.
 
-```
-curl -X POST http://127.0.0.1:8080/api/wire
-```
+## This stamp
 
-## This job
+1. Jellyfin: try answers password, `reelos`/`reelos`, public user names. If still no token, reset **only** Jellyfin config, complete startup from `answers.json`, create Movies/Shows on `/symlinks`. Auth failure does not abort wire.
+2. Prowlarr/Radarr/Sonarr/Decypharr DNS `1.1.1.1` + `8.8.8.8`. `extra_hosts` `search-api.torbox.app` → Cloudflare IPv4 of `api.torbox.app`. Wire also injects `/etc/hosts` and falls back to official Torznab `https://search-api.torbox.app/torznab`. No tracker roster.
+3. Settings in desktop nav, phone header, phone tab bar. `/settings` stays valid.
 
-1. Provider indexer / Prowlarr `ConnectionResetError` is a log line. It cannot abort `main`.
-2. `bootstrap_jellyfin()` runs **first**, then indexer. Retry until Movies exists on `/symlinks` (Shows if TV was on). Low-perf extract flags stay off.
-3. `/dev/sdb` mount is non-fatal. Never format `sdb`.
-
-## Sandbox
-
-Not a house proof. No fake HP curls.
-
-HP not applied.
+No ISO. No other tickets.
