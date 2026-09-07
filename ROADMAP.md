@@ -1,6 +1,6 @@
 # ROADMAP.md
 
-Hal. Updated **2026-09-06 19:22 CDT**.
+Hal. Updated **2026-09-06 20:13 CDT**.
 
 Parked work. Owner picks issue + stamp later.
 
@@ -17,17 +17,8 @@ Parked work. Owner picks issue + stamp later.
 | #3 | [Ebooks to Android](https://github.com/ajt1995/reelos/issues/3) | `feature/3-books` |
 | #4 | [Finish music](https://github.com/ajt1995/reelos/issues/4) | `feature/4-music` |
 | #5 | [House logs](https://github.com/ajt1995/reelos/issues/5) | `feature/5-logs` |
+| #6 | [Settings missing from chrome](https://github.com/ajt1995/reelos/issues/6) | `feature/6-settings-link` |
 
-## Branch law (this is the lock)
+## Branch law
 
-`main` is the house apply. Channel is `main.tar.gz`. Same VERSION + new SHA still overlays the HP.
-
-- Do **not** implement parked tickets on `main`.
-- One issue → one branch named above. PR against `main`. **Do not merge.**
-- Do not touch `channel.json`, `VERSION`, `daemon/reelos-update.sh` on any branch unless the owner says that stamp is the job.
-- STATUS.md: which branch, what's done, **not merged**.
-- No indexer roster. No ISO unless asked.
-
-Not bumping VERSION is not a lock. Staying off `main` is.
-
-Merge happens when HAL names **one** issue and a version number.
+`main` is the house apply. Feature work off `main`. PR, do not merge until HAL names a stamp.
