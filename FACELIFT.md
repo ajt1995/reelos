@@ -1,41 +1,61 @@
 # FACELIFT.md
 
-Parked **2026-09-06**. Hal.
+Parked. Hal. Updated **2026-09-06 19:02 CDT**.
 
-**Not an OTA. Not 1.2.16. Not tonight.**
-`VERSION` stays **1.2.15**. Function first. Batman on the TV first. Then we talk.
+**Not an OTA. Not tonight.** No version until the owner assigns one.
 
-Working name: **1.3 Light** — paint, type, motion. Same rooms as 1.2.15. No new engines.
+Working name: **1.3 Light**.
 
-## Rule
+This is a **design system**, not a poster of six phones. Issues #2–#4 must be able to land later without a second facelift and without orphan chrome.
 
-If a screen does not exist in 1.2.15, do not invent it here. Updater, provision, Prowlarr, TorBox YML, Doctor stay untouched. If you "just refactor store.ts," stop.
+## First pass still does not invent features
 
-## Light
+Paint the rooms that exist in 1.2.15. Do not build Seerr, books, or Lidarr lookup here. Do not touch updater / provision / Prowlarr / TorBox YML.
 
-Charcoal void. One gold source. No rainbow glass. Posters get a ~2% gold bloom and sit down. Disabled goes dim, not gray-on-gray.
+## System (this is the work)
 
-## Type
+### Tokens
 
-Display serif for titles. Quiet sans for body. Wordmark tracking stays. Body never shouts.
+- Void: charcoal, near-black.
+- Light: one gold source. No second accent.
+- Type: display serif for titles, quiet sans for body, mono for addresses.
+- Motion: 120–180ms ease-out, 4–6px rise, fade+8px pages. Splash breathes once. `prefers-reduced-motion` kills it.
+- State pills: word only — queued / grabbing / ready. No fake %.
 
-## Motion
+### Chrome (stable)
 
-- Splash: wordmark breathes once, ~1.2s, then stops.
-- Cards: 120–180ms ease-out, 4–6px rise, no bounce.
-- Page change: fade + 8px. Not a slide-from-the-mall.
-- Request: gold pill word only — queued / grabbing / ready. No fake %.
-- Honor `prefers-reduced-motion`.
+Every future room uses the same shell:
 
-## Screens (already mocked in Imagine)
+- Top: wordmark left, one utility right (Settings).
+- Center: one primary action (search, or the thing this page is for).
+- Rows: **From this house.** Only real library items. Kind is a label, not a new theme.
+- Bottom nav: slots, not a frozen trio. Home / Requests / Connect today. A fourth slot may appear when a kind is on (Music, Books). Empty slots do not exist.
+- Connect cards: giant IPv4 + port, QR, same login, name of the **destination app** (Jellyfin, later Kavita, etc.).
 
-1. Splash — wordmark, caption THE HOUSE BOX, nothing else.
-2. Wizard source — one field, Validate, no dashboard chrome.
-3. Home empty — "Search a title. Watch happens in Jellyfin."
-4. Home after — row **From this house.** Only Jellyfin titles.
-5. Title Ready — Watch on the TV. Secondary: this phone.
-6. Connect TV — giant `http://<ipv4>:8096`, QR, same login. Not `.local`.
+### Slots for later tickets
 
-## When this file becomes a job
+| Later | Reuses |
+|---|---|
+| #2 Request in Jellyfin | Same pill + same request row. TV is still Connect. Do not skin Seerr gold. |
+| #3 Ebooks | New intent chip in the **existing** wizard step. New Connect card. New Home row if Kavita/Calibre has items. Same title page: primary = Open on the phone. |
+| #4 Music | Same lookup field, same request pill, Home row if Jellyfin Music has items. |
 
-House is on 1.2.15. One title plays on the TV. Then Hal writes a design ticket. Until then xorriso does not open this.
+New kind = one chip + one row + one Connect destination. Not a new palette.
+
+### What would break this
+
+- A second gold. Neon. Per-feature themes.
+- Hard-coded three-tab nav that cannot grow.
+- Title page that assumes “Watch on the TV” is the only primary.
+- Home that maps `catalog.ts` when a kind is empty.
+
+## Screens to paint first (examples, not a ceiling)
+
+1. Splash
+2. Wizard source
+3. Home empty
+4. Home after (one row)
+5. Title Ready (primary action named by kind)
+6. Connect (destination card)
+
+When this becomes a job: owner names a version. Until then do not open it.
