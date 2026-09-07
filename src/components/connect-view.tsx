@@ -16,6 +16,8 @@ type Box = {
   tailscaleAuth: string | null;
   tailscaleInstalled: boolean;
   tailscaleUp: boolean;
+  tailscaleIp?: string | null;
+  tailscaleDns?: string | null;
   tailnet: string | null;
 };
 
@@ -163,39 +165,46 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
           </div>
           {away === "out" ? (
             <div className="mt-4 text-sm text-muted">
-              {box.tailscaleUp ? (
-                <p className="text-foreground">
-                  Tailnet {box.tailnet || "paired"}. Survives reboot. Phone app, same account.
-                </p>
+              {box.tailscaleUp && box.tailscaleIp ? (
+                <div className="text-foreground">
+                  <p className="font-display text-2xl tracking-tight">{box.tailscaleIp}</p>
+                  {box.tailscaleDns ? <p className="mt-1 text-gold">{box.tailscaleDns}</p> : null}
+                  {box.tailnet ? <p className="mt-1">Tailnet {box.tailnet}. Survives reboot.</p> : null}
+                  <p className="mt-3">
+                    Phone: Tailscale app, same account, then{" "}
+                    <span className="text-gold">http://{box.tailscaleIp}</span>
+                  </p>
+                </div>
               ) : (
                 <>
-                  <p>Install Tailscale on the phone too. First this box needs it — that was skipped on purpose during updates.</p>
+                  <p>Install the Tailscale app on the phone, same account. First this box has to log in.</p>
                   <Button
                     className="mt-3"
                     disabled={tsBusy}
                     onClick={() => {
                       setTsBusy(true);
-                      setTsMsg("Installing on the box. Apt can take a minute.");
-                      void fetch("/api/tailscale/install", { method: "POST" })
+                      setTsMsg("Getting a login link…");
+                      void fetch("/api/tailscale/login", { method: "POST" })
                         .then((r) => r.json())
-                        .then((j: { ok?: boolean; error?: string }) => {
-                          setTsMsg(j.ok ? "Installing… watch for a login link below." : j.error || "Could not start");
+                        .then((j: { ok?: boolean; error?: string; auth?: string; up?: boolean }) => {
+                          if (j.up) setTsMsg("Already logged in.");
+                          else setTsMsg(j.ok ? "Open the link or scan the QR." : j.error || "Could not start login");
                         })
                         .finally(() => setTsBusy(false));
                     }}
                   >
-                    Install Tailscale on this box
+                    Get Tailscale login
                   </Button>
                   {tsMsg ? <p className="mt-2">{tsMsg}</p> : null}
                   {box.tailscaleAuth ? (
                     <>
-                      <a className="mt-3 block break-all text-gold" href={box.tailscaleAuth}>
+                      <a className="mt-4 block break-all font-display text-2xl text-gold" href={box.tailscaleAuth}>
                         {box.tailscaleAuth}
                       </a>
                       <img
                         alt="Tailscale login"
-                        className="mt-3 size-40 rounded-xl bg-white p-2"
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(box.tailscaleAuth)}`}
+                        className="mt-3 size-52 rounded-xl bg-white p-2"
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(box.tailscaleAuth)}`}
                       />
                       <Button
                         className="mt-3"
@@ -208,7 +217,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
                       </Button>
                     </>
                   ) : box.tailscaleInstalled ? (
-                    <p className="mt-2">Installed. Waiting for a login.tailscale.com link…</p>
+                    <p className="mt-2">Installed. Not logged in — tap Get Tailscale login.</p>
                   ) : null}
                 </>
               )}
