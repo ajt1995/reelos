@@ -56,13 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.16";
-export const SHIPPED_VERSION = "1.2.16";
+export const LATEST_VERSION = "1.2.17";
+export const SHIPPED_VERSION = "1.2.17";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Jellyfin owner match or reset. Movies on /symlinks.",
-  "TorBox DNS. Settings in the chrome.",
+  "OTA swap does not 502. Settings still in the chrome.",
+  "Jellyfin owner match. TorBox DNS.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

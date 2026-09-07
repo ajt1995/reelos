@@ -154,6 +154,8 @@ need install/compose/docker-compose.yml '1.1.1.1'
 need install/compose/docker-compose.yml 'search-api.torbox.app'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'jellyfin config reset'
+need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
+need daemon/reelos-update.sh 'caddy parked on updating page'
 log "canaries ok"
 
 NEXT="$ROOT.next"
@@ -223,6 +225,33 @@ mkdir -p "$ROOT.prev"
 cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
 [ -f "$ROOT/compose/docker-compose.yml" ] && cp -a "$ROOT/compose/docker-compose.yml" "$ROOT.prev/docker-compose.yml" || true
 
+caddy_updating() {
+  mkdir -p /etc/caddy
+  if [ -f /etc/caddy/Caddyfile ]; then
+    cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
+  fi
+  cat >/etc/caddy/Caddyfile <<'EOF'
+:80 {
+	header Content-Type "text/html; charset=utf-8"
+	respond "ReelOS is updating. This page will come back in a minute." 200
+}
+EOF
+  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+  log "caddy parked on updating page"
+}
+
+caddy_reelos() {
+  mkdir -p /etc/caddy
+  if [ -f "$ROOT/compose/Caddyfile" ]; then
+    cp "$ROOT/compose/Caddyfile" /etc/caddy/Caddyfile
+  elif [ -f /etc/caddy/Caddyfile.reelos.bak ]; then
+    cp /etc/caddy/Caddyfile.reelos.bak /etc/caddy/Caddyfile
+  fi
+  systemctl enable --now caddy >/dev/null 2>&1 || true
+  systemctl reload caddy 2>/dev/null || systemctl restart caddy 2>/dev/null || true
+  log "caddy proxying to live 8080"
+}
+
 restore() {
   log "restore after failure"
   trap - ERR
@@ -237,9 +266,32 @@ restore() {
   systemctl start reelos 2>/dev/null || true
   sleep 2
   systemctl start reelos 2>/dev/null || true
+  local i code
+  for i in $(seq 1 20); do
+    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    [ "$code" = "200" ] && break
+    sleep 1
+  done
+  caddy_reelos
 }
 
+# Unit + daemon-reload BEFORE stop so start never uses a stale unit.
+UNIT_SRC=""
+if [ -f "$NEXT/systemd/reelos.service" ]; then
+  UNIT_SRC="$NEXT/systemd/reelos.service"
+elif [ -f "$WORK/src/install/systemd/reelos.service" ]; then
+  UNIT_SRC="$WORK/src/install/systemd/reelos.service"
+fi
+if [ -n "$UNIT_SRC" ]; then
+  mkdir -p "$ROOT/systemd"
+  cp "$UNIT_SRC" "$ROOT/systemd/reelos.service"
+  cp "$UNIT_SRC" /etc/systemd/system/reelos.service
+  systemctl daemon-reload || true
+  log "unit installed, daemon-reload (8080 still up)"
+fi
+
 trap restore ERR
+caddy_updating
 log "stopping shell for mv (seconds, not minutes)"
 systemctl stop reelos 2>/dev/null || true
 mv "$ROOT/app" "$ROOT.prev/app"
@@ -251,45 +303,66 @@ cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
 rm -rf "$NEXT"
 
-if [ -f "$ROOT/compose/Caddyfile" ]; then
-  mkdir -p /etc/caddy
-  cp "$ROOT/compose/Caddyfile" /etc/caddy/Caddyfile
-  systemctl enable --now caddy >/dev/null 2>&1 || true
-  systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
-fi
-if [ -f "$ROOT/systemd/reelos.service" ]; then
-  cp "$ROOT/systemd/reelos.service" /etc/systemd/system/reelos.service
-  systemctl daemon-reload || true
-fi
 log "starting shell"
-systemctl enable --now reelos || true
-systemctl restart reelos || true
+systemctl enable reelos >/dev/null 2>&1 || true
+systemctl start reelos || true
 
-probe() {
-  local i code body code80 page80
+probe_home() {
+  local i code
   for i in $(seq 1 45); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
-    body=$(curl -sS --max-time 5 "http://127.0.0.1:8080/api/lookup?q=x" || true)
-    code80=$(curl -sS -o /tmp/reelos-ota-80.html -w "%{http_code}" --max-time 3 http://127.0.0.1/ || true)
-    page80=$(head -c 400 /tmp/reelos-ota-80.html 2>/dev/null || true)
-    log "probe $i home=$code :80=$code80 lookup=${body:0:40}"
-    if echo "$page80" | grep -qiE 'Caddy works|Welcome to Caddy'; then
-      log "probe $i stock Caddy on :80 — not ReelOS"
-      systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
+    log "probe $i home=$code"
+    if [ "$code" = "200" ]; then
+      return 0
+    fi
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl start reelos 2>/dev/null || true
+    if [ $((i % 8)) -eq 0 ]; then
+      log "8080 still down — restart reelos"
+      systemctl restart reelos 2>/dev/null || true
+    fi
+    sleep 1
+  done
+  journalctl -u reelos --no-pager -n 50 >>"$LOG" 2>/dev/null || true
+  log "home never returned"
+  return 1
+}
+
+probe_port80() {
+  local i code page
+  for i in $(seq 1 20); do
+    code=$(curl -sS -o /tmp/reelos-ota-80.html -w "%{http_code}" --max-time 3 http://127.0.0.1/ || true)
+    page=$(head -c 800 /tmp/reelos-ota-80.html 2>/dev/null || true)
+    log "probe :80 $i code=$code"
+    if echo "$page" | grep -qiE 'Caddy works|Welcome to Caddy'; then
+      log "stock Caddy on :80 — reinstalling ReelOS Caddyfile"
+      caddy_reelos
       sleep 1
       continue
     fi
-    if [ "$code" = "200" ] && [ "$code80" = "200" ] && echo "$body" | grep -q 'titles'; then
+    if echo "$page" | grep -qi 'ReelOS is updating'; then
+      log ":80 still updating page"
+      caddy_reelos
+      sleep 1
+      continue
+    fi
+    if [ "$code" = "200" ]; then
       return 0
     fi
-    systemctl start reelos 2>/dev/null || true
     sleep 1
   done
   return 1
 }
 
-if ! probe; then
+if ! probe_home; then
   log "probe failed — restoring previous app"
+  restore
+  exit 1
+fi
+# 8080 is Home 200. Point Caddy at it now — never reload reverse_proxy at a dead backend.
+caddy_reelos
+if ! probe_port80; then
+  log ":80 is not ReelOS — restoring previous app"
   restore
   exit 1
 fi
