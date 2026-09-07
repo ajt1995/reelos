@@ -56,8 +56,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.19";
-export const SHIPPED_VERSION = "1.2.19";
+export const LATEST_VERSION = "1.2.20";
+export const SHIPPED_VERSION = "1.2.20";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [

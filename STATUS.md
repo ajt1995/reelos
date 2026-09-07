@@ -1,15 +1,11 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 21:10 CDT**.
+Xorriso. Dated **2026-09-06 21:14 CDT**.
 
-# 1.2.19 frozen
+# 1.2.20 frozen
 
-VERSION **1.2.19**. House 1.2.18 Apply died because `systemctl stop reelos` kills the updater (same cgroup as the UI).
+1.2.19 SSH apply failed: `curl | bash` has `$0=bash`, copied the bash binary into `reelos-ota.service`.
 
-## This stamp
+SSH is not in the `reelos.service` cgroup. Detach only when we *are*. `--no-block` on the phone path.
 
-OTA runs as `reelos-ota.service` (`systemd-run`, oneshot) **before** the shell is stopped. Phone Apply returns 200; the unit keeps going. SSH Apply waits on that unit.
-
-1.2.18 work stays (compose DNS/extra_hosts, force-recreate, ReelOS-torbox, doctor 15s).
-
-House right now: recover Home, then one SSH apply. Do not tap Apply on the phone until Home is 200.
+House: `sudo REELOS_OTA_UNIT=1 bash -s apply` still works on the 1.2.19 mailman.

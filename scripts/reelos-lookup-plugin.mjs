@@ -518,6 +518,7 @@ async function handleUpdateApply(req, res) {
     const run = spawnSync(
       "systemd-run",
       [
+        "--no-block",
         "--unit=reelos-ota",
         "--collect",
         "--service-type=oneshot",

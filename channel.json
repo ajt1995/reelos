@@ -1,9 +1,9 @@
 {
-  "version": "1.2.19",
+  "version": "1.2.20",
   "channel": "stable",
   "notes": [
-    "1.2.19: Apply survives stop reelos (own systemd unit).",
-    "Keeps 1.2.18 TorBox DNS + indexer."
+    "1.2.20: SSH apply stays in SSH. Phone Apply still uses reelos-ota.service.",
+    "1.2.18 TorBox DNS + indexer included."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
