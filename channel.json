@@ -1,8 +1,8 @@
 {
-  "version": "1.2.33",
+  "version": "1.2.34",
   "channel": "stable",
   "notes": [
-    "1.2.33: Caddy on :80 without a 90s systemd hang. Dead :80 does not roll back a live Home."
+    "1.2.34: Settings Apply is a real systemd unit, not a child of the UI. Check does not dump the OTA log in red."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

@@ -110,21 +110,30 @@ log "ReelOS $LOCAL → $REMOTE"
 in_reelos_unit() {
   grep -q 'reelos.service' /proc/self/cgroup 2>/dev/null
 }
-if [ "${REELOS_OTA_UNIT:-}" != "1" ] && in_reelos_unit && command -v systemd-run >/dev/null 2>&1; then
+if [ "${REELOS_OTA_UNIT:-}" != "1" ] && in_reelos_unit && command -v systemctl >/dev/null 2>&1; then
   log "detach updater into reelos-ota.service (survives stop reelos)"
-  systemctl reset-failed reelos-ota 2>/dev/null || true
-  systemctl stop reelos-ota 2>/dev/null || true
+  mkdir -p /var/lib/reelos /etc/systemd/system
   src="${BASH_SOURCE[0]:-}"
   if [ ! -f "$src" ] || [ "$src" = "bash" ]; then
-    src=/tmp/reelos-update.sh
+    src=/var/lib/reelos/update-apply.sh
   fi
-  chmod 755 "$src" 2>/dev/null || true
-  systemd-run --no-block --unit=reelos-ota --collect --service-type=oneshot \
-    --property=TimeoutStartSec=infinity \
-    --setenv=REELOS_OTA_UNIT=1 \
-    --setenv=REELOS_OTA_REEXEC="${REELOS_OTA_REEXEC:-}" \
-    --setenv=REELOS_ROOT="$ROOT" \
-    /bin/bash "$src" apply
+  cp -a "$src" /var/lib/reelos/update-apply.sh 2>/dev/null || true
+  chmod 755 /var/lib/reelos/update-apply.sh
+  cat >/etc/systemd/system/reelos-ota.service <<'EOF'
+[Unit]
+Description=ReelOS OTA
+After=network-online.target
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+KillMode=mixed
+Environment=REELOS_OTA_UNIT=1
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
+EOF
+  systemctl daemon-reload || true
+  systemctl reset-failed reelos-ota 2>/dev/null || true
+  systemctl start --no-block reelos-ota
   exit 0
 fi
 
@@ -173,7 +182,7 @@ need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs 'sonarr hits='
 need scripts/reelos-lookup-plugin.mjs '/api/request'
-need scripts/reelos-lookup-plugin.mjs '/api/update/apply'
+need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
 need src/components/library-view.tsx '/api/library'
 need scripts/reelos-lookup-plugin.mjs '/api/library'

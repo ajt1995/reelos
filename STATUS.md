@@ -1,12 +1,13 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-07 16:40 CDT**.
+Xorriso. Dated **2026-09-07 16:50 CDT**.
 
-# 1.2.33
+# 1.2.34
 
-House: 1.2.32 Home came up on :8080. `systemctl start caddy` hung 90s (Type=notify). Probe :80 failed, OTA rolled back to 1.2.31. Phone Tailscale to :80 = connection refused.
+House: Settings Check found 1.2.32, Apply via `systemd-run --collect` died, UI dumped ota.log in red, version stayed 1.2.31.
 
-- Caddyfile: `auto_https off`, `admin off`
-- systemd drop-in: Type=simple, 12s start
-- if systemd still stuck, run `caddy` directly
-- :80 down is a log line, not a rollback. :8080 200 is success.
+- Apply writes `/var/lib/reelos/update-apply.sh` + `/etc/systemd/system/reelos-ota.service`
+- `systemctl start --no-block reelos-ota` (not a child of reelos.service)
+- Status = `systemctl is-active reelos-ota`, not `pgrep`
+- Error line is 160 chars, not the whole log
+- Check still only checks. Apply is the install button.

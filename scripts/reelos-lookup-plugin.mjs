@@ -520,46 +520,59 @@ async function handleUpdateApply(req, res) {
       send(res, 500, { ok: false, error: "could not download updater" });
       return;
     }
-    writeFileSync("/tmp/reelos-update.sh", body, { mode: 0o755 });
-    spawnSync("systemctl", ["reset-failed", "reelos-ota"], { encoding: "utf8" });
-    spawnSync("systemctl", ["stop", "reelos-ota"], { encoding: "utf8" });
-    const run = spawnSync(
-      "systemd-run",
-      [
-        "--no-block",
-        "--unit=reelos-ota",
-        "--collect",
-        "--service-type=oneshot",
-        "--property=TimeoutStartSec=infinity",
-        "--setenv=REELOS_OTA_UNIT=1",
-        "/bin/bash",
-        "/tmp/reelos-update.sh",
-        "apply",
-      ],
-      { encoding: "utf8" },
+    mkdirSync("/var/lib/reelos", { recursive: true });
+    writeFileSync("/var/lib/reelos/update-apply.sh", body, { mode: 0o755 });
+    writeFileSync(
+      "/etc/systemd/system/reelos-ota.service",
+      `[Unit]
+Description=ReelOS OTA
+After=network-online.target
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+KillMode=mixed
+Environment=REELOS_OTA_UNIT=1
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
+`,
     );
-    if (run.status !== 0) {
-      send(res, 500, { ok: false, error: (run.stderr || run.stdout || "systemd-run failed").slice(0, 200) });
+    spawnSync("systemctl", ["daemon-reload"], { encoding: "utf8" });
+    const st = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
+    if (st === "active" || st === "activating") {
+      send(res, 200, { ok: true, started: true, already: true });
       return;
     }
+    spawnSync("systemctl", ["reset-failed", "reelos-ota"], { encoding: "utf8" });
+    const run = spawnSync("systemctl", ["start", "--no-block", "reelos-ota"], { encoding: "utf8" });
+    if (run.status !== 0) {
+      send(res, 500, { ok: false, error: (run.stderr || run.stdout || "could not start reelos-ota").slice(0, 160) });
+      return;
+    }
+    otaNote("ui apply started reelos-ota.service");
     send(res, 200, { ok: true, started: true });
   } catch (e) {
-    send(res, 500, { ok: false, error: String(e) });
+    send(res, 500, { ok: false, error: String(e).slice(0, 160) });
+  }
+}
+
+function lastOtaLines(n = 3) {
+  try {
+    if (!existsSync("/var/lib/reelos/ota.log")) return "";
+    const lines = readFileSync("/var/lib/reelos/ota.log", "utf8")
+      .trim()
+      .split("\n")
+      .filter((l) => l && !l.includes("channel ") && !l.startsWith("----"));
+    return lines.slice(-n).join("\n");
+  } catch {
+    return "";
   }
 }
 
 async function handleUpdateStatus(_req, res) {
-  const running = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" }).status === 0;
-  let log = "";
-  try {
-    if (existsSync("/var/lib/reelos/ota.log")) {
-      const t = readFileSync("/var/lib/reelos/ota.log", "utf8");
-      log = t.trim().split("\n").slice(-8).join("\n");
-    }
-  } catch {
-    /* */
-  }
-  send(res, 200, { ok: true, local: localVersion(), running, log });
+  const st = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
+  const running = st === "active" || st === "activating";
+  send(res, 200, { ok: true, local: localVersion(), running, log: lastOtaLines(3) });
 }
 
 async function arrGet(url, key) {

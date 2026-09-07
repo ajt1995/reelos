@@ -56,8 +56,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.33";
-export const SHIPPED_VERSION = "1.2.33";
+export const LATEST_VERSION = "1.2.34";
+export const SHIPPED_VERSION = "1.2.34";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
@@ -525,22 +525,19 @@ export const useReelStore = create<ReelState>()(
               });
               return;
             }
+            let misses = 0;
             const tick = () => {
               void fetch("/api/update/status", { cache: "no-store" })
                 .then((r) => r.json())
                 .then((st: { running?: boolean; local?: string; log?: string }) => {
                   const cur = get();
                   const steps2 = (cur.update.steps || []).map((x) => ({ ...x }));
+                  const last = (st.log || "").trim().split("\n").pop() || "";
                   if (steps2[0]) {
                     steps2[0].status = "running";
-                    steps2[0].log = st.log || "";
+                    steps2[0].log = last.slice(0, 160);
                   }
-                  if (st.running) {
-                    set({ update: { ...cur.update, status: "applying", steps: steps2 } });
-                    window.setTimeout(tick, 2500);
-                    return;
-                  }
-                  if (st.local && target && st.local === target) {
+                  if (st.local && target && st.local === target && !st.running) {
                     set({
                       update: {
                         ...cur.update,
@@ -553,12 +550,21 @@ export const useReelStore = create<ReelState>()(
                     });
                     return;
                   }
+                  if (st.running) misses = 0;
+                  else misses += 1;
+                  if (st.running || misses < 24) {
+                    set({
+                      update: { ...cur.update, status: "applying", steps: steps2, notes: [] },
+                    });
+                    window.setTimeout(tick, 2500);
+                    return;
+                  }
                   set({
                     update: {
                       ...cur.update,
                       status: "error",
                       current: st.local || cur.update.current,
-                      notes: [st.log || "Apply ended. Version did not change."],
+                      notes: [last.slice(0, 160) || "Apply ended. Version did not change."],
                       steps: steps2,
                     },
                   });
