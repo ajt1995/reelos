@@ -176,6 +176,8 @@ need src/components/title-view.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Install Tailscale on this box'
 need src/components/advanced-view.tsx TerminalRow
+need src/components/settings-view.tsx 'title="Terminal"'
+need src/components/library-view.tsx hydrateShelf
 need install/compose/docker-compose.yml '0.0.0.0:8096'
 need install/compose/docker-compose.yml rshared
 need daemon/reelos-lid.sh HandleLidSwitch
@@ -183,20 +185,18 @@ need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs 'sonarr hits='
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
+need scripts/reelos-lookup-plugin.mjs '/api/update/run'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
-need src/components/library-view.tsx '/api/library'
 need scripts/reelos-lookup-plugin.mjs '/api/library'
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
-need daemon/wire-engines.py 'force-recreate prowlarr+decypharr'
-need scripts/reelos-lookup-plugin.mjs '=== jellyfin ==='
-need src/components/settings-view.tsx 'Copy last hour'
 need daemon/wire-engines.py 'restart_fuse_readers'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
-need daemon/reelos-update.sh 'UI-only OTA'
+need daemon/reelos-update.sh 'applied (home up)'
+need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
@@ -438,12 +438,48 @@ if ! probe_home; then
   restore
   exit 1
 fi
-# 8080 is Home 200. Point Caddy at it now — never reload reverse_proxy at a dead backend.
+trap - ERR
+echo "$REMOTE" >"$ROOT/VERSION"
+if [ -n "${HEAD_SHA:-}" ]; then
+  echo "$HEAD_SHA" >"$STATE/applied-sha"
+fi
+log "ReelOS $REMOTE applied (home up)"
+echo "ReelOS $REMOTE applied (home up)"
+
 caddy_reelos
 if ! probe_port80; then
   log ":80 still down — Home is on :8080, not rolling back"
 fi
-trap - ERR
+
+sshd_open() {
+  mkdir -p /etc/ssh/sshd_config.d
+  cat >/etc/ssh/sshd_config.d/reelos.conf <<'EOF'
+ListenAddress 0.0.0.0
+ListenAddress ::
+PasswordAuthentication yes
+EOF
+  systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd 2>/dev/null || true
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow 22/tcp >/dev/null 2>&1 || true
+    ufw allow in on tailscale0 >/dev/null 2>&1 || true
+  fi
+  if command -v tailscale >/dev/null 2>&1; then
+    tailscale set --ssh 2>/dev/null || true
+  fi
+  log "ssh listening on 0.0.0.0:22"
+}
+sshd_open
+
+nudge_fuse() {
+  if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+    timeout 25 docker restart reelos-jellyfin-1 reelos-radarr-1 reelos-sonarr-1 >/dev/null 2>&1 || true
+    log "restarted fuse readers"
+  else
+    log "fuse not mounted — skip reader restart"
+  fi
+}
+nudge_fuse
 
 load_env() {
   if [ -f "$ROOT/compose/.env" ]; then

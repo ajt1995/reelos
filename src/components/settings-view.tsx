@@ -216,20 +216,22 @@ export function SettingsView() {
           open={panel === "logs"}
           onClick={() => setPanel(panel === "logs" ? null : "logs")}
         />
+        <TerminalRow
+          open={panel === "term"}
+          onClick={() => setPanel(panel === "term" ? null : "term")}
+        />
       </div>
 
-      {!settings.hideAdvanced ? (
-        <Link
-          to="/settings/advanced"
-          className="mt-4 flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
-        >
-          <div>
-            <p className="font-display font-medium">Advanced apps</p>
-            <p className="mt-1 text-sm text-muted">Engines. You do not need these for daily use.</p>
-          </div>
-          <ChevronRight className="size-4 text-faint" />
-        </Link>
-      ) : null}
+      <Link
+        to="/settings/advanced"
+        className="mt-4 flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
+      >
+        <div>
+          <p className="font-display font-medium">Advanced apps</p>
+          <p className="mt-1 text-sm text-muted">Engines. You do not need these for daily use.</p>
+        </div>
+        <ChevronRight className="size-4 text-faint" />
+      </Link>
 
       <Doctor />
 

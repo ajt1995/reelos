@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { adapterProfile, viaLabel } from "@/lib/adapter";
-import { getTitle, TITLES } from "@/lib/catalog";
+import { getTitle } from "@/lib/catalog";
 import { sourceLabel, useReelStore } from "@/lib/store";
 import { pushIndexer } from "@/lib/appliance";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ export function EngineView({ id }: { id: string }) {
       : META[id];
   const requests = useReelStore((s) => s.requests);
   const library = useReelStore((s) => s.library);
+  const shelf = useReelStore((s) => s.shelf);
 
   if (!meta) {
     return (
@@ -37,12 +38,8 @@ export function EngineView({ id }: { id: string }) {
     );
   }
 
-  const movies = TITLES.filter((t) => t.kind === "movie" && (library.includes(t.id) || requests.some((r) => r.titleId === t.id)));
-  const shows = TITLES.filter(
-    (t) =>
-      (t.kind === "tv" || t.kind === "anime") &&
-      (library.includes(t.id) || requests.some((r) => r.titleId === t.id)),
-  );
+  const movies = shelf.filter((t) => t.kind === "movie");
+  const shows = shelf.filter((t) => t.kind === "tv" || t.kind === "anime");
 
   return (
     <div className="bg-raised">
@@ -69,7 +66,7 @@ export function EngineView({ id }: { id: string }) {
         {id === "indexers" ? <IndexerPanel /> : null}
         {id === "subtitles" ? (
           <p className="text-sm text-muted">
-            English preferred. Wired to {library.length} library items. Missing: 2.
+            English preferred. Wired to the library.
           </p>
         ) : null}
         {id === "downloads" ? <AdapterConsole /> : null}

@@ -1440,6 +1440,10 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/tailscale/check") return void (await handleTailscaleCheck(req, res));
           if (pathOnly === "/api/update/check") return void (await handleUpdateCheck(req, res));
           if (pathOnly === "/api/update/apply") return void (await handleUpdateApply(req, res));
+          if (pathOnly === "/api/update/run") {
+            req.method = "POST";
+            return void (await handleUpdateApply(req, res));
+          }
           if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
           if (pathOnly === "/api/request") return void (await handleRequest(req, res));
           if (pathOnly === "/api/password") return void (await handlePassword(req, res));
