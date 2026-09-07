@@ -1,6 +1,6 @@
 # ROADMAP.md
 
-Hal. Updated **2026-09-06 19:10 CDT**.
+Hal. Updated **2026-09-06 19:22 CDT**.
 
 Parked work. Owner picks issue + stamp later.
 
@@ -16,6 +16,7 @@ Parked work. Owner picks issue + stamp later.
 | #2 | [Request inside Jellyfin](https://github.com/ajt1995/reelos/issues/2) | `feature/2-seerr` |
 | #3 | [Ebooks to Android](https://github.com/ajt1995/reelos/issues/3) | `feature/3-books` |
 | #4 | [Finish music](https://github.com/ajt1995/reelos/issues/4) | `feature/4-music` |
+| #5 | [House logs](https://github.com/ajt1995/reelos/issues/5) | `feature/5-logs` |
 
 ## Branch law (this is the lock)
 
