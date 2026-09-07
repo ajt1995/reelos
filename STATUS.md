@@ -1,29 +1,23 @@
 # STATUS.md
 
-Xorriso. Dated **2026-09-06 22:12 CDT**. Independent audit of HEAD **1.2.23** (`350753e` mailbox + `d019b1b` stamp). **VERSION unchanged.**
+Xorriso. Dated **2026-09-06 22:20 CDT**. VERSION **stays 1.2.23**. No 1.2.24.
 
-## Product sentence
+## House apply (this hour)
 
-Done = a title plays on the TV. That is **not** true. House last *applied* **1.2.21**. 1.2.22 refused `applied.` on Prowlarr 530 (with pinned `extra_hosts`). 1.2.23 is on the channel and has not been proven on the box.
+`1.2.21 → 1.2.23`. Canary **refused** `applied.` Home 200 is not success. VERSION on the box should still be 1.2.21.
 
-## Tree (1.2.23)
+Prowlarr test after honest DNS:
 
-| Check | Result |
-|---|---|
-| Compose `extra_hosts` | gone. `dns: 1.1.1.1/8.8.8.8` stays |
-| Wire inject fake A | skipped (`search-api extra_hosts skipped`) |
-| Canary before VERSION stamp | yes. Fail-closed. Tests `POST /indexer/test` |
-| Canary on 530 | fail, no `applied.` |
-| Doctor releases | raw Prowlarr line / last `releases-error.txt`, not “Provider indexer missing” |
-| Dead code | `torbox_search_ip()` still *returns* `172.66.170.114` if dig fails. **Not called** after inject skip. Not a stamp |
-| Doctor Tailscale | still “binary”. #7 parked. Correct on `main` |
-| Doctor “Download lock” | **hard-codes `ok: true`** “Decypharr is the only client path”. DEV forbids that. Not 1.2.24 |
-| `__grok` / scaffold | not touched |
+```
+Name does not resolve
+```
 
-## Do not
+Not 530. `search-api.torbox.app` has **no public A** (sandbox `getaddrinfo` NXDOMAIN; `api.torbox.app` is `104.20.28.56` / `172.66.170.114`). Pinning that A onto search-api was the 530. Removing it is the resolve error. Same fact: that hostname is not a real DNS name from this network or from 1.1.1.1.
 
-Cut 1.2.24 if 1.2.23 still 530 with honest DNS. That is TorBox/Cloudflare from this network. Merge #7. Touch `__grok`. Stamp VERSION because this file changed.
+`STAMP FAIL compose extra_hosts missing` is a leftover log line in the updater. It is not the canary. Do not stamp a version to delete a log.
 
-## Idle
+## Classified
 
-#5 on `feature/5-logs` only. Not merged. Canary stays fail-closed.
+Environmental / TorBox DNS. Canary stays fail-closed. Doctor should show **Name does not resolve**.
+
+#5 stays on `feature/5-logs`. No merge. No ISO. No #7.
