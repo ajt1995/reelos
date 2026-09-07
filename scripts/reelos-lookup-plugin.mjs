@@ -300,6 +300,7 @@ async function handleBox(_req, res) {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     ipv4: ip,
     watch: ip ? `http://${ip}:8096` : "",
+    seerr: ip ? `http://${ip}:5055` : "",
     ui: ip ? `http://${ip}` : "",
     jellyfin,
     frontend: a.frontend || "jellyfin",
@@ -1328,7 +1329,10 @@ function composeProfiles(a) {
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
-  if (a.frontend === "jellyfin" || a.frontend === "both") p.push("jellyfin");
+  if (a.frontend === "jellyfin" || a.frontend === "both") {
+    p.push("jellyfin");
+    p.push("seerr");
+  }
   if (a.frontend === "plex" || a.frontend === "both") p.push("plex");
   if (a.source === "local-vpn") p.push("localvpn");
   else p.push("debrid");

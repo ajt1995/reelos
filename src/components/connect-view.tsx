@@ -8,6 +8,7 @@ type Box = {
   provisioned: boolean;
   ipv4: string;
   watch: string;
+  seerr?: string;
   jellyfin: { state: "green" | "amber" | "red"; detail: string };
   frontend: string;
   access: string;
@@ -23,6 +24,7 @@ const empty: Box = {
   provisioned: false,
   ipv4: "",
   watch: "",
+  seerr: "",
   jellyfin: { state: "amber", detail: "Still starting" },
   frontend: "jellyfin",
   access: "lan",
@@ -96,7 +98,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
       <p className="font-display text-xs tracking-[0.22em] text-gold uppercase">Connect</p>
       <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">Your TV is not ReelOS</h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
-        Request in ReelOS. Watch in Jellyfin. This page is also in Settings.
+        Request in Seerr. Watch in the Jellyfin TV app. Same house login.
       </p>
 
       <Card>
@@ -147,6 +149,30 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
               </Button>
             </a>
           ) : null}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="w-full">
+          <p className="font-display font-medium">Request — Seerr</p>
+          <p className="mt-1 text-sm text-muted">
+            Dummy-proof search and Request. Same login as Jellyfin. Auto-approves this household.
+            Official Jellyfin Android TV cannot Request — use this, a TV browser, JellyWatch, Moonfin, or SeerrTV.
+          </p>
+          {box.seerr || box.ipv4 ? (
+            <>
+              <p className="mt-4 break-all font-mono text-xl text-gold">
+                {box.seerr || `http://${box.ipv4}:5055`}
+              </p>
+              <a href={box.seerr || `http://${box.ipv4}:5055`} target="_blank" rel="noreferrer">
+                <Button className="mt-3" size="lg">
+                  Open Seerr
+                </Button>
+              </a>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-muted">Waiting on LAN address.</p>
+          )}
         </div>
       </Card>
 

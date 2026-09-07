@@ -2,6 +2,7 @@
 """Idempotent engine wiring after wizard / Repair / OTA."""
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import re
@@ -1348,6 +1349,169 @@ def wire_bazarr(radarr_key: str | None, sonarr_key: str | None) -> None:
             pass
 
 
+# Seerr permission bits: REQUEST + AUTO_APPROVE movie/tv + household admin.
+SEERR_HOUSEHOLD = 2 | 16 | 32 | 128 | 256 | 131072 | 262144 | 524288
+
+
+class Seerr:
+    def __init__(self) -> None:
+        self.cj = http.cookiejar.CookieJar()
+        self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
+
+    def call(self, path: str, method: str = "GET", body: dict | None = None):
+        data = None
+        headers = {"Accept": "application/json"}
+        if body is not None:
+            data = json.dumps(body).encode()
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(
+            "http://127.0.0.1:5055" + path,
+            data=data,
+            method=method,
+            headers=headers,
+        )
+        with self.op.open(req, timeout=25) as resp:
+            raw = resp.read().decode() or "{}"
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"raw": raw[:200]}
+
+
+def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    password = (a.get("adminPassword") or "reelos").strip() or "reelos"
+    up = False
+    for _ in range(40):
+        try:
+            urllib.request.urlopen("http://127.0.0.1:5055/api/v1/status", timeout=3).read()
+            up = True
+            break
+        except NET_ERR:
+            time.sleep(2)
+    if not up:
+        log_wire("seerr not up")
+        return
+    s = Seerr()
+    try:
+        pub = s.call("/api/v1/settings/public")
+    except NET_ERR as e:
+        log_wire(f"seerr public {e}")
+        return
+    if not pub.get("initialized"):
+        try:
+            s.call(
+                "/api/v1/auth/jellyfin",
+                "POST",
+                {
+                    "username": user,
+                    "password": password,
+                    "hostname": "jellyfin",
+                    "port": 8096,
+                    "useSsl": False,
+                    "urlBase": "",
+                    "email": f"{user}@reelos.local",
+                    "serverType": 2,
+                },
+            )
+            log_wire("seerr jellyfin login")
+        except NET_ERR as e:
+            log_wire(f"seerr setup {type(e).__name__} {e}")
+            return
+    else:
+        try:
+            s.call("/api/v1/auth/jellyfin", "POST", {"username": user, "password": password})
+        except NET_ERR as e:
+            log_wire(f"seerr reauth {type(e).__name__} {e}")
+    try:
+        libs = s.call("/api/v1/settings/jellyfin/library?sync=true")
+        rows = libs if isinstance(libs, list) else libs.get("libraries") or []
+        enabled = []
+        for lib in rows:
+            item = dict(lib)
+            item["enabled"] = True
+            enabled.append(item)
+        if enabled:
+            s.call("/api/v1/settings/jellyfin", "POST", {"libraries": enabled})
+    except NET_ERR as e:
+        log_wire(f"seerr libraries {type(e).__name__} {e}")
+    qid = quality_id("http://127.0.0.1:7878/api/v3", radarr_key) if radarr_key else 1
+    if radarr_key:
+        try:
+            s.call(
+                "/api/v1/settings/radarr",
+                "POST",
+                {
+                    "name": "Radarr",
+                    "hostname": "radarr",
+                    "port": 7878,
+                    "apiKey": radarr_key,
+                    "useSsl": False,
+                    "activeProfileId": qid or 1,
+                    "activeDirectory": "/symlinks",
+                    "isDefault": True,
+                    "is4k": False,
+                    "minimumAvailability": "released",
+                    "syncEnabled": True,
+                    "preventSearch": False,
+                    "tagRequests": False,
+                },
+            )
+            log_wire("seerr radarr")
+        except NET_ERR as e:
+            log_wire(f"seerr radarr {type(e).__name__} {e}")
+    sqid = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key) if sonarr_key else 1
+    if sonarr_key:
+        try:
+            s.call(
+                "/api/v1/settings/sonarr",
+                "POST",
+                {
+                    "name": "Sonarr",
+                    "hostname": "sonarr",
+                    "port": 8989,
+                    "apiKey": sonarr_key,
+                    "useSsl": False,
+                    "activeProfileId": sqid or 1,
+                    "activeDirectory": "/symlinks",
+                    "activeLanguageProfileId": 1,
+                    "isDefault": True,
+                    "is4k": False,
+                    "syncEnabled": True,
+                    "preventSearch": False,
+                    "tagRequests": False,
+                    "enableSeasonFolders": True,
+                },
+            )
+            log_wire("seerr sonarr")
+        except NET_ERR as e:
+            log_wire(f"seerr sonarr {type(e).__name__} {e}")
+    try:
+        main = s.call("/api/v1/settings/main") or {}
+        main["localLogin"] = True
+        main["mediaServerLogin"] = True
+        main["defaultPermissions"] = SEERR_HOUSEHOLD
+        s.call("/api/v1/settings/main", "POST", main)
+    except NET_ERR as e:
+        log_wire(f"seerr main {type(e).__name__} {e}")
+    try:
+        users = s.call("/api/v1/user")
+        rows = users if isinstance(users, list) else users.get("results") or []
+        for u in rows:
+            uid = u.get("id")
+            if not uid:
+                continue
+            s.call(
+                f"/api/v1/user/{uid}",
+                "PUT",
+                {"permissions": SEERR_HOUSEHOLD, "id": uid},
+            )
+        log_wire("seerr auto-approve household")
+    except NET_ERR as e:
+        log_wire(f"seerr users {type(e).__name__} {e}")
+
+
 def extra_access() -> None:
     if os.environ.get("REELOS_OTA") == "1":
         return
@@ -1453,6 +1617,11 @@ def main() -> int:
         wire_bazarr(radarr_key, sonarr_key)
     except Exception as e:
         log_wire(f"bazarr {type(e).__name__} {e}")
+    if frontend in ("jellyfin", "both"):
+        try:
+            bootstrap_seerr(radarr_key, sonarr_key)
+        except Exception as e:
+            log_wire(f"seerr bootstrap {type(e).__name__} {e}")
     extra_access()
 
     (STATE / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")

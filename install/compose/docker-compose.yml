@@ -19,6 +19,20 @@ services:
     environment:
       TZ: ${TZ:-UTC}
 
+  seerr:
+    profiles: ["seerr"]
+    image: ghcr.io/fallenbagel/jellyseerr:latest
+    container_name: seerr
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-UTC}
+      LOG_LEVEL: info
+      PORT: "5055"
+    volumes:
+      - ./configs/seerr:/app/config
+    ports:
+      - "0.0.0.0:5055:5055"
+
   plex:
     profiles: ["plex"]
     image: lscr.io/linuxserver/plex:latest

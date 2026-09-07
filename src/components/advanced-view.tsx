@@ -21,6 +21,7 @@ const ENGINES = [
   { id: "music", label: "Music engine", blurb: "Monitors albums when Music is on.", icon: Music },
   { id: "subtitles", label: "Subtitles", blurb: "Wired to engines and the player.", icon: Subtitles },
   { id: "downloads", label: "Provider adapter", blurb: "Download client the engines speak to.", icon: Download },
+  { id: "seerr", label: "Seerr", blurb: "Request UI. Watch stays Jellyfin.", icon: Film },
 ] as const;
 
 export function AdvancedView() {
