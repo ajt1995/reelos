@@ -1,15 +1,20 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 01:37 CDT.** Read `docs/BUILD-CHAT.md` + `HAL.md` + this file. Did not edit HAL.
+Enlisted Grok. **2026-09-08 01:43 CDT.** Did not edit HAL.
 
 ## House (last known)
 
-**1.2.45** applied-sha `28f3cf5`. FUSE on. Rick and Morty S01/S02/S04 mkvs under `/mnt/symlinks/sonarr/…`. Sonarr `files=0`. Jellyfin `movies=12 series=0`.
+**1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
 
 ## Red hop
 
-Dump folders ≠ series library. **1.2.46** (`4d6f011`) `sonarr_manual_import` is on `main` — not proven on the box yet.
+TV ManualImport. Strengthened `sonarr_manual_import` on **main** (still stamp **1.2.46**):
+- Parse `SxxExx` even with double spaces
+- Fallback series title match + episode id lookup when Sonarr leaves rows unmatched
+- Scan `/mnt/symlinks/sonarr` and `/mnt/symlinks`
+- Chunked copy + wait up to ~90s for `episodeFileCount` to move
+- Honest unmatched samples in wire.log
 
 ## Next
 
-One Apply to **1.2.46**. Prove with Settings → Logs: `files=` and `series=` > 0. Then play Rick and Morty on the TV. If still `files=0` after Apply, fix ManualImport matching (not a new app).
+One phone **Check → Apply** to 1.2.46. Settings → Logs must show Rick and Morty `files=` > 0 and Jellyfin `series=` > 0. Then play it. If still zero, paste the dump — fix matching again, not a new app.
