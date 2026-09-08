@@ -252,22 +252,43 @@ async function probeJson(url, ms = 3000) {
 }
 
 async function jellyfinToken(user, password) {
+  const names = [];
+  for (const n of [user, "reelos", "Austin"]) if (n && !names.includes(n)) names.push(n);
   try {
-    const r = await fetch("http://127.0.0.1:8096/Users/AuthenticateByName", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Emby-Authorization":
-          'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"',
-      },
-      body: JSON.stringify({ Username: user, Pw: password }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    return { token: j.AccessToken, id: j.User?.Id };
+    const pub = await fetch("http://127.0.0.1:8096/Users/Public", { signal: AbortSignal.timeout(4000) }).then((r) =>
+      r.json(),
+    );
+    for (const row of Array.isArray(pub) ? pub : []) {
+      const n = String(row.Name || "").trim();
+      if (n && !names.includes(n)) names.push(n);
+    }
   } catch {
-    return null;
+    /* */
   }
+  const pws = [];
+  for (const p of [password, "reelos", user, "Austin"]) if (p && !pws.includes(p)) pws.push(p);
+  for (const n of names) {
+    for (const p of pws) {
+      try {
+        const r = await fetch("http://127.0.0.1:8096/Users/AuthenticateByName", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Emby-Authorization":
+              'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"',
+          },
+          body: JSON.stringify({ Username: n, Pw: p }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (!r.ok) continue;
+        const j = await r.json();
+        if (j.AccessToken) return { token: j.AccessToken, id: j.User?.Id, name: n };
+      } catch {
+        /* */
+      }
+    }
+  }
+  return null;
 }
 
 async function jellyfinState(ip) {

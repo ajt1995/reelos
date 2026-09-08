@@ -1083,11 +1083,21 @@ def jellyfin_authenticate(user: str, password: str) -> str | None:
 
 
 def jellyfin_token() -> str | None:
+    cached = STATE / "jellyfin-token.json"
+    try:
+        prev = json.loads(cached.read_text()) if cached.exists() else {}
+        tok = str(prev.get("token") or "")
+        if tok:
+            call("http://127.0.0.1:8096/Users/Me", headers={"X-Emby-Token": tok})
+            log_wire(f"jellyfin auth cached as {prev.get('user') or '?'}")
+            return tok
+    except (OSError, json.JSONDecodeError, NET_ERR, urllib.error.HTTPError):
+        pass
     a = answers()
     user = (a.get("adminName") or "reelos").strip() or "reelos"
-    pw = (a.get("adminPassword") or "").strip()
+    pw = (a.get("adminPassword") or a.get("pin") or "").strip()
     names: list[str] = []
-    for n in (user, "reelos"):
+    for n in (user, "reelos", "Austin"):
         if n and n not in names:
             names.append(n)
     try:
@@ -1099,7 +1109,7 @@ def jellyfin_token() -> str | None:
     except NET_ERR:
         pass
     pws: list[str] = []
-    for p in (pw, "reelos", user):
+    for p in (pw, "reelos", user, "Austin"):
         if p and p not in pws:
             pws.append(p)
     for n in names:
@@ -1107,7 +1117,12 @@ def jellyfin_token() -> str | None:
             tok = jellyfin_authenticate(n, p)
             if tok:
                 log_wire(f"jellyfin auth as {n}")
+                try:
+                    cached.write_text(json.dumps({"token": tok, "user": n}) + "\n")
+                except OSError:
+                    pass
                 return tok
+    log_wire(f"jellyfin auth failed names={','.join(names) or 'none'} pws={len(pws)}")
     return None
 
 
