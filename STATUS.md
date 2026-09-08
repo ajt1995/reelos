@@ -1,14 +1,13 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 20:22 CDT.** VERSION **1.2.42**. House door was killed by a double Apply. Do not tell them to Apply while :80 is refused.
+Xorriso. **2026-09-07 20:28 CDT.** VERSION **1.2.42**.
 
-## Process (enforced by `scripts/check-ota.py`)
+## How we work (owner, 20:28)
 
-I do not push if this fails. I do not say `applied.` if :80 is not ReelOS.
+Do not use the owner as a debugger. SSH/paste only if it becomes a product fix that stops that behavior. No “run these three commands and tell me.” Diagnose from dumps + logs they already send. Ship on `main`. They Apply once the door is up.
 
-- One Apply at a time (`flock` + UI 409)
-- `ensure_door` before VERSION stamp
-- FUSE remount starts `caddy` + `reelos` when it finishes
-- Contracts in check-ota.py are fatal on the box too
+## Tonight
 
-House: start Caddy, then `wire-engines.py fuse`. Do not Apply until `curl :80` is 200.
+House Apply should pull FUSE-on-host, import scan after engines are up, one-Apply flock, `ensure_door` before `applied.`
+
+Did not merge #13 #15 #16 #17 #19 #20.
