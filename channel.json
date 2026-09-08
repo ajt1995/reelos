@@ -1,8 +1,8 @@
 {
-  "version": "1.2.46",
+  "version": "1.2.47",
   "channel": "stable",
   "notes": [
-    "1.2.46: Sonarr copies dump episodes into the series folder so Jellyfin can show Rick and Morty."
+    "1.2.47: Sonarr dump-folder import, honest request progress, Settings split. Phone Check then Apply."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

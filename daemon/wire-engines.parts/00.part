@@ -1,0 +1,204 @@
+#!/usr/bin/env python3
+"""Idempotent engine wiring after wizard / Repair / OTA."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+ROOT = Path(os.environ.get("REELOS_ROOT", "/opt/reelos"))
+COMPOSE = ROOT / "compose"
+STATE = Path("/var/lib/reelos")
+DECYPHARR = COMPOSE / "configs" / "decypharr" / "config.json"
+
+PROVIDER = {
+    "torbox": "torbox",
+    "real-debrid": "realdebrid",
+    "alldebrid": "alldebrid",
+    "premiumize": "premiumize",
+}
+QUALITY = {"1080p": "HD-1080p", "hybrid": "Ultra-HD", "4k": "Ultra-HD", "custom": "Any"}
+
+
+def answers() -> dict:
+    p = STATE / "answers.json"
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text())
+    except json.JSONDecodeError:
+        return {}
+
+
+def source() -> str:
+    env = COMPOSE / ".env"
+    if env.exists():
+        for line in env.read_text().splitlines():
+            if line.startswith("SOURCE="):
+                return line.split("=", 1)[1].strip()
+    return answers().get("source") or "real-debrid"
+
+
+def api_key(xml_path: Path) -> str | None:
+    if not xml_path.exists():
+        return None
+    try:
+        node = ET.parse(xml_path).getroot().find("ApiKey")
+    except ET.ParseError:
+        return None
+    if node is None or not node.text:
+        return None
+    return node.text.strip()
+
+
+NET_ERR = (
+    urllib.error.URLError,
+    urllib.error.HTTPError,
+    TimeoutError,
+    json.JSONDecodeError,
+    ConnectionError,
+    OSError,
+)
+
+
+def call(url: str, key: str | None = None, method: str = "GET", body: dict | None = None, headers: dict | None = None):
+    data = None if body is None else json.dumps(body).encode()
+    hdrs = {"Content-Type": "application/json"}
+    if key:
+        hdrs["X-Api-Key"] = key
+    if headers:
+        hdrs.update(headers)
+    req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            raw = resp.read()
+            return json.loads(raw.decode()) if raw else None
+    except urllib.error.HTTPError:
+        raise
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError) as e:
+        raise urllib.error.URLError(e)
+
+
+def wait_key(xml: Path, seconds: int = 90) -> str | None:
+    if not xml.exists():
+        seconds = min(seconds, 12)
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        k = api_key(xml)
+        if k:
+            return k
+        time.sleep(2)
+    return None
+
+
+def compose_env() -> dict:
+    env = os.environ.copy()
+    p = COMPOSE / ".env"
+    if p.exists():
+        for line in p.read_text().splitlines():
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            env.setdefault(k.strip(), v.strip())
+    return env
+
+
+def compose(*args: str) -> None:
+    subprocess.run(
+        ["docker", "compose", *args],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+def patch_decypharr() -> None:
+    src = source()
+    if src == "local-vpn":
+        return
+    slug = PROVIDER.get(src, "realdebrid")
+    cfg: dict = {}
+    if DECYPHARR.exists():
+        try:
+            cfg = json.loads(DECYPHARR.read_text())
+        except json.JSONDecodeError:
+            cfg = {}
+    debrids = cfg.get("debrids") or [{}]
+    entry = debrids[0] if debrids else {}
+    entry["provider"] = slug
+    entry["name"] = slug
+    if answers().get("apiKey"):
+        entry["api_key"] = answers()["apiKey"].strip()
+    entry.setdefault("folder", "/mnt")
+    entry["folder"] = "/mnt/debrid"
+    entry["use_webdav"] = True
+    cfg["debrids"] = [entry]
+    Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
+    Path("/opt/reelos/compose/configs/decypharr/cache/dfs").mkdir(parents=True, exist_ok=True)
+    cfg["mount"] = {
+        "type": "dfs",
+        "mount_path": "/mnt/debrid",
+        "dfs": {
+            "cache_dir": "/app/cache/dfs",
+            "uid": 1000,
+            "gid": 1000,
+            "umask": "002",
+        },
+    }
+    cfg.setdefault(
+        "qbittorrent",
+        {"download_folder": "/mnt/symlinks", "categories": ["sonarr", "radarr", "lidarr"]},
+    )
+    cfg.setdefault("use_auth", False)
+    cfg.setdefault("log_level", "info")
+    cfg.setdefault("port", "8282")
+    DECYPHARR.parent.mkdir(parents=True, exist_ok=True)
+    text = json.dumps(cfg, indent=2) + "\n"
+    prev = DECYPHARR.read_text() if DECYPHARR.exists() else ""
+    if text == prev:
+        log_wire("decypharr config unchanged — restart to remount")
+        subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
+        time.sleep(5)
+        restart_fuse_readers()
+        return
+    DECYPHARR.write_text(text)
+    compose("up", "-d", "--force-recreate", "decypharr")
+    time.sleep(5)
+    restart_fuse_readers()
+
+
+def restart_fuse_readers() -> None:
+    """Containers started before FUSE cannot see /mnt/debrid. Restart after mount."""
+    if not Path("/mnt/debrid/version.txt").exists() and not Path("/mnt/debrid/__all__").exists():
+        log_wire("fuse not up — skip reader restart")
+        return
+    for name in ("reelos-jellyfin-1", "reelos-radarr-1", "reelos-sonarr-1"):
+        r = subprocess.run(["docker", "restart", name], capture_output=True, text=True, check=False)
+        log_wire(f"restart {name} rc={r.returncode}")
+
+
+def fuse_on_host() -> bool:
+    return Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists()
+
+
+def persist_mnt_shared() -> None:
+    unit = """[Unit]
+Description=ReelOS /mnt rshared so Decypharr FUSE is visible
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mkdi

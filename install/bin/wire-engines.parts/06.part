@@ -1,0 +1,176 @@
+ow_key, name):
+                clear_releases_error()
+                return
+        time.sleep(4)
+    err_now = ""
+    try:
+        err_now = (STATE / "releases-error.txt").read_text()
+    except OSError:
+        err_now = ""
+    if "530" in err_now or "resolv" in err_now.lower():
+        log_wire("STAMP FAIL keeping Prowlarr error")
+        return
+    set_releases_error(f"STAMP FAIL {name} missing after retry")
+
+
+def transcode_override() -> None:
+    dri = Path("/dev/dri")
+    override = COMPOSE / "compose.override.yml"
+    if not dri.exists():
+        return
+    override.write_text(
+        "services:\n"
+        "  jellyfin:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+        "  plex:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+    )
+    subprocess.run(
+        ["docker", "compose", "up", "-d"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def mount_extra_disks() -> None:
+    try:
+        _mount_extra_disks()
+    except Exception as exc:
+        print(f"wire-engines: extra disks skipped: {exc}", file=sys.stderr)
+
+
+def _mount_extra_disks() -> None:
+    a = answers()
+    selected = a.get("selectedDisks") or []
+    format_ok = set(a.get("formatDisks") or [])
+    os_dev = None
+    try:
+        os_dev = os.path.realpath("/dev/disk/by-label/cloudimg-rootfs")
+    except OSError:
+        pass
+    for raw in selected:
+        name = raw.replace("/dev/", "").strip()
+        if not name or name.endswith("n1") and "nvme" in name and Path("/").stat().st_dev:
+            pass
+        dev = Path("/dev") / name
+        if not dev.exists():
+            continue
+        real = os.path.realpath(dev)
+        if os_dev and real == os_dev:
+            continue
+        # never format the disk that holds /
+        try:
+            root_src = subprocess.check_output(["findmnt", "-n", "-o", "SOURCE", "/"], text=True).strip()
+            if real in root_src or root_src.startswith(real):
+                continue
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        mnt = Path("/srv/media") / name
+        mnt.mkdir(parents=True, exist_ok=True)
+        try:
+            if name in format_ok and not str(name).startswith("sdb"):
+                mounted = subprocess.run(["findmnt", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                has_fs = subprocess.run(["blkid", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                if not mounted and not has_fs:
+                    subprocess.run(["mkfs.ext4", "-F", "-L", f"reelos-{name}", str(dev)], check=False)
+            line = f"{dev} {mnt} auto defaults,nofail 0 2"
+            fstab = Path("/etc/fstab")
+            text = fstab.read_text() if fstab.exists() else ""
+            if str(dev) not in text:
+                fstab.write_text(text.rstrip() + "\n" + line + "\n")
+            r = subprocess.run(["mount", str(mnt)], check=False, capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"wire-engines: mount {dev} skipped: {(r.stderr or r.stdout or '').strip()}", file=sys.stderr)
+        except Exception as exc:
+            print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
+
+
+def jellyfin_authenticate(user: str, password: str) -> str | None:
+    body = json.dumps({"Username": user, "Pw": password}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:8096/Users/AuthenticateByName",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            "X-Emby-Authorization": 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.1"',
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("AccessToken")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError, ConnectionError, OSError):
+        return None
+
+
+def jellyfin_token() -> str | None:
+    cached = STATE / "jellyfin.token"
+    if cached.exists():
+        t = cached.read_text().strip()
+        if t:
+            try:
+                call("http://127.0.0.1:8096/Users/Me", headers={"X-Emby-Token": t})
+                return t
+            except NET_ERR:
+                pass
+    for _ in range(8):
+        tok = jellyfin_token_once()
+        if tok:
+            try:
+                STATE.mkdir(parents=True, exist_ok=True)
+                cached.write_text(tok + "\n")
+            except OSError:
+                pass
+            return tok
+        time.sleep(3)
+    return None
+
+
+def jellyfin_token_once() -> str | None:
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    pw = (a.get("adminPassword") or "").strip()
+    names: list[str] = []
+    for n in (user, "reelos"):
+        if n and n not in names:
+            names.append(n)
+    try:
+        public = call("http://127.0.0.1:8096/Users/Public") or []
+        for row in public if isinstance(public, list) else []:
+            n = str(row.get("Name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+    except NET_ERR:
+        pass
+    pws: list[str] = []
+    for p in (pw, str(a.get("password") or ""), str(a.get("boxPassword") or ""), "reelos", user):
+        if p and p not in pws:
+            pws.append(p)
+    for n in names:
+        for p in pws:
+            tok = jellyfin_authenticate(n, p)
+            if tok:
+                log_wire(f"jellyfin auth as {n}")
+                return tok
+    return None
+
+
+def log_wire(msg: str) -> None:
+    line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n"
+    try:
+        (STATE / "wire.log").open("a").write(line)
+    except OSError:
+        pass
+
+
+def performance_low() -> bool:
+    p = STATE / "performance.json"
+    if not p.exists():
+        try:
+  

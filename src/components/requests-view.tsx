@@ -34,6 +34,8 @@ export function RequestsView() {
         try {
           const j = (await fetch(`/api/request?${q}`, { cache: "no-store" }).then((res) => res.json())) as {
             status?: string;
+            progress?: number;
+            percent?: number;
           };
           if (stop) return;
           const mapped =
@@ -46,8 +48,27 @@ export function RequestsView() {
                   : j.status === "queued"
                     ? "waiting"
                     : r.status;
-          if (mapped !== r.status) {
-            if (mapped === "available" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+          const apiProg =
+            typeof j.progress === "number"
+              ? j.progress
+              : typeof j.percent === "number"
+                ? j.percent
+                : undefined;
+          const nextProgress =
+            mapped === "available"
+              ? 100
+              : typeof apiProg === "number"
+                ? Math.max(0, Math.min(100, Math.round(apiProg)))
+                : mapped === "downloading"
+                  ? r.progress
+                  : 0;
+          if (mapped !== r.status || nextProgress !== r.progress) {
+            if (
+              mapped === "available" &&
+              r.status !== "available" &&
+              typeof Notification !== "undefined" &&
+              Notification.permission === "granted"
+            ) {
               try {
                 new Notification(`${getTitle(r.titleId)?.title || "Title"} is in the library`);
               } catch {
@@ -56,10 +77,14 @@ export function RequestsView() {
             }
             useReelStore.setState((s) => ({
               requests: s.requests.map((x) =>
-                x.id === r.id ? { ...x, status: mapped as typeof x.status, progress: mapped === "available" ? 100 : 0 } : x,
+                x.id === r.id
+                  ? { ...x, status: mapped as typeof x.status, progress: nextProgress, updatedAt: Date.now() }
+                  : x,
               ),
               library:
-                mapped === "available" && !s.library.includes(r.titleId) ? [...s.library, r.titleId] : s.library,
+                mapped === "available" && !s.library.includes(r.titleId)
+                  ? [...s.library, r.titleId]
+                  : s.library,
             }));
           }
         } catch {
@@ -127,7 +152,7 @@ export function RequestsView() {
                   <p className="mt-1 text-xs text-muted">
                     {viaLabel(r.via, r.status) ??
                       (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                    {r.status === "downloading" ? ` · ${Math.round(r.progress)}%` : ""}
+                    {r.status === "downloading" && r.progress > 0 ? ` · ${Math.round(r.progress)}%` : ""}
                     {r.release ? ` · ${r.release}` : ""}
                   </p>
                 )}

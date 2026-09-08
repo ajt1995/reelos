@@ -1,0 +1,177 @@
+
+        f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
+        method="POST",
+        body=body,
+        headers={"X-Emby-Token": token},
+    )
+
+
+def add_jellyfin_path(token: str, name: str) -> None:
+    q = urllib.parse.urlencode({"refreshLibrary": "true"})
+    call(
+        f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
+        method="POST",
+        body={"Name": name, "Path": "/symlinks", "PathInfo": {"Path": "/symlinks"}},
+        headers={"X-Emby-Token": token},
+    )
+
+
+def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
+    by_name = {str(f.get("Name") or ""): f for f in folders}
+    for name, _ctype in want:
+        folder = by_name.get(name)
+        if not folder or not folder_has_symlinks(folder):
+            return False
+    return True
+
+
+def reset_jellyfin_config() -> None:
+    cfg = COMPOSE / "configs" / "jellyfin"
+    log_wire("jellyfin config reset (keep images/volumes)")
+    compose("stop", "jellyfin")
+    if cfg.exists():
+        for child in list(cfg.iterdir()):
+            try:
+                if child.is_dir():
+                    shutil.rmtree(child)
+                else:
+                    child.unlink()
+            except OSError as e:
+                log_wire(f"jellyfin reset skip {child.name} {e}")
+    compose("up", "-d", "jellyfin")
+
+
+def wait_jellyfin(seconds: int = 90) -> dict | None:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3) as resp:
+                return json.loads(resp.read().decode())
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
+            time.sleep(2)
+    return None
+
+
+def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        folders = jellyfin_folders(token)
+        if libraries_ready(folders, want):
+            return True
+        by_name = {str(f.get("Name") or ""): f for f in folders}
+        for name, ctype in want:
+            folder = by_name.get(name)
+            try:
+                if folder is None:
+                    create_jellyfin_library(token, name, ctype)
+                    log_wire(f"jellyfin library {name}")
+                elif not folder_has_symlinks(folder):
+                    add_jellyfin_path(token, name)
+                    log_wire(f"jellyfin path {name} /symlinks")
+            except urllib.error.HTTPError as e:
+                err = e.read().decode()[:240] if e.fp else str(e)
+                log_wire(f"jellyfin library {name} {e.code} {err}")
+            except NET_ERR as e:
+                log_wire(f"jellyfin library {name} {e}")
+        time.sleep(3)
+    return libraries_ready(jellyfin_folders(token), want)
+
+
+def bootstrap_jellyfin() -> None:
+    info = wait_jellyfin(90)
+    if not info:
+        log_wire("jellyfin not up")
+        return
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    password = (a.get("adminPassword") or "reelos").strip() or "reelos"
+    for path in ("/mnt/symlinks", "/srv/media/movies", "/srv/media/tv"):
+        Path(path).mkdir(parents=True, exist_ok=True)
+    ensure_host_symlinks()
+    if not info.get("StartupWizardCompleted"):
+        complete_jellyfin_startup(user, password)
+    intent = a.get("intent") or {}
+    want: list[tuple[str, str]] = []
+    if intent.get("movies", True):
+        want.append(("Movies", "movies"))
+    if intent.get("tv") or intent.get("anime"):
+        want.append(("Shows", "tvshows"))
+    if intent.get("music"):
+        want.append(("Music", "music"))
+    token = jellyfin_token()
+    if not token:
+        if os.environ.get("REELOS_OTA"):
+            log_wire("jellyfin auth mismatch — not resetting during OTA")
+            return
+        log_wire("jellyfin auth mismatch — resetting jellyfin config")
+        reset_jellyfin_config()
+        if not wait_jellyfin(90):
+            log_wire("jellyfin not up after reset")
+            return
+        complete_jellyfin_startup(user, password)
+        token = jellyfin_token()
+    if not token:
+        log_wire("jellyfin auth failed")
+        return
+    ready = ensure_jellyfin_libraries(token, want)
+    if not ready:
+        log_wire("jellyfin libraries missing after retry")
+    else:
+        log_wire("jellyfin libraries ready")
+    apply_jellyfin_performance(token)
+    try:
+        call(
+            "http://127.0.0.1:8096/Library/Refresh",
+            method="POST",
+            headers={"X-Emby-Token": token},
+        )
+        log_wire("jellyfin refresh")
+    except NET_ERR as e:
+        log_wire(f"jellyfin refresh {e}")
+
+
+def bazarr_key() -> str | None:
+    for p in (
+        COMPOSE / "configs" / "bazarr" / "config" / "config.yaml",
+        COMPOSE / "configs" / "bazarr" / "config.yaml",
+    ):
+        if not p.exists():
+            continue
+        m = re.search(r"apikey:\s*['\"]?([A-Za-z0-9]+)", p.read_text())
+        if m:
+            return m.group(1)
+    return None
+
+
+def wire_bazarr(radarr_key: str | None, sonarr_key: str | None) -> None:
+    deadline = time.time() + 90
+    key = None
+    while time.time() < deadline:
+        key = bazarr_key()
+        if key:
+            break
+        time.sleep(2)
+    if not key:
+        return
+    if radarr_key:
+        try:
+            call(
+                "http://127.0.0.1:6767/api/radarr",
+                key,
+                method="POST",
+                body={
+                    "name": "Radarr",
+                    "address": "radarr",
+                    "port": 7878,
+                    "apikey": radarr_key,
+                    "ssl": False,
+                },
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            pass
+    if sonarr_key:
+        try:
+            call(
+                "http://127.0.0.1:6767/api/sonarr",
+                key,
+   

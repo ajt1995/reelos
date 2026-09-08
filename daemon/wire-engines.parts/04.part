@@ -1,0 +1,175 @@
+OS_OTA") and not prowlarr_has_hosts():
+        running = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", "reelos-prowlarr-1"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "true" in (running.stdout or ""):
+            log_wire("prowlarr already up — skip recreate")
+            return
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--no-deps",
+        "prowlarr",
+        "decypharr",
+    ]
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"force-recreate prowlarr+decypharr rc={r.returncode}")
+    time.sleep(8)
+
+
+def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
+    """Generic Torznab at search-api.torbox.app. Schema optional."""
+    impl = {
+        "implementation": "Torznab",
+        "implementationName": "Torznab",
+        "configContract": "TorznabSettings",
+        "appProfileId": 1,
+        "protocol": "torrent",
+    }
+    fields = None
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"torznab schema {e}")
+        schemas = []
+    for schema in schemas if isinstance(schemas, list) else []:
+        if str(schema.get("implementation") or "").lower() == "torznab":
+            impl = schema
+            fields = []
+            for f in schema.get("fields") or []:
+                item = dict(f)
+                n = str(item.get("name") or "").lower()
+                if n in ("baseurl", "base_url"):
+                    item["value"] = "https://search-api.torbox.app"
+                elif n in ("apipath", "api_path"):
+                    item["value"] = "/torznab"
+                elif n in ("apikey", "api_key"):
+                    item["value"] = key
+                fields.append(item)
+            break
+    if not fields:
+        fields = [
+            {"name": "baseUrl", "value": "https://search-api.torbox.app"},
+            {"name": "apiPath", "value": "/torznab"},
+            {"name": "apiKey", "value": key},
+        ]
+    body = {
+        "enable": True,
+        "appProfileId": impl.get("appProfileId") or 1,
+        "priority": 25,
+        "name": name,
+        "protocol": impl.get("protocol") or "torrent",
+        "implementation": impl.get("implementation") or "Torznab",
+        "implementationName": impl.get("implementationName") or "Torznab",
+        "configContract": impl.get("configContract") or "TorznabSettings",
+        "fields": fields,
+    }
+    try:
+        call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+        log_wire(f"provider indexer added {name} via Torznab search-api")
+        return True
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:400] if e.fp else str(e)
+        set_releases_error(f"Prowlarr {e.code}: {err}")
+        if e.code == 400 and name.lower() in err.lower():
+            return indexer_enabled(prow_key, name)
+        return False
+    except NET_ERR as e:
+        set_releases_error(f"torznab POST failed {e}")
+        return False
+
+
+def indexer_test(prow_key: str, ix: dict) -> tuple[bool, str]:
+    try:
+        call(
+            "http://127.0.0.1:9696/api/v1/indexer/test",
+            prow_key,
+            method="POST",
+            body=ix,
+        )
+        return True, ""
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:400] if e.fp else str(e)
+        return False, err or f"Prowlarr test {e.code}"
+    except NET_ERR as e:
+        return False, f"indexer test {e}"
+
+
+def indexer_enabled(prow_key: str, name: str) -> bool:
+    try:
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        return False
+    for ix in have if isinstance(have, list) else []:
+        if ix.get("name") == name and ix.get("enable"):
+            return True
+    return False
+
+
+# Prowlarr first-party public defs. Owner ordered EvoSeedbox-style fallback
+# after search-api.torbox.app has no DNS.
+PUBLIC_INDEXERS = (
+    ("ReelOS-1337x", ("1337x",)),
+    ("ReelOS-tpb", ("thepiratebay", "the pirate bay")),
+    ("ReelOS-yts", ("yts", "yify")),
+    ("ReelOS-eztv", ("eztv",)),
+)
+
+
+def ensure_public_indexers(prow_key: str) -> None:
+    if os.environ.get("REELOS_OTA"):
+        log_wire("OTA: skip public indexer tests")
+        return
+    wait_prowlarr_api(prow_key, 60)
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"public indexers list {e}")
+        return
+    if not isinstance(schemas, list):
+        schemas = []
+    rows = have if isinstance(have, list) else []
+    names = {ix.get("name") for ix in rows}
+    for name, hints in PUBLIC_INDEXERS:
+        if name in names:
+            log_wire(f"public indexer exists {name}")
+            continue
+        hit = next((s for s in schemas if any(h in _schema_blob(s) for h in hints)), None)
+        if not hit:
+            log_wire(f"public indexer no schema {name}")
+            continue
+        try:
+            _add_from_schema(prow_key, name, "", hit)
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:300] if e.fp else str(e)
+            log_wire(f"public indexer {name} {e.code}: {err}")
+        except NET_ERR as e:
+            log_wire(f"public indexer {name} {e}")
+    tested = []
+    try:
+        have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        return
+    for ix in have2 if isinstance(have2, list) else []:
+        if not ix.get("enable"):
+            continue
+        ok_t, terr = indexer_test(prow_key, ix)
+        n = i

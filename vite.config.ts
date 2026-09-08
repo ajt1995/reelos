@@ -12,6 +12,8 @@ import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { reelosLookupPlugin } from "./scripts/reelos-lookup-plugin.mjs";
+// @ts-expect-error JS plugin alongside the TS vite config
+import { reelosRequestProgressPlugin } from "./scripts/reelos-request-progress-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
@@ -162,6 +164,7 @@ export default defineConfig(({ command, isPreview }) => ({
   resolve: { tsconfigPaths: true },
   plugins: [
     pgliteBootstrapPlugin(),
+    reelosRequestProgressPlugin(),
     reelosLookupPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),
