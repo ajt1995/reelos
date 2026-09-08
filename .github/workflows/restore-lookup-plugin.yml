@@ -1,0 +1,61 @@
+name: restore-lookup-plugin
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/restore-lookup-plugin.yml
+permissions:
+  contents: write
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore plugin from last full blob + ranking
+        run: |
+          set -euo pipefail
+          git show 77dd64e69d05039778d21a2196352bee8b7c1adb:scripts/reelos-lookup-plugin.mjs > scripts/reelos-lookup-plugin.mjs
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path("scripts/reelos-lookup-plugin.mjs")
+          text = p.read_text()
+          needle = "  await Promise.all(jobs);\n  send(res, 200, { titles, error });\n"
+          insert = (
+          "  await Promise.all(jobs);\n"
+          "  const qn = q.toLowerCase();\n"
+          "  titles.sort((a, b) => {\n"
+          "    const as = String(a?.title || \"\").toLowerCase();\n"
+          "    const bs = String(b?.title || \"\").toLowerCase();\n"
+          "    const ar = as === qn ? 0 : as.startsWith(qn) ? 1 : as.includes(qn) ? 2 : 3;\n"
+          "    const br = bs === qn ? 0 : bs.startsWith(qn) ? 1 : bs.includes(qn) ? 2 : 3;\n"
+          "    if (ar !== br) return ar - br;\n"
+          "    if (ar === 0 && a.kind !== b.kind) return a.kind === \"movie\" ? -1 : 1;\n"
+          "    return (Number(b?.year) || 0) - (Number(a?.year) || 0);\n"
+          "  });\n"
+          "  send(res, 200, { titles, error });\n"
+          )
+          if "titles.sort" in text:
+              print("already has titles.sort")
+          elif needle not in text:
+              raise SystemExit("needle missing")
+          else:
+              p.write_text(text.replace(needle, insert, 1))
+          data = p.read_bytes()
+          print("size", len(data))
+          assert b"titles.sort" in data
+          assert b"readFileSync" in data
+          assert not data.strip().startswith(b"PLACEHOLDER")
+          PY
+      - name: Commit restore and remove this workflow
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/restore-lookup-plugin.yml
+          rm -rf scripts/.restore-lookup || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status
+          git commit -m "fix: restore lookup plugin + rank exact matches first"
+          git push origin HEAD:main
