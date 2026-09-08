@@ -30,7 +30,9 @@ Enlisted Grok. **2026-09-08 04:00 CDT.** Did not edit HAL. No books/Kavita. Sett
 
 ## This stamp
 
-**Settings declutter:** HouseCard slimmed to user/PIN/LAN/hostname/Jellyfin/Tailscale — dropped Source/Quality/Collecting/Watch (accordion rows already cover). Dead `InstallRow` removed. Soft density only. UpdatesRow Check/Apply still wired to store `checkForUpdate`/`startUpdate`. VERSION untouched.
+**BLOCKER tip:** `settings-view.tsx` accidentally overwritten with placeholder text on tip (`c5ba712` / `8b8d7e6`). Ready decluttered body on box: `/workspace/reelos-settings/settings-view.tsx` (+ `PUSH.json`, sha256 `dab05fe698b15368fb242f0373bf8a789323d1245b1659516ff5c15def022886`). Parent must `push_files` that body before any Apply.
+
+**Settings declutter (ready, not yet on tip .tsx):** HouseCard slimmed to user/PIN/LAN/hostname/Jellyfin/Tailscale — dropped Source/Quality/Collecting/Watch (accordion rows already cover). Dead `InstallRow` removed. Soft density only. UpdatesRow Check/Apply still wired to store `checkForUpdate`/`startUpdate`. VERSION untouched.
 
 **wire-engines restored via parts+shim** (daemon + install/bin):
 - `wire-engines.py` = shim that joins sorted `wire-engines.parts/*.part`
@@ -44,5 +46,6 @@ Enlisted Grok. **2026-09-08 04:00 CDT.** Did not edit HAL. No books/Kavita. Sett
 
 ## Next
 
-1. House Apply **1.2.47** from this branch only when named
-2. Lab Decypharr+FUSE only if grab→JF path must be proven on box
+1. **Restore** decluttered `settings-view.tsx` from box `PUSH.json` via GitHub MCP `push_files`
+2. House Apply **1.2.47** from this branch only when named
+3. Lab Decypharr+FUSE only if grab→JF path must be proven on box
