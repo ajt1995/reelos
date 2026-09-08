@@ -1,0 +1,36 @@
+                ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+    except Exception as e:
+        log_wire(f"arr wire {type(e).__name__} {e}")
+
+    try:
+        wire_bazarr(radarr_key, sonarr_key)
+    except Exception as e:
+        log_wire(f"bazarr {type(e).__name__} {e}")
+    extra_access()
+
+    try:
+        ensure_fuse()
+    except Exception as e:
+        log_wire(f"fuse {type(e).__name__} {e}")
+
+    (STATE / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")
+
+    lock = ROOT / "bin" / "lock-download-clients.py"
+    if lock.exists() and source() != "local-vpn":
+        subprocess.run([sys.executable, str(lock)], check=False)
+    kiosk = ROOT / "bin" / "kiosk.sh"
+    if os.environ.get("REELOS_OTA") != "1" and kiosk.exists() and Path("/dev/dri").exists():
+        subprocess.run(["bash", str(kiosk)], check=False)
+    return 0
+
+
+if __name__ == "__main__":
+    if "--performance" in sys.argv:
+        apply_jellyfin_performance()
+        raise SystemExit(0)
+    if "fuse" in sys.argv:
+        raise SystemExit(0 if ensure_fuse() is None else 0)
+    if "import" in sys.argv:
+        kick_imports()
+        raise SystemExit(0)
+    raise SystemExit(main())
