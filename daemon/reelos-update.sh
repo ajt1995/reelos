@@ -13,10 +13,20 @@ trap 'log "ERR line $LINENO exit $?"' ERR
 # curl, not Python urllib. House Python 3.14 hangs under systemd; Node/curl do not.
 fetch_channel() {
   mkdir -p "$WORK"
+  # GitHub API first — raw.githubusercontent.com caches stale channel.json
+  if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" \
+      -H "Accept: application/vnd.github.raw" \
+      -o "$WORK/channel.json" \
+      "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main" \
+    && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("version") else 1)' "$WORK/channel.json"
+  then
+    log "channel $(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')"
+    return 0
+  fi
   local u
   for u in \
-    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json" \
-    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json"
+    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json" \
+    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json?$(date +%s)"
   do
     log "channel GET $u"
     if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" -o "$WORK/channel.json" "$u" \
@@ -137,11 +147,7 @@ else
   tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
 fi
 GOT=$(cat "$WORK/src/VERSION" 2>/dev/null || true)
-if [ "$GOT" != "$REMOTE" ]; then
-  log "tarball VERSION '$GOT' != channel $REMOTE"
-  exit 1
-fi
-
+# Re-exec mailman before version compare. Stale channel.json must not block a newer tarball.
 NEW_UP="$WORK/src/daemon/reelos-update.sh"
 if [ -f "$NEW_UP" ] && [ "${REELOS_OTA_REEXEC:-}" != "1" ]; then
   if ! cmp -s "$NEW_UP" "$0" 2>/dev/null; then
@@ -149,6 +155,19 @@ if [ -f "$NEW_UP" ] && [ "${REELOS_OTA_REEXEC:-}" != "1" ]; then
     chmod 755 "$NEW_UP"
     export REELOS_OTA_REEXEC=1
     exec bash "$NEW_UP" apply
+  fi
+fi
+if [ -z "$GOT" ]; then
+  log "tarball has no VERSION"
+  exit 1
+fi
+if [ "$GOT" != "$REMOTE" ]; then
+  if newer "$GOT" "$REMOTE"; then
+    log "channel $REMOTE stale, tarball $GOT — using tarball"
+    REMOTE="$GOT"
+  else
+    log "tarball VERSION '$GOT' != channel $REMOTE"
+    exit 1
   fi
 fi
 

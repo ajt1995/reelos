@@ -581,13 +581,17 @@ async function handleUpdateApply(req, res) {
   }
   try {
     const urls = [
-      "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
+      "https://api.github.com/repos/ajt1995/reelos/contents/daemon/reelos-update.sh?ref=main",
       "https://github.com/ajt1995/reelos/raw/refs/heads/main/daemon/reelos-update.sh",
+      "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
     ];
     let body = "";
     for (const u of urls) {
       try {
-        const r = await fetch(u, { cache: "no-store", headers: { "User-Agent": "ReelOS-update" } });
+        const r = await fetch(u, {
+          cache: "no-store",
+          headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github.raw" },
+        });
         if (r.ok) {
           body = await r.text();
           break;
