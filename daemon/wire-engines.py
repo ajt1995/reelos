@@ -1,1 +1,1 @@
-PLACEHOLDER
+@/workspace/FIX-wire-content.py
