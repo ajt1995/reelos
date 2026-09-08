@@ -17,7 +17,9 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "not printing applied"),
     ("daemon/reelos-update.sh", "door :80 is ReelOS"),
     ("scripts/reelos-lookup-plugin.mjs", "Update already running"),
-    ("daemon/wire-engines.py", "door caddy/reelos started after fuse"),
+    ("daemon/reelos-update.sh", "hop FUSE"),
+    ("daemon/reelos-update.sh", "hop Jellyfin"),
+    ("daemon/reelos-update.sh", "hop search"),
 )
 
 

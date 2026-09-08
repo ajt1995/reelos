@@ -1,8 +1,8 @@
 {
-  "version": "1.2.43",
+  "version": "1.2.44",
   "channel": "stable",
   "notes": [
-    "1.2.43: Phone Apply is the mailman. Caddy systemd survives reboot. Check is SHA. :80 stays up during swap."
+    "1.2.44: Apply fails unless FUSE, Jellyfin, and search are green. Progress bar on the TTY."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

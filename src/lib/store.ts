@@ -56,13 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.43";
-export const SHIPPED_VERSION = "1.2.43";
+export const LATEST_VERSION = "1.2.44";
+export const SHIPPED_VERSION = "1.2.44";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "1.2.43: Phone Apply is the mailman. Caddy systemd survives reboot.",
-  "Check uses SHA drift. :80 stays up during the swap.",
+  "1.2.44: Apply does not stamp unless FUSE, Jellyfin, and search work.",
+  "Progress bar on the command line.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

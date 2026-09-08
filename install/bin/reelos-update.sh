@@ -8,6 +8,19 @@ WORK=/tmp/reelos-ota
 LOG="$STATE/ota.log"
 mkdir -p "$STATE" "$WORK"
 log() { printf '%s\n' "$*" >>"$LOG"; printf '%s\n' "$*" >&2; }
+STEPS=8
+STEP=0
+step() {
+  STEP=$((STEP + 1))
+  local label=$1 w=28 f i bar=""
+  f=$((STEP * w / STEPS))
+  i=0
+  while [ "$i" -lt "$w" ]; do
+    i=$((i + 1))
+    if [ "$i" -le "$f" ]; then bar="${bar}#"; else bar="${bar}-"; fi
+  done
+  log "[${bar}] ${label}  ${STEP}/${STEPS}"
+}
 trap 'log "ERR line $LINENO exit $?"' ERR
 
 # curl, not Python urllib. House Python 3.14 hangs under systemd; Node/curl do not.
@@ -159,9 +172,11 @@ fi
 
 if [ "${REELOS_OTA_REEXEC:-}" = "1" ] && [ -f "$WORK/src/VERSION" ]; then
   log "tarball already extracted — skip second download"
+  step "Download"
 else
   log "downloading $TARBALL"
-  curl -fL --ipv4 --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
+  step "Download"
+  curl --progress-bar -fL --ipv4 --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
   log "tarball $(wc -c < "$WORK/src.tar.gz") bytes"
   rm -rf "$WORK/src"
   mkdir -p "$WORK/src"
@@ -239,7 +254,9 @@ need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
-need daemon/reelos-ensure.sh 'npm run start:box'
+need daemon/reelos-update.sh 'hop FUSE green'
+need daemon/reelos-update.sh 'hop Jellyfin green'
+need daemon/reelos-update.sh 'hop search green'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
@@ -250,6 +267,7 @@ if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   exit 1
 fi
 log "canaries ok"
+step "Verify"
 if [ -f "$WORK/src/scripts/check-ota.py" ]; then
   python3 "$WORK/src/scripts/check-ota.py" "$WORK/src" --apply || { log "check-ota fail"; exit 1; }
 fi
@@ -296,6 +314,7 @@ if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
     SKIP_NPM=1
     if [ -d "$ROOT/app/node_modules" ]; then
       log "copying node_modules into staging (8080 still up)"
+step "Stage"
       cp -a "$ROOT/app/node_modules" "$NEXT/app/node_modules"
       log "package.json unchanged — reused node_modules"
     else
@@ -490,9 +509,11 @@ probe_home() {
       log "home 200"
       return 0
     fi
+    printf '\r[waiting Home] %d/45   ' "$i" >&2
     start_shell
     sleep 1
   done
+  printf '\n' >&2
   journalctl -u reelos --no-pager -n 50 >>"$LOG" 2>/dev/null || true
   log "home never returned"
   return 1
@@ -531,11 +552,13 @@ if ! probe_home; then
 fi
 trap - ERR
 log "home up — not stamping VERSION"
+step "Home"
 
 caddy_reelos
 if ! probe_port80; then
   log ":80 still down — Home is on :8080, not rolling back"
 fi
+step "Door :80"
 
 ensure_door() {
   systemctl start reelos >/dev/null 2>&1 || true
@@ -591,6 +614,7 @@ nudge_fuse() {
   fi
 }
 nudge_fuse
+step "FUSE"
 
 load_env() {
   if [ -f "$ROOT/compose/.env" ]; then
@@ -708,6 +732,56 @@ PY
 }
 
 CANARY_FAIL=0
+HOP_FAIL=0
+
+hop_stack() {
+  log "hops: FUSE + Jellyfin + search (fail-closed)"
+  step "Jellyfin"
+  if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+    log "hop FUSE green"
+  else
+    log "hop FUSE red — /mnt/debrid empty"
+    HOP_FAIL=1
+  fi
+  local j i
+  j=0
+  for i in $(seq 1 20); do
+    if curl -fsS --max-time 3 http://127.0.0.1:8096/System/Info/Public >/dev/null 2>&1; then
+      j=1
+      break
+    fi
+    printf '\r[waiting Jellyfin] %d/20   ' "$i" >&2
+    sleep 1
+  done
+  printf '\n' >&2
+  if [ "$j" = "1" ]; then
+    log "hop Jellyfin green"
+  else
+    log "hop Jellyfin red — :8096 silent"
+    HOP_FAIL=1
+  fi
+  step "Search"
+  python3 - <<'PY' && log "hop search green" || { log "hop search red"; HOP_FAIL=1; }
+import json, sys, urllib.request
+try:
+    with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=Batman", timeout=45) as r:
+        d = json.load(r)
+except Exception as e:
+    print(type(e).__name__, e, file=sys.stderr)
+    sys.exit(1)
+titles = d.get("titles") if isinstance(d, dict) else []
+if titles:
+    print((titles[0].get("title") or "ok")[:80], file=sys.stderr)
+    sys.exit(0)
+print(d.get("error") or "no titles", file=sys.stderr)
+sys.exit(1)
+PY
+}
+
+if [ -f /var/lib/reelos/provisioned ]; then
+  hop_stack
+fi
+
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
   CANARY_OUT=$(indexer_canary) || {
     CANARY_FAIL=1
@@ -719,7 +793,8 @@ else
   log "indexer canary skipped (compose unchanged — not a UI-only OTA)"
 fi
 
-if [ "$CANARY_FAIL" = "1" ]; then
+if [ "$CANARY_FAIL" = "1" ] || [ "${HOP_FAIL:-0}" = "1" ]; then
+  log "not printing applied — hops or indexer red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
   exit 1
 fi

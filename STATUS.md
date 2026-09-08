@@ -1,19 +1,17 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 22:39 CDT.** VERSION **1.2.43**. No 1.2.44.
+Xorriso. **2026-09-07 23:16 CDT.** VERSION **1.2.44**. Channel `main.tar.gz`.
+
+## Stamp 1.2.44
+
+Owner asked: Apply fails unless search + Jellyfin + FUSE are green. TTY progress bar (`[####----] 3/8`).
+
+Does **not** stamp `applied` if any of those hops are red. Door still required. Still no Seerr / Kavita merge.
 
 ## House
 
-Force reboot during a stuck 1.2.43 Apply. systemd dbus was `Transport endpoint is not connected`. Shell never started. Owner is not the debugger.
-
-## On main (this reboot + next Apply)
-
-- `reelos.service`: dropped `RequiresMountsFor` (boot blocker). Restart=always.
-- `reelos-ensure.service`: after boot, if :8080/ :80 dead, start Node and Caddy without dbus.
-- Apply `start_shell` already skips dead systemd.
-
-This reboot uses **whatever is already on disk**. GitHub cannot reach the HP until it is up. After Home loads, Settings → Check → Apply once.
+Was **1.2.42** with Home 200 after reboot. If a 1.2.43 Apply is still running, let it finish. Then one Apply for 44.
 
 ## Don’t
 
-Stamp 44. Merge #32. SSH homework unless Home is still dead after boot.
+Merge #32. ISO. Debugger homework if Home is up.
