@@ -1,6 +1,6 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 03:00 CDT.** Did not edit HAL. No books/Kavita.
+Enlisted Grok. **2026-09-08 03:26 CDT.** Did not edit HAL. No books/Kavita.
 
 ## Branch
 
@@ -10,23 +10,19 @@ Enlisted Grok. **2026-09-08 03:00 CDT.** Did not edit HAL. No books/Kavita.
 
 **1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
 
-## This stamp (partial)
+## This stamp
 
-**On branch (good):**
-- `daemon/sonarr_manual_import.py` + `install/bin` mirror — hardened companion module (blob `bb5a4ba`)
-- `VERSION` / `channel.json` → **1.2.47**, tarball = this branch
+**wire-engines restored via parts+shim** (daemon + install/bin):
+- `wire-engines.py` = shim that joins sorted `wire-engines.parts/*.part`
+- Complete parts `00–09` on both trees; joined body = slim (~59408 bytes)
+- Joined body has ManualImport loader (`reelos_sonarr_manual_import` ×1, `sonarr_manual_import` ×6)
+- Companion `sonarr_manual_import.py` on branch — movies/TV ManualImport hooked via module
 
-**Broken — do not Apply yet:**
-- `daemon/wire-engines.py` and `install/bin/wire-engines.py` are a **shim** that joins `wire-engines.parts/*.part`
-- Parts present on daemon: `00–03`, `09` only — **missing `04–08`** (incomplete body; shim will fail or run truncated code)
-- ManualImport loader is **not hooked** until a complete `wire-engines.py` (slim loader that importlibs the companion) is restored
-
-## Restore ready on box
-
-`/workspace/RESTORE-wire.json` and `/workspace/FIX-wire-content.py` (~59KB) = full working `wire-engines` with `reelos_sonarr_manual_import` loader. Push those two paths via GitHub MCP `push_files`, then delete `wire-engines.parts/`.
+**Still warn — house Apply only after phone UI Check path:**
+- Do **not** Apply from a feature-branch URL until Hal names it
+- Phone **Check → Apply** when ready; prove Logs `files=` / `series=` > 0
 
 ## Next
 
-1. Restore complete `wire-engines.py` (daemon + install/bin)
-2. Lab mid-2010s movie/TV search sanity
-3. House Apply **1.2.47** from this branch only when named — prove Logs `files=` / `series=` > 0
+1. Lab mid-2010s movie/TV search sanity
+2. House Apply **1.2.47** from this branch only when named
