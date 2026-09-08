@@ -26,19 +26,23 @@ async function handleList(res) {
     const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 20000 });
     const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
     const requests = [];
-    const titles = [];
+    const need = [];
     for (const row of rows) {
       const rec = seerrRequestRow(row);
       if (!rec.titleId) continue;
       requests.push(rec);
       const parsed = parseTitleId(rec.titleId);
-      if (!parsed?.tmdb) continue;
-      const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
-      const d = await seerrFetch(path, { key, ms: 12000 });
-      const t = seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
-      if (t) titles.push(t);
+      if (parsed?.tmdb) need.push(parsed);
     }
-    send(res, 200, { requests, titles, engine: "seerr" });
+    const details = await Promise.all(
+      need.map(async (parsed) => {
+        const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+        const d = await seerrFetch(path, { key, ms: 12000 });
+        if (!d.ok || !d.json) return null;
+        return seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+      }),
+    );
+    send(res, 200, { requests, titles: details.filter(Boolean), engine: "seerr" });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }

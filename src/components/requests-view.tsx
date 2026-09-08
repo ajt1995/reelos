@@ -84,15 +84,20 @@ export function RequestsView() {
         ) : null}
         {list.map((r) => {
           const t = getTitle(r.titleId);
-          if (!t) return null;
+          const titleId = t?.id || r.titleId;
+          const label = t?.title || r.titleId || "Title";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
-              <Link to="/title/$id" params={{ id: t.id }} className="shrink-0">
-                <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+              <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
+                {t?.poster ? (
+                  <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+                ) : (
+                  <div className="h-[72px] w-12 rounded-lg bg-card-2" />
+                )}
               </Link>
               <div className="min-w-0 flex-1">
-                <Link to="/title/$id" params={{ id: t.id }} className="truncate font-medium">
-                  {t.title}
+                <Link to="/title/$id" params={{ id: titleId }} className="truncate font-medium">
+                  {label}
                   {r.season ? ` · S${String(r.season).padStart(2, "0")}` : ""}
                 </Link>
                 <p className="mt-1 text-xs text-muted">
@@ -125,7 +130,7 @@ export function RequestsView() {
               ) : (
                 <Link
                   to="/play/$id"
-                  params={{ id: t.id }}
+                  params={{ id: titleId }}
                   className="text-sm text-gold hover:text-gold-bright"
                 >
                   Play

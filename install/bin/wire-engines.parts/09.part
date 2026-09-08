@@ -128,6 +128,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
                         "apiKey": radarr_key,
                         "useSsl": False,
                         "activeProfileId": qid or 1,
+                        "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
                         "activeDirectory": "/symlinks/radarr",
                         "isDefault": True,
                         "is4k": False,
@@ -135,6 +136,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
                         "syncEnabled": True,
                         "preventSearch": False,
                         "tagRequests": False,
+                        "tags": [],
                     },
                 )
                 log_wire("seerr radarr")
@@ -155,6 +157,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
                         "apiKey": sonarr_key,
                         "useSsl": False,
                         "activeProfileId": sqid or 1,
+                        "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
                         "activeDirectory": "/symlinks/sonarr",
                         "isDefault": True,
                         "is4k": False,
@@ -162,6 +165,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
                         "preventSearch": False,
                         "tagRequests": False,
                         "enableSeasonFolders": True,
+                        "tags": [],
                     },
                 )
                 log_wire("seerr sonarr")
