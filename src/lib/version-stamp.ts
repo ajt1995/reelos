@@ -1,4 +1,3 @@
-/** Single source for OTA version gate + UI stamp. Keep in lockstep with VERSION + channel.json. */
 export const LATEST_VERSION = "1.2.47";
 export const SHIPPED_VERSION = "1.2.47";
 export const UPDATE_NOTES = [
