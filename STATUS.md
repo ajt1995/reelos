@@ -1,13 +1,18 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 23:25 CDT.** VERSION **1.2.44**.
+Xorriso. **2026-09-07 23:26 CDT.** VERSION **1.2.44**. House applied-sha **c84545d**.
 
-## Why no GitHub token in the tree
+## House dump (reelos-house 4)
 
-The tarball is public. A PAT in `main` is a leaked secret. Grok’s GitHub connector is **this chat**, not the HP.
+**Green:** FUSE on host. Jellyfin movies=3 (National Treasure, Barbie, Guardians). Search Batman. Door `:80` ReelOS. `ReelOS 1.2.44 applied.` Docker all Up.
 
-## Now
+**Red / not done:**
+- Rick and Morty S01/S02/S04 dirs exist under sonarr dumps, **files=0**. Jellyfin **series=0**.
+- Jellyfin library refresh **401 / no token** (`#32` still off main).
+- Sonarr import has been `Connection reset` on OTA wire.
+- Apply log is **doubled** (two processes still stamped).
+- House SHA **c84545d**; main is **77dd64e** (GitHub token + bugs in Logs). Same VERSION 1.2.44.
 
-Settings → Logs: paste a GitHub token with **issues: write** on `ajt1995/reelos`. Saved `0600` at `/var/lib/reelos/github-token`. Failures POST a House issue. Still 1.2.44.
+## Don’t
 
-Apply 44 once when 43 is done.
+Stamp 1.2.45 until HAL names it. Next wave they already queued: **#32 Jellyfin token** so refresh/import can put those seasons in the library.
