@@ -976,6 +976,54 @@ function shOut(args, timeout = 8000) {
   }
 }
 
+async function tvHop() {
+  const fuse = existsSync("/mnt/debrid/__all__") || existsSync("/mnt/debrid/version.txt");
+  const dumps = shOut(
+    ["bash", "-lc", "ls -la /mnt/symlinks/sonarr 2>&1 | head -25; echo '---'; find /mnt/symlinks/sonarr -maxdepth 2 \\( -type f -o -type l \\) 2>/dev/null | head -20"],
+    2000,
+  ).trim();
+  let sonarr = "sonarr: no key";
+  const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
+  if (sk) {
+    try {
+      const series = await arrGet("http://127.0.0.1:8989/api/v3/series", sk);
+      const list = Array.isArray(series) ? series : [];
+      sonarr = list.length
+        ? list
+            .slice(0, 20)
+            .map((s) => `${s.title} files=${s.statistics?.episodeFileCount || 0} pct=${s.statistics?.percentOfEpisodes || 0}`)
+            .join("\n")
+        : "sonarr: zero series";
+    } catch (e) {
+      sonarr = `sonarr: ${e}`;
+    }
+  }
+  let jf = "jellyfin: no token";
+  const a = answers();
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (auth?.token) {
+    try {
+      const r = await fetch(
+        "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Limit=1",
+        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+      );
+      const data = await r.json();
+      const movies = await fetch(
+        "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie&Limit=1",
+        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+      ).then((x) => x.json());
+      const shows = await fetch(
+        "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Series&Limit=1",
+        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+      ).then((x) => x.json());
+      jf = `jellyfin movies=${movies.TotalRecordCount ?? "?"} series=${shows.TotalRecordCount ?? "?"} total=${data.TotalRecordCount ?? "?"}`;
+    } catch (e) {
+      jf = `jellyfin: ${e}`;
+    }
+  }
+  return [`fuse ${fuse ? "on host" : "MISSING"}`, "=== sonarr dumps ===", dumps, "=== sonarr series ===", sonarr, "=== jellyfin counts ===", jf].join("\n");
+}
+
 async function handleLogs(_req, res) {
   const ver = existsSync("/var/lib/reelos/installed-version")
     ? readFileSync("/var/lib/reelos/installed-version", "utf8").trim()
@@ -989,8 +1037,10 @@ async function handleLogs(_req, res) {
     `ReelOS ${ver}`,
     `applied-sha ${sha}`,
     `time ${new Date().toISOString()}`,
+    "=== tv hop ===",
+    await tvHop(),
     "=== mount ===",
-    shOut(["bash", "-lc", "ls -la /mnt /mnt/debrid /mnt/debrid/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -40"], 2500).trim(),
+    shOut(["bash", "-lc", "ls -la /mnt /mnt/debrid /mnt/debrid/__all__ /mnt/symlinks /mnt/symlinks/radarr 2>&1 | head -40"], 1500).trim(),
     "=== files ===",
     shOut(["bash", "-lc", "find /mnt/symlinks -maxdepth 3 \\( -type f -o -type l \\) 2>/dev/null | head -30"], 2500).trim(),
     "=== decypharr ===",

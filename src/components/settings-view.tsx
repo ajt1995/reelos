@@ -938,7 +938,7 @@ function LogsRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const loaded = useRef(false);
 
   const grab = async () => {
-    const r = await fetch("/api/logs", { cache: "no-store", signal: AbortSignal.timeout(15000) });
+    const r = await fetch("/api/logs", { cache: "no-store", signal: AbortSignal.timeout(45000) });
     const j = (await r.json()) as { ok?: boolean; text?: string; error?: string };
     if (!j.text) throw new Error(j.error || "No logs");
     return j.text;

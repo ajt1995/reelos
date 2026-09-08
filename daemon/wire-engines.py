@@ -234,36 +234,42 @@ def wait_http(url: str, seconds: int = 40) -> bool:
 
 
 def kick_imports() -> None:
-    wait_http("http://127.0.0.1:7878/ping", 40)
-    wait_http("http://127.0.0.1:8989/ping", 40)
+    wait_http("http://127.0.0.1:7878/ping", 90)
+    wait_http("http://127.0.0.1:8989/ping", 90)
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
     rk = api_key(radarr_xml)
     sk = api_key(sonarr_xml)
     if rk:
-        try:
-            call(
-                "http://127.0.0.1:7878/api/v3/command",
-                rk,
-                method="POST",
-                body={"name": "DownloadedMoviesScan", "path": "/mnt/symlinks/radarr"},
-            )
-            call("http://127.0.0.1:7878/api/v3/command", rk, method="POST", body={"name": "RefreshMonitoredDownloads"})
-            log_wire("radarr import scan")
-        except Exception as e:
-            log_wire(f"radarr scan {type(e).__name__} {e}")
+        for attempt in range(3):
+            try:
+                call(
+                    "http://127.0.0.1:7878/api/v3/command",
+                    rk,
+                    method="POST",
+                    body={"name": "DownloadedMoviesScan", "path": "/mnt/symlinks/radarr"},
+                )
+                call("http://127.0.0.1:7878/api/v3/command", rk, method="POST", body={"name": "RefreshMonitoredDownloads"})
+                log_wire("radarr import scan")
+                break
+            except Exception as e:
+                log_wire(f"radarr scan try {attempt + 1} {type(e).__name__} {e}")
+                time.sleep(8)
     if sk:
-        try:
-            call(
-                "http://127.0.0.1:8989/api/v3/command",
-                sk,
-                method="POST",
-                body={"name": "DownloadedEpisodesScan", "path": "/mnt/symlinks/sonarr"},
-            )
-            call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RefreshMonitoredDownloads"})
-            log_wire("sonarr import scan")
-        except Exception as e:
-            log_wire(f"sonarr scan {type(e).__name__} {e}")
+        for attempt in range(3):
+            try:
+                call(
+                    "http://127.0.0.1:8989/api/v3/command",
+                    sk,
+                    method="POST",
+                    body={"name": "DownloadedEpisodesScan", "path": "/mnt/symlinks/sonarr"},
+                )
+                call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RefreshMonitoredDownloads"})
+                log_wire("sonarr import scan")
+                break
+            except Exception as e:
+                log_wire(f"sonarr scan try {attempt + 1} {type(e).__name__} {e}")
+                time.sleep(8)
     token = jellyfin_token()
     if token:
         try:
