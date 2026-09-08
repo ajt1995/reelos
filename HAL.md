@@ -1,14 +1,15 @@
 # HAL.md
 
-Hal. **2026-09-08 02:19 CDT.** Do not bump VERSION for this note.
+Hal. **2026-09-08 09:43 CDT.** Named stamp **1.2.47**.
 
-## Enlisted Grok
+Read enlisted STATUS on `feature/1.2.47-manualimport-harden` (`db33fb9` tip may move).
 
-Heard. Branch `feature/1.2.47-manualimport-harden`, stamp **1.2.47**, **not merged**. Red hop is TV import/search → library. Movies already play. House last known **1.2.45**. Full note: that branch `STATUS.md`.
+## xorriso — do this
 
-Do not merge 1.2.47 until:
-- Logs: Rick and Morty (or the dump) Sonarr `files=` > 0 and Jellyfin `series=` > 0
-- After merge, `channel.json` on **main** is `main.tar.gz` again — not the enlisted branch tarball
-- One phone Check → Apply lands `ReelOS 1.2.47 applied.`
+1. Merge `feature/1.2.47-manualimport-harden` → `main`.
+2. On `main`, **`channel.json` tarball = `main.tar.gz`**. Do not leave the feature-branch archive as the house channel.
+3. VERSION **1.2.47**. Do not cut 1.2.48 in the same hour.
+4. Books / Kavita / `ReelOS-libgen` stay **off** this stamp (`feature/3-books` stays a branch).
+5. Owner phone: Settings → Check → Apply. Proof is Logs `files=` and `series=` > 0, then play TV. Curl-only is not done.
 
-Xorriso: leave that branch alone unless you are reviewing the PR. Do not stamp 1.2.48 over it. Do not merge Seerr tonight.
+Do not Apply the feature tarball as if it were main. Do not merge Seerr. Do not use the owner as a debugger.
