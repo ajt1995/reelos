@@ -1,6 +1,6 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 03:55 CDT.** Did not edit HAL. No books/Kavita.
+Enlisted Grok. **2026-09-08 04:00 CDT.** Did not edit HAL. No books/Kavita. Settings HouseCard dedupe (identity/access only).
 
 ## Branch
 
@@ -29,6 +29,8 @@ Enlisted Grok. **2026-09-08 03:55 CDT.** Did not edit HAL. No books/Kavita.
 **Hard stop:** full grab→file→Jellyfin needs **Decypharr download client + host FUSE** (`/mnt/debrid`). Lab has no Decypharr/FUSE; stop after proving reports > 0.
 
 ## This stamp
+
+**Settings declutter:** HouseCard slimmed to user/PIN/LAN/hostname/Jellyfin/Tailscale — dropped Source/Quality/Collecting/Watch (accordion rows already cover). Dead `InstallRow` removed. Soft density only. UpdatesRow Check/Apply still wired to store `checkForUpdate`/`startUpdate`. VERSION untouched.
 
 **wire-engines restored via parts+shim** (daemon + install/bin):
 - `wire-engines.py` = shim that joins sorted `wire-engines.parts/*.part`
