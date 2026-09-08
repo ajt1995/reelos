@@ -16,8 +16,9 @@ RAW=https://raw.githubusercontent.com/ajt1995/reelos/main
 
 echo "ReelOS · heal (keep wizard answers)"
 
-mkdir -p "$COMPOSE/configs/jellyfin" "$COMPOSE/configs/decypharr" "$ROOT/bin" \
-  /mnt/debrid /mnt/symlinks /srv/media/movies /srv/media/tv /srv/media/anime /srv/media/music
+mkdir -p "$COMPOSE/configs/jellyfin" "$COMPOSE/configs/decypharr" "$COMPOSE/configs/seerr" "$ROOT/bin" \
+  /mnt/debrid /mnt/symlinks /mnt/symlinks/radarr /mnt/symlinks/sonarr \
+  /srv/media/movies /srv/media/tv /srv/media/anime /srv/media/music
 modprobe fuse 2>/dev/null || true
 mount --make-rshared /mnt 2>/dev/null || true
 chown -R 1000:1000 "$COMPOSE/configs" /mnt/debrid /mnt/symlinks /srv/media 2>/dev/null || true

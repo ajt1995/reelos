@@ -258,6 +258,8 @@ def main() -> int:
     checks.append(ok("Prowlarr hop", "Prowlarr accepts indexers" if prow else "indexers dead — Prowlarr", prow))
 
     checks.append(container_hop("reelos-jellyfin-1", "Jellyfin hop", 8096))
+    if frontend in ("jellyfin", "both"):
+        checks.append(container_hop("seerr", "Seerr hop", 5055))
 
     print(json.dumps({"version": version, "checks": checks}))
     return 0

@@ -50,6 +50,7 @@ export interface Title {
   year: number;
   runtime?: number;
   seasons?: number;
+  seasonList?: number[];
   tracks?: number;
   rating: number;
   genres: string[];

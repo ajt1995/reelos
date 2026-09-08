@@ -245,11 +245,21 @@ def main() -> int:
     checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
 
     checks.append(container_hop("decypharr", "Decypharr hop", 8282))
+    fuse = Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists()
+    checks.append(
+        ok(
+            "Debrid files",
+            "FUSE visible on the box" if fuse else "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs",
+            fuse,
+        )
+    )
 
     prow = listening(9696) and api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")
     checks.append(ok("Prowlarr hop", "Prowlarr accepts indexers" if prow else "indexers dead — Prowlarr", prow))
 
     checks.append(container_hop("reelos-jellyfin-1", "Jellyfin hop", 8096))
+    if frontend in ("jellyfin", "both"):
+        checks.append(container_hop("seerr", "Seerr hop", 5055))
 
     print(json.dumps({"version": version, "checks": checks}))
     return 0

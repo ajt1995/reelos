@@ -1,15 +1,5 @@
-/** GET /api/request with real Radarr/Sonarr queue progress (sizeleft). Registered before lookup. */
-import { readFileSync } from "node:fs";
-
-function xmlKey(file) {
-  try {
-    const xml = readFileSync(file, "utf8");
-    const m = /<ApiKey>([^<]+)<\/ApiKey>/.exec(xml);
-    return m?.[1] || "";
-  } catch {
-    return "";
-  }
-}
+/** GET /api/request — Seerr status (and optional *arr sizeleft). Registered before lookup. */
+import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit } from "./reelos-seerr.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -18,103 +8,84 @@ function send(res, code, body) {
   res.end(JSON.stringify(body));
 }
 
-async function arrGet(url, key) {
-  const res = await fetch(url, { headers: { "X-Api-Key": key }, signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(String(res.status));
-  return res.json();
+function requestIdFromQuery(u) {
+  const tmdb = String(u.searchParams.get("tmdb") || "").trim();
+  const type = String(u.searchParams.get("type") || "").trim();
+  let id = String(u.searchParams.get("id") || "").trim();
+  if (!id && tmdb) id = type === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
+  return id;
 }
 
-function queueProgress(item) {
-  const size = Number(item?.size || 0);
-  const left = Number(item?.sizeleft ?? item?.sizeLeft ?? NaN);
-  if (size > 0 && Number.isFinite(left) && left >= 0) {
-    return Math.max(0, Math.min(99, Math.round(((size - left) / size) * 100)));
+async function handleList(res) {
+  const key = seerrApiKey();
+  if (!key) {
+    send(res, 200, { requests: [], titles: [], error: "Seerr has no API key yet" });
+    return;
   }
-  return undefined;
-}
-
-function queueStatus(item) {
-  const s = String(item?.status || "").toLowerCase();
-  if (s.includes("fail") || s === "warning") return "failed";
-  if (s.includes("download") || s === "downloading" || s === "paused") return "grabbing";
-  return "queued";
+  try {
+    const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 20000 });
+    const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
+    const requests = [];
+    const need = [];
+    for (const row of rows) {
+      const rec = seerrRequestRow(row);
+      if (!rec.titleId) continue;
+      requests.push(rec);
+      const parsed = parseTitleId(rec.titleId);
+      if (parsed?.tmdb) need.push(parsed);
+    }
+    const details = await Promise.all(
+      need.map(async (parsed) => {
+        const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+        const d = await seerrFetch(path, { key, ms: 12000 });
+        if (!d.ok || !d.json) return null;
+        return seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+      }),
+    );
+    send(res, 200, { requests, titles: details.filter(Boolean), engine: "seerr" });
+  } catch (e) {
+    send(res, 200, { requests: [], titles: [], error: String(e) });
+  }
 }
 
 async function handleGet(req, res) {
   const u = new URL(req.url || "/", "http://reelos.local");
-  const tmdb = String(u.searchParams.get("tmdb") || "").trim();
-  const tvdb = String(u.searchParams.get("tvdb") || "").trim();
-  let id = String(u.searchParams.get("id") || "").trim();
-  if (!id && tmdb) id = `tmdb-${tmdb}`;
-  if (!id && tvdb) id = `tvdb-${tvdb}`;
+  const id = requestIdFromQuery(u);
   if (!id) {
-    send(res, 400, { status: "unknown", error: "Need tmdb, tvdb, or id" });
+    return handleList(res);
+  }
+  const key = seerrApiKey();
+  if (!key) {
+    send(res, 200, { status: "unknown", engine: "seerr", error: "Seerr has no API key yet" });
+    return;
+  }
+  const parsed = parseTitleId(id);
+  if (!parsed?.tmdb) {
+    send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
     return;
   }
   try {
-    if (id.startsWith("tmdb-")) {
-      const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
-      if (!rk) {
-        send(res, 200, { status: "unknown", engine: "radarr", error: "Movies engine has no API key" });
-        return;
-      }
-      const movies = await arrGet(`http://127.0.0.1:7878/api/v3/movie?tmdbId=${encodeURIComponent(id.slice(5))}`, rk);
-      const movie = Array.isArray(movies) ? movies[0] : null;
-      if (!movie) {
-        send(res, 200, { status: "unknown", engine: "radarr", error: "Not in Radarr" });
-        return;
-      }
-      const queue = await arrGet("http://127.0.0.1:7878/api/v3/queue", rk);
-      const records = Array.isArray(queue) ? queue : queue?.records || [];
-      const q = records.find((x) => x.movieId === movie.id);
-      let status = "queued";
-      if (movie.hasFile) status = "downloaded";
-      else if (q) status = queueStatus(q);
-      const progress = status === "downloaded" ? 100 : q ? queueProgress(q) : undefined;
-      send(res, 200, { status, engine: "radarr", title: movie.title, hasFile: Boolean(movie.hasFile), progress });
-      return;
-    }
-    if (id.startsWith("tvdb-")) {
-      const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
-      if (!sk) {
-        send(res, 200, { status: "unknown", engine: "sonarr", error: "TV engine has no API key" });
-        return;
-      }
-      const series = await arrGet(`http://127.0.0.1:8989/api/v3/series?tvdbId=${encodeURIComponent(id.slice(5))}`, sk);
-      const show = Array.isArray(series) ? series[0] : null;
-      if (!show) {
-        send(res, 200, { status: "unknown", engine: "sonarr", error: "Not in Sonarr" });
-        return;
-      }
-      const queue = await arrGet("http://127.0.0.1:8989/api/v3/queue", sk);
-      const records = Array.isArray(queue) ? queue : queue?.records || [];
-      const q = records.find((x) => x.seriesId === show.id);
-      let status = "queued";
-      const files = Number(show.statistics?.episodeFileCount || 0);
-      const pct = Number(show.statistics?.percentOfEpisodes || 0);
-      if (files > 0 || pct === 100) status = "downloaded";
-      else if (q) status = queueStatus(q);
-      const progress =
-        status === "downloaded"
-          ? 100
-          : q
-            ? queueProgress(q)
-            : Number.isFinite(pct)
-              ? Math.max(0, Math.min(100, Math.round(pct)))
-              : undefined;
-      send(res, 200, {
-        status,
-        engine: "sonarr",
-        title: show.title,
-        episodeFileCount: files,
-        percent: pct,
-        progress,
-      });
-      return;
-    }
-    send(res, 400, { status: "unknown", error: "Need tmdb or tvdb id" });
+    const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+    const r = await seerrFetch(path, { key, ms: 15000 });
+    const media = r.json?.mediaInfo || r.json?.media || {};
+    const reqs = Array.isArray(media.requests) ? media.requests : [];
+    const last = reqs[0] || { media, type: parsed.mediaType };
+    const mapped = seerrRequestRow({
+      ...last,
+      type: parsed.mediaType,
+      media: { ...media, tmdbId: Number(parsed.tmdb) },
+    });
+    const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+    send(res, 200, {
+      status: mapped.engine || "unknown",
+      engine: "seerr",
+      title: title?.title,
+      seasons: title?.seasons,
+      seasonList: title?.seasonList,
+      progress: mapped.status === "available" ? 100 : mapped.progress,
+    });
   } catch (e) {
-    send(res, 200, { status: "unknown", error: String(e) });
+    send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });
   }
 }
 

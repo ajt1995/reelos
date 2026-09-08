@@ -2,6 +2,7 @@
 """Idempotent engine wiring after wizard / Repair / OTA."""
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import re

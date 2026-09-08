@@ -79,11 +79,19 @@ def jellyfin_folders(token: str):
     return folders if isinstance(folders, list) else []
 
 
-def folder_has_symlinks(folder: dict) -> bool:
+def library_symlink_path(name: str) -> str:
+    return {"Movies": "/symlinks/radarr", "Shows": "/symlinks/sonarr", "Music": "/symlinks/music"}.get(
+        name, "/symlinks"
+    )
+
+
+def folder_has_symlinks(folder: dict, path: str | None = None) -> bool:
+    want = (path or "/symlinks").rstrip("/")
     locs = [str(x).rstrip("/") for x in (folder.get("Locations") or [])]
     opts = folder.get("LibraryOptions") or {}
     paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or [])]
-    return "/symlinks" in locs + paths
+    have = locs + paths
+    return want in have
 
 
 def complete_jellyfin_startup(user: str, password: str) -> None:
@@ -122,14 +130,15 @@ def complete_jellyfin_startup(user: str, password: str) -> None:
 
 
 def ensure_host_symlinks() -> None:
-    Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
-    try:
-        os.chmod("/mnt/symlinks", 0o777)
-    except OSError:
-        pass
+    for host in ("/mnt/symlinks", "/mnt/symlinks/radarr", "/mnt/symlinks/sonarr", "/mnt/symlinks/music"):
+        Path(host).mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(host, 0o777)
+        except OSError:
+            pass
     for name in ("reelos-jellyfin-1", "jellyfin"):
         r = subprocess.run(
-            ["docker", "exec", name, "mkdir", "-p", "/symlinks"],
+            ["docker", "exec", name, "mkdir", "-p", "/symlinks/radarr", "/symlinks/sonarr", "/symlinks/music"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
@@ -139,12 +148,13 @@ def ensure_host_symlinks() -> None:
 
 
 def create_jellyfin_library(token: str, name: str, ctype: str) -> None:
+    path = library_symlink_path(name)
     q = urllib.parse.urlencode(
         {
             "name": name,
             "collectionType": ctype,
             "refreshLibrary": "true",
-            "paths": "/symlinks",
+            "paths": path,
         }
     )
     body = {
@@ -155,7 +165,7 @@ def create_jellyfin_library(token: str, name: str, ctype: str) -> None:
             "EnableChapterImageExtraction": False,
             "ExtractChapterImagesDuringLibraryScan": False,
             "DummyChapterDuration": 0,
-            "PathInfos": [{"Path": "/symlinks"}],
+            "PathInfos": [{"Path": path}],
         }
     }
     call(

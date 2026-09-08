@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { getTitle } from "@/lib/catalog";
+import { getTitle, rememberCatalogTitles } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import type { RequestStatus } from "@/lib/types";
+import type { MediaRequest, RequestStatus, Title } from "@/lib/types";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -24,72 +24,29 @@ export function RequestsView() {
   useEffect(() => {
     let stop = false;
     const tick = async () => {
-      const live = useReelStore.getState().requests;
-      for (const r of live) {
-        const q = r.titleId.startsWith("tmdb-")
-          ? `tmdb=${r.titleId.slice(5)}`
-          : r.titleId.startsWith("tvdb-")
-            ? `tvdb=${r.titleId.slice(5)}`
-            : `id=${encodeURIComponent(r.titleId)}`;
-        try {
-          const j = (await fetch(`/api/request?${q}`, { cache: "no-store" }).then((res) => res.json())) as {
-            status?: string;
-            progress?: number;
-            percent?: number;
-          };
-          if (stop) return;
-          const mapped =
-            j.status === "downloaded"
-              ? "available"
-              : j.status === "grabbing"
-                ? "downloading"
-                : j.status === "failed"
-                  ? "failed"
-                  : j.status === "queued"
-                    ? "waiting"
-                    : r.status;
-          const apiProg =
-            typeof j.progress === "number"
-              ? j.progress
-              : typeof j.percent === "number"
-                ? j.percent
-                : undefined;
-          const nextProgress =
-            mapped === "available"
-              ? 100
-              : typeof apiProg === "number"
-                ? Math.max(0, Math.min(100, Math.round(apiProg)))
-                : mapped === "downloading"
-                  ? r.progress
-                  : 0;
-          if (mapped !== r.status || nextProgress !== r.progress) {
-            if (
-              mapped === "available" &&
-              r.status !== "available" &&
-              typeof Notification !== "undefined" &&
-              Notification.permission === "granted"
-            ) {
-              try {
-                new Notification(`${getTitle(r.titleId)?.title || "Title"} is in the library`);
-              } catch {
-                /* */
-              }
-            }
-            useReelStore.setState((s) => ({
-              requests: s.requests.map((x) =>
-                x.id === r.id
-                  ? { ...x, status: mapped as typeof x.status, progress: nextProgress, updatedAt: Date.now() }
-                  : x,
-              ),
-              library:
-                mapped === "available" && !s.library.includes(r.titleId)
-                  ? [...s.library, r.titleId]
-                  : s.library,
-            }));
-          }
-        } catch {
-          /* */
+      try {
+        const j = (await fetch("/api/request", { cache: "no-store" }).then((res) => res.json())) as {
+          requests?: MediaRequest[];
+          titles?: Title[];
+        };
+        if (stop) return;
+        const titles = Array.isArray(j.titles) ? j.titles : [];
+        rememberCatalogTitles(titles);
+        useReelStore.getState().rememberTitles?.(titles);
+        const live = Array.isArray(j.requests) ? j.requests : [];
+        if (live.length) {
+          useReelStore.setState((s) => ({
+            requests: live,
+            library: [
+              ...new Set([
+                ...s.library,
+                ...live.filter((r) => r.status === "available").map((r) => r.titleId),
+              ]),
+            ],
+          }));
         }
+      } catch {
+        /* */
       }
     };
     void tick();
@@ -127,15 +84,20 @@ export function RequestsView() {
         ) : null}
         {list.map((r) => {
           const t = getTitle(r.titleId);
-          if (!t) return null;
+          const titleId = t?.id || r.titleId;
+          const label = t?.title || r.titleId || "Title";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
-              <Link to="/title/$id" params={{ id: t.id }} className="shrink-0">
-                <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+              <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
+                {t?.poster ? (
+                  <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+                ) : (
+                  <div className="h-[72px] w-12 rounded-lg bg-card-2" />
+                )}
               </Link>
               <div className="min-w-0 flex-1">
-                <Link to="/title/$id" params={{ id: t.id }} className="truncate font-medium">
-                  {t.title}
+                <Link to="/title/$id" params={{ id: titleId }} className="truncate font-medium">
+                  {label}
                   {r.season ? ` · S${String(r.season).padStart(2, "0")}` : ""}
                 </Link>
                 <p className="mt-1 text-xs text-muted">
@@ -168,7 +130,7 @@ export function RequestsView() {
               ) : (
                 <Link
                   to="/play/$id"
-                  params={{ id: t.id }}
+                  params={{ id: titleId }}
                   className="text-sm text-gold hover:text-gold-bright"
                 >
                   Play
