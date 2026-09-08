@@ -1,3 +1,116 @@
+             method="POST",
+                body={
+                    "name": "Sonarr",
+                    "address": "sonarr",
+                    "port": 8989,
+                    "apikey": sonarr_key,
+                    "ssl": False,
+                },
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            pass
+
+
+def extra_access() -> None:
+    if os.environ.get("REELOS_OTA") == "1":
+        return
+    script = ROOT / "bin" / "reelos-access.sh"
+    if script.exists():
+        subprocess.run(["bash", str(script)], check=False)
+
+
+def share_mnt() -> None:
+    Path("/mnt").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
+    persist_mnt_shared()
+    if fuse_on_host():
+        log_wire("share_mnt: fuse on host — not bind-mounting /mnt")
+        return
+    r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
+    if r.returncode:
+        log_wire(f"rshared /mnt skipped: {(r.stderr or r.stdout or '')[:160]}")
+    else:
+        log_wire("rshared /mnt")
+    for p in ("/mnt/debrid", "/mnt/symlinks"):
+        try:
+            os.chmod(p, 0o777)
+            os.chown(p, 1000, 1000)
+        except OSError as e:
+            log_wire(f"chmod {p} {e}")
+    log_wire("fuse mountpoint writable")
+
+
+def main() -> int:
+    STATE.mkdir(parents=True, exist_ok=True)
+    share_mnt()
+    for d in (
+        "/srv/media/movies",
+        "/srv/media/tv",
+        "/srv/media/anime",
+        "/srv/media/music",
+        "/srv/media/downloads",
+        "/mnt/symlinks",
+        "/mnt/symlinks/anime",
+        "/mnt/symlinks/music",
+    ):
+        Path(d).mkdir(parents=True, exist_ok=True)
+    mount_extra_disks()
+    if source() != "local-vpn":
+        try:
+            patch_decypharr()
+        except Exception as e:
+            log_wire(f"decypharr {type(e).__name__} {e}")
+    try:
+        transcode_override()
+    except Exception as e:
+        log_wire(f"transcode {type(e).__name__} {e}")
+
+    a = answers()
+    intent = a.get("intent") or {}
+    frontend = a.get("frontend") or "jellyfin"
+
+    if frontend in ("jellyfin", "both"):
+        try:
+            bootstrap_jellyfin()
+        except Exception as e:
+            log_wire(f"jellyfin bootstrap {type(e).__name__} {e}")
+
+    radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
+    sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
+    lidarr_xml = COMPOSE / "configs" / "lidarr" / "config.xml"
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+
+    radarr_key = wait_key(radarr_xml) if intent.get("movies", True) else None
+    sonarr_key = wait_key(sonarr_xml) if intent.get("tv") or intent.get("anime") else None
+    lidarr_key = wait_key(lidarr_xml) if intent.get("music") else None
+    prow_key = wait_key(prow_xml)
+    try:
+        if prow_key:
+            ensure_provider_indexer(prow_key)
+            ensure_public_indexers(prow_key)
+    except Exception as e:
+        log_wire(f"provider indexer {type(e).__name__} {e}")
+
+    engine: dict = {"wiredAt": int(time.time()), "quality": a.get("quality")}
+
+    try:
+        if radarr_key:
+            ensure_roots("http://127.0.0.1:7878/api/v3", radarr_key, "movie")
+            engine["radarrQuality"] = quality_id("http://127.0.0.1:7878/api/v3", radarr_key)
+            if prow_key:
+                ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
+        if sonarr_key:
+            kind = "anime" if intent.get("anime") and not intent.get("tv") else "tv"
+            ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, kind)
+            if intent.get("anime"):
+                ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, "anime")
+            engine["sonarrQuality"] = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key)
+            if prow_key:
+                ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
+        if lidarr_key:
+            ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
+            if prow_key:
                 ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
     except Exception as e:
         log_wire(f"arr wire {type(e).__name__} {e}")
