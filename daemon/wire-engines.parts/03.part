@@ -1,3 +1,41 @@
+quest(url, headers={"User-Agent": "ReelOS-wire"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            dest.write_bytes(resp.read())
+        log_wire(f"official yml {dest.name} -> {dest}")
+    except (urllib.error.URLError, TimeoutError, OSError) as e:
+        log_wire(f"official yml fetch failed {e}")
+        return False
+    subprocess.run(
+        ["docker", "compose", "restart", "prowlarr"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(12)
+    return True
+
+
+def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
+    fields = []
+    for f in hit.get("fields") or []:
+        item = dict(f)
+        n = str(item.get("name") or "")
+        if n.lower() in ("apikey", "api_key", "api-key", "token"):
+            item["value"] = key
+        fields.append(item)
+    body = {
+        "enable": True,
+        "appProfileId": hit.get("appProfileId") or 1,
+        "priority": hit.get("priority") or 25,
+        "name": name,
+        "protocol": hit.get("protocol") or "torrent",
+        "implementation": hit.get("implementation"),
+        "implementationName": hit.get("implementationName"),
+        "configContract": hit.get("configContract"),
+        "fields": fields,
+    }
     call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
     log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
 
@@ -162,62 +200,4 @@ def clear_releases_error() -> None:
 
 
 def recreate_prowlarr() -> None:
-    if os.environ.get("REELOS_OTA") and not prowlarr_has_hosts():
-        running = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Running}}", "reelos-prowlarr-1"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if "true" in (running.stdout or ""):
-            log_wire("prowlarr already up — skip recreate")
-            return
-    cmd = [
-        "docker",
-        "compose",
-        "--profile",
-        "indexers",
-        "--profile",
-        "debrid",
-        "up",
-        "-d",
-        "--force-recreate",
-        "--no-deps",
-        "prowlarr",
-        "decypharr",
-    ]
-    r = subprocess.run(
-        cmd,
-        cwd=str(COMPOSE),
-        env=compose_env(),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    log_wire(f"force-recreate prowlarr+decypharr rc={r.returncode}")
-    time.sleep(8)
-
-
-def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
-    """Generic Torznab at search-api.torbox.app. Schema optional."""
-    impl = {
-        "implementation": "Torznab",
-        "implementationName": "Torznab",
-        "configContract": "TorznabSettings",
-        "appProfileId": 1,
-        "protocol": "torrent",
-    }
-    fields = None
-    try:
-        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
-    except NET_ERR as e:
-        log_wire(f"torznab schema {e}")
-        schemas = []
-    for schema in schemas if isinstance(schemas, list) else []:
-        if str(schema.get("implementation") or "").lower() == "torznab":
-            impl = schema
-            fields = []
-            for f in schema.get("fields") or []:
-                item = dict(f)
-                n = str(item.get("name") or "").lower()
-                if n in ("baseurl", "base_url"):
+    if os.environ.get("REEL
