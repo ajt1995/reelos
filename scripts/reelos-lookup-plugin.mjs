@@ -7,3 +7,11 @@ function xmlKey(file) {
   const m = /<ApiKey>([^<]+)<\/ApiKey>/.exec(readFileSync(file, "utf8"));
   return m?.[1] ?? null;
 }
+
+function note(msg) {
+  try {
+    appendFileSync("/var/lib/reelos/lookup.log", `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    /* */
+  }
+}
