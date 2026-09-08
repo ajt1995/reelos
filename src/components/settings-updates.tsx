@@ -59,7 +59,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
                 <span className="mt-1.5 size-1.5 rounded-full bg-faint/40" />
               )}
               <span>
-                <span className={s.status === "pending" ? "text-faint" : "">{s.label}</span>
+                <span className={s.status === "pending" ? "text-faint" : ""}>{s.label}</span>
                 {s.log ? (
                   <span className="mt-0.5 block font-mono text-[11px] text-faint">{s.log}</span>
                 ) : null}
