@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
+  BookOpen,
   Clapperboard,
   Compass,
   Home,
@@ -13,7 +14,7 @@ import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const NAV = [
+const BASE_NAV = [
   { to: "/", label: "Home", icon: Home },
   { to: "/discover", label: "Discover", icon: Compass },
   { to: "/requests", label: "Requests", icon: Clapperboard },
@@ -25,9 +26,15 @@ const NAV = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const frontend = useReelStore((s) => s.answers.frontend);
+  const intent = useReelStore((s) => s.answers.intent);
   const downloading = useReelStore(
     (s) => s.requests.filter((r) => r.status === "downloading").length,
   );
+
+  const NAV = [...BASE_NAV];
+  if (intent.books) {
+    NAV.splice(4, 0, { to: "/books", label: "Books", icon: BookOpen });
+  }
 
   return (
     <div className="min-h-dvh bg-background md:flex">
