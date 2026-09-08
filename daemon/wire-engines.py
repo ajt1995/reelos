@@ -287,6 +287,54 @@ def relink_from_debrid() -> int:
     return n
 
 
+def sonarr_manual_import(sk: str) -> None:
+    """Dump folders are not a series library. Copy matched episodes into the series folder."""
+    q = urllib.parse.urlencode({"folder": "/mnt/symlinks/sonarr", "filterExistingFiles": "true"})
+    url = f"http://127.0.0.1:8989/api/v3/manualimport?{q}"
+    hdrs = {"X-Api-Key": sk, "Content-Type": "application/json"}
+    try:
+        req = urllib.request.Request(url, headers=hdrs)
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            rows = json.loads(resp.read().decode()) or []
+    except Exception as e:
+        log_wire(f"sonarr manualimport list {type(e).__name__} {e}")
+        return
+    files = []
+    unmatched = 0
+    for row in rows:
+        series = row.get("series") or {}
+        episodes = row.get("episodes") or []
+        path = row.get("path")
+        if not path or not series.get("id") or not episodes:
+            unmatched += 1
+            continue
+        item = {
+            "path": path,
+            "seriesId": series["id"],
+            "episodeIds": [e["id"] for e in episodes if e.get("id")],
+            "quality": row.get("quality"),
+            "languages": row.get("languages") or [{"id": 1}],
+            "indexerFlags": row.get("indexerFlags") or 0,
+        }
+        if row.get("releaseGroup"):
+            item["releaseGroup"] = row["releaseGroup"]
+        files.append(item)
+    log_wire(f"sonarr manualimport matched={len(files)} unmatched={unmatched}")
+    if not files:
+        return
+    try:
+        call(
+            "http://127.0.0.1:8989/api/v3/command",
+            sk,
+            method="POST",
+            body={"name": "ManualImport", "files": files, "importMode": "copy"},
+        )
+        log_wire(f"sonarr manualimport queued {len(files)}")
+        time.sleep(8)
+    except Exception as e:
+        log_wire(f"sonarr manualimport {type(e).__name__} {e}")
+
+
 def kick_imports() -> None:
     relink_from_debrid()
     wait_http("http://127.0.0.1:7878/ping", 90)
@@ -328,6 +376,7 @@ def kick_imports() -> None:
             except Exception as e:
                 log_wire(f"sonarr scan try {attempt + 1} {type(e).__name__} {e}")
                 time.sleep(8)
+        sonarr_manual_import(sk)
     token = jellyfin_token()
     if token:
         try:

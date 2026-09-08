@@ -56,12 +56,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.45";
-export const SHIPPED_VERSION = "1.2.45";
+export const LATEST_VERSION = "1.2.46";
+export const SHIPPED_VERSION = "1.2.46";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "1.2.45: Rick and Morty (and other TV) import from FUSE into Sonarr and Jellyfin.",
+  "1.2.46: TV dumps import into Sonarr as real episodes. Watch Rick and Morty on the TV.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);

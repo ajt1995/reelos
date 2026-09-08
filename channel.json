@@ -1,8 +1,8 @@
 {
-  "version": "1.2.45",
+  "version": "1.2.46",
   "channel": "stable",
   "notes": [
-    "1.2.45: Empty TV dump folders get files from TorBox FUSE. Sonarr import + Jellyfin refresh with a real token."
+    "1.2.46: Sonarr copies dump episodes into the series folder so Jellyfin can show Rick and Morty."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

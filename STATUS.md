@@ -1,16 +1,13 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 23:28 CDT.** VERSION **1.2.45**.
+Xorriso. **2026-09-07 23:38 CDT.** VERSION **1.2.46**.
 
-## House dump
+## House 1.2.45 dump
 
-1.2.44 applied. Movies in Jellyfin. Rick and Morty season dirs **empty**, series=0. Jellyfin 401 on refresh during OTA.
+Relink worked. S01/S02/S04 mkvs are on disk. Sonarr still `files=0`. Jellyfin `series=0` (movies=12). Dump folders are not a series library.
 
-## 1.2.45
+## 1.2.46
 
-- Relink empty `/mnt/symlinks/sonarr/*` from `/mnt/debrid/__all__`
-- Sonarr `DownloadedEpisodesScan` + RescanSeries (retries)
-- Jellyfin token cached; refresh after import
-- Apply always runs `wire-engines.py import` even when compose is unchanged
+`sonarr_manual_import`: match those mkvs to the Rick and Morty series, **copy** into the series folder, refresh Jellyfin.
 
-One Apply. Then Logs: `files=` on Rick and Morty should not be 0. Watch on the TV.
+One Apply. Logs should show `files=` > 0 and `series=` > 0. Then play it.
