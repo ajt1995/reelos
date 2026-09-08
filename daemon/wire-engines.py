@@ -222,7 +222,20 @@ WantedBy=multi-user.target
         log_wire(f"mnt-shared unit {e}")
 
 
+def wait_http(url: str, seconds: int = 40) -> bool:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=2).read()
+            return True
+        except Exception:
+            time.sleep(1)
+    return False
+
+
 def kick_imports() -> None:
+    wait_http("http://127.0.0.1:7878/ping", 40)
+    wait_http("http://127.0.0.1:8989/ping", 40)
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
     rk = api_key(radarr_xml)
@@ -251,11 +264,15 @@ def kick_imports() -> None:
             log_wire("sonarr import scan")
         except Exception as e:
             log_wire(f"sonarr scan {type(e).__name__} {e}")
-    try:
-        urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8096/Library/Refresh", method="POST"), timeout=8)
-        log_wire("jellyfin refresh after import")
-    except Exception as e:
-        log_wire(f"jellyfin refresh {type(e).__name__} {e}")
+    token = jellyfin_token()
+    if token:
+        try:
+            call("http://127.0.0.1:8096/Library/Refresh", method="POST", headers={"X-Emby-Token": token})
+            log_wire("jellyfin refresh after import")
+        except Exception as e:
+            log_wire(f"jellyfin refresh {type(e).__name__} {e}")
+    else:
+        log_wire("jellyfin refresh skipped — no token")
 
 
 def ensure_fuse() -> None:
@@ -278,7 +295,9 @@ def ensure_fuse() -> None:
         if fuse_on_host():
             log_wire("fuse on host")
             restart_fuse_readers()
-            time.sleep(8)
+            if not fuse_on_host():
+                log_wire("fuse vanished after reader restart")
+                continue
             kick_imports()
             return
     log_wire("fuse still missing after recreate")
