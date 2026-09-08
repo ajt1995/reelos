@@ -5,7 +5,7 @@
 ## Stamp
 
 - **VERSION / channel:** still `1.2.48` (no stamp this PR)
-- **PR:** `cursor/stuck-download-purge-2e0a` — durable *arr queue watch, not a mailman change
+- **PR:** https://github.com/ajt1995/reelos/pull/41 (`cursor/stuck-download-purge-2e0a`) — durable *arr queue watch, not a mailman change
 - **What it is:** House was sitting at Radarr/Sonarr 0% (`sizeleft==size`, tracked still ok/downloading) after Decypharr submitted a cached TorBox hash and `Action=symlink` never created `/mnt/symlinks/{radarr|sonarr}/…`. Automation then re-added the same hash → duplicate TorBox rows → Pro 2h rate limit. ReelOS had no stuck-queue purge.
 
 ## Layer (why this, not Decypharr fork / mailman)
