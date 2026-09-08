@@ -1,1 +1,1 @@
-test-placeholder-will-overwrite
+PLACEHOLDER_REPLACE_WITH_FILE
