@@ -34,9 +34,11 @@ def main() -> int:
     root = Path(args[0] if args else ".").resolve()
     ver = (root / "VERSION").read_text().strip()
     chan = __import__("json").loads((root / "channel.json").read_text()).get("version")
-    store = (root / "src/lib/store.ts").read_text()
-    shipped = re.search(r'SHIPPED_VERSION = "([^"]+)"', store)
-    latest = re.search(r'LATEST_VERSION = "([^"]+)"', store)
+    stamp_path = root / "src/lib/version-stamp.ts"
+    store_path = root / "src/lib/store.ts"
+    text = stamp_path.read_text() if stamp_path.is_file() else store_path.read_text()
+    shipped = re.search(r'SHIPPED_VERSION = "([^"]+)"', text)
+    latest = re.search(r'LATEST_VERSION = "([^"]+)"', text)
     s = shipped.group(1) if shipped else ""
     l = latest.group(1) if latest else ""
     if ver != chan or ver != s or ver != l:
@@ -44,8 +46,8 @@ def main() -> int:
 
     updater = (root / "daemon/reelos-update.sh").read_text()
     for rel, needle in CONTRACTS:
-        text = (root / rel).read_text() if (root / rel).is_file() else ""
-        if needle not in text:
+        textc = (root / rel).read_text() if (root / rel).is_file() else ""
+        if needle not in textc:
             return fail(f"OTA contract missing {rel} ~ {needle}")
 
     stamp = updater.find('echo "$REMOTE" >"$ROOT/VERSION"')
