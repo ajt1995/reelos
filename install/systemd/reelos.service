@@ -2,9 +2,6 @@
 Description=ReelOS shell
 After=network-online.target
 Wants=network-online.target
-# Do not wait on firstboot. A looping firstboot (ISO stopped short) used to
-# block this unit forever, so the phone never saw the wizard.
-RequiresMountsFor=/opt/reelos/app
 
 [Service]
 Type=simple
@@ -16,6 +13,7 @@ Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/usr/bin/env npm run start:box
 Restart=always
 RestartSec=2
+TimeoutStartSec=90
 User=root
 
 [Install]

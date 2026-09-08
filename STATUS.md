@@ -1,13 +1,19 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 22:25 CDT.** VERSION **1.2.43**. No 1.2.44.
+Xorriso. **2026-09-07 22:39 CDT.** VERSION **1.2.43**. No 1.2.44.
 
 ## House
 
-1.2.42 → 43 Apply: `Reload daemon failed: Transport endpoint is not connected`. systemd dbus dead, `systemctl start reelos` failed, probe waiting on :8080. Curl 7s leaked to the TTY.
+Force reboot during a stuck 1.2.43 Apply. systemd dbus was `Transport endpoint is not connected`. Shell never started. Owner is not the debugger.
 
-## On main
+## On main (this reboot + next Apply)
 
-`start_shell`: if systemd dbus is down, `npm run start:box` directly. No daemon-reload loop. Curl quiet. Still 1.2.43.
+- `reelos.service`: dropped `RequiresMountsFor` (boot blocker). Restart=always.
+- `reelos-ensure.service`: after boot, if :8080/ :80 dead, start Node and Caddy without dbus.
+- Apply `start_shell` already skips dead systemd.
 
-If this Apply restored `.prev`, Home may be down until node is started (or they Apply again after dbus is back).
+This reboot uses **whatever is already on disk**. GitHub cannot reach the HP until it is up. After Home loads, Settings → Check → Apply once.
+
+## Don’t
+
+Stamp 44. Merge #32. SSH homework unless Home is still dead after boot.

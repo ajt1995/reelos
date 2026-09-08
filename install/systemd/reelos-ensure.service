@@ -1,0 +1,13 @@
+[Unit]
+Description=ReelOS boot door — Home :8080 and Caddy :80
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/reelos/bin/reelos-ensure.sh
+RemainAfterExit=yes
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

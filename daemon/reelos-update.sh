@@ -239,7 +239,8 @@ need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
-need daemon/reelos-update.sh 'systemd dbus down'
+need daemon/reelos-ensure.sh 'npm run start:box'
+need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
 need scripts/reelos-lookup-plugin.mjs 'Update already running'
@@ -473,7 +474,11 @@ cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
 rm -rf "$NEXT"
 
 log "starting shell"
-systemctl enable reelos >/dev/null 2>&1 || true
+systemctl enable reelos reelos-ensure caddy >/dev/null 2>&1 || true
+if [ -f "$ROOT/systemd/reelos-ensure.service" ]; then
+  cp "$ROOT/systemd/reelos-ensure.service" /etc/systemd/system/reelos-ensure.service
+  chmod 755 "$ROOT/bin/reelos-ensure.sh" 2>/dev/null || true
+fi
 start_shell
 
 probe_home() {
