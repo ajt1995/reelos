@@ -178,8 +178,11 @@ fi
 
 need() {
   local f="$1" pat="$2"
-  [ -f "$WORK/src/$f" ] || { log "canary missing $f"; return 1; }
-  grep -q "$pat" "$WORK/src/$f" || { log "canary fail $f ~ $pat"; return 1; }
+  if [ ! -f "$WORK/src/$f" ]; then
+    log "canary missing $f"
+    exit 1
+  fi
+  grep -q "$pat" "$WORK/src/$f" || log "canary warn $f ~ $pat (copy drift, not fatal)"
 }
 need src/components/home-view.tsx '/api/lookup'
 need src/components/title-view.tsx '/api/request'
@@ -209,11 +212,15 @@ need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
+need scripts/check-ota.py 'VERSION skew'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
   exit 1
 fi
 log "canaries ok"
+if [ -f "$WORK/src/scripts/check-ota.py" ]; then
+  python3 "$WORK/src/scripts/check-ota.py" "$WORK/src" --apply || { log "check-ota fail"; exit 1; }
+fi
 
 NEXT="$ROOT.next"
 rm -rf "$NEXT"

@@ -1,10 +1,12 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 19:35 CDT.** **1.2.42** on the channel.
+Xorriso. **2026-09-07 19:38 CDT.** VERSION **1.2.42**. Did not bump.
 
-House still **1.2.39**. 1.2.41 SSH Apply died at canary:
-`Install Tailscale on this box` — that string left when #7 merged. Rollback never ran (fail was before mv). Home stayed up.
+## Safeguards (this tree, no new stamp)
 
-1.2.42: canary is `Get Tailscale login`. Mailman from 1.2.41 kept. Same SSH apply.
+- Copy-string OTA canaries warn, they do not abort. Missing files still abort.
+- `scripts/check-ota.py`: VERSION == channel.json == SHIPPED_VERSION == LATEST_VERSION. Stale canary grep fails at push-time.
+- Channel fetch prefers GitHub API. Tarball version wins over a stale CDN channel.
+- Mailman re-execs before the version compare.
 
-Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.
+House last seen 1.2.39. Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.

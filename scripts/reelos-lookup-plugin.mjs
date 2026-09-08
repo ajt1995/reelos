@@ -516,7 +516,7 @@ function localVersion() {
 async function fetchGh(url) {
   const r = await fetch(url, {
     cache: "no-store",
-    headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github+json" },
+    headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github.raw" },
   });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.text();
@@ -524,24 +524,27 @@ async function fetchGh(url) {
 
 async function loadChannel() {
   const urls = [
-    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
-    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
     "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
+    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
+    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
   ];
   for (const u of urls) {
     try {
       const text = await fetchGh(u);
-      if (u.includes("api.github.com")) {
-        const meta = JSON.parse(text);
-        if (!meta.content) continue;
-        const decoded = Buffer.from(meta.content.replace(/\n/g, ""), "base64").toString("utf8");
-        const ch = JSON.parse(decoded);
-        otaNote(`channel ${ch.version} via api.github.com`);
+      const payload = text.trim().startsWith("{") ? text : null;
+      let ch = null;
+      if (payload) {
+        const parsed = JSON.parse(payload);
+        if (parsed.version) ch = parsed;
+        else if (parsed.content) {
+          const decoded = Buffer.from(String(parsed.content).replace(/\n/g, ""), "base64").toString("utf8");
+          ch = JSON.parse(decoded);
+        }
+      }
+      if (ch && ch.version) {
+        otaNote(`channel ${ch.version} via ${u}`);
         return ch;
       }
-      const ch = JSON.parse(text);
-      otaNote(`channel ${ch.version} via ${u}`);
-      return ch;
     } catch (e) {
       otaNote(`miss ${u} ${e}`);
     }
