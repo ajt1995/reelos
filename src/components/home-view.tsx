@@ -72,7 +72,7 @@ export function HomeView() {
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
-          setLookupErr(r?.error || (titles.length ? null : "Engine returned no titles"));
+          setLookupErr(titles.length ? null : r?.error || "Engine returned no titles");
         })
         .catch((e) => {
           if (!cancelled) {

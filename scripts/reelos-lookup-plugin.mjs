@@ -203,7 +203,7 @@ async function handleLookup(req, res) {
   const jobs = [];
   if (q.length >= 2 && rk) {
     jobs.push(
-      pull(`http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`, rk)
+      pull(`http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(q)}`, rk, 30000)
         .then((hits) => {
           for (const h of (hits || []).slice(0, 8)) {
             const t = movieHit(h);
@@ -219,7 +219,7 @@ async function handleLookup(req, res) {
   }
   if (q.length >= 2 && sk) {
     jobs.push(
-      pull(`http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`, sk)
+      pull(`http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(q)}`, sk, 20000)
         .then((hits) => {
           for (const h of (hits || []).slice(0, 8)) {
             const t = seriesHit(h);

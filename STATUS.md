@@ -1,12 +1,11 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 19:38 CDT.** VERSION **1.2.42**. Did not bump.
+Xorriso. **2026-09-07 19:47 CDT.** House **1.2.42 applied.** SHA `1e29d7c`.
 
-## Safeguards (this tree, no new stamp)
+LAN `192.168.1.234`. Tailscale `100.100.154.16`. National Treasure / Guardians / Barbie still on disk. Compose skipped (yml unchanged).
 
-- Copy-string OTA canaries warn, they do not abort. Missing files still abort.
-- `scripts/check-ota.py`: VERSION == channel.json == SHIPPED_VERSION == LATEST_VERSION. Stale canary grep fails at push-time.
-- Channel fetch prefers GitHub API. Tarball version wins over a stale CDN channel.
-- Mailman re-execs before the version compare.
+## This tree (no VERSION bump)
 
-House last seen 1.2.39. Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.
+Movie lookup: Radarr `pull` was 8s abort — house Radarr needs ~20s. Now 30s. Doctor button swallowed 8s abort; now 45s + Running… + error. Does not auto-run on Settings open.
+
+Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.

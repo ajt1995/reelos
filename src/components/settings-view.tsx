@@ -1027,14 +1027,20 @@ function Doctor() {
   const profile = adapterProfile(answers.source, answers.frontend);
   const [live, setLive] = useState<{ ok: boolean; label: string; detail: string }[] | null>(null);
   const [wireMsg, setWireMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [docErr, setDocErr] = useState("");
 
   const load = () => {
-    void fetch("/api/doctor", { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    setBusy(true);
+    setDocErr("");
+    void fetch("/api/doctor", { cache: "no-store", signal: AbortSignal.timeout(45000) })
       .then((r) => r.json())
-      .then((r: { live?: boolean; checks?: { ok: boolean; label: string; detail: string }[] }) => {
+      .then((r: { live?: boolean; checks?: { ok: boolean; label: string; detail: string }[]; error?: string }) => {
         if (r.live && r.checks?.length) setLive(r.checks);
+        else setDocErr(r.error || "Doctor returned no checks");
       })
-      .catch(() => {});
+      .catch((e) => setDocErr(String(e).slice(0, 120)))
+      .finally(() => setBusy(false));
   };
 
   const rewire = async () => {
@@ -1077,13 +1083,14 @@ function Doctor() {
     <div className="mt-8 rounded-2xl bg-card p-5 shadow-[var(--shadow-border)]">
       <p className="font-display font-medium">Doctor</p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <Button variant="ghost" onClick={() => load()}>
-          Run doctor
+        <Button variant="ghost" onClick={() => load()} disabled={busy}>
+          {busy ? "Running…" : "Run doctor"}
         </Button>
         <Button variant="ghost" onClick={() => void rewire()}>
           Rewire engines
         </Button>
         {wireMsg ? <p className="text-sm text-muted">{wireMsg}</p> : null}
+        {docErr ? <p className="text-sm text-gold">{docErr}</p> : null}
       </div>
       <ul className="mt-4 space-y-3">
         {checks.map((c) => (
