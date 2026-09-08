@@ -1,17 +1,17 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 19:16 CDT.** Trial stamp **1.2.40**. Did not touch #14.
+Xorriso. **2026-09-07 19:28 CDT.** **1.2.41** on the channel.
 
-## Merged into 1.2.40
+## Why 1.2.40 phone Apply died
 
-- PR #11 (#8) installed vs available
-- PR #12 (#7) Tailscale Doctor = Running + `100.`
-- PR #22 (#21) Settings house cheat sheet
+House: `reelos-ota.service` **failed** after `---- apply local=1.2.39 ----`. No `ReelOS 1.2.39 → 1.2.40`. No updater process.
 
-## Not merged
+Phone Apply runs the updater as a systemd oneshot. First hop after that line was **Python 3.14 urllib** fetching `channel.json`. Node had just fetched it fine. House Python urllib already hangs (Radarr lookups). SSH Apply works because it is not that unit.
 
-#13 #15 #16 #17 #19 #20. #18 parked.
+## 1.2.41
 
-## House
+Channel fetch = **curl --ipv4**. ERR trap + line numbers into `ota.log`. systemd stdout/stderr append to the same log. UI Apply reports failed if the unit dies in 2s.
 
-Phone Apply is the test. Channel is 1.2.40 / `main.tar.gz`.
+One SSH apply lands this. After that, phone Apply is the mailman.
+
+Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.

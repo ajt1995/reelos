@@ -1,8 +1,8 @@
 {
-  "version": "1.2.40",
+  "version": "1.2.41",
   "channel": "stable",
   "notes": [
-    "1.2.40: Installed version is last applied. Tailscale Doctor needs Running + 100. Settings house cheat sheet."
+    "1.2.41: Phone Apply mailman. curl for channel, not Python urllib. OTA logs every step. 1.2.40 house card still in this tree."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

@@ -614,6 +614,9 @@ TimeoutStartSec=infinity
 KillMode=mixed
 Environment=REELOS_OTA_UNIT=1
 Environment=REELOS_ROOT=/opt/reelos
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/var/lib/reelos/ota.log
+StandardError=append:/var/lib/reelos/ota.log
 ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
 `,
     );
@@ -627,6 +630,14 @@ ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
     const run = spawnSync("systemctl", ["start", "--no-block", "reelos-ota"], { encoding: "utf8" });
     if (run.status !== 0) {
       send(res, 500, { ok: false, error: (run.stderr || run.stdout || "could not start reelos-ota").slice(0, 160) });
+      return;
+    }
+    spawnSync("sleep", ["2"], { encoding: "utf8" });
+    const st2 = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
+    if (st2 === "failed") {
+      const j = spawnSync("journalctl", ["-u", "reelos-ota", "-n", "15", "--no-pager"], { encoding: "utf8" });
+      otaNote("ui apply reelos-ota.service failed");
+      send(res, 500, { ok: false, error: (j.stdout || "reelos-ota failed").slice(0, 240) });
       return;
     }
     otaNote("ui apply started reelos-ota.service");

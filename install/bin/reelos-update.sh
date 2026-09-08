@@ -7,37 +7,27 @@ STATE=/var/lib/reelos
 WORK=/tmp/reelos-ota
 LOG="$STATE/ota.log"
 mkdir -p "$STATE" "$WORK"
-log() { echo "$*" | tee -a "$LOG" >/dev/stderr; }
+log() { printf '%s\n' "$*" >>"$LOG"; printf '%s\n' "$*" >&2; }
+trap 'log "ERR line $LINENO exit $?"' ERR
 
+# curl, not Python urllib. House Python 3.14 hangs under systemd; Node/curl do not.
 fetch_channel() {
-  python3 - <<'PY'
-import json, urllib.request, sys
-urls = [
-  "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
-  "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
-  "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
-]
-best = None
-best_key = []
-for u in urls:
-    try:
-        req = urllib.request.Request(u, headers={"User-Agent": "ReelOS-update", "Accept": "application/vnd.github.raw"})
-        with urllib.request.urlopen(req, timeout=20) as r:
-            raw = r.read().decode()
-        data = json.loads(raw)
-        if "content" in data and data.get("encoding") == "base64":
-            import base64
-            data = json.loads(base64.b64decode(data["content"]).decode())
-        ver = str(data.get("version") or "")
-        key = [int(x) for x in ver.split(".") if x.isdigit()]
-        if key > best_key:
-            best, best_key = data, key
-    except Exception:
-        continue
-if not best:
-    sys.exit(1)
-open("/tmp/reelos-ota/channel.json", "w").write(json.dumps(best, indent=2) + "\n")
-PY
+  mkdir -p "$WORK"
+  local u
+  for u in \
+    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json" \
+    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json"
+  do
+    log "channel GET $u"
+    if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" -o "$WORK/channel.json" "$u" \
+      && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("version") else 1)' "$WORK/channel.json"
+    then
+      log "channel $(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')"
+      return 0
+    fi
+    log "channel miss $u"
+  done
+  return 1
 }
 
 LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
@@ -61,18 +51,14 @@ sys.exit(0 if a>b else 1)' "$1" "$2"
 }
 
 github_sha() {
-  python3 - <<'PY'
-import json, urllib.request
+  curl -fsSL --ipv4 --max-time 15 -A "ReelOS-update" \
+    -H "Accept: application/vnd.github+json" \
+    https://api.github.com/repos/ajt1995/reelos/commits/main \
+    | python3 -c 'import json,sys
 try:
-    req = urllib.request.Request(
-        "https://api.github.com/repos/ajt1995/reelos/commits/main",
-        headers={"User-Agent": "ReelOS-update", "Accept": "application/vnd.github+json"},
-    )
-    with urllib.request.urlopen(req, timeout=15) as r:
-        print(json.load(r).get("sha") or "")
+    print(json.load(sys.stdin).get("sha") or "")
 except Exception:
-    print("")
-PY
+    print("")' || true
 }
 
 HEAD_SHA=$(github_sha)
@@ -129,6 +115,9 @@ TimeoutStartSec=infinity
 KillMode=mixed
 Environment=REELOS_OTA_UNIT=1
 Environment=REELOS_ROOT=/opt/reelos
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=append:/var/lib/reelos/ota.log
+StandardError=append:/var/lib/reelos/ota.log
 ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
 EOF
   systemctl daemon-reload || true
@@ -140,7 +129,9 @@ fi
 if [ "${REELOS_OTA_REEXEC:-}" = "1" ] && [ -f "$WORK/src/VERSION" ]; then
   log "tarball already extracted — skip second download"
 else
-  curl -fL --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
+  log "downloading $TARBALL"
+  curl -fL --ipv4 --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
+  log "tarball $(wc -c < "$WORK/src.tar.gz") bytes"
   rm -rf "$WORK/src"
   mkdir -p "$WORK/src"
   tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
