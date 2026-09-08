@@ -522,8 +522,12 @@ function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
     <Row icon={RefreshCw} title="Updates" hint={hint} open={open} onClick={onClick}>
       <p className="font-mono text-sm">
-        ReelOS {update.current}
-        <span className="ml-3 text-muted">{CHANNEL}</span>
+        Installed {update.current}
+        {update.status === "available" && update.target ? (
+          <span className="ml-3 text-muted">available {update.target}</span>
+        ) : (
+          <span className="ml-3 text-muted">{CHANNEL}</span>
+        )}
       </p>
       <p className="mt-2 text-sm text-muted">
         Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put.

@@ -81,7 +81,7 @@ function makeAdapter(answers: WizardAnswers): AdapterState {
   };
 }
 
-function idleUpdate(current = SHIPPED_VERSION): UpdateState {
+function idleUpdate(current = "…"): UpdateState {
   return {
     status: "idle",
     current,

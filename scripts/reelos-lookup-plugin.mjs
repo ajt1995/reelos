@@ -426,6 +426,9 @@ function cmpVer(a, b) {
 
 function localVersion() {
   try {
+    if (existsSync("/var/lib/reelos/installed-version")) {
+      return readFileSync("/var/lib/reelos/installed-version", "utf8").trim() || "0";
+    }
     if (existsSync("/opt/reelos/VERSION")) return readFileSync("/opt/reelos/VERSION", "utf8").trim();
   } catch {
     /* */
@@ -850,9 +853,11 @@ function shOut(args, timeout = 8000) {
 }
 
 async function handleLogs(_req, res) {
-  const ver = existsSync("/opt/reelos/VERSION")
-    ? readFileSync("/opt/reelos/VERSION", "utf8").trim()
-    : localVersion();
+  const ver = existsSync("/var/lib/reelos/installed-version")
+    ? readFileSync("/var/lib/reelos/installed-version", "utf8").trim()
+    : existsSync("/opt/reelos/VERSION")
+      ? readFileSync("/opt/reelos/VERSION", "utf8").trim()
+      : localVersion();
   const sha = existsSync("/var/lib/reelos/applied-sha")
     ? readFileSync("/var/lib/reelos/applied-sha", "utf8").trim()
     : "";

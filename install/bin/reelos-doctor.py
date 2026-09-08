@@ -146,7 +146,10 @@ def main() -> int:
     intent = answers.get("intent") or {}
     frontend = answers.get("frontend") or "jellyfin"
     version = "unknown"
-    if (ROOT / "VERSION").exists():
+    inst = STATE / "installed-version"
+    if inst.exists():
+        version = inst.read_text().strip() or version
+    elif (ROOT / "VERSION").exists():
         version = (ROOT / "VERSION").read_text().strip()
 
     checks = []

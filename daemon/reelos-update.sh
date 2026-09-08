@@ -197,7 +197,7 @@ need daemon/wire-engines.py 'restart_fuse_readers'
 need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
-need daemon/reelos-update.sh 'applied (home up)'
+need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
@@ -441,12 +441,7 @@ if ! probe_home; then
   exit 1
 fi
 trap - ERR
-echo "$REMOTE" >"$ROOT/VERSION"
-if [ -n "${HEAD_SHA:-}" ]; then
-  echo "$HEAD_SHA" >"$STATE/applied-sha"
-fi
-log "ReelOS $REMOTE applied (home up)"
-echo "ReelOS $REMOTE applied (home up)"
+log "home up — not stamping VERSION"
 
 caddy_reelos
 if ! probe_port80; then
@@ -599,17 +594,25 @@ sys.exit(0)
 PY
 }
 
+CANARY_FAIL=0
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
   CANARY_OUT=$(indexer_canary) || {
-    log "indexer canary FAIL ${CANARY_OUT:-} — Home still counts"
+    CANARY_FAIL=1
+    log "indexer canary FAIL ${CANARY_OUT:-} — not stamping installed version"
     [ -f "$STATE/releases-error.txt" ] && log "$(head -c 400 "$STATE/releases-error.txt")"
   }
-  log "indexer canary ${CANARY_OUT:-skipped}"
+  [ "$CANARY_FAIL" = "0" ] && log "indexer canary ${CANARY_OUT:-ok}"
 else
   log "indexer canary skipped (UI-only OTA)"
 fi
 
+if [ "$CANARY_FAIL" = "1" ]; then
+  log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+  exit 1
+fi
+
 echo "$REMOTE" >"$ROOT/VERSION"
+echo "$REMOTE" >"$STATE/installed-version"
 if [ -n "${HEAD_SHA:-}" ]; then
   echo "$HEAD_SHA" >"$STATE/applied-sha"
 fi
