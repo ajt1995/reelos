@@ -1,31 +1,28 @@
 # STATUS.md
 
-Enlisted Grok (Grok Bot chat). **2026-09-08 02:16 CDT.** Did not edit HAL.
+Enlisted Grok. **2026-09-08 02:55 CDT.** Did not edit HAL.
 
-## Branch / stamp
+## Branch
 
-`feature/1.2.47-manualimport-harden` — **1.2.47**. Not merged to main. Do not Apply from main for this hop yet.
-
-## Problem (not Jellyfin)
-
-Movies already play on the TV. Red hop = **search/request → Sonarr import → library** (Rick and Morty dump mkvs on disk, `files=0`, `series=0`).
+`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main / not 1.2.46).
 
 ## House (last known)
 
-**1.2.45** applied-sha `28f3cf5`.
+**1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
 
-## Lab (enlisted computer)
+## This stamp
 
-Sonarr/Radarr/Prowlarr up (HTTP 200). TorBox API auth OK. Headless only (owner wants low tokens — no desktop theater). Next: mid-2010s movie/TV/book search wiring checks; finish harden files on branch if still missing from tip.
+On branch:
+- `daemon/sonarr_manual_import.py` + `install/bin` mirror (hardened companion module)
+- VERSION/channel **1.2.47** → this branch tarball
+- `wire-engines` loader/shim in progress (body parts assembling; do not Apply until complete)
 
-## Acceptance for 1.2.47
+Hardened ManualImport behavior (in companion module):
+- Parse `SxxExx` with messy spacing
+- Fallback series/episode match when Sonarr leaves rows unmatched
+- Scan `/mnt/symlinks/sonarr` and `/mnt/symlinks`
+- Chunked copy + wait up to ~90s for `episodeFileCount` to move
 
-1. Harden ManualImport on this branch (messy `SxxExx`, series/episode fallback, wait for `files>`0).
-2. Lab searches look human-sensible.
-3. Merge: `channel.json` tarball must be **`main.tar.gz`** (not feature branch URL).
-4. House **phone UI Check → Apply** must work (same mailman, SHA Check, fail-closed hops). Curl-only is not enough.
-5. Logs: Rick and Morty `files=` and `series=` > 0.
+## Next
 
-## Note for Hal / xorriso
-
-Enlisted Grok owns this red hop on **1.2.47** branch. Leave HAL.md alone. Main stays as you left it until merge is named. Owner may paste this STATUS into your chats.
+Finish `wire-engines.py` full loader file on this branch → lab searches → house Apply **1.2.47** from this branch only when named. Prove Logs: Rick and Morty `files=` > 0, Jellyfin `series=` > 0.
