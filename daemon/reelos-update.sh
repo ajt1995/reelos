@@ -283,7 +283,7 @@ need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
-need daemon/reelos-bug.sh 'ReelOS bug'
+need daemon/wire-engines.py 'relink_from_debrid'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
@@ -809,6 +809,10 @@ PY
 
 if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
+  if [ -x "$ROOT/bin/wire-engines.py" ]; then
+    log "import after hops (TV/movies into the library)"
+    python3 "$ROOT/bin/wire-engines.py" import || log "import non-fatal"
+  fi
 fi
 
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then

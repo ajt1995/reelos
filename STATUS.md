@@ -1,18 +1,16 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 23:26 CDT.** VERSION **1.2.44**. House applied-sha **c84545d**.
+Xorriso. **2026-09-07 23:28 CDT.** VERSION **1.2.45**.
 
-## House dump (reelos-house 4)
+## House dump
 
-**Green:** FUSE on host. Jellyfin movies=3 (National Treasure, Barbie, Guardians). Search Batman. Door `:80` ReelOS. `ReelOS 1.2.44 applied.` Docker all Up.
+1.2.44 applied. Movies in Jellyfin. Rick and Morty season dirs **empty**, series=0. Jellyfin 401 on refresh during OTA.
 
-**Red / not done:**
-- Rick and Morty S01/S02/S04 dirs exist under sonarr dumps, **files=0**. Jellyfin **series=0**.
-- Jellyfin library refresh **401 / no token** (`#32` still off main).
-- Sonarr import has been `Connection reset` on OTA wire.
-- Apply log is **doubled** (two processes still stamped).
-- House SHA **c84545d**; main is **77dd64e** (GitHub token + bugs in Logs). Same VERSION 1.2.44.
+## 1.2.45
 
-## Don’t
+- Relink empty `/mnt/symlinks/sonarr/*` from `/mnt/debrid/__all__`
+- Sonarr `DownloadedEpisodesScan` + RescanSeries (retries)
+- Jellyfin token cached; refresh after import
+- Apply always runs `wire-engines.py import` even when compose is unchanged
 
-Stamp 1.2.45 until HAL names it. Next wave they already queued: **#32 Jellyfin token** so refresh/import can put those seasons in the library.
+One Apply. Then Logs: `files=` on Rick and Morty should not be 0. Watch on the TV.

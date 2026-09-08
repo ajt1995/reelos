@@ -232,7 +232,63 @@ def wait_http(url: str, seconds: int = 40) -> bool:
     return False
 
 
+def relink_from_debrid() -> int:
+    """Empty *arr dump dirs → symlink files from FUSE /mnt/debrid/__all__."""
+    all_root = Path("/mnt/debrid/__all__")
+    if not all_root.is_dir():
+        log_wire("relink skip — no __all__")
+        return 0
+    catalog: dict[str, Path] = {}
+    try:
+        for p in all_root.iterdir():
+            catalog[p.name.lower()] = p
+    except OSError as e:
+        log_wire(f"relink catalog {e}")
+        return 0
+    n = 0
+    for dump_root in (Path("/mnt/symlinks/sonarr"), Path("/mnt/symlinks/radarr"), Path("/mnt/symlinks")):
+        if not dump_root.is_dir():
+            continue
+        try:
+            kids = list(dump_root.iterdir())
+        except OSError:
+            continue
+        for dump in kids:
+            if not dump.is_dir() or dump.name in ("radarr", "sonarr", "anime", "music", "debrid"):
+                continue
+            try:
+                has = any(x.is_file() or x.is_symlink() for x in dump.rglob("*"))
+            except OSError:
+                continue
+            if has:
+                continue
+            key = dump.name.lower()
+            hit = catalog.get(key)
+            if not hit:
+                compact = re.sub(r"[^a-z0-9]+", "", key)[:20]
+                for name, p in catalog.items():
+                    if compact and compact in re.sub(r"[^a-z0-9]+", "", name):
+                        hit = p
+                        break
+            if not hit:
+                continue
+            try:
+                for src in hit.iterdir():
+                    dest = dump / src.name
+                    if dest.exists():
+                        continue
+                    os.symlink(src, dest)
+                    n += 1
+            except OSError as e:
+                log_wire(f"relink {dump.name} {e}")
+            else:
+                log_wire(f"relink {dump.name} <- {hit.name}")
+    log_wire(f"relink {n} links")
+    return n
+
+
 def kick_imports() -> None:
+    relink_from_debrid()
     wait_http("http://127.0.0.1:7878/ping", 90)
     wait_http("http://127.0.0.1:8989/ping", 90)
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
@@ -240,14 +296,15 @@ def kick_imports() -> None:
     rk = api_key(radarr_xml)
     sk = api_key(sonarr_xml)
     if rk:
-        for attempt in range(3):
+        for attempt in range(5):
             try:
-                call(
-                    "http://127.0.0.1:7878/api/v3/command",
-                    rk,
-                    method="POST",
-                    body={"name": "DownloadedMoviesScan", "path": "/mnt/symlinks/radarr"},
-                )
+                for path in ("/mnt/symlinks/radarr", "/mnt/symlinks"):
+                    call(
+                        "http://127.0.0.1:7878/api/v3/command",
+                        rk,
+                        method="POST",
+                        body={"name": "DownloadedMoviesScan", "path": path},
+                    )
                 call("http://127.0.0.1:7878/api/v3/command", rk, method="POST", body={"name": "RefreshMonitoredDownloads"})
                 log_wire("radarr import scan")
                 break
@@ -255,14 +312,16 @@ def kick_imports() -> None:
                 log_wire(f"radarr scan try {attempt + 1} {type(e).__name__} {e}")
                 time.sleep(8)
     if sk:
-        for attempt in range(3):
+        for attempt in range(5):
             try:
-                call(
-                    "http://127.0.0.1:8989/api/v3/command",
-                    sk,
-                    method="POST",
-                    body={"name": "DownloadedEpisodesScan", "path": "/mnt/symlinks/sonarr"},
-                )
+                for path in ("/mnt/symlinks/sonarr", "/mnt/symlinks"):
+                    call(
+                        "http://127.0.0.1:8989/api/v3/command",
+                        sk,
+                        method="POST",
+                        body={"name": "DownloadedEpisodesScan", "path": path},
+                    )
+                call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RescanSeries"})
                 call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RefreshMonitoredDownloads"})
                 log_wire("sonarr import scan")
                 break
@@ -1083,6 +1142,29 @@ def jellyfin_authenticate(user: str, password: str) -> str | None:
 
 
 def jellyfin_token() -> str | None:
+    cached = STATE / "jellyfin.token"
+    if cached.exists():
+        t = cached.read_text().strip()
+        if t:
+            try:
+                call("http://127.0.0.1:8096/Users/Me", headers={"X-Emby-Token": t})
+                return t
+            except NET_ERR:
+                pass
+    for _ in range(8):
+        tok = jellyfin_token_once()
+        if tok:
+            try:
+                STATE.mkdir(parents=True, exist_ok=True)
+                cached.write_text(tok + "\n")
+            except OSError:
+                pass
+            return tok
+        time.sleep(3)
+    return None
+
+
+def jellyfin_token_once() -> str | None:
     a = answers()
     user = (a.get("adminName") or "reelos").strip() or "reelos"
     pw = (a.get("adminPassword") or "").strip()
@@ -1099,7 +1181,7 @@ def jellyfin_token() -> str | None:
     except NET_ERR:
         pass
     pws: list[str] = []
-    for p in (pw, "reelos", user):
+    for p in (pw, str(a.get("password") or ""), str(a.get("boxPassword") or ""), "reelos", user):
         if p and p not in pws:
             pws.append(p)
     for n in names:
@@ -1604,4 +1686,7 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if "fuse" in sys.argv:
         raise SystemExit(0 if ensure_fuse() is None else 0)
+    if "import" in sys.argv:
+        kick_imports()
+        raise SystemExit(0)
     raise SystemExit(main())
