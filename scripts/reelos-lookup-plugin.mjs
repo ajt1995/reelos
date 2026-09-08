@@ -598,6 +598,11 @@ async function handleUpdateApply(req, res) {
     send(res, 405, { ok: false });
     return;
   }
+  const st0 = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
+  if (st0 === "active" || st0 === "activating") {
+    send(res, 409, { ok: false, error: "Update already running", already: true });
+    return;
+  }
   try {
     const urls = [
       "https://api.github.com/repos/ajt1995/reelos/contents/daemon/reelos-update.sh?ref=main",

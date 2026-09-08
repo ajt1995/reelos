@@ -89,6 +89,16 @@ print(json.dumps({
   exit 0
 fi
 
+if [ "$MODE" = "apply" ]; then
+  mkdir -p "$STATE"
+  exec 9>"$STATE/ota.lock"
+  if ! flock -n 9; then
+    log "apply already running — refusing second Apply"
+    echo "apply already running"
+    exit 0
+  fi
+fi
+
 if ! newer "$REMOTE" "$LOCAL"; then
   if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$APPLIED_SHA" ]; then
     log "same $LOCAL, new main ${HEAD_SHA:0:12}"
@@ -213,6 +223,8 @@ need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
+need daemon/reelos-update.sh 'apply already running'
+need daemon/reelos-update.sh 'door :80 is ReelOS'
 need scripts/check-ota.py 'VERSION skew'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
@@ -466,6 +478,27 @@ if ! probe_port80; then
   log ":80 still down — Home is on :8080, not rolling back"
 fi
 
+ensure_door() {
+  systemctl start reelos >/dev/null 2>&1 || true
+  caddy_reelos
+  if probe_home && probe_port80; then
+    log "door :80 is ReelOS"
+    return 0
+  fi
+  log "door :80 dead — retry caddy"
+  timeout 12 systemctl restart caddy >/dev/null 2>&1 || true
+  sleep 2
+  caddy_reelos
+  probe_home || true
+  probe_port80 || true
+  if curl -fsS -o /dev/null --max-time 3 http://127.0.0.1/; then
+    log "door :80 is ReelOS"
+    return 0
+  fi
+  log "door :80 still dead"
+  return 1
+}
+
 sshd_open() {
   mkdir -p /etc/ssh/sshd_config.d
   cat >/etc/ssh/sshd_config.d/reelos.conf <<'EOF'
@@ -632,6 +665,11 @@ fi
 
 if [ "$CANARY_FAIL" = "1" ]; then
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+  exit 1
+fi
+
+if ! ensure_door; then
+  log "not printing applied — phone would see connection refused"
   exit 1
 fi
 

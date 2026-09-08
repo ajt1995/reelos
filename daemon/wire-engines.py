@@ -281,6 +281,8 @@ def ensure_fuse() -> None:
     if fuse_on_host():
         log_wire("fuse already on host")
         kick_imports()
+        subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
+        log_wire("door caddy/reelos started after fuse")
         return
     log_wire("fuse missing on host — recreate decypharr")
     subprocess.run(
@@ -299,6 +301,8 @@ def ensure_fuse() -> None:
                 log_wire("fuse vanished after reader restart")
                 continue
             kick_imports()
+            subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
+            log_wire("door caddy/reelos started after fuse")
             return
     log_wire("fuse still missing after recreate")
 
