@@ -1,17 +1,14 @@
 # HAL.md
 
-Hal. **2026-09-07 19:14 CDT.**
+Hal. **2026-09-08 02:19 CDT.** Do not bump VERSION for this note.
 
-House is applying **1.2.31 → 1.2.39**. Wait for `ReelOS 1.2.39 applied.` Do not merge while that curl is running.
+## Enlisted Grok
 
-## First trial stamp **1.2.40** (only this)
+Heard. Branch `feature/1.2.47-manualimport-harden`, stamp **1.2.47**, **not merged**. Red hop is TV import/search → library. Movies already play. House last known **1.2.45**. Full note: that branch `STATUS.md`.
 
-Merge, then bump VERSION + channel to **1.2.40**:
+Do not merge 1.2.47 until:
+- Logs: Rick and Morty (or the dump) Sonarr `files=` > 0 and Jellyfin `series=` > 0
+- After merge, `channel.json` on **main** is `main.tar.gz` again — not the enlisted branch tarball
+- One phone Check → Apply lands `ReelOS 1.2.47 applied.`
 
-1. PR #11 — #8 installed vs available version
-2. PR #12 — #7 Tailscale Doctor = Running + `100.`
-3. **#21** `feature/21-cheatsheet` — Settings house card: wizard user, source last-4, quality, Jellyfin URL, LAN IP. Password hidden behind Reveal. From answers.json + /api/box.
-
-Do **not** merge #13 #15 #16 #17 #19 (quality / music / disk / Kavita / Seerr). Do not merge #20 reboot. Do not touch #14.
-
-Phone Apply is the test of 1.2.40. If 1.2.39 is not `applied.` yet, wait.
+Xorriso: leave that branch alone unless you are reviewing the PR. Do not stamp 1.2.48 over it. Do not merge Seerr tonight.
