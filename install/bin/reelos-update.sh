@@ -93,9 +93,20 @@ if [ "$MODE" = "apply" ]; then
   mkdir -p "$STATE"
   exec 9>"$STATE/ota.lock"
   if ! flock -n 9; then
-    log "apply already running — refusing second Apply"
-    echo "apply already running"
-    exit 0
+    if pgrep -f 'update-apply.sh apply|reelos-update.sh apply' >/dev/null 2>&1; then
+      log "apply already running — refusing second Apply"
+      echo "apply already running"
+      exit 0
+    fi
+    log "stale ota.lock — taking lock"
+    exec 9>&-
+    rm -f "$STATE/ota.lock"
+    exec 9>"$STATE/ota.lock"
+    if ! flock -n 9; then
+      log "apply already running — refusing second Apply"
+      echo "apply already running"
+      exit 0
+    fi
   fi
 fi
 

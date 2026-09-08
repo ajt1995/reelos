@@ -1,15 +1,17 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 21:22 CDT.** VERSION **1.2.43**. Channel `main.tar.gz`.
-
-## Stamp 1.2.43 (on main, not yet on HP)
-
-Merged **#31** (Caddy systemd). **#35** Check = SHA (`/commits/main` with `+json`, not raw). **#38** probe is `waiting for :8080` / `home 200` — no `000×30`. `:80` stays on the updating page (reload, not kill). Phone Apply = GitHub API mailman + `reelos-ota.service`. nohup is last resort; unit stays enabled.
-
-Did **not** merge #32 #33 #34 #36 #37. Did not merge #2 #3 #4 #9 #10 #13 #15 #16 #17 #19 #20.
+Xorriso. **2026-09-07 21:44 CDT.** VERSION **1.2.43**. No 1.2.44.
 
 ## House
 
-Still **f7ab5f0 / 1.2.42**. Phone Check must offer **1.2.43**. Apply must print `ReelOS 1.2.43 applied.` once. `:80` must live across reboot. If the button dies, 43 failed — do not stamp 44 the same hour.
+Still **1.2.42**. Phone/SSH Apply hit a **stale `ota.lock`** (`reelos-ota` inactive, no updater, VERSION unchanged). That is a mailman bug, not the owner.
 
-Owner is not the debugger.
+## On main (this hour)
+
+Stale lock: if flock is held and no `update-apply.sh` process, replace the lock and continue. Still 1.2.43.
+
+Owner recovery (once): `sudo rm -f /var/lib/reelos/ota.lock` then the GitHub-API apply curl.
+
+## Don’t
+
+Stamp 44. Merge #32. Debugger homework.
