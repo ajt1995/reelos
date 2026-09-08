@@ -14,14 +14,14 @@ import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const BASE_NAV = [
+const BASE_NAV: { to: any; label: string; icon: any }[] = [
   { to: "/", label: "Home", icon: Home },
   { to: "/discover", label: "Discover", icon: Compass },
   { to: "/requests", label: "Requests", icon: Clapperboard },
   { to: "/library", label: "Library", icon: Library },
   { to: "/activity", label: "Activity", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
-] as const;
+];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });

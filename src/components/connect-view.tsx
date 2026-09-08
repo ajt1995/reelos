@@ -208,10 +208,10 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
         <div className="w-full">
           <p className="font-display font-medium">Away from home</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant={away === "house" ? "default" : "ghost"} onClick={() => setAway("house")}>
+            <Button variant={away === "house" ? "gold" : "ghost"} onClick={() => setAway("house")}>
               Only this house
             </Button>
-            <Button variant={away === "out" ? "default" : "ghost"} onClick={() => setAway("out")}>
+            <Button variant={away === "out" ? "gold" : "ghost"} onClick={() => setAway("out")}>
               Also my phone when I'm out
             </Button>
           </div>

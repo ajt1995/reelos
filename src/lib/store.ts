@@ -243,6 +243,8 @@ function labState(): Pick<
   | "provisioned"
   | "requests"
   | "library"
+  | "shelf"
+  | "shelfError"
   | "watchProgress"
   | "activity"
   | "users"
