@@ -123,6 +123,32 @@ def releases_hop(answers: dict) -> dict:
     return ok("releases", last or "Indexer test failed", False)
 
 
+def tailscale_hop() -> dict:
+    bin_path = shutil.which("tailscale")
+    if not bin_path:
+        return ok("Tailscale", "Not installed", False)
+    try:
+        raw = subprocess.check_output(
+            [bin_path, "status", "--json"],
+            text=True,
+            timeout=8,
+            stderr=subprocess.DEVNULL,
+        )
+        st = json.loads(raw or "{}")
+    except Exception:
+        return ok("Tailscale", "NeedsLogin", False)
+    backend = str(st.get("BackendState") or "")
+    ips = (st.get("Self") or {}).get("TailscaleIPs") or []
+    ip100 = next((str(x) for x in ips if str(x).startswith("100.")), None)
+    auth = str(st.get("AuthURL") or "").strip()
+    if backend == "Running" and ip100:
+        dns = str((st.get("Self") or {}).get("DNSName") or "").rstrip(".")
+        return ok("Tailscale", ip100 + (f" {dns}" if dns else ""), True)
+    if auth:
+        return ok("Tailscale", f"NeedsLogin {auth}", False)
+    return ok("Tailscale", backend or "NeedsLogin", False)
+
+
 def listening(port: int) -> bool:
     s = socket.socket()
     s.settimeout(0.4)
@@ -207,9 +233,8 @@ def main() -> int:
     checks.append(ok("Discovery", "reelos.local" if avahi else "Avahi missing", avahi))
 
     access = answers.get("access") or "lan"
-    if access == "tailscale":
-        ts = shutil.which("tailscale") is not None
-        checks.append(ok("Tailscale", "tailscale binary" if ts else "Not installed", ts))
+    if access == "tailscale" or shutil.which("tailscale"):
+        checks.append(tailscale_hop())
     if access == "cloudflare":
         cf = Path("/etc/systemd/system/cloudflared.service").exists()
         checks.append(ok("Cloudflare Tunnel", "Unit present" if cf else "Token not applied", cf))

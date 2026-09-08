@@ -23,24 +23,59 @@ function tailscaleBin() {
   return null;
 }
 
-function tailnetName() {
+function tailscaleState() {
   const bin = tailscaleBin();
-  if (!bin) return null;
-  const r = spawnSync(bin, ["status", "--json"], { encoding: "utf8", timeout: 4000 });
-  if (r.status !== 0) return null;
-  try {
-    const j = JSON.parse(r.stdout || "{}");
-    return j.CurrentTailnet?.Name || j.Self?.DNSName || null;
-  } catch {
-    return null;
+  const empty = {
+    installed: false,
+    up: false,
+    state: "missing",
+    auth: null,
+    ip: null,
+    dns: null,
+    tailnet: null,
+  };
+  if (!bin) {
+    try {
+      if (existsSync("/var/lib/reelos/tailscale-auth.url")) {
+        empty.auth = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim() || null;
+      }
+    } catch {
+      /* */
+    }
+    return empty;
   }
+  const r = spawnSync(bin, ["status", "--json"], { encoding: "utf8", timeout: 8000 });
+  let j = {};
+  try {
+    j = JSON.parse(r.stdout || "{}");
+  } catch {
+    j = {};
+  }
+  const backend = String(j.BackendState || "");
+  const ips = j.Self?.TailscaleIPs || [];
+  const ip = ips.find((x) => String(x).startsWith("100.")) || null;
+  const dns = String(j.Self?.DNSName || "").replace(/\.$/, "") || null;
+  const tailnet = j.CurrentTailnet?.Name || dns || null;
+  let auth = String(j.AuthURL || "").trim() || null;
+  if (!auth) {
+    try {
+      if (existsSync("/var/lib/reelos/tailscale-auth.url")) {
+        auth = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim() || null;
+      }
+    } catch {
+      /* */
+    }
+  }
+  const up = backend === "Running" && Boolean(ip);
+  return { installed: true, up, state: backend || "NeedsLogin", auth: up ? null : auth, ip, dns, tailnet };
+}
+
+function tailnetName() {
+  return tailscaleState().tailnet;
 }
 
 function tailscaleRunning() {
-  const bin = tailscaleBin();
-  if (!bin) return false;
-  const r = spawnSync(bin, ["status"], { encoding: "utf8", timeout: 4000 });
-  return r.status === 0;
+  return tailscaleState().up;
 }
 
 function ipv4() {
@@ -271,31 +306,45 @@ async function jellyfinState(ip) {
   return { state: "green", detail: `Jellyfin on http://${ip}:8096`, libraries: names };
 }
 
+function saveAuthUrl(url) {
+  if (!url) return;
+  try {
+    mkdirSync("/var/lib/reelos", { recursive: true });
+    writeFileSync("/var/lib/reelos/tailscale-auth.url", `${url}\n`, { mode: 0o644 });
+  } catch {
+    /* */
+  }
+}
+
+function grabLoginUrl(bin) {
+  const st = tailscaleState();
+  if (st.auth) return st.auth;
+  const r = spawnSync(bin, ["login", "--timeout=20s"], { encoding: "utf8", timeout: 25000 });
+  const blob = `${r.stdout || ""}\n${r.stderr || ""}`;
+  const m = blob.match(/https:\/\/login\.tailscale\.com\/[^\s]+/);
+  if (m) {
+    saveAuthUrl(m[0]);
+    return m[0];
+  }
+  const up = spawnSync(bin, ["up", "--timeout=12s"], { encoding: "utf8", timeout: 20000 });
+  const blob2 = `${up.stdout || ""}\n${up.stderr || ""}`;
+  const m2 = blob2.match(/https:\/\/login\.tailscale\.com\/[^\s]+/);
+  if (m2) {
+    saveAuthUrl(m2[0]);
+    return m2[0];
+  }
+  return tailscaleState().auth;
+}
+
 function tailscaleAuthUrl() {
-  try {
-    if (existsSync("/var/lib/reelos/tailscale-auth.url")) {
-      const t = readFileSync("/var/lib/reelos/tailscale-auth.url", "utf8").trim();
-      if (t) return t;
-    }
-  } catch {
-    /* */
-  }
-  try {
-    if (existsSync("/var/lib/reelos/tailscale-install.log")) {
-      const log = readFileSync("/var/lib/reelos/tailscale-install.log", "utf8");
-      const m = log.match(/https:\/\/login\.tailscale\.com\/[^\s]+/);
-      if (m) return m[0];
-    }
-  } catch {
-    /* */
-  }
-  return null;
+  return tailscaleState().auth;
 }
 
 async function handleBox(_req, res) {
   const a = answers();
   const ip = ipv4();
   const jellyfin = await jellyfinState(ip);
+  const ts = tailscaleState();
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     ipv4: ip,
@@ -307,14 +356,17 @@ async function handleBox(_req, res) {
     adminName: a.adminName || "reelos",
     adminPassword: a.adminPassword || "reelos",
     answers: a,
-    tailscaleAuth: tailscaleAuthUrl(),
-    tailscaleInstalled: Boolean(tailscaleBin()),
-    tailscaleUp: tailscaleRunning(),
-    tailnet: tailnetName(),
+    tailscaleAuth: ts.auth,
+    tailscaleInstalled: ts.installed,
+    tailscaleUp: ts.up,
+    tailscaleIp: ts.ip,
+    tailscaleDns: ts.dns,
+    tailscaleState: ts.state,
+    tailnet: ts.tailnet,
   });
 }
 
-async function handleTailscaleInstall(req, res) {
+async function handleTailscaleLogin(req, res) {
   if ((req.method || "GET").toUpperCase() !== "POST") {
     send(res, 405, { ok: false, error: "POST only" });
     return;
@@ -322,18 +374,35 @@ async function handleTailscaleInstall(req, res) {
   const a = answers();
   a.access = "tailscale";
   try {
+    mkdirSync("/var/lib/reelos", { recursive: true });
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
   } catch (e) {
     send(res, 500, { ok: false, error: String(e) });
     return;
   }
-  const script = existsSync("/opt/reelos/bin/reelos-access.sh")
-    ? "/opt/reelos/bin/reelos-access.sh"
-    : "/opt/reelos/bin/reelos-access.sh";
-  const log = "/var/lib/reelos/tailscale-install.log";
-  const out = openSync(log, "a");
-  spawn("bash", [script], { detached: true, stdio: ["ignore", out, out] }).unref();
-  send(res, 200, { ok: true, started: true });
+  let bin = tailscaleBin();
+  if (!bin) {
+    const log = "/var/lib/reelos/tailscale-install.log";
+    const out = openSync(log, "a");
+    spawn("bash", ["-lc", "curl -fsSL https://tailscale.com/install.sh | sh"], {
+      detached: true,
+      stdio: ["ignore", out, out],
+    }).unref();
+    send(res, 200, { ok: true, started: true, installed: false, up: false, auth: null });
+    return;
+  }
+  spawnSync("systemctl", ["enable", "--now", "tailscaled"], { timeout: 8000 });
+  const st = tailscaleState();
+  if (st.up) {
+    send(res, 200, { ok: true, installed: true, up: true, ip: st.ip, dns: st.dns, tailnet: st.tailnet, auth: null });
+    return;
+  }
+  const url = grabLoginUrl(bin);
+  send(res, 200, { ok: true, installed: true, up: false, auth: url, state: tailscaleState().state });
+}
+
+async function handleTailscaleInstall(req, res) {
+  return handleTailscaleLogin(req, res);
 }
 
 async function handleTailscaleCheck(req, res) {
@@ -341,17 +410,25 @@ async function handleTailscaleCheck(req, res) {
     send(res, 405, { ok: false });
     return;
   }
-  const up = tailscaleRunning();
-  if (up) {
-    spawnSync("systemctl", ["enable", "--now", "tailscaled"], { timeout: 8000 });
+  spawnSync("systemctl", ["enable", "--now", "tailscaled"], { timeout: 8000 });
+  const st = tailscaleState();
+  if (st.up) {
     try {
-      const { unlinkSync } = await import("node:fs");
-      if (existsSync("/var/lib/reelos/tailscale-auth.url")) unlinkSync("/var/lib/reelos/tailscale-auth.url");
+      spawnSync("rm", ["-f", "/var/lib/reelos/tailscale-auth.url"]);
     } catch {
       /* */
     }
   }
-  send(res, 200, { ok: true, up, installed: Boolean(tailscaleBin()), tailnet: tailnetName() });
+  send(res, 200, {
+    ok: true,
+    up: st.up,
+    installed: st.installed,
+    ip: st.ip,
+    dns: st.dns,
+    tailnet: st.tailnet,
+    auth: st.auth,
+    state: st.state,
+  });
 }
 
 async function handleIndexer(req, res) {
@@ -1573,6 +1650,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
+          if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));
           if (pathOnly === "/api/tailscale/install") return void (await handleTailscaleInstall(req, res));
           if (pathOnly === "/api/tailscale/check") return void (await handleTailscaleCheck(req, res));
           if (pathOnly === "/api/update/check") return void (await handleUpdateCheck(req, res));
