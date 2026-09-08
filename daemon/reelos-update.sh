@@ -554,7 +554,7 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   COMPOSE_CHANGED=0
   if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
     if cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null; then
-      log "compose yml unchanged — skip compose up, wire, indexer canary"
+      log "compose yml unchanged — skip full compose up and indexer test (FUSE remount still runs)"
     else
       COMPOSE_CHANGED=1
       cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
@@ -662,7 +662,7 @@ if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
   }
   [ "$CANARY_FAIL" = "0" ] && log "indexer canary ${CANARY_OUT:-ok}"
 else
-  log "indexer canary skipped (UI-only OTA)"
+  log "indexer canary skipped (compose unchanged — not a UI-only OTA)"
 fi
 
 if [ "$CANARY_FAIL" = "1" ]; then
