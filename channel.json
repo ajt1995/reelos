@@ -1,8 +1,8 @@
 {
-  "version": "1.2.41",
+  "version": "1.2.42",
   "channel": "stable",
   "notes": [
-    "1.2.41: Phone Apply mailman. curl for channel, not Python urllib. OTA logs every step. 1.2.40 house card still in this tree."
+    "1.2.42: OTA canary matches Tailscale copy from #7. 1.2.41 mailman + 1.2.40 house card."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

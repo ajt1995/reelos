@@ -165,7 +165,7 @@ need() {
 need src/components/home-view.tsx '/api/lookup'
 need src/components/title-view.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
-need src/components/connect-view.tsx 'Install Tailscale on this box'
+need src/components/connect-view.tsx 'Get Tailscale login'
 need src/components/advanced-view.tsx TerminalRow
 need src/components/settings-view.tsx 'title="Terminal"'
 need src/components/library-view.tsx hydrateShelf
