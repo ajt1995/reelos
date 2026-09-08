@@ -630,7 +630,15 @@ EOF
 }
 sshd_open
 
+
 nudge_fuse() {
+  # Stale FUSE (ENOTCONN) makes mkdir -p fail with "Already exists" under set -e.
+  if [ -e /mnt/debrid ] || [ -L /mnt/debrid ]; then
+    if ! ls /mnt/debrid >/dev/null 2>&1; then
+      log "stale /mnt/debrid FUSE — lazy unmount"
+      fusermount -uz /mnt/debrid 2>/dev/null || umount -l /mnt/debrid 2>/dev/null || true
+    fi
+  fi
   mkdir -p /mnt /mnt/debrid /mnt/symlinks
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
