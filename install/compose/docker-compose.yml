@@ -147,6 +147,7 @@ services:
       - /dev/fuse:/dev/fuse:rwm
     cap_add:
       - SYS_ADMIN
+    privileged: true
     security_opt:
       - apparmor:unconfined
 

@@ -1,11 +1,13 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 19:47 CDT.** House **1.2.42 applied.** SHA `1e29d7c`.
+Xorriso. **2026-09-07 20:01 CDT.** House **1.2.42** SHA `10d8096`.
 
-LAN `192.168.1.234`. Tailscale `100.100.154.16`. National Treasure / Guardians / Barbie still on disk. Compose skipped (yml unchanged).
+Rick and Morty: TorBox grabbed S04–S09. Host `/mnt/debrid` empty. Decypharr FUSE never left the container (`rslave` / `/mnt` not shared). Same hole as Jurassic/Mario dump dirs.
 
-## This tree (no VERSION bump)
+This tree (VERSION stays 1.2.42):
+- `reelos-mnt-shared.service` makes `/mnt` rshared before Docker
+- If `__all__` missing, recreate Decypharr, restart arrs, Sonarr/Radarr import scan, Jellyfin refresh
+- Doctor hop **Debrid files**
+- `privileged: true` on Decypharr
 
-Movie lookup: Radarr `pull` was 8s abort — house Radarr needs ~20s. Now 30s. Doctor button swallowed 8s abort; now 45s + Running… + error. Does not auto-run on Settings open.
-
-Did not merge #13 #15 #16 #17 #19 #20. Did not touch #14.
+Did not merge #13 #15 #16 #17 #19 #20.

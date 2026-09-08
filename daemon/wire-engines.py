@@ -188,6 +188,102 @@ def restart_fuse_readers() -> None:
         log_wire(f"restart {name} rc={r.returncode}")
 
 
+def fuse_on_host() -> bool:
+    return Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists()
+
+
+def persist_mnt_shared() -> None:
+    unit = """[Unit]
+Description=ReelOS /mnt rshared so Decypharr FUSE is visible
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mkdir -p /mnt /mnt/debrid /mnt/symlinks
+ExecStart=/bin/mount --bind /mnt /mnt
+ExecStart=/bin/mount --make-rshared /mnt
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+"""
+    path = Path("/etc/systemd/system/reelos-mnt-shared.service")
+    try:
+        if path.exists() and path.read_text() == unit:
+            subprocess.run(["systemctl", "start", "reelos-mnt-shared"], check=False, capture_output=True)
+            return
+        path.write_text(unit)
+        subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+        subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-shared"], check=False, capture_output=True)
+        log_wire("mnt-shared unit enabled")
+    except OSError as e:
+        log_wire(f"mnt-shared unit {e}")
+
+
+def kick_imports() -> None:
+    radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
+    sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
+    rk = api_key(radarr_xml)
+    sk = api_key(sonarr_xml)
+    if rk:
+        try:
+            call(
+                "http://127.0.0.1:7878/api/v3/command",
+                rk,
+                method="POST",
+                body={"name": "DownloadedMoviesScan", "path": "/mnt/symlinks/radarr"},
+            )
+            call("http://127.0.0.1:7878/api/v3/command", rk, method="POST", body={"name": "RefreshMonitoredDownloads"})
+            log_wire("radarr import scan")
+        except Exception as e:
+            log_wire(f"radarr scan {type(e).__name__} {e}")
+    if sk:
+        try:
+            call(
+                "http://127.0.0.1:8989/api/v3/command",
+                sk,
+                method="POST",
+                body={"name": "DownloadedEpisodesScan", "path": "/mnt/symlinks/sonarr"},
+            )
+            call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RefreshMonitoredDownloads"})
+            log_wire("sonarr import scan")
+        except Exception as e:
+            log_wire(f"sonarr scan {type(e).__name__} {e}")
+    try:
+        urllib.request.urlopen(urllib.request.Request("http://127.0.0.1:8096/Library/Refresh", method="POST"), timeout=8)
+        log_wire("jellyfin refresh after import")
+    except Exception as e:
+        log_wire(f"jellyfin refresh {type(e).__name__} {e}")
+
+
+def ensure_fuse() -> None:
+    persist_mnt_shared()
+    share_mnt()
+    if fuse_on_host():
+        log_wire("fuse already on host")
+        kick_imports()
+        return
+    log_wire("fuse missing on host — recreate decypharr")
+    subprocess.run(
+        ["docker", "compose", "--profile", "debrid", "up", "-d", "--force-recreate", "decypharr"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        check=False,
+        capture_output=True,
+    )
+    for _ in range(20):
+        time.sleep(2)
+        if fuse_on_host():
+            log_wire("fuse on host")
+            restart_fuse_readers()
+            time.sleep(8)
+            kick_imports()
+            return
+    log_wire("fuse still missing after recreate")
+
+
 
 def root_paths(kind: str) -> list[str]:
     mode = answers().get("storageMode") or "both"
@@ -1455,6 +1551,11 @@ def main() -> int:
         log_wire(f"bazarr {type(e).__name__} {e}")
     extra_access()
 
+    try:
+        ensure_fuse()
+    except Exception as e:
+        log_wire(f"fuse {type(e).__name__} {e}")
+
     (STATE / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")
 
     lock = ROOT / "bin" / "lock-download-clients.py"
@@ -1470,4 +1571,6 @@ if __name__ == "__main__":
     if "--performance" in sys.argv:
         apply_jellyfin_performance()
         raise SystemExit(0)
+    if "fuse" in sys.argv:
+        raise SystemExit(0 if ensure_fuse() is None else 0)
     raise SystemExit(main())
