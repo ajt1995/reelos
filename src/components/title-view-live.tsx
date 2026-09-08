@@ -13,8 +13,18 @@ export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
   const remote = useReelStore((s) => s.remoteTitles.find((t) => t.id === id));
   const title = catalog ?? remote;
+  const [season, setSeason] = useState(1);
+  const [maxSeason, setMaxSeason] = useState(1);
+  const [hash, setHash] = useState("");
+  const [hashErr, setHashErr] = useState(false);
+  const [reqErr, setReqErr] = useState<string | null>(null);
   const request = useReelStore((s) =>
-    s.requests.find((r) => r.titleId === id && r.status !== "failed"),
+    s.requests.find(
+      (r) =>
+        r.titleId === id &&
+        r.status !== "failed" &&
+        (r.season == null || r.season === season),
+    ),
   );
   const failed = useReelStore((s) =>
     s.requests.find((r) => r.titleId === id && r.status === "failed"),
@@ -24,10 +34,6 @@ export function TitleView({ id }: { id: string }) {
   const source = useReelStore((s) => s.answers.source);
   const requestTitle = useReelStore((s) => s.requestTitle);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
-  const [season, setSeason] = useState(1);
-  const [hash, setHash] = useState("");
-  const [hashErr, setHashErr] = useState(false);
-  const [reqErr, setReqErr] = useState<string | null>(null);
   const { inJellyfin, engineStatus } = useEngineRequest(id);
 
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
@@ -106,7 +112,10 @@ export function TitleView({ id }: { id: string }) {
 
           {title.kind === "tv" || title.kind === "anime" ? (
             <div className="mt-5 flex flex-wrap gap-2">
-              {Array.from({ length: title.seasons ?? 1 }, (_, i) => i + 1).map((n) => (
+              {Array.from(
+                { length: Math.max(title.seasons ?? 1, maxSeason, season) },
+                (_, i) => i + 1,
+              ).map((n) => (
                 <button
                   key={n}
                   type="button"
@@ -120,6 +129,17 @@ export function TitleView({ id }: { id: string }) {
                   Season {n}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => {
+                  const next = Math.max(title.seasons ?? 1, maxSeason, season) + 1;
+                  setMaxSeason(next);
+                  setSeason(next);
+                }}
+                className="h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
+              >
+                + Season
+              </button>
             </div>
           ) : null}
 
@@ -142,7 +162,8 @@ export function TitleView({ id }: { id: string }) {
                 <Check className="size-4" />
                 In library
               </span>
-            ) : blocked ? (
+            ) : null}
+            {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
@@ -174,7 +195,9 @@ export function TitleView({ id }: { id: string }) {
                 }}
               >
                 <Plus className="size-4" />
-                Request
+                {title.kind === "tv" || title.kind === "anime"
+                  ? `Request S${String(season).padStart(2, "0")}`
+                  : "Request"}
               </Button>
             )}
           </div>
@@ -183,7 +206,7 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {!available && !blocked ? (
+          {(!available || title.kind === "tv" || title.kind === "anime") && !blocked ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {
