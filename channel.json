@@ -1,8 +1,8 @@
 {
-  "version": "1.2.42",
+  "version": "1.2.43",
   "channel": "stable",
   "notes": [
-    "1.2.42: OTA canary matches Tailscale copy from #7. 1.2.41 mailman + 1.2.40 house card."
+    "1.2.43: Phone Apply is the mailman. Caddy systemd survives reboot. Check is SHA. :80 stays up during swap."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

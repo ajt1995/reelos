@@ -514,9 +514,10 @@ function localVersion() {
 }
 
 async function fetchGh(url) {
+  const accept = url.includes("/commits/") ? "application/vnd.github+json" : "application/vnd.github.raw";
   const r = await fetch(url, {
     cache: "no-store",
-    headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github.raw" },
+    headers: { "User-Agent": "ReelOS-update", Accept: accept },
   });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.text();
@@ -583,11 +584,14 @@ async function handleUpdateCheck(_req, res) {
     /* */
   }
   const shaDrift = Boolean(head) && head !== applied;
+  const notes = shaDrift && !newer
+    ? [`Code update on ${best.version} (${head.slice(0, 12)})`]
+    : best.notes || [];
   send(res, 200, {
     ok: true,
     local,
     remote: best.version,
-    notes: best.notes || [],
+    notes,
     available: newer || shaDrift,
     sha: head.slice(0, 12),
   });

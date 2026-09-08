@@ -227,7 +227,8 @@ need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
-need daemon/reelos-update.sh 'caddy systemd active'
+need daemon/reelos-update.sh 'waiting for :8080'
+need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
 need scripts/reelos-lookup-plugin.mjs 'Update already running'
 need scripts/check-ota.py 'VERSION skew'
@@ -322,7 +323,13 @@ caddy_updating() {
 	respond "ReelOS is updating. This page will come back in a minute." 200
 }
 EOF
-  timeout 8 systemctl reload caddy >/dev/null 2>&1 || timeout 8 systemctl restart caddy >/dev/null 2>&1 || true
+  caddy_dropin
+  if caddy_listen; then
+    timeout 8 systemctl reload caddy >/dev/null 2>&1 || true
+  else
+    systemctl reset-failed caddy >/dev/null 2>&1 || true
+    timeout 25 systemctl start caddy >/dev/null 2>&1 || true
+  fi
   log "caddy parked on updating page"
 }
 
@@ -366,9 +373,10 @@ caddy_reelos() {
     mv /etc/caddy/Caddyfile.tmp /etc/caddy/Caddyfile
   fi
   caddy_dropin
-  caddy_clear
   systemctl reset-failed caddy >/dev/null 2>&1 || true
-  if timeout 25 systemctl start caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
+  if caddy_listen && timeout 8 systemctl reload caddy >/dev/null 2>&1 && sleep 0.4 && caddy_listen; then
+    log "caddy systemd active"
+  elif timeout 25 systemctl start caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
     log "caddy systemd active"
   elif timeout 25 systemctl restart caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
     log "caddy systemd active after restart"
@@ -441,10 +449,11 @@ systemctl start reelos || true
 
 probe_home() {
   local i code
+  log "waiting for :8080 — door :80 stays on updating page"
   for i in $(seq 1 45); do
     code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
-    log "probe $i home=$code"
     if [ "$code" = "200" ]; then
+      log "home 200"
       return 0
     fi
     systemctl daemon-reload 2>/dev/null || true

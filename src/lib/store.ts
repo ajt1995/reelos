@@ -56,13 +56,13 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.42";
-export const SHIPPED_VERSION = "1.2.42";
+export const LATEST_VERSION = "1.2.43";
+export const SHIPPED_VERSION = "1.2.43";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "Apply no longer dies when the shell stops.",
-  "TorBox DNS + indexer from 1.2.18.",
+  "1.2.43: Phone Apply is the mailman. Caddy systemd survives reboot.",
+  "Check uses SHA drift. :80 stays up during the swap.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);
