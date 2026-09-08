@@ -1,3 +1,29 @@
+ef ensure_fuse() -> None:
+    persist_mnt_shared()
+    share_mnt()
+    if fuse_on_host():
+        log_wire("fuse already on host")
+        kick_imports()
+        subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
+        log_wire("door caddy/reelos started after fuse")
+        return
+    log_wire("fuse missing on host — recreate decypharr")
+    subprocess.run(
+        ["docker", "compose", "--profile", "debrid", "up", "-d", "--force-recreate", "decypharr"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        check=False,
+        capture_output=True,
+    )
+    for _ in range(20):
+        time.sleep(2)
+        if fuse_on_host():
+            log_wire("fuse on host")
+            restart_fuse_readers()
+            if not fuse_on_host():
+                log_wire("fuse vanished after reader restart")
+                continue
+            kick_imports()
             subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
             log_wire("door caddy/reelos started after fuse")
             return
@@ -141,41 +167,4 @@ def install_official_yml(src: str) -> bool:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / Path(url).name
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "ReelOS-wire"})
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            dest.write_bytes(resp.read())
-        log_wire(f"official yml {dest.name} -> {dest}")
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        log_wire(f"official yml fetch failed {e}")
-        return False
-    subprocess.run(
-        ["docker", "compose", "restart", "prowlarr"],
-        cwd=str(COMPOSE),
-        env=compose_env(),
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    time.sleep(12)
-    return True
-
-
-def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
-    fields = []
-    for f in hit.get("fields") or []:
-        item = dict(f)
-        n = str(item.get("name") or "")
-        if n.lower() in ("apikey", "api_key", "api-key", "token"):
-            item["value"] = key
-        fields.append(item)
-    body = {
-        "enable": True,
-        "appProfileId": hit.get("appProfileId") or 1,
-        "priority": hit.get("priority") or 25,
-        "name": name,
-        "protocol": hit.get("protocol") or "torrent",
-        "implementation": hit.get("implementation"),
-        "implementationName": hit.get("implementationName"),
-        "configContract": hit.get("configContract"),
-        "fields": fields,
-    }
+        req = urllib.request.Re
