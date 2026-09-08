@@ -227,7 +227,7 @@ need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
-need daemon/reelos-update.sh 'door :80 is ReelOS'
+need daemon/reelos-update.sh 'caddy systemd active'
 need daemon/reelos-update.sh 'not printing applied'
 need scripts/reelos-lookup-plugin.mjs 'Update already running'
 need scripts/check-ota.py 'VERSION skew'
@@ -331,17 +331,27 @@ caddy_dropin() {
   cat >/etc/systemd/system/caddy.service.d/reelos.conf <<'EOF'
 [Service]
 Type=simple
-TimeoutStartSec=12
+TimeoutStartSec=45
+TimeoutStopSec=10
+Restart=on-failure
+RestartSec=2
 ExecStart=
 ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 EOF
   systemctl daemon-reload || true
+  systemctl enable caddy >/dev/null 2>&1 || true
 }
 
 caddy_listen() {
   ss -lptn 2>/dev/null | grep -qE ':80 |:80$' && return 0
   curl -sS -o /dev/null --max-time 1 http://127.0.0.1/ && return 0
   return 1
+}
+
+caddy_clear() {
+  timeout 8 systemctl stop caddy >/dev/null 2>&1 || true
+  pkill -x caddy >/dev/null 2>&1 || true
+  sleep 0.4
 }
 
 caddy_reelos() {
@@ -356,14 +366,20 @@ caddy_reelos() {
     mv /etc/caddy/Caddyfile.tmp /etc/caddy/Caddyfile
   fi
   caddy_dropin
-  timeout 12 systemctl restart caddy >/dev/null 2>&1 || true
-  if ! caddy_listen; then
-    log "caddy systemd stuck — running caddy directly"
-    timeout 5 systemctl stop caddy >/dev/null 2>&1 || true
+  caddy_clear
+  systemctl reset-failed caddy >/dev/null 2>&1 || true
+  if timeout 25 systemctl start caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
+    log "caddy systemd active"
+  elif timeout 25 systemctl restart caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
+    log "caddy systemd active after restart"
+  else
+    log "caddy systemd stuck — last journal:"
+    journalctl -u caddy.service -n 15 --no-pager 2>/dev/null | tail -15 | while read -r line; do log "caddy $line"; done || true
     pkill -x caddy >/dev/null 2>&1 || true
-    sleep 0.4
+    sleep 0.3
     nohup /usr/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >>/var/lib/reelos/caddy.log 2>&1 &
     sleep 1
+    log "caddy nohup fallback — unit still enabled for reboot"
   fi
   log "caddy proxying to live 8080"
 }
