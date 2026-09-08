@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -176,6 +178,12 @@ def main() -> int:
         time.sleep(3)
     for app in APPS:
         lock_app(app)
+    sweep = Path(__file__).resolve().with_name("stuck-downloads.py")
+    if sweep.is_file():
+        try:
+            subprocess.run([sys.executable, str(sweep)], check=False, timeout=90)
+        except Exception:
+            pass
     return 0
 
 

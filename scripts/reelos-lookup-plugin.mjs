@@ -1264,6 +1264,7 @@ async function handleActivity(_req, res) {
     events.push({ id: `${src}-${events.length}`, at: Date.now(), message: t.slice(0, 240), src });
   };
   for (const line of tailFile("/var/lib/reelos/wire.log", 20).split("\n")) push("wire", line);
+  for (const line of tailFile("/var/lib/reelos/stuck-downloads.log", 12).split("\n")) push("stuck", line);
   for (const line of tailFile("/var/lib/reelos/ota.log", 15).split("\n")) push("ota", line);
   for (const line of shOut(["journalctl", "-u", "reelos", "-n", "12", "--no-pager", "-o", "cat"], 2500).split("\n")) {
     push("shell", line);
@@ -1608,6 +1609,7 @@ async function handleProvision(req, res) {
           },
         ],
         qbittorrent: { download_folder: "/mnt/symlinks", categories: ["sonarr", "radarr", "lidarr"] },
+        default_download_action: "symlink",
         use_auth: false,
         log_level: "info",
         port: "8282",

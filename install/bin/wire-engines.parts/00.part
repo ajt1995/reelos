@@ -161,6 +161,7 @@ def patch_decypharr() -> None:
         "qbittorrent",
         {"download_folder": "/mnt/symlinks", "categories": ["sonarr", "radarr", "lidarr"]},
     )
+    cfg.setdefault("default_download_action", "symlink")
     cfg.setdefault("use_auth", False)
     cfg.setdefault("log_level", "info")
     cfg.setdefault("port", "8282")

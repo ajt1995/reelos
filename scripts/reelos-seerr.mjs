@@ -109,7 +109,33 @@ export function seerrSearchHit(h, mediaTypeHint) {
   };
 }
 
-export function seerrRequestRow(r) {
+export function readStuckNotes() {
+  try {
+    if (existsSync("/var/lib/reelos/stuck-notes.json")) {
+      const j = JSON.parse(readFileSync("/var/lib/reelos/stuck-notes.json", "utf8"));
+      return j && typeof j === "object" ? j : {};
+    }
+  } catch {
+    /* */
+  }
+  return {};
+}
+
+export function applyStuckNotes(row, notes) {
+  if (!row?.titleId || !notes) return row;
+  if (row.status === "available" || row.engine === "downloaded") return row;
+  const note = notes[row.titleId];
+  if (!note || note.status !== "failed") return row;
+  return {
+    ...row,
+    status: "failed",
+    engine: "failed",
+    reason: note.reason || "Download stuck — cleared so TorBox is not re-added",
+    progress: 0,
+  };
+}
+
+export function seerrRequestRow(r, notes) {
   const media = r?.media || {};
   const mediaType = r?.type === "tv" || media.mediaType === "tv" ? "tv" : "movie";
   const tmdb = media.tmdbId || r?.mediaId;
@@ -124,7 +150,7 @@ export function seerrRequestRow(r) {
         : engine === "failed"
           ? "failed"
           : "waiting";
-  return {
+  const row = {
     id: `seerr-${r?.id}`,
     titleId,
     status,
@@ -137,6 +163,7 @@ export function seerrRequestRow(r) {
     mediaType,
     engine,
   };
+  return applyStuckNotes(row, notes === undefined ? readStuckNotes() : notes);
 }
 
 export async function seerrFetch(path, { key, method = "GET", body, ms = 20000 } = {}) {
