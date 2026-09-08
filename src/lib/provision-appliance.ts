@@ -68,6 +68,7 @@ export const provisionAppliance = createServerFn({ method: "POST" })
           download_folder: "/mnt/symlinks",
           categories: ["sonarr", "radarr", "lidarr"],
         },
+        default_download_action: "symlink",
         use_auth: false,
         log_level: "info",
         port: "8282",

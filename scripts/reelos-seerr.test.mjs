@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
+  applyStuckNotes,
   mapSeerrStatus,
   parseTitleId,
   realSeasonNumbers,
@@ -82,12 +83,35 @@ test("request rows survive Apply because they come from Seerr ids", () => {
     requestedBy: { displayName: "Austin" },
     seasons: [{ seasonNumber: 2 }],
     media: { tmdbId: 80566, status: 3 },
-  });
+  }, {});
   assert.equal(row.id, "seerr-9");
   assert.equal(row.titleId, "tmdb-tv-80566");
   assert.equal(row.status, "downloading");
   assert.equal(row.season, 2);
   assert.equal(row.requester, "Austin");
+});
+
+test("stuck-notes mark a grabbing Seerr row failed and leave available alone", () => {
+  const notes = { "tmdb-tv-80566": { status: "failed", reason: "Cached but symlink missing" } };
+  const grabbing = seerrRequestRow(
+    {
+      id: 9,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-08T00:00:00.000Z",
+      updatedAt: "2026-09-08T00:00:00.000Z",
+      seasons: [{ seasonNumber: 2 }],
+      media: { tmdbId: 80566, status: 3 },
+    },
+    notes,
+  );
+  assert.equal(grabbing.status, "failed");
+  assert.equal(grabbing.reason, "Cached but symlink missing");
+  const ok = applyStuckNotes(
+    { titleId: "tmdb-tv-80566", status: "available", engine: "downloaded", progress: 100 },
+    notes,
+  );
+  assert.equal(ok.status, "available");
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {

@@ -245,14 +245,16 @@ def main() -> int:
     checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
 
     checks.append(container_hop("decypharr", "Decypharr hop", 8282))
-    fuse = Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists()
-    checks.append(
-        ok(
-            "Debrid files",
-            "FUSE visible on the box" if fuse else "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs",
-            fuse,
-        )
-    )
+    fuse_detail = "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs"
+    fuse_ok = False
+    try:
+        kids = list(Path("/mnt/debrid").iterdir()) if Path("/mnt/debrid").exists() else []
+        fuse_ok = Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists() or bool(kids)
+        fuse_detail = "FUSE visible on the box" if fuse_ok else fuse_detail
+    except OSError as e:
+        fuse_ok = False
+        fuse_detail = f"FUSE stale ({e}) — remount Decypharr and restart *arrs"
+    checks.append(ok("Debrid files", fuse_detail, fuse_ok))
 
     prow = listening(9696) and api_key(COMPOSE / "configs" / "prowlarr" / "config.xml")
     checks.append(ok("Prowlarr hop", "Prowlarr accepts indexers" if prow else "indexers dead — Prowlarr", prow))

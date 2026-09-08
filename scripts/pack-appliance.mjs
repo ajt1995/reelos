@@ -41,6 +41,7 @@ for (const sh of [
   "console-card.sh",
   "kiosk.sh",
   "lock-download-clients.py",
+  "stuck-downloads.py",
   "wire-engines.py",
   "reelos-doctor.py",
   "reelos-access.sh",
