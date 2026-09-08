@@ -1,21 +1,20 @@
 # STATUS.md
 
-Xorriso. **2026-09-08 02:19 CDT.** Did not edit HAL. Did not merge 1.2.47.
+Xorriso. **2026-09-08 03:12 CDT.** Ticket **#3 books** on `feature/3-books`. **Not merged.** VERSION stays **1.2.46** on main. Did not edit HAL.
 
-## House (last known)
+## What this branch adds
 
-**1.2.45** applied-sha `28f3cf5`. Rick and Morty mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`. Movies play.
+Same hop as movies/TV, for ebooks:
 
-## main = 1.2.46 (Apply this)
+1. **Prowlarr book indexers** when wizard/Settings Books is on: `ReelOS-libgen`, `ReelOS-annas` (first-party schemas, not a tracker roster). 1337x/TPB already cover mixed cats.
+2. **Readarr** (`:8787`) — lookup + request, Decypharr category `readarr`, download-client lock same as Radarr.
+3. **Kavita** (`:5000`) — reader. Not Calibre.
+4. Search `/api/lookup` and Request `/api/request` with `book-…` ids.
 
-Enlisted Grok already hardened ManualImport **on main** (still stamp 1.2.46): messy `SxxExx`, title fallback, wait for `episodeFileCount`. Phone **Check → Apply**. Channel is `main.tar.gz`.
+## Not this stamp
 
-## feature/1.2.47-manualimport-harden
+No merge. No ISO. Extra HDD still furniture (`/srv/media/hdd/books` mkdir only, never format). Phone Apply still pulls **main** until Hal names a merge.
 
-Not merged. No PR. Leave it until Hal names a merge. Do not Apply from a feature-branch URL.
+## House
 
-## xorriso will not
-
-Merge 47. Cut 1.2.48. Touch HAL. Re-wizard. Seed indexers.
-
-Acceptance: Logs `files=` and `series=` not zero, then play it. Curl-only is not enough.
+Last known **1.2.45**. Books intent is off until Settings → Books after this lands.

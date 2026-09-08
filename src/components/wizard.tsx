@@ -114,7 +114,7 @@ function canContinue(step: number, a: ReturnType<typeof useReelStore.getState>["
   }
   if (step === 3) {
     const i = a.intent;
-    return i.movies || i.tv || i.anime || i.kids || i.music;
+    return i.movies || i.tv || i.anime || i.kids || i.music || i.books;
   }
   if (step === 5) {
     if (a.frontend === "plex" || a.frontend === "both") return a.plexClaim.trim().length >= 4;
@@ -427,12 +427,13 @@ function StepIntent() {
     { key: "uhd", label: "4K" },
     { key: "kids", label: "Kids" },
     { key: "music", label: "Music" },
+    { key: "books", label: "Books" },
   ];
   return (
     <div>
       <Heading
         title="What are you collecting?"
-        sub="We only install engines you need. Movies and TV are on by default. Music never appears unless you ask."
+        sub="We only install engines you need. Movies and TV are on by default. Books is Kavita + Readarr, not Calibre."
       />
       <div className="flex flex-wrap gap-2">
         {chips.map((c) => {

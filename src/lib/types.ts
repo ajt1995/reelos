@@ -1,4 +1,4 @@
-export type Kind = "movie" | "tv" | "anime" | "kids" | "music";
+export type Kind = "movie" | "tv" | "anime" | "kids" | "music" | "book";
 export type StorageMode = "debrid" | "local" | "both";
 export type SourceId =
   | "torbox"
@@ -24,6 +24,7 @@ export interface Intent {
   uhd: boolean;
   kids: boolean;
   music: boolean;
+  books: boolean;
 }
 
 export interface WizardAnswers {

@@ -160,6 +160,28 @@ function seriesHit(h) {
   };
 }
 
+function bookHit(h) {
+  const foreign = h.foreignBookId ?? h.goodreadsBookId ?? h.id;
+  if (foreign == null || foreign === "") return null;
+  const poster =
+    String(h.remotePoster || "") ||
+    String((h.images || []).find((i) => i?.coverType === "cover" || i?.coverType === "poster")?.remoteUrl || "");
+  const author = h.author?.authorName || h.authorTitle || "";
+  const title = String(h.title || "Untitled");
+  return {
+    id: `book-${foreign}`,
+    kind: "book",
+    title: author ? `${title} — ${author}` : title,
+    year: Number(h.releaseDate ? String(h.releaseDate).slice(0, 4) : h.year) || 0,
+    overview: String(h.overview || h.shortOverview || ""),
+    poster,
+    rating: Number(h.ratings?.value || 0),
+    genres: Array.isArray(h.genres) ? h.genres.map(String) : [],
+    maxQuality: "ebook",
+    popularity: 40,
+  };
+}
+
 async function pull(url, key, ms = 8000) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
@@ -196,9 +218,10 @@ async function handleLookup(req, res) {
   let error = null;
   const rk = xmlKey("/opt/reelos/compose/configs/radarr/config.xml");
   const sk = xmlKey("/opt/reelos/compose/configs/sonarr/config.xml");
-  note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"}`);
-  if (q.length >= 2 && !rk && !sk) {
-    error = "Movies/TV engines have no API key yet";
+  const bk = xmlKey("/opt/reelos/compose/configs/readarr/config.xml");
+  note(`api q=${q} radarr=${rk ? "yes" : "NO"} sonarr=${sk ? "yes" : "NO"} readarr=${bk ? "yes" : "NO"}`);
+  if (q.length >= 2 && !rk && !sk && !bk) {
+    error = "Movies/TV/books engines have no API key yet";
   }
   const jobs = [];
   if (q.length >= 2 && rk) {
@@ -230,6 +253,22 @@ async function handleLookup(req, res) {
         .catch((e) => {
           error = error || `shows ${e}`;
           note(`sonarr ${e}`);
+        }),
+    );
+  }
+  if (q.length >= 2 && bk) {
+    jobs.push(
+      pull(`http://127.0.0.1:8787/api/v1/book/lookup?term=${encodeURIComponent(q)}`, bk, 20000)
+        .then((hits) => {
+          for (const h of (hits || []).slice(0, 8)) {
+            const t = bookHit(h);
+            if (t) titles.push(t);
+          }
+          note(`readarr hits=${(hits || []).length}`);
+        })
+        .catch((e) => {
+          error = error || `books ${e}`;
+          note(`readarr ${e}`);
         }),
     );
   }
@@ -921,7 +960,40 @@ async function handleRequest(req, res) {
       send(res, 200, { ok: true, engine: "sonarr", added: added.ok, title: series.title || titleId });
       return;
     }
-    send(res, 400, { ok: false, error: "That title is not from the movie/TV engines. Search again, then request." });
+    if (titleId.startsWith("book-")) {
+      const bk = xmlKey("/opt/reelos/compose/configs/readarr/config.xml");
+      if (!bk) {
+        send(res, 503, { ok: false, error: "Books engine has no API key" });
+        return;
+      }
+      const foreign = titleId.slice(5);
+      const hits = await arrGet(
+        `http://127.0.0.1:8787/api/v1/book/lookup?term=${encodeURIComponent(body.title || foreign)}`,
+        bk,
+      );
+      const book = Array.isArray(hits)
+        ? hits.find((h) => String(h.foreignBookId || h.goodreadsBookId || h.id) === foreign) || hits[0]
+        : null;
+      if (!book) {
+        send(res, 404, { ok: false, error: "Readarr did not find that book" });
+        return;
+      }
+      const root = await firstRoot("http://127.0.0.1:8787/api/v1", bk, "/symlinks");
+      const profileId = await namedProfile("http://127.0.0.1:8787/api/v1", bk);
+      const author = book.author || {};
+      const added = await arrPost("http://127.0.0.1:8787/api/v1/author", bk, {
+        ...author,
+        qualityProfileId: author.qualityProfileId || profileId,
+        metadataProfileId: author.metadataProfileId || 1,
+        rootFolderPath: author.rootFolderPath || root,
+        monitored: true,
+        addOptions: { searchForMissingBooks: true, monitored: true },
+      });
+      note(`readarr add ${added.status} root=${root}`);
+      send(res, 200, { ok: true, engine: "readarr", added: added.ok, title: book.title || titleId });
+      return;
+    }
+    send(res, 400, { ok: false, error: "That title is not from the movie/TV/book engines. Search again, then request." });
   } catch (e) {
     const error = String(e?.name === "AbortError" ? "Engine timed out" : e);
     note(`request err ${error}`);
@@ -1257,6 +1329,15 @@ async function handleIntent(req, res) {
   } else {
     spawnSync("docker", ["compose", "stop", "lidarr"], { cwd: compose, encoding: "utf8", timeout: 20000 });
   }
+  if (a.intent?.books) {
+    spawnSync("docker", ["compose", "--profile", "books", "up", "-d", "readarr", "kavita"], {
+      cwd: compose,
+      encoding: "utf8",
+      timeout: 120000,
+    });
+  } else {
+    spawnSync("docker", ["compose", "stop", "readarr", "kavita"], { cwd: compose, encoding: "utf8", timeout: 20000 });
+  }
   send(res, 200, { ok: true, intent: a.intent });
 }
 
@@ -1553,6 +1634,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (intent.books) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") p.push("jellyfin");
   if (a.frontend === "plex" || a.frontend === "both") p.push("plex");
@@ -1607,7 +1689,7 @@ async function handleProvision(req, res) {
             use_webdav: false,
           },
         ],
-        qbittorrent: { download_folder: "/mnt/symlinks", categories: ["sonarr", "radarr", "lidarr"] },
+        qbittorrent: { download_folder: "/mnt/symlinks", categories: ["sonarr", "radarr", "lidarr", "readarr"] },
         use_auth: false,
         log_level: "info",
         port: "8282",

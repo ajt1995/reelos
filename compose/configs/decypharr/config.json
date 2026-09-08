@@ -10,7 +10,7 @@
   ],
   "qbittorrent": {
     "download_folder": "/mnt/symlinks",
-    "categories": ["sonarr", "radarr", "lidarr"]
+    "categories": ["sonarr", "radarr", "lidarr", "readarr"]
   },
   "use_auth": false,
   "log_level": "info",

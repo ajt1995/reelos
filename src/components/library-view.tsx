@@ -11,6 +11,7 @@ const TABS: { id: "all" | Kind; label: string }[] = [
   { id: "anime", label: "Anime" },
   { id: "kids", label: "Kids" },
   { id: "music", label: "Music" },
+  { id: "book", label: "Books" },
 ];
 
 export function LibraryView() {

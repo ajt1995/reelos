@@ -97,6 +97,7 @@ export function SettingsView() {
                 ["anime", "Anime"],
                 ["kids", "Kids"],
                 ["music", "Music"],
+                ["books", "Books"],
               ] as const
             ).map(([k, label]) => (
               <button

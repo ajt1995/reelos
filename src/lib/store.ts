@@ -35,6 +35,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: false,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -226,7 +227,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "RD-LAB-KEY-7F3A",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: false },
   quality: "hybrid",
   frontend: "jellyfin",
 };

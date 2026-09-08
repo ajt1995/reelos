@@ -110,6 +110,42 @@ services:
     ports:
       - "127.0.0.1:8686:8686"
 
+  readarr:
+    profiles: ["books"]
+    image: lscr.io/linuxserver/readarr:develop
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/readarr:/config
+      - /srv/media:/media
+      - /mnt/symlinks:/mnt/symlinks
+      - /mnt/symlinks:/symlinks
+      - /mnt:/mnt:rslave
+    ports:
+      - "127.0.0.1:8787:8787"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  kavita:
+    profiles: ["books"]
+    image: lscr.io/linuxserver/kavita:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/kavita:/config
+      - /mnt/symlinks:/symlinks
+      - /srv/media/hdd/books:/books
+      - /srv/media:/media
+    ports:
+      - "0.0.0.0:5000:5000"
+
   bazarr:
     profiles: ["subtitles"]
     image: lscr.io/linuxserver/bazarr:latest

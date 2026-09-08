@@ -158,7 +158,7 @@ def patch_decypharr() -> None:
     }
     cfg.setdefault(
         "qbittorrent",
-        {"download_folder": "/mnt/symlinks", "categories": ["sonarr", "radarr", "lidarr"]},
+        {"download_folder": "/mnt/symlinks", "categories": ["sonarr", "radarr", "lidarr", "readarr"]},
     )
     cfg.setdefault("use_auth", False)
     cfg.setdefault("log_level", "info")
@@ -431,8 +431,10 @@ def root_paths(kind: str) -> list[str]:
             paths.append("/mnt/symlinks/anime")
         if kind == "music":
             paths.append("/mnt/symlinks/music")
+        if kind in ("book", "books"):
+            paths.append("/mnt/symlinks/readarr")
     if mode in ("local", "both"):
-        folder = {"movie": "movies", "tv": "tv", "anime": "anime", "music": "music"}.get(kind, "movies")
+        folder = {"movie": "movies", "tv": "tv", "anime": "anime", "music": "music", "book": "books", "books": "books"}.get(kind, "movies")
         paths.append(f"/media/{folder}")
     return paths or ["/mnt/symlinks"]
 
@@ -444,6 +446,8 @@ HOST_FOR = {
     "/media/tv": "/srv/media/tv",
     "/media/anime": "/srv/media/anime",
     "/media/music": "/srv/media/music",
+    "/media/books": "/srv/media/hdd/books",
+    "/mnt/symlinks/readarr": "/mnt/symlinks/readarr",
 }
 
 
@@ -893,6 +897,12 @@ PUBLIC_INDEXERS = (
     ("ReelOS-eztv", ("eztv",)),
 )
 
+# Same hop as TV/movies: first-party Prowlarr defs, not a tracker roster.
+BOOK_INDEXERS = (
+    ("ReelOS-libgen", ("libgen", "library genesis")),
+    ("ReelOS-annas", ("anna", "annas-archive", "annas archive")),
+)
+
 
 def ensure_public_indexers(prow_key: str) -> None:
     if os.environ.get("REELOS_OTA"):
@@ -909,7 +919,10 @@ def ensure_public_indexers(prow_key: str) -> None:
         schemas = []
     rows = have if isinstance(have, list) else []
     names = {ix.get("name") for ix in rows}
-    for name, hints in PUBLIC_INDEXERS:
+    wanted = list(PUBLIC_INDEXERS)
+    if (answers().get("intent") or {}).get("books"):
+        wanted.extend(BOOK_INDEXERS)
+    for name, hints in wanted:
         if name in names:
             log_wire(f"public indexer exists {name}")
             continue
@@ -1379,6 +1392,12 @@ def complete_jellyfin_startup(user: str, password: str) -> None:
 
 def ensure_host_symlinks() -> None:
     Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    for extra in ("/mnt/symlinks/readarr", "/srv/media/hdd/books"):
+        Path(extra).mkdir(parents=True, exist_ok=True)
+        try:
+            os.chown(extra, 1000, 1000)
+        except OSError:
+            pass
     try:
         os.chmod("/mnt/symlinks", 0o777)
     except OSError:
@@ -1671,11 +1690,13 @@ def main() -> int:
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
     lidarr_xml = COMPOSE / "configs" / "lidarr" / "config.xml"
+    readarr_xml = COMPOSE / "configs" / "readarr" / "config.xml"
     prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
 
     radarr_key = wait_key(radarr_xml) if intent.get("movies", True) else None
     sonarr_key = wait_key(sonarr_xml) if intent.get("tv") or intent.get("anime") else None
     lidarr_key = wait_key(lidarr_xml) if intent.get("music") else None
+    readarr_key = wait_key(readarr_xml) if intent.get("books") else None
     prow_key = wait_key(prow_xml)
     try:
         if prow_key:
@@ -1704,6 +1725,10 @@ def main() -> int:
             ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
             if prow_key:
                 ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+        if readarr_key:
+            ensure_roots("http://127.0.0.1:8787/api/v1", readarr_key, "book")
+            if prow_key:
+                ensure_prowlarr_app("Readarr", "Readarr", "http://readarr:8787", readarr_key, prow_key)
     except Exception as e:
         log_wire(f"arr wire {type(e).__name__} {e}")
 

@@ -480,6 +480,8 @@ export function kindLabel(kind: Kind) {
       return "Kids";
     case "music":
       return "Music";
+    case "book":
+      return "Book";
   }
 }
 

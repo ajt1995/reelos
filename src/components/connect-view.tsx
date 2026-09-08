@@ -228,6 +228,23 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
 
       <Card>
         <div className="w-full">
+          <p className="font-display font-medium">Books — Kavita</p>
+          <p className="mt-2 text-sm text-muted">
+            Same house login. Reader on the phone. Request is Readarr, same as movies/TV.
+            Prowlarr gets LibGen / Anna’s Archive when Books is on. Not Calibre.
+          </p>
+          {box.ipv4 ? (
+            <a className="mt-3 block text-gold" href={`http://${box.ipv4}:5000`} target="_blank" rel="noreferrer">
+              http://{box.ipv4}:5000
+            </a>
+          ) : (
+            <p className="mt-2 text-sm text-muted">Waiting on LAN address.</p>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="w-full">
           <p className="font-display font-medium">Indexers</p>
           <p className="mt-1 text-sm text-muted">
             Optional extra Torznab. Skip is valid — the provider is already the first release source.

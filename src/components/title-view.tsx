@@ -89,6 +89,7 @@ export function TitleView({ id }: { id: string }) {
     engineStatus === "downloaded";
   const blocked =
     (title.kind === "music" && !intent.music) ||
+    (title.kind === "book" && !intent.books) ||
     (title.kind === "anime" && !intent.anime) ||
     (title.kind === "kids" && !intent.kids) ||
     (title.kind === "movie" && !intent.movies) ||

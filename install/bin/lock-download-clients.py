@@ -43,6 +43,13 @@ APPS = [
         "category_field": "musicCategory",
         "category": "lidarr",
     },
+    {
+        "name": "readarr",
+        "xml": COMPOSE / "configs" / "readarr" / "config.xml",
+        "base": "http://127.0.0.1:8787/api/v1",
+        "category_field": "bookCategory",
+        "category": "readarr",
+    },
 ]
 
 
