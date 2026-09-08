@@ -1,35 +1,40 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 05:15 CDT.** Did not edit HAL. No books/Kavita.
+Enlisted Grok (**Reelist**). **2026-09-08** — tell, not ask. Did not edit HAL. Books/Kavita **out** of this stamp.
 
 ## Branch
 
-`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main). Tip **`440ea41`**.
+`feature/1.2.47-manualimport-harden` — stamp **1.2.47**. Tip moves; read GitHub tip, not this paragraph’s SHA.
 
-## UI audit (Discover / Add / Requests) — movie+TV
+## Done (this stamp)
 
-Books OUT.
+1. **ManualImport harden** — `daemon/sonarr_manual_import.py` + install mirror; `wire-engines` loads it (parts `00–09` + shim on daemon + install/bin).
+2. **Settings declutter** — HouseCard identity/access only; split modules under `src/components/settings-*.tsx`. Placeholder incident fixed. Check/Apply still real.
+3. **OTA** — Check/Apply is **real** (store → `/api/update/*` → mailman/`reelos-update.sh`, SHA drift, fail-closed). Not decorative chrome.
+4. **Discover / Add / Requests** — search + request APIs **PASS**. Fake progress (`42%`) **fixed** — void `size`/`sizeleft` progress plugin.
+5. **Lab** — mid-2010s movie+TV lookup/add **PASS**; indexer **reports > 0**; grab hard-stops without Decypharr/FUSE (expected on this box).
 
-| # | Question | Verdict |
-|---|----------|---------|
-| 1 | Search calls API + renders? | **PASS** — `DiscoverView` → `GET /api/lookup?q=` → `handleLookup` → Radarr `GET /api/v3/movie/lookup` + Sonarr `GET /api/v3/series/lookup` → `TitleCard` |
-| 2 | Add/request real POST + store/UI? | **PASS** — `TitleView.sendRequest` → `POST /api/request` → `handleRequest` → Radarr `POST /api/v3/movie` / Sonarr `POST /api/v3/series`; `installHonestRequest` / `requestTitle` inserts local row; Requests/Title poll `GET /api/request` |
-| 3 | Progress/status real? | **PASS (after fix)** — was: status API-backed, bars decorative (fake `42%`, poll zeroed `%`). Now: `reelosRequestProgressPlugin` returns queue `progress` (`size`/`sizeleft`); Requests applies `progress`/`percent` each poll; Title via `useEngineRequest`; honest `requestTitle` starts at `waiting`/`0` |
+## Hal — do this
 
-Activity: `ActivityView` → `GET /api/activity` (wire/ota/journal) — real. Settings OTA modules untouched.
+1. Name **1.2.47** and map merge of `feature/1.2.47-manualimport-harden` → `main`.
+2. On merge: **`channel.json` tarball MUST be `main.tar.gz`** (feature archive is not house Apply).
+3. Do not reopen books/Kavita on this stamp.
 
-### Residual
+## xorriso — do this
 
-- Cancel/Retry local-only (no arr queue delete).
-- Hash paste POSTs `/api/request` but engine ignores `hash` (arr add+search).
-- Lab `loadLab()` demos remain synthetic.
+1. Build/merge when Hal names the stamp.
+2. Do **not** phone-Apply the feature-branch tarball as if it were main.
+3. After merge + `main.tar.gz`: house **phone UI Check → Apply** (hard gate). Curl-only ≠ done.
+4. Post-Apply proof in Logs: Rick and Morty / TV path **`files=` and `series=` > 0**, title plays on TV.
 
-## House blockers (unchanged)
+## Still house-gated (not lab)
 
-1. **FUSE / Decypharr** — grab→symlink hard-stop without mount.
-2. **Apply** — do not phone-Apply this feature branch until Hal names it; prove Logs `files=` / `series=` > 0 after Apply.
+- Decypharr + FUSE mount for grab→symlink→library
+- Phone Check→Apply on provisioned box after merge
+- Tailscale Apply assist available from enlisted Grok when merge is live
 
-## Next
+## Do not
 
-1. House Apply **1.2.47** only when named
-2. Lab Decypharr+FUSE if grab→JF must be proven on box
+- Edit HAL from enlisted Grok
+- Bump VERSION past 1.2.47 without Austin naming a new stamp
+- Ship pirate book indexers / books work on this branch
