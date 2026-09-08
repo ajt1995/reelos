@@ -20,8 +20,7 @@ jobs:
           git show 4d6f011666eb6bb8b22dfdab3fec70ef434c2afa:src/lib/store.ts > /tmp/store.ts
           python3 <<'PY'
           from pathlib import Path
-          p = Path('/tmp/store.ts')
-          t = p.read_text()
+          t = Path('/tmp/store.ts').read_text()
           t = t.replace('LATEST_VERSION = "1.2.46"', 'LATEST_VERSION = "1.2.47"')
           t = t.replace('SHIPPED_VERSION = "1.2.46"', 'SHIPPED_VERSION = "1.2.47"')
           old = '"1.2.46: TV dumps import into Sonarr as real episodes. Watch Rick and Morty on the TV."'
@@ -29,7 +28,7 @@ jobs:
           if old in t:
               t = t.replace(old, new)
           Path('src/lib/store.ts').write_text(t)
-          print('wrote', len(t), 'starts', t[:40]!r)
+          print('wrote', len(t), 'starts', repr(t[:40]))
           assert t.startswith('import { create }')
           assert 'LATEST_VERSION = "1.2.47"' in t
           PY
