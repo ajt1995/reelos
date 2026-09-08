@@ -95,10 +95,10 @@ export function TitleView({ id }: { id: string }) {
             {title.runtime ? ` · ${formatRuntime(title.runtime)}` : null}
             {title.seasons ? ` · ${title.seasons} seasons` : null}
             {title.tracks ? ` · ${title.tracks} tracks` : null}
-            {` · ${title.rating.toFixed(1)}`}
+            {title.rating != null && Number.isFinite(Number(title.rating)) ? ` · ${Number(title.rating).toFixed(1)}` : null}
             {title.director ? ` · ${title.director}` : null}
           </p>
-          <p className="mt-2 text-xs text-faint">{title.genres.join(" · ")}</p>
+          <p className="mt-2 text-xs text-faint">{(title.genres ?? []).join(" · ")}</p>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{title.overview}</p>
           {!available && !blocked && !request ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(title, source)}</p>
@@ -148,7 +148,7 @@ export function TitleView({ id }: { id: string }) {
               </p>
             ) : request?.status === "downloading" ? (
               <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
-                {request.progress > 0
+                {typeof request.progress === "number" && request.progress > 0
                   ? `Grabbing · ${Math.round(request.progress)}%`
                   : request.via === "cache"
                     ? "Cache hit · importing"
