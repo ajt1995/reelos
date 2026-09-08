@@ -1,1 +1,1 @@
-LOAD_FROM_FILE
+export * from './store-body';
