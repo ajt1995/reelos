@@ -256,7 +256,7 @@ need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
-need daemon/reelos-update.sh 'hop search green'
+need daemon/reelos-update.sh 'reload is a no-op'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
@@ -420,9 +420,9 @@ caddy_reelos() {
   fi
   caddy_dropin
   systemctl reset-failed caddy >/dev/null 2>&1 || true
-  if caddy_listen && timeout 8 systemctl reload caddy >/dev/null 2>&1 && sleep 0.4 && caddy_listen; then
-    log "caddy systemd active"
-  elif timeout 25 systemctl start caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
+  # admin off → reload is a no-op. Restart or the updating page sticks forever.
+  caddy_clear
+  if timeout 25 systemctl start caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
     log "caddy systemd active"
   elif timeout 25 systemctl restart caddy >/dev/null 2>&1 && sleep 1 && caddy_listen; then
     log "caddy systemd active after restart"
@@ -532,9 +532,9 @@ probe_port80() {
       continue
     fi
     if echo "$page" | grep -qi 'ReelOS is updating'; then
-      log ":80 still updating page"
+      log ":80 still updating page — restart caddy (reload is a no-op with admin off)"
       caddy_reelos
-      sleep 1
+      sleep 2
       continue
     fi
     if [ "$code" = "200" ]; then
