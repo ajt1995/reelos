@@ -1,6 +1,6 @@
 # OTA.md
 
-Hal. **2026-09-07 21:18 CDT.** Do not bump VERSION because this file exists.
+Hal. **2026-09-07 21:20 CDT.** Do not bump VERSION because this file exists.
 
 The updater is the only pipe onto the house box. Treat it like a product, not a debug REPL.
 
@@ -16,35 +16,39 @@ If a feature needs a compose change, the updater may *run* compose. It must not 
 ## One Apply
 
 - Flock. Second Apply is refused, not queued on a dead Caddy.
-- Owner is not the debugger. No “run these three curls.” Logs they already dumped + ship on `main`.
+- Owner is not the debugger. No “run these three curls.”
 - Do not start a stamp while another curl is on the HP.
 
 ## Fetch
 
-- Do not trust `raw.githubusercontent.com` as the channel. Prefer GitHub API + tarball version wins over a stale CDN `channel.json`.
+- Prefer GitHub API. Tarball version wins over a stale CDN `channel.json`.
 - Mailman re-execs from the tarball **before** the version compare.
-- Settings Check: if `main` SHA ≠ `applied-sha`, it is not “up to date” just because VERSION strings match (#27).
+- Settings Check: if `main` SHA ≠ `applied-sha`, it is not “up to date” (#27).
 
 ## Stamp last
 
-Order is fixed:
-
 1. Stage `.next` while `:8080` still serves
-2. FUSE / mounts that Watch needs (do not bind-mount `/mnt` over Decypharr)
-3. Caddy unit started and `:80` is ReelOS
+2. FUSE / mounts (do not bind-mount `/mnt` over Decypharr)
+3. Caddy **systemd unit** started — not nohup. `:80` is ReelOS
 4. `ensure_door`
 5. Print `applied.` **once**
 6. Then VERSION / `applied-sha`
 
-Canaries: missing **files** abort. Copy-string / Doctor sentences **warn**. A leftover “Install Tailscale” string must not block a UI-only tree.
+Canaries: missing **files** abort. Copy-string / Doctor sentences **warn**.
 
-## VERSION
+Phone Apply (`reelos-ota.service`) and SSH Apply run the **same** script. No Python 3.14 urllib fetch of channel.json.
 
-- Mailbox files do not get a stamp.
-- Do not cut 1.2.N+1 because a hypothesis changed.
-- If `applied.` was refused, the house VERSION does not move.
-- Phone Apply and SSH Apply must run the **same** script. Python 3.14 urllib is not a second channel.
+## Next stamp only (1.2.43 when this is true)
 
-## After each stamp the owner cares about
+House is `applied-sha` **f7ab5f0**, channel **1.2.42**, `main` ahead. Do not cut 43 until these are on `main` **and** real (not scaffold):
 
-One phone Check/Apply on `192.168.1.234`. If that button dies, the stamp is a fail — fix the door, do not merge Seerr.
+1. **#23 / PR #31** — Caddy unit installed, `enable --now`, survives reboot. Kill the nohup fallback as the success path.
+2. **#27 / PR #35** — Check uses SHA drift. VERSION match is not “up to date.”
+3. **#30 / PR #38** — Probe is not “000 × N then 200.” Door must hold.
+4. Phone Apply = same mailman as SSH (GitHub API, re-exec first).
+
+Leave **scaffold** PRs #33 #34 #36 #37 off `main`. Leave #32 (Jellyfin token) for the next wave — not this mailman stamp.
+
+Do not merge #2 #3 #4 #9 #10 #13 #15 #16 #17 #19 #20. Do not seed indexers. Do not apt Tailscale/Chromium.
+
+**1.2.43** is allowed only when Check on the phone offers 43, Apply prints `ReelOS 1.2.43 applied.`, Home stays up, and a reboot still serves `:80`. If phone Apply dies, 43 is a fail. Fix the door. Do not stack 1.2.44 the same hour.
