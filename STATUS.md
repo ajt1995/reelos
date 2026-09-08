@@ -1,45 +1,39 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 04:35 CDT.** Did not edit HAL. No books/Kavita.
+Enlisted Grok. **2026-09-08 04:55 CDT.** Did not edit HAL. No books/Kavita.
 
 ## Branch
 
-`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main). Tip **`d77f453`**.
+`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main).
 
-## Settings restored after placeholder incident
+## UI audit (Discover / Add / Requests) — movie+TV
 
-Tip `settings-view.tsx` was `PLACEHOLDER_REPLACE_WITH_FILE` (`8b8d7e6`/`c5ba712`). Decluttered body landed via **split modules** (MCP ~6KB limit):
+Books OUT.
 
-- `src/components/settings-view.tsx` — thin layout; re-exports `TerminalRow`
-- `src/components/settings-ui.tsx` — Row / Toggle / persistUi
-- `src/components/settings-house.tsx` — HouseCard (identity/access only)
-- `src/components/settings-panels.tsx` — DisksPanel, PwaRow, PerformanceRow, PasswordRow
-- `src/components/settings-source.tsx` — SourcePanel
-- `src/components/settings-accordions.tsx` — Library/Quality/Users/Access/Notes panels
-- `src/components/settings-updates.tsx` — UpdatesRow (`checkForUpdate` / `startUpdate`)
-- `src/components/settings-logs.tsx` — LogsRow
-- `src/components/settings-terminal.tsx` — TerminalRow
-- `src/components/settings-doctor.tsx` — Doctor
+| # | Question | Verdict |
+|---|----------|---------|
+| 1 | Search calls API + renders? | **PASS** — `DiscoverView` → `GET /api/lookup?q=` → `handleLookup` → Radarr `GET /api/v3/movie/lookup` + Sonarr `GET /api/v3/series/lookup` → `TitleCard` results |
+| 2 | Add/request real POST + store/UI? | **PASS** — `TitleView.sendRequest` → `POST /api/request` → `handleRequest` → Radarr `POST /api/v3/movie` or Sonarr `POST /api/v3/series` (`searchForMovie` / `searchForMissingEpisodes`); `requestTitle` inserts local row; Requests/Title poll `GET /api/request` |
+| 3 | Progress/status real? | **PASS (after fix)** — status was already API-backed (`handleRequestStatus` / queue / hasFile / episodeFileCount). Progress bars were decorative (fake `42%`, poll zeroed `%`). Fixed: plugin returns queue `progress` (`size`/`sizeleft`); Requests + Title poll apply `progress`/`percent`; `requestTitle` no longer invents `%` |
 
-Asserted on tip: no PLACEHOLDER; UpdatesRow has checkForUpdate/startUpdate; HouseCard dts lack Source/Quality/Collecting/Watch.
+Activity: `ActivityView` → `GET /api/activity` (wire/ota/journal) — real.
+
+### Residual (not fake bars)
+
+- Cancel/Retry are local store only (no Radarr/Sonarr delete-from-queue).
+- Hash paste POSTs `/api/request` but engine handler ignores `hash` (still arr add+search).
+- Lab `loadLab()` demo requests remain synthetic.
 
 ## House (last known)
 
 **1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
 
-## Lab (box `/workspace/reelos-lab`)
+## Remaining house blockers
 
-**Lookup/add PASS** (prior). Prowlarr public indexers → Radarr reports=103 / Sonarr reports=14. Grab needs Decypharr+FUSE (hard stop).
-
-## This stamp
-
-**wire-engines restored via parts+shim** (daemon + install/bin): parts `00–09`; ManualImport loader present. Companion `sonarr_manual_import.py` on branch.
-
-**Still warn — house Apply only after phone UI Check path:**
-- Do **not** Apply from a feature-branch URL until Hal names it
-- Phone **Check → Apply** when ready; prove Logs `files=` / `series=` > 0
+1. **FUSE / Decypharr** — grab→symlink path still hard-stops lab prove without mount.
+2. **Apply** — do not phone-Apply this feature branch until Hal names it; prove Logs `files=` / `series=` > 0 after Apply.
 
 ## Next
 
-1. House Apply **1.2.47** from this branch only when named
-2. Lab Decypharr+FUSE only if grab→JF path must be proven on box
+1. House Apply **1.2.47** only when named
+2. Lab Decypharr+FUSE if grab→JF must be proven on box
