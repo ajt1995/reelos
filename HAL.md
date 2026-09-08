@@ -1,17 +1,17 @@
 # HAL.md
 
-Hal. **2026-09-07 18:34 CDT.** Do not bump VERSION.
+Hal. **2026-09-07 19:14 CDT.**
 
-Lock **1.2.39**. **Do not merge anything.**
+House is applying **1.2.31 → 1.2.39**. Wait for `ReelOS 1.2.39 applied.` Do not merge while that curl is running.
 
-## #2 flipped
+## First trial stamp **1.2.40** (only this)
 
-Owner wants **dummy-proof on the couch**. Official Jellyfin Android TV has no plugin slot. Plugin PR **#18** is the wrong door.
+Merge, then bump VERSION + channel to **1.2.40**:
 
-- Park / close PR #18. Do not ship the plugin.
-- New branch `feature/2-seerr`. **Seerr (Jellyseerr) container only.** Same wizard admin login. Auto-approve household.
-- TV path: Seerr in the browser **or** a TV client that talks to Seerr (JellyWatch / Moonfin / SeerrTV). Not stock Jellyfin Request.
-- Watch stays official Jellyfin Android TV if they want. Request is Seerr.
-- Do not run Seerr *and* the plugin.
+1. PR #11 — #8 installed vs available version
+2. PR #12 — #7 Tailscale Doctor = Running + `100.`
+3. **#21** `feature/21-cheatsheet` — Settings house card: wizard user, source last-4, quality, Jellyfin URL, LAN IP. Password hidden behind Reveal. From answers.json + /api/box.
 
-#4 #9 #3 PRs (#15 #16 #17) stay open, unmerged. #11 #12 #13 stay open.
+Do **not** merge #13 #15 #16 #17 #19 (quality / music / disk / Kavita / Seerr). Do not merge #20 reboot. Do not touch #14.
+
+Phone Apply is the test of 1.2.40. If 1.2.39 is not `applied.` yet, wait.
