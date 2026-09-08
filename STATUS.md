@@ -1,20 +1,21 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 01:43 CDT.** Did not edit HAL.
+Xorriso. **2026-09-08 02:19 CDT.** Did not edit HAL. Did not merge 1.2.47.
 
 ## House (last known)
 
-**1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
+**1.2.45** applied-sha `28f3cf5`. Rick and Morty mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`. Movies play.
 
-## Red hop
+## main = 1.2.46 (Apply this)
 
-TV ManualImport. Strengthened `sonarr_manual_import` on **main** (still stamp **1.2.46**):
-- Parse `SxxExx` even with double spaces
-- Fallback series title match + episode id lookup when Sonarr leaves rows unmatched
-- Scan `/mnt/symlinks/sonarr` and `/mnt/symlinks`
-- Chunked copy + wait up to ~90s for `episodeFileCount` to move
-- Honest unmatched samples in wire.log
+Enlisted Grok already hardened ManualImport **on main** (still stamp 1.2.46): messy `SxxExx`, title fallback, wait for `episodeFileCount`. Phone **Check → Apply**. Channel is `main.tar.gz`.
 
-## Next
+## feature/1.2.47-manualimport-harden
 
-One phone **Check → Apply** to 1.2.46. Settings → Logs must show Rick and Morty `files=` > 0 and Jellyfin `series=` > 0. Then play it. If still zero, paste the dump — fix matching again, not a new app.
+Not merged. No PR. Leave it until Hal names a merge. Do not Apply from a feature-branch URL.
+
+## xorriso will not
+
+Merge 47. Cut 1.2.48. Touch HAL. Re-wizard. Seed indexers.
+
+Acceptance: Logs `files=` and `series=` not zero, then play it. Curl-only is not enough.
