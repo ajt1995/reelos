@@ -1,0 +1,223 @@
+    call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+    log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
+
+
+def torbox_search_ip() -> str:
+    for cmd in (
+        ["dig", "+short", "@1.1.1.1", "search-api.torbox.app", "A"],
+        ["dig", "+short", "@8.8.8.8", "search-api.torbox.app", "A"],
+        ["dig", "+short", "@1.1.1.1", "api.torbox.app", "A"],
+    ):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+        for line in (r.stdout or "").splitlines():
+            line = line.strip()
+            if line.count(".") == 3 and line[0].isdigit():
+                return line
+    try:
+        infos = socket.getaddrinfo("api.torbox.app", 443, socket.AF_INET)
+        if infos:
+            return str(infos[0][4][0])
+    except OSError:
+        pass
+    return "172.66.170.114"
+
+
+DNS_HOSTS = """    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+"""
+
+
+def ensure_compose_dns() -> None:
+    """Persist Docker DNS. Do not pin search-api to another hostname's A."""
+    p = COMPOSE / "docker-compose.yml"
+    if not p.exists():
+        log_wire("compose yml missing")
+        return
+    stripped = strip_compose_extra_hosts()
+    text = p.read_text()
+    if "1.1.1.1" not in text:
+        for port in ("9696:9696", "7878:7878", "8989:8989", "8282:8282"):
+            old = f'      - "127.0.0.1:{port}"\n'
+            new = f'      - "127.0.0.1:{port}"\n{DNS_HOSTS}'
+            if old in text:
+                text = text.replace(old, new, 1)
+        p.write_text(text)
+        log_wire("compose dns written")
+        recreate_prowlarr()
+        return
+    if stripped or prowlarr_has_hosts():
+        log_wire("dropping pinned extra_hosts")
+        recreate_prowlarr()
+
+
+def recreate_arrs() -> None:
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "movies",
+        "--profile",
+        "tv",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--remove-orphans",
+        "prowlarr",
+        "radarr",
+        "sonarr",
+        "decypharr",
+    ]
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"compose recreate arrs rc={r.returncode}")
+    time.sleep(10)
+
+
+def prowlarr_has_hosts() -> bool:
+    for name in ("reelos-prowlarr-1", "prowlarr"):
+        r = subprocess.run(
+            ["docker", "inspect", "-f", "{{json .HostConfig.ExtraHosts}}", name],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "search-api.torbox.app" in (r.stdout or ""):
+            return True
+    return False
+
+
+def inject_search_api_hosts() -> None:
+    """1.2.23: do not pin search-api.torbox.app to api.torbox.app's A."""
+    log_wire("search-api extra_hosts skipped (use container DNS)")
+
+
+def wait_prowlarr_api(prow_key: str, seconds: int = 90) -> bool:
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            call("http://127.0.0.1:9696/api/v1/indexer", prow_key)
+            log_wire("prowlarr api ready")
+            return True
+        except NET_ERR as e:
+            log_wire(f"prowlarr api wait {e}")
+            time.sleep(3)
+    set_releases_error("Prowlarr API never returned 200 after recreate")
+    return False
+
+
+def strip_compose_extra_hosts() -> bool:
+    """Do not pin search-api to api.torbox.app's IP."""
+    p = COMPOSE / "docker-compose.yml"
+    if not p.exists():
+        return False
+    text = p.read_text()
+    if "extra_hosts:" not in text:
+        return False
+    out = []
+    skip = 0
+    for line in text.splitlines(True):
+        if skip:
+            if line.startswith("      - ") and "torbox.app" in line:
+                continue
+            skip = 0
+        if line.strip() == "extra_hosts:":
+            skip = 1
+            continue
+        out.append(line)
+    p.write_text("".join(out))
+    log_wire("stripped extra_hosts from compose")
+    return True
+
+
+def set_releases_error(msg: str) -> None:
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "releases-error.txt").write_text(msg[:800] + "\n")
+    except OSError:
+        pass
+    log_wire(msg)
+
+
+def clear_releases_error() -> None:
+    try:
+        p = STATE / "releases-error.txt"
+        if p.exists():
+            p.unlink()
+    except OSError:
+        pass
+
+
+def recreate_prowlarr() -> None:
+    if os.environ.get("REELOS_OTA") and not prowlarr_has_hosts():
+        running = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", "reelos-prowlarr-1"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "true" in (running.stdout or ""):
+            log_wire("prowlarr already up — skip recreate")
+            return
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--no-deps",
+        "prowlarr",
+        "decypharr",
+    ]
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"force-recreate prowlarr+decypharr rc={r.returncode}")
+    time.sleep(8)
+
+
+def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
+    """Generic Torznab at search-api.torbox.app. Schema optional."""
+    impl = {
+        "implementation": "Torznab",
+        "implementationName": "Torznab",
+        "configContract": "TorznabSettings",
+        "appProfileId": 1,
+        "protocol": "torrent",
+    }
+    fields = None
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"torznab schema {e}")
+        schemas = []
+    for schema in schemas if isinstance(schemas, list) else []:
+        if str(schema.get("implementation") or "").lower() == "torznab":
+            impl = schema
+            fields = []
+            for f in schema.get("fields") or []:
+                item = dict(f)
+                n = str(item.get("name") or "").lower()
+                if n in ("baseurl", "base_url"):
