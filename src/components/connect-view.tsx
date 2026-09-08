@@ -42,6 +42,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
   const patchSettings = useReelStore((s) => s.patchSettings);
   const openReelOS = useReelStore((s) => s.openReelOS);
+  const intent = useReelStore((s) => s.answers.intent);
   const [box, setBox] = useState<Box>(empty);
   const [away, setAway] = useState<"house" | "out" | null>(null);
   const [idxName, setIdxName] = useState("Indexer");
@@ -177,6 +178,31 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
           )}
         </div>
       </Card>
+
+      {intent.books ? (
+        <Card>
+          <div className="w-full">
+            <p className="font-display font-medium">Books (Kavita)</p>
+            <p className="mt-1 text-sm text-muted">
+              Read on your phone. Connect an OPDS reader app (like Moon+ Reader or FBReader) to this URL.
+            </p>
+            {box.ipv4 ? (
+              <>
+                <p className="mt-4 break-all font-mono text-xl text-gold">
+                  {`http://${box.ipv4}:5000`}
+                </p>
+                <a href={`http://${box.ipv4}:5000`} target="_blank" rel="noreferrer">
+                  <Button className="mt-3" size="lg">
+                    Open Kavita
+                  </Button>
+                </a>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted">Waiting on LAN address.</p>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       <Card>
         <div className="w-full">

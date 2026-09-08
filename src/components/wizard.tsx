@@ -427,6 +427,7 @@ function StepIntent() {
     { key: "uhd", label: "4K" },
     { key: "kids", label: "Kids" },
     { key: "music", label: "Music" },
+    { key: "books", label: "Books" },
   ];
   return (
     <div>

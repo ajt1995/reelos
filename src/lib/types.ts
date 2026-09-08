@@ -24,6 +24,7 @@ export interface Intent {
   uhd: boolean;
   kids: boolean;
   music: boolean;
+  books: boolean;
 }
 
 export interface WizardAnswers {

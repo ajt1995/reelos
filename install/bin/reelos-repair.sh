@@ -53,6 +53,10 @@ else
 	handle /play* {
 		reverse_proxy 127.0.0.1:8096
 	}
+	handle /books* {
+		uri strip_prefix /books
+		reverse_proxy 127.0.0.1:5000
+	}
 	handle /advanced/downloads* {
 		uri strip_prefix /advanced/downloads
 		reverse_proxy 127.0.0.1:8282

@@ -35,7 +35,7 @@
 ## Do not
 
 - Edit **HAL.md** (Hal owns stamps/spec).
-- Merge `feature/3-books` / pirate book indexers.
+- Merge `feature/3-books-kavita` to add Kavita and books intent.
 - Apply a feature-branch tarball — **main only**.
 - Hot-patch `/opt/reelos` instead of GitHub→Apply when avoidable.
 - Claim green from ports alone — need file/play proof.

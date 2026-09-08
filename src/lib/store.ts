@@ -35,6 +35,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: false,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -170,6 +171,7 @@ function logFor(id: string, label: string) {
     sonarr: "Root folder /srv/media/tv. Quality profile applied.",
     anime: "Anime-sane profile attached to Sonarr.",
     lidarr: "Root folder /srv/media/music.",
+    kavita: "Root folder /srv/media/books.",
     seerr: "Request UI linked. No setup screen left.",
     jellyfin: "Libraries published. Hardware transcode noted.",
     plex: "Claim accepted. Libraries published.",
@@ -199,6 +201,7 @@ export function buildPlan(answers: WizardAnswers): BuildStep[] {
   if (answers.intent.tv) steps.push({ id: "sonarr", label: "TV engine" });
   if (answers.intent.anime) steps.push({ id: "anime", label: "Anime profile" });
   if (answers.intent.music) steps.push({ id: "lidarr", label: "Music engine" });
+  if (answers.intent.books) steps.push({ id: "kavita", label: "Book engine" });
   steps.push({ id: "seerr", label: "Request UI" });
   if (answers.frontend !== "plex") steps.push({ id: "jellyfin", label: "Jellyfin" });
   if (answers.frontend !== "jellyfin") steps.push({ id: "plex", label: "Plex" });
@@ -226,7 +229,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "RD-LAB-KEY-7F3A",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: true },
   quality: "hybrid",
   frontend: "jellyfin",
 };
