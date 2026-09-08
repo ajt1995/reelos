@@ -239,6 +239,7 @@ need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
+need daemon/reelos-update.sh 'systemd dbus down'
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
 need scripts/reelos-lookup-plugin.mjs 'Update already running'
@@ -366,6 +367,20 @@ caddy_listen() {
   return 1
 }
 
+start_shell() {
+  if systemctl start reelos >/dev/null 2>&1; then
+    return 0
+  fi
+  log "systemd dbus down — starting shell without unit"
+  if curl -s -o /dev/null -w "%{http_code}" --max-time 1 http://127.0.0.1:8080/ 2>/dev/null | grep -q 200; then
+    return 0
+  fi
+  (
+    cd /opt/reelos/app && exec /usr/bin/env npm run start:box
+  ) >>/var/lib/reelos/reelos.log 2>&1 &
+  echo $! >"$STATE/reelos.pid" || true
+}
+
 caddy_clear() {
   timeout 8 systemctl stop caddy >/dev/null 2>&1 || true
   pkill -x caddy >/dev/null 2>&1 || true
@@ -414,12 +429,12 @@ restore() {
     [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
   fi
   systemctl daemon-reload 2>/dev/null || true
-  systemctl start reelos 2>/dev/null || true
+  start_shell
   sleep 2
-  systemctl start reelos 2>/dev/null || true
+  start_shell
   local i code
   for i in $(seq 1 20); do
-    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ 2>/dev/null || true)
     [ "$code" = "200" ] && break
     sleep 1
   done
@@ -437,8 +452,11 @@ if [ -n "$UNIT_SRC" ]; then
   mkdir -p "$ROOT/systemd"
   cp "$UNIT_SRC" "$ROOT/systemd/reelos.service"
   cp "$UNIT_SRC" /etc/systemd/system/reelos.service
-  systemctl daemon-reload || true
-  log "unit installed, daemon-reload (8080 still up)"
+  if systemctl daemon-reload >/dev/null 2>&1; then
+    log "unit installed, daemon-reload (8080 still up)"
+  else
+    log "unit installed, daemon-reload skipped (systemd dbus)"
+  fi
 fi
 
 trap restore ERR
@@ -456,23 +474,18 @@ rm -rf "$NEXT"
 
 log "starting shell"
 systemctl enable reelos >/dev/null 2>&1 || true
-systemctl start reelos || true
+start_shell
 
 probe_home() {
   local i code
   log "waiting for :8080 — door :80 stays on updating page"
   for i in $(seq 1 45); do
-    code=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ || true)
+    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ 2>/dev/null || true)
     if [ "$code" = "200" ]; then
       log "home 200"
       return 0
     fi
-    systemctl daemon-reload 2>/dev/null || true
-    systemctl start reelos 2>/dev/null || true
-    if [ $((i % 8)) -eq 0 ]; then
-      log "8080 still down — restart reelos"
-      systemctl restart reelos 2>/dev/null || true
-    fi
+    start_shell
     sleep 1
   done
   journalctl -u reelos --no-pager -n 50 >>"$LOG" 2>/dev/null || true
