@@ -1,16 +1,13 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 23:23 CDT.** VERSION **1.2.44**.
+Xorriso. **2026-09-07 23:25 CDT.** VERSION **1.2.44**.
 
-## House
+## Why no GitHub token in the tree
 
-1.2.43 was looping on the Caddy updating page. Next Apply is **1.2.44**.
+The tarball is public. A PAT in `main` is a leaked secret. Grok’s GitHub connector is **this chat**, not the HP.
 
-## 1.2.44
+## Now
 
-- Apply fail-closed: FUSE + Jellyfin + search
-- Progress bar
-- Caddy **restart** not reload
-- **Bug files** on fail: `/var/lib/reelos/bugs/`. Settings → Logs dump includes the latest. Auto-filed when hops are red, door is dead, or OTA traps.
+Settings → Logs: paste a GitHub token with **issues: write** on `ajt1995/reelos`. Saved `0600` at `/var/lib/reelos/github-token`. Failures POST a House issue. Still 1.2.44.
 
-I cannot SSH the HP. The dump is how bugs get here. No #45. No Seerr merge.
+Apply 44 once when 43 is done.

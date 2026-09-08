@@ -44,6 +44,9 @@ bug_snap() {
     tail -30 "$LOG" 2>/dev/null || true
   } >"$f" 2>&1
   log "bug filed $f"
+  if [ -x "$ROOT/bin/reelos-bug.sh" ]; then
+    "$ROOT/bin/reelos-bug.sh" "$why" >/dev/null 2>&1 || true
+  fi
 }
 trap 'log "ERR line $LINENO exit $?"; bug_snap "ERR-$LINENO"' ERR
 

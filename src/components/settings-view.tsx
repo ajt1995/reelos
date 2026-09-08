@@ -935,6 +935,8 @@ function LogsRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [text, setText] = useState("");
+  const [token, setToken] = useState("");
+  const [ghSet, setGhSet] = useState(false);
   const loaded = useRef(false);
 
   const grab = async () => {
@@ -952,6 +954,8 @@ function LogsRow({ open, onClick }: { open: boolean; onClick: () => void }) {
       setText(t);
       loaded.current = true;
       setMsg(`${t.split("\n").length} lines`);
+      const g = await fetch("/api/bugs/github", { cache: "no-store" }).then((r) => r.json()) as { set?: boolean };
+      setGhSet(Boolean(g.set));
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Collect failed");
     }
@@ -1006,6 +1010,37 @@ function LogsRow({ open, onClick }: { open: boolean; onClick: () => void }) {
         </Button>
         <Button size="sm" variant="ghost" onClick={() => void download()} disabled={busy}>
           Download
+        </Button>
+      </div>
+      <p className="mt-4 text-sm text-muted">
+        GitHub token so failed Applies open an issue on ajt1995/reelos. Stays on this box. Not in the ISO.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <input
+          type="password"
+          autoComplete="off"
+          placeholder={ghSet ? "Token saved — paste to replace" : "ghp_… issues write"}
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          className="min-w-[12rem] flex-1 rounded-xl bg-raised px-3 py-2 text-sm"
+        />
+        <Button
+          size="sm"
+          onClick={() => {
+            void fetch("/api/bugs/github", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token }),
+            })
+              .then((r) => r.json())
+              .then((j: { set?: boolean }) => {
+                setGhSet(Boolean(j.set));
+                setToken("");
+                setMsg(j.set ? "GitHub reports on" : "GitHub reports off");
+              });
+          }}
+        >
+          Save
         </Button>
       </div>
       {text ? (

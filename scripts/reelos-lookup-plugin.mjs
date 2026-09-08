@@ -1070,6 +1070,32 @@ async function handleLogs(_req, res) {
   send(res, 200, { ok: true, text: redactLogs(blob) });
 }
 
+async function handleBugsGithub(req, res) {
+  const tokFile = "/var/lib/reelos/github-token";
+  if ((req.method || "GET").toUpperCase() === "GET") {
+    send(res, 200, { ok: true, set: existsSync(tokFile) });
+    return;
+  }
+  if ((req.method || "").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const tok = String(body.token || "").trim();
+  mkdirSync("/var/lib/reelos", { recursive: true });
+  if (!tok) {
+    try {
+      spawnSync("rm", ["-f", tokFile], { encoding: "utf8" });
+    } catch {
+      /* */
+    }
+    send(res, 200, { ok: true, set: false });
+    return;
+  }
+  writeFileSync(tokFile, `${tok}\n`, { mode: 0o600 });
+  send(res, 200, { ok: true, set: true });
+}
+
 let termCwd = "/home/reelos";
 let termOut = "";
 
@@ -1797,6 +1823,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/performance") return void (await handlePerformance(req, res));
           if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
           if (pathOnly === "/api/logs") return void (await handleLogs(req, res));
+          if (pathOnly === "/api/bugs/github") return void (await handleBugsGithub(req, res));
         } catch (e) {
           send(res, 500, { error: String(e) });
           return;
