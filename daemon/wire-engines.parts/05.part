@@ -1,0 +1,147 @@
+x.get("name")
+        if ok_t:
+            tested.append(str(n))
+            log_wire(f"public indexer test ok {n}")
+        else:
+            log_wire(f"public indexer test fail {n} {terr[:200]}")
+    if tested:
+        clear_releases_error()
+        log_wire("releases via " + ",".join(tested))
+    elif not (STATE / "releases-error.txt").exists():
+        set_releases_error("No public indexer passed Prowlarr test")
+
+
+def ensure_provider_indexer(prow_key: str) -> None:
+    """One official provider indexer. Failure is a log line, never a crash."""
+    try:
+        _ensure_provider_indexer(prow_key)
+    except Exception as e:
+        set_releases_error(f"provider indexer {type(e).__name__} {e}")
+
+
+def _ensure_provider_indexer(prow_key: str) -> None:
+    src = source()
+    if src == "local-vpn":
+        log_wire("provider indexer skipped (local-vpn)")
+        return
+    if os.environ.get("REELOS_OTA"):
+        log_wire("OTA: skip torbox indexer wait")
+        return
+    key = (answers().get("apiKey") or "").strip()
+    if not key:
+        log_wire("provider indexer failed: no apiKey")
+        return
+    name = f"ReelOS-{src}"
+    ensure_compose_dns()
+    if not os.environ.get("REELOS_OTA"):
+        recreate_prowlarr()
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+    prow_key = wait_key(prow_xml, 90) or prow_key
+    wait_prowlarr_api(prow_key, 90)
+    inject_search_api_hosts()
+    deadline = time.time() + 120
+    yml_tried = False
+    torznab_tried = False
+    while time.time() < deadline:
+        try:
+            have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+        except NET_ERR as e:
+            set_releases_error(f"Prowlarr list {e}")
+            time.sleep(4)
+            continue
+        rows = have if isinstance(have, list) else []
+        existing = next((ix for ix in rows if ix.get("name") == name), None)
+        if existing:
+            if not existing.get("enable"):
+                try:
+                    existing["enable"] = True
+                    iid = existing.get("id")
+                    call(
+                        f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
+                        prow_key,
+                        method="PUT",
+                        body=existing,
+                    )
+                    log_wire(f"provider indexer enabled {name}")
+                except urllib.error.HTTPError as e:
+                    err = e.read().decode()[:400] if e.fp else str(e)
+                    set_releases_error(f"Prowlarr enable {e.code}: {err}")
+                    time.sleep(4)
+                    continue
+                except NET_ERR as e:
+                    set_releases_error(f"provider indexer enable failed {e}")
+                    time.sleep(4)
+                    continue
+            ok_t, terr = indexer_test(prow_key, existing)
+            if ok_t:
+                log_wire(f"provider indexer exists {name}")
+                clear_releases_error()
+                return
+            set_releases_error(terr)
+            time.sleep(4)
+            continue
+        hit = None
+        try:
+            hit = _find_schema(prow_key, src)
+        except NET_ERR as e:
+            log_wire(f"provider indexer schema retry {e}")
+        if not hit and not yml_tried:
+            log_wire(f"no first-party indexer in Prowlarr for {src} — installing official yml")
+            if install_official_yml(src):
+                yml_tried = True
+                prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+                prow_key = wait_key(prow_xml, 60) or prow_key
+                wait_prowlarr_api(prow_key, 60)
+                try:
+                    hit = _find_schema(prow_key, src)
+                except NET_ERR as e:
+                    log_wire(f"provider indexer schema after yml failed {e}")
+        if not hit:
+            if src == "torbox" and not torznab_tried:
+                torznab_tried = True
+                add_torbox_torznab(prow_key, name, key)
+                ix = next(
+                    (
+                        r
+                        for r in (call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or [])
+                        if r.get("name") == name and r.get("enable")
+                    ),
+                    None,
+                )
+                if ix:
+                    ok_t, terr = indexer_test(prow_key, ix)
+                    if ok_t:
+                        clear_releases_error()
+                        return
+                    set_releases_error(terr)
+            set_releases_error(f"{name} not in Prowlarr — no first-party schema")
+            time.sleep(4)
+            continue
+        try:
+            _add_from_schema(prow_key, name, key, hit)
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:400] if e.fp else str(e)
+            set_releases_error(f"Prowlarr {e.code}: {err}")
+            if "resolv" in err.lower():
+                if os.environ.get("REELOS_OTA"):
+                    log_wire("Name does not resolve — skip recreate during OTA")
+                else:
+                    log_wire("Name does not resolve — recreating Prowlarr")
+                    recreate_prowlarr()
+                    prow_key = wait_key(prow_xml, 60) or prow_key
+                    inject_search_api_hosts()
+        except NET_ERR as e:
+            set_releases_error(f"provider indexer POST failed {e}")
+        if indexer_enabled(prow_key, name):
+            have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            ix = next((r for r in have2 if r.get("name") == name), None)
+            if ix:
+                ok_t, terr = indexer_test(prow_key, ix)
+                if ok_t:
+                    clear_releases_error()
+                    return
+                set_releases_error(terr)
+        if src == "torbox" and not torznab_tried:
+            torznab_tried = True
+            add_torbox_torznab(prow_key, name, key)
+            if indexer_enabled(pr
