@@ -21,7 +21,31 @@ step() {
   done
   log "[${bar}] ${label}  ${STEP}/${STEPS}"
 }
-trap 'log "ERR line $LINENO exit $?"' ERR
+bug_snap() {
+  local why=${1:-unknown} f
+  mkdir -p "$STATE/bugs"
+  f="$STATE/bugs/$(date +%Y%m%dT%H%M%S)-$(echo "$why" | tr -c 'a-zA-Z0-9' '_' | cut -c1-40).txt"
+  {
+    echo "ReelOS bug"
+    echo "why $why"
+    echo "time $(date -Is)"
+    echo "VERSION $(cat "$ROOT/VERSION" 2>/dev/null || echo none)"
+    echo "--- :8080 ---"
+    curl -s -o /dev/null -w "%{http_code}\n" --max-time 2 http://127.0.0.1:8080/ 2>/dev/null || echo down
+    echo "--- :80 ---"
+    curl -s -o /dev/null -w "%{http_code}\n" --max-time 2 http://127.0.0.1/ 2>/dev/null || echo down
+    echo "--- jellyfin ---"
+    curl -s -o /dev/null -w "%{http_code}\n" --max-time 2 http://127.0.0.1:8096/System/Info/Public 2>/dev/null || echo down
+    echo "--- fuse ---"
+    ls /mnt/debrid/__all__ 2>&1 | head -8
+    echo "--- docker ---"
+    docker ps --format '{{.Names}} {{.Status}}' 2>&1 | head -12
+    echo "--- ota tail ---"
+    tail -30 "$LOG" 2>/dev/null || true
+  } >"$f" 2>&1
+  log "bug filed $f"
+}
+trap 'log "ERR line $LINENO exit $?"; bug_snap "ERR-$LINENO"' ERR
 
 # curl, not Python urllib. House Python 3.14 hangs under systemd; Node/curl do not.
 fetch_channel() {
@@ -256,7 +280,8 @@ need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
-need daemon/reelos-update.sh 'reload is a no-op'
+need daemon/reelos-bug.sh 'ReelOS bug'
+need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
@@ -440,6 +465,7 @@ caddy_reelos() {
 
 restore() {
   log "restore after failure"
+  bug_snap "restore"
   trap - ERR
   systemctl stop reelos 2>/dev/null || true
   if [ -d "$ROOT.prev/app" ]; then
@@ -795,12 +821,14 @@ fi
 
 if [ "$CANARY_FAIL" = "1" ] || [ "${HOP_FAIL:-0}" = "1" ]; then
   log "not printing applied — hops or indexer red"
+  bug_snap "hops-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
   exit 1
 fi
 
 if ! ensure_door; then
   log "not printing applied — phone would see connection refused"
+  bug_snap "door-dead"
   exit 1
 fi
 

@@ -1043,6 +1043,8 @@ async function handleLogs(_req, res) {
     `ReelOS ${ver}`,
     `applied-sha ${sha}`,
     `time ${new Date().toISOString()}`,
+    "=== bugs ===",
+    shOut(["bash", "-lc", "ls -1t /var/lib/reelos/bugs 2>/dev/null | head -8; echo '--- latest ---'; cat $(ls -1t /var/lib/reelos/bugs/*.txt 2>/dev/null | head -1) 2>/dev/null | head -80"], 4000).trim(),
     "=== tv hop ===",
     await tvHop(),
     "=== mount ===",
