@@ -817,10 +817,18 @@ async function handleRequestStatus(req, res) {
       const records = Array.isArray(queue) ? queue : queue?.records || [];
       const q = records.find((x) => x.seriesId === show.id);
       let status = "queued";
-      if (show.statistics?.percentOfEpisodes === 100) status = "downloaded";
+      const files = Number(show.statistics?.episodeFileCount || 0);
+      const pct = Number(show.statistics?.percentOfEpisodes || 0);
+      if (files > 0 || pct === 100) status = "downloaded";
       else if (q) status = queueStatus(q);
       if (status === "downloaded") await jellyfinRefresh(id);
-      send(res, 200, { status, engine: "sonarr", title: show.title });
+      send(res, 200, {
+        status,
+        engine: "sonarr",
+        title: show.title,
+        episodeFileCount: files,
+        percent: pct,
+      });
       return;
     }
     send(res, 400, { status: "unknown", error: "Need tmdb or tvdb id" });
@@ -1360,10 +1368,23 @@ async function handleLibrary(req, res) {
       const tmdb = it.ProviderIds?.Tmdb;
       const tvdb = it.ProviderIds?.Tvdb;
       const kind = it.Type === "Series" ? "tv" : "movie";
-      const id = tmdb ? `tmdb-${tmdb}` : tvdb ? `tvdb-${tvdb}` : `jf-${it.Id}`;
+      const ids = [
+        tmdb ? `tmdb-${tmdb}` : "",
+        tvdb ? `tvdb-${tvdb}` : "",
+        it.Id ? `jf-${it.Id}` : "",
+      ].filter(Boolean);
+      const id =
+        kind === "tv"
+          ? tvdb
+            ? `tvdb-${tvdb}`
+            : ids[0]
+          : tmdb
+            ? `tmdb-${tmdb}`
+            : ids[0];
       const poster = it.Id ? `http://${host}:8096/Items/${it.Id}/Images/Primary` : "";
       return {
         id,
+        ids,
         kind,
         title: String(it.Name || "Untitled"),
         year: Number(it.ProductionYear) || 0,

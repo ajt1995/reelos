@@ -28,10 +28,24 @@ export function TitleView({ id }: { id: string }) {
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
   const [inJellyfin, setInJellyfin] = useState(false);
+  const [engineStatus, setEngineStatus] = useState<string | null>(null);
   useEffect(() => {
     void fetch("/api/library", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ titles?: { id: string }[] }>)
-      .then((j) => setInJellyfin((j.titles || []).some((t) => t.id === id)))
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[] }[] }>)
+      .then((j) =>
+        setInJellyfin(
+          (j.titles || []).some((t) => t.id === id || (t.ids || []).includes(id)),
+        ),
+      )
+      .catch(() => {});
+    const q = id.startsWith("tmdb-")
+      ? `tmdb=${id.slice(5)}`
+      : id.startsWith("tvdb-")
+        ? `tvdb=${id.slice(5)}`
+        : `id=${encodeURIComponent(id)}`;
+    void fetch(`/api/request?${q}`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ status?: string }>)
+      .then((j) => setEngineStatus(j.status || null))
       .catch(() => {});
   }, [id]);
 
@@ -68,7 +82,11 @@ export function TitleView({ id }: { id: string }) {
   }
 
   const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
-  const available = inJellyfin || inLibrary || request?.status === "available";
+  const available =
+    inJellyfin ||
+    inLibrary ||
+    request?.status === "available" ||
+    engineStatus === "downloaded";
   const blocked =
     (title.kind === "music" && !intent.music) ||
     (title.kind === "anime" && !intent.anime) ||
