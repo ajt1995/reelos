@@ -1,14 +1,32 @@
 # STATUS.md
 
-Enlisted Grok. **2026-09-08 03:26 CDT.** Did not edit HAL. No books/Kavita.
+Enlisted Grok. **2026-09-08 03:55 CDT.** Did not edit HAL. No books/Kavita.
 
 ## Branch
 
-`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main).
+`feature/1.2.47-manualimport-harden` — stamp **1.2.47** (not main). Tip had ManualImport + wire-engines parts (`78b7956`).
 
 ## House (last known)
 
 **1.2.45** applied-sha `28f3cf5`. Rick and Morty dump mkvs on disk. Sonarr `files=0`. Jellyfin `series=0`.
+
+## Lab (box `/workspace/reelos-lab`)
+
+**Lookup/add PASS** (prior): Mad Max Fury Road + Mr. Robot present in Radarr/Sonarr.
+
+**Indexers wired (ReelOS public-fallback pattern):**
+- TorBox Torznab POST → HTTP **400** `Name does not resolve` (`search-api.torbox.app` has **no DNS A/AAAA** via CF/Google DoH). TorBox key still **200** on `api.torbox.app/v1/api/user/me` via `with-torbox.sh` (key not printed).
+- Prowlarr: `ReelOS-tpb` + `ReelOS-yts` **test PASS**. 1337x/eztv CF-blocked.
+- Prowlarr apps Radarr/Sonarr **test PASS** (bridge IPs). Synced Torznab into *arr.
+
+**Search evidence:**
+- Radarr `GET /api/v3/release?movieId=1` → **200**, **reports=103** (Mad Max: Fury Road).
+- Sonarr `GET /api/v3/release?episodeId=74` → **200**, **reports=14** (Mr. Robot S01E01).
+- Grab `POST /api/v3/release` → **500** `Torrent Download client isn't configured yet`. Queue `totalRecords=0`.
+
+**Jellyfin:** wizard completed; libs **Movies→/media/movies**, **TV→/media/tv** (API 204). Item count 0 (empty media dirs).
+
+**Hard stop:** full grab→file→Jellyfin needs **Decypharr download client + host FUSE** (`/mnt/debrid`). Lab has no Decypharr/FUSE; stop after proving reports > 0.
 
 ## This stamp
 
@@ -24,5 +42,5 @@ Enlisted Grok. **2026-09-08 03:26 CDT.** Did not edit HAL. No books/Kavita.
 
 ## Next
 
-1. Lab mid-2010s movie/TV search sanity
-2. House Apply **1.2.47** from this branch only when named
+1. House Apply **1.2.47** from this branch only when named
+2. Lab Decypharr+FUSE only if grab→JF path must be proven on box
