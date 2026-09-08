@@ -1,0 +1,44 @@
+name: restore-store-once
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/restore-store-once.yml
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore store.ts from known-good blob + bump 1.2.47
+        run: |
+          set -euo pipefail
+          head -c 80 src/lib/store.ts || true
+          git show 4d6f011666eb6bb8b22dfdab3fec70ef434c2afa:src/lib/store.ts > /tmp/store.ts
+          python3 <<'PY'
+          from pathlib import Path
+          p = Path('/tmp/store.ts')
+          t = p.read_text()
+          t = t.replace('LATEST_VERSION = "1.2.46"', 'LATEST_VERSION = "1.2.47"')
+          t = t.replace('SHIPPED_VERSION = "1.2.46"', 'SHIPPED_VERSION = "1.2.47"')
+          old = '"1.2.46: TV dumps import into Sonarr as real episodes. Watch Rick and Morty on the TV."'
+          new = '"1.2.47: Sonarr dump-folder import, honest request progress, Settings split. Phone Check then Apply."'
+          if old in t:
+              t = t.replace(old, new)
+          Path('src/lib/store.ts').write_text(t)
+          print('wrote', len(t), 'starts', t[:40]!r)
+          assert t.startswith('import { create }')
+          assert 'LATEST_VERSION = "1.2.47"' in t
+          PY
+          git config user.name 'ajt1995'
+          git config user.email 'austin.turner1995@gmail.com'
+          git add src/lib/store.ts
+          if git diff --cached --quiet; then
+            echo 'no change'
+            exit 0
+          fi
+          git commit -m 'fix(store): restore full zustand store 1.2.47 (one file)'
+          git push origin HEAD:main
