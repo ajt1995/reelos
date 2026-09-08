@@ -682,4 +682,3 @@ if [ -n "${HEAD_SHA:-}" ]; then
 fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
-echo "ReelOS $REMOTE applied."

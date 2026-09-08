@@ -47,7 +47,7 @@ def main() -> int:
             return fail(f"OTA contract missing {rel} ~ {needle}")
 
     stamp = updater.find('echo "$REMOTE" >"$ROOT/VERSION"')
-    applied = updater.find('echo "ReelOS $REMOTE applied."')
+    applied = updater.find('log "ReelOS $REMOTE applied."')
     door = updater.find("if ! ensure_door")
     if door < 0 or stamp < 0 or applied < 0:
         return fail("OTA contract: ensure_door / VERSION stamp / applied. missing")
