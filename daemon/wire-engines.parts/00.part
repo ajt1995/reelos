@@ -201,17 +201,4 @@ Before=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/bin/mkdir -p /mnt /mnt/debrid /mnt/symlinks
-ExecStart=/bin/mount --bind /mnt /mnt
-ExecStart=/bin/mount --make-rshared /mnt
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-"""
-    path = Path("/etc/systemd/system/reelos-mnt-shared.service")
-    try:
-        if path.exists() and path.read_text() == unit:
-            return
-        path.write_text(unit)
-        subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+ExecStart=/bin/mkdi
