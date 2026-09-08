@@ -1,21 +1,17 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 18:30 CDT.** Lock **1.2.39**. Nothing merged. No 1.2.40. Did not touch #14.
+Xorriso. **2026-09-07 19:16 CDT.** Trial stamp **1.2.40**. Did not touch #14.
+
+## Merged into 1.2.40
+
+- PR #11 (#8) installed vs available
+- PR #12 (#7) Tailscale Doctor = Running + `100.`
+- PR #22 (#21) Settings house cheat sheet
+
+## Not merged
+
+#13 #15 #16 #17 #19 #20. #18 parked.
 
 ## House
 
-VERSION file last seen **1.2.31**. 1.2.39 is the channel, not proven on the HP this afternoon.
-
-## Open PRs — do not merge
-
-| Issue | PR |
-| ----- | -- |
-| #8 version chrome | https://github.com/ajt1995/reelos/pull/11 |
-| #7 Tailscale | https://github.com/ajt1995/reelos/pull/12 |
-| #10 quality cutoff | https://github.com/ajt1995/reelos/pull/13 |
-| #4 music / Lidarr | https://github.com/ajt1995/reelos/pull/15 |
-| #9 extra HDD | https://github.com/ajt1995/reelos/pull/16 |
-| #3 Kavita | https://github.com/ajt1995/reelos/pull/17 |
-| #2 Seerr (plugin PR #18 parked) | https://github.com/ajt1995/reelos/pull/19 |
-
-#2 is Seerr. Plugin PR #18 parked. Do not merge.
+Phone Apply is the test. Channel is 1.2.40 / `main.tar.gz`.
