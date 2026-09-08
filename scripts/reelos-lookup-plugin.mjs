@@ -568,12 +568,28 @@ async function handleUpdateCheck(_req, res) {
     return;
   }
   const newer = cmpVer(versionKey(best.version), versionKey(local)) > 0;
+  let head = "";
+  try {
+    const t = await fetchGh("https://api.github.com/repos/ajt1995/reelos/commits/main");
+    const j = JSON.parse(t);
+    head = String(j.sha || "");
+  } catch {
+    /* */
+  }
+  let applied = "";
+  try {
+    if (existsSync("/var/lib/reelos/applied-sha")) applied = readFileSync("/var/lib/reelos/applied-sha", "utf8").trim();
+  } catch {
+    /* */
+  }
+  const shaDrift = Boolean(head) && head !== applied;
   send(res, 200, {
     ok: true,
     local,
     remote: best.version,
     notes: best.notes || [],
-    available: newer,
+    available: newer || shaDrift,
+    sha: head.slice(0, 12),
   });
 }
 
