@@ -15,11 +15,7 @@ export function useEngineRequest(id: string) {
         ),
       )
       .catch(() => {});
-    const q = id.startsWith("tmdb-")
-      ? `tmdb=${id.slice(5)}`
-      : id.startsWith("tvdb-")
-        ? `tvdb=${id.slice(5)}`
-        : `id=${encodeURIComponent(id)}`;
+    const q = `id=${encodeURIComponent(id)}`;
     let stop = false;
     const poll = () => {
       void fetch(`/api/request?${q}`, { cache: "no-store" })

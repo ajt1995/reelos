@@ -35,8 +35,15 @@ def root_paths(kind: str) -> list[str]:
     mode = answers().get("storageMode") or "both"
     paths: list[str] = []
     if mode in ("debrid", "both"):
-        paths.append("/symlinks")
-        paths.append("/mnt/symlinks")
+        if kind == "movie":
+            paths.append("/symlinks/radarr")
+            paths.append("/mnt/symlinks/radarr")
+        elif kind == "tv":
+            paths.append("/symlinks/sonarr")
+            paths.append("/mnt/symlinks/sonarr")
+        else:
+            paths.append("/symlinks")
+            paths.append("/mnt/symlinks")
         if kind == "anime":
             paths.append("/mnt/symlinks/anime")
         if kind == "music":
@@ -49,7 +56,11 @@ def root_paths(kind: str) -> list[str]:
 
 HOST_FOR = {
     "/symlinks": "/mnt/symlinks",
+    "/symlinks/radarr": "/mnt/symlinks/radarr",
+    "/symlinks/sonarr": "/mnt/symlinks/sonarr",
     "/mnt/symlinks": "/mnt/symlinks",
+    "/mnt/symlinks/radarr": "/mnt/symlinks/radarr",
+    "/mnt/symlinks/sonarr": "/mnt/symlinks/sonarr",
     "/media/movies": "/srv/media/movies",
     "/media/tv": "/srv/media/tv",
     "/media/anime": "/srv/media/anime",

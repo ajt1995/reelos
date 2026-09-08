@@ -1,20 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
-import { getTitle, kindLabel } from "@/lib/catalog";
+import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
+import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
 import { useEngineRequest } from "@/lib/use-engine-request";
 
 export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
   const remote = useReelStore((s) => s.remoteTitles.find((t) => t.id === id));
+  const rememberTitles = useReelStore((s) => s.rememberTitles);
   const title = catalog ?? remote;
-  const [season, setSeason] = useState(1);
-  const [maxSeason, setMaxSeason] = useState(1);
+  const [detail, setDetail] = useState<Title | null>(null);
+  const resolved = detail ?? title;
+  const seasonNumbers =
+    resolved?.seasonList?.filter((n) => n > 0) ??
+    (resolved?.seasons && resolved.seasons > 0
+      ? Array.from({ length: resolved.seasons }, (_, i) => i + 1)
+      : []);
+  const [season, setSeason] = useState(seasonNumbers[0] ?? 1);
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
@@ -36,16 +44,43 @@ export function TitleView({ id }: { id: string }) {
   const pasteRelease = useReelStore((s) => s.pasteRelease);
   const { inJellyfin, engineStatus } = useEngineRequest(id);
 
+  useEffect(() => {
+    let stop = false;
+    void fetch(`/api/lookup?id=${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ titles?: Title[] }>)
+      .then((j) => {
+        const t = j.titles?.[0];
+        if (stop || !t) return;
+        rememberCatalogTitles([t]);
+        rememberTitles?.([t]);
+        setDetail(t);
+        const nums =
+          t.seasonList?.filter((n) => n > 0) ??
+          (t.seasons && t.seasons > 0 ? Array.from({ length: t.seasons }, (_, i) => i + 1) : []);
+        if (nums.length) setSeason((cur) => (nums.includes(cur) ? cur : (nums[0] ?? 1)));
+      })
+      .catch(() => {});
+    return () => {
+      stop = true;
+    };
+  }, [id, rememberTitles]);
+
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
     setReqErr(null);
+    const mediaType = payload.titleId.startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = payload.titleId.startsWith("tmdb-tv-")
+      ? payload.titleId.slice(8)
+      : payload.titleId.startsWith("tmdb-")
+        ? payload.titleId.slice(5)
+        : undefined;
     void fetch("/api/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         titleId: payload.titleId,
-        title: title?.title,
-        tmdb: payload.titleId.startsWith("tmdb-") ? payload.titleId.slice(5) : undefined,
-        tvdb: payload.titleId.startsWith("tvdb-") ? payload.titleId.slice(5) : undefined,
+        title: resolved?.title,
+        mediaType,
+        tmdb,
         season: payload.season,
         hash: payload.hash,
       }),
@@ -57,10 +92,10 @@ export function TitleView({ id }: { id: string }) {
       .catch((e) => setReqErr(String(e)));
   };
 
-  if (!title) {
+  if (!resolved) {
     return (
       <div className="px-6 py-16">
-        <p className="text-muted">That title is not in the catalog.</p>
+        <p className="text-muted">Looking up that title…</p>
         <Link to="/" className="mt-4 inline-block text-gold">
           Home
         </Link>
@@ -75,71 +110,61 @@ export function TitleView({ id }: { id: string }) {
     request?.status === "available" ||
     engineStatus === "downloaded";
   const blocked =
-    (title.kind === "music" && !intent.music) ||
-    (title.kind === "anime" && !intent.anime) ||
-    (title.kind === "kids" && !intent.kids) ||
-    (title.kind === "movie" && !intent.movies) ||
-    (title.kind === "tv" && !intent.tv);
+    (resolved.kind === "music" && !intent.music) ||
+    (resolved.kind === "anime" && !intent.anime) ||
+    (resolved.kind === "kids" && !intent.kids) ||
+    (resolved.kind === "movie" && !intent.movies) ||
+    (resolved.kind === "tv" && !intent.tv);
 
   return (
     <div className="pb-16">
       <div className="relative min-h-[280px] overflow-hidden md:min-h-[360px]">
         <img
-          src={title.poster}
+          src={resolved.poster}
           alt=""
           className="absolute inset-0 size-full object-cover opacity-40 kenburns"
         />
         <div className="absolute inset-0 bg-linear-to-t from-background via-background/70 to-background/20" />
       </div>
       <div className="relative z-10 mx-auto -mt-40 grid max-w-5xl gap-8 px-5 md:-mt-48 md:grid-cols-[200px_1fr] md:px-10">
-        <Poster title={title} className="mx-auto w-[180px] rounded-2xl md:w-auto" />
+        <Poster title={resolved} className="mx-auto w-[180px] rounded-2xl md:w-auto" />
         <div className="pt-2">
-          <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(title.kind)}</p>
-          <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{title.title}</h1>
+          <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
+          <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">
-            {title.year}
-            {title.runtime ? ` · ${formatRuntime(title.runtime)}` : null}
-            {title.seasons ? ` · ${title.seasons} seasons` : null}
-            {title.tracks ? ` · ${title.tracks} tracks` : null}
-            {title.rating != null && Number.isFinite(Number(title.rating)) ? ` · ${Number(title.rating).toFixed(1)}` : null}
-            {title.director ? ` · ${title.director}` : null}
+            {resolved.year}
+            {resolved.runtime ? ` · ${formatRuntime(resolved.runtime)}` : null}
+            {seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
+            {resolved.tracks ? ` · ${resolved.tracks} tracks` : null}
+            {resolved.rating != null && Number.isFinite(Number(resolved.rating)) ? ` · ${Number(resolved.rating).toFixed(1)}` : null}
+            {resolved.director ? ` · ${resolved.director}` : null}
           </p>
-          <p className="mt-2 text-xs text-faint">{(title.genres ?? []).join(" · ")}</p>
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{title.overview}</p>
+          <p className="mt-2 text-xs text-faint">{(resolved.genres ?? []).join(" · ")}</p>
+          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
           {!available && !blocked && !request ? (
-            <p className="mt-4 text-sm text-gold">{cacheCopy(title, source)}</p>
+            <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}
 
-          {title.kind === "tv" || title.kind === "anime" ? (
+          {resolved.kind === "tv" || resolved.kind === "anime" ? (
             <div className="mt-5 flex flex-wrap gap-2">
-              {Array.from(
-                { length: Math.max(title.seasons ?? 1, maxSeason, season) },
-                (_, i) => i + 1,
-              ).map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSeason(n)}
-                  className={
-                    season === n
-                      ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
-                      : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
-                  }
-                >
-                  Season {n}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  const next = Math.max(title.seasons ?? 1, maxSeason, season) + 1;
-                  setMaxSeason(next);
-                  setSeason(next);
-                }}
-                className="h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
-              >
-                + Season
-              </button>
+              {seasonNumbers.length === 0 ? (
+                <p className="text-sm text-muted">Loading seasons from Seerr…</p>
+              ) : (
+                seasonNumbers.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setSeason(n)}
+                    className={
+                      season === n
+                        ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
+                        : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
+                    }
+                  >
+                    Season {n}
+                  </button>
+                ))
+              )}
             </div>
           ) : null}
 
@@ -183,19 +208,22 @@ export function TitleView({ id }: { id: string }) {
               <Button
                 variant="ghost"
                 size="lg"
+                disabled={
+                  (resolved.kind === "tv" || resolved.kind === "anime") && seasonNumbers.length === 0
+                }
                 onClick={() => {
                   requestTitle(
-                    title.id,
-                    title.kind === "tv" || title.kind === "anime" ? season : undefined,
+                    resolved.id,
+                    resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
                   );
                   sendRequest({
-                    titleId: title.id,
-                    season: title.kind === "tv" || title.kind === "anime" ? season : undefined,
+                    titleId: resolved.id,
+                    season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
                   });
                 }}
               >
                 <Plus className="size-4" />
-                {title.kind === "tv" || title.kind === "anime"
+                {resolved.kind === "tv" || resolved.kind === "anime"
                   ? `Request S${String(season).padStart(2, "0")}`
                   : "Request"}
               </Button>
@@ -206,16 +234,16 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {(!available || title.kind === "tv" || title.kind === "anime") && !blocked ? (
+          {(!available || resolved.kind === "tv" || resolved.kind === "anime") && !blocked ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {
                 e.preventDefault();
-                const ok = pasteRelease(title.id, hash);
+                const ok = pasteRelease(resolved.id, hash);
                 setHashErr(!ok);
                 if (ok) {
                   setHash("");
-                  sendRequest({ titleId: title.id, hash });
+                  sendRequest({ titleId: resolved.id, hash });
                 }
               }}
             >

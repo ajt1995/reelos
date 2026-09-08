@@ -11,6 +11,9 @@
 		uri strip_prefix /advanced/downloads
 		reverse_proxy 127.0.0.1:8282
 	}
+	handle /seerr* {
+		reverse_proxy 127.0.0.1:5055
+	}
 	handle {
 		reverse_proxy 127.0.0.1:8080
 	}

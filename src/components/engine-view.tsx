@@ -14,6 +14,7 @@ const META: Record<string, { title: string; fandom: string; port: string }> = {
   music: { title: "Music engine", fandom: "Lidarr", port: "8686" },
   subtitles: { title: "Subtitles", fandom: "Bazarr", port: "6767" },
   downloads: { title: "Provider adapter", fandom: "Client", port: "8085" },
+  seerr: { title: "Seerr", fandom: "Jellyseerr", port: "5055" },
 };
 
 export function EngineView({ id }: { id: string }) {
@@ -70,6 +71,11 @@ export function EngineView({ id }: { id: string }) {
           </p>
         ) : null}
         {id === "downloads" ? <AdapterConsole /> : null}
+        {id === "seerr" ? (
+          <p className="text-sm text-muted">
+            Daily search and Request stay in ReelOS. This is the Jellyseerr admin on :5055 (also /seerr).
+          </p>
+        ) : null}
       </div>
     </div>
   );

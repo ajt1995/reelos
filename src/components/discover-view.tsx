@@ -80,7 +80,7 @@ export function DiscoverView() {
             ))}
           </Row>
         ) : (
-          <p className="mt-10 text-sm text-muted">No titles from the movie engine for that search.</p>
+          <p className="mt-10 text-sm text-muted">No titles from Seerr for that search.</p>
         )
       ) : (
         <>

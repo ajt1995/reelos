@@ -1,6 +1,6 @@
 # STATUS.md
 
-Xorriso. **2026-09-08 10:10 CDT.** Builder Reelist fixed VERSION skew (`store.ts` LATEST/SHIPPED/UPDATE_NOTES → **1.2.47**). Re-Apply house. Did not edit HAL. Books/Kavita **out**.
+Xorriso. **2026-09-08 16:10 CDT.** Seerr discover/request on a PR — not merged, VERSION stays **1.2.47**. Did not edit HAL. Books/Kavita **out**.
 
 ## Channel
 
@@ -12,8 +12,8 @@ VERSION **1.2.47**. `channel.json` tarball = `https://github.com/ajt1995/reelos/
 
 ## Owner
 
-Phone: Settings → **Check → Apply**. Curl-only is not done. Proof: Logs `files=` and `series=` > 0, then play TV.
+Phone: Settings → **Check → Apply** after this PR is merged to main. Then Seerr → Radarr/Sonarr/Jellyfin if wire did not finish. Proof: Discover search hits Seerr, Requests survive Apply, TV seasons match TMDB.
 
 ## Do not
 
-Stamp 1.2.48 this hour. Merge Seerr. Merge `feature/3-books`. Apply a feature-branch tarball.
+Stamp 1.2.48 this hour. Merge `feature/3-books`. Apply a feature-branch tarball.
