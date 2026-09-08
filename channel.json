@@ -1,8 +1,8 @@
 {
-  "version": "1.2.47",
+  "version": "1.2.48",
   "channel": "stable",
   "notes": [
-    "1.2.47: Sonarr dump-folder import, honest request progress, Settings split. Phone Check then Apply."
+    "1.2.48: Discover/Request via built-in Seerr (Jellyseerr). Phone UI kept. Seasons capped to TMDB. Requests survive Apply. JF Movies\u2192/symlinks/radarr Shows\u2192/symlinks/sonarr seed. Sandbox-proven before merge."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }
