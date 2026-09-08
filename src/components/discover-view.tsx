@@ -4,6 +4,7 @@ import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
+import { installHonestRequest } from "@/lib/honest-request";
 
 export function DiscoverView() {
   const [q, setQ] = useState("");
@@ -14,6 +15,7 @@ export function DiscoverView() {
   const shelfError = useReelStore((s) => s.shelfError);
 
   useEffect(() => {
+    installHonestRequest();
     hydrateShelf();
   }, [hydrateShelf]);
 
