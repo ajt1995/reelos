@@ -219,8 +219,9 @@ need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
 need install/compose/docker-compose.yml '1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'restart_fuse_readers'
-need daemon/wire-engines.py 'fuse missing on host'
-need install/compose/docker-compose.yml '/mnt:/mnt:rslave'
+need daemon/wire-engines.py 'not bind-mounting /mnt'
+need install/compose/docker-compose.yml '/mnt/debrid:/mnt/debrid:rshared'
+need install/compose/docker-compose.yml '/mnt/debrid:/mnt/debrid:rslave'
 need daemon/reelos-update.sh 'daemon-reload (8080 still up)'
 need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
@@ -525,16 +526,14 @@ sshd_open
 
 nudge_fuse() {
   mkdir -p /mnt /mnt/debrid /mnt/symlinks
-  mount --bind /mnt /mnt 2>/dev/null || true
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
-    timeout 25 docker restart reelos-jellyfin-1 reelos-radarr-1 reelos-sonarr-1 >/dev/null 2>&1 || true
-    log "restarted fuse readers"
+    log "fuse already on host — not bind-mounting /mnt"
   elif [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "fuse not on host — remount decypharr"
     python3 "$ROOT/bin/wire-engines.py" fuse || log "fuse remount non-fatal"
   else
-    log "fuse not mounted — skip reader restart"
+    log "fuse not mounted — skip remount"
   fi
 }
 nudge_fuse
@@ -549,8 +548,7 @@ load_env() {
 }
 
 if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
-  mkdir -p /mnt /mnt/symlinks
-  mount --bind /mnt /mnt 2>/dev/null || true
+  mkdir -p /mnt /mnt/symlinks /mnt/debrid
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   load_env
   COMPOSE_CHANGED=0

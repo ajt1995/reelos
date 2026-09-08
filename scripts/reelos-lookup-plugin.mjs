@@ -969,8 +969,10 @@ function tailFile(p, n) {
 
 function shOut(args, timeout = 8000) {
   try {
-    const r = spawnSync(args[0], args.slice(1), { encoding: "utf8", timeout });
-    return `${r.stdout || ""}${r.stderr || ""}`;
+    const r = spawnSync(args[0], args.slice(1), { encoding: "utf8", timeout, maxBuffer: 512 * 1024 });
+    const out = `${r.stdout || ""}${r.stderr || ""}`.trim();
+    if (out) return `${out}\n`;
+    return `(empty status=${r.status} error=${r.error ? r.error.code || r.error : "none"})\n`;
   } catch (e) {
     return `${e}\n`;
   }
@@ -1048,9 +1050,9 @@ async function handleLogs(_req, res) {
     "=== jellyfin ===",
     shOut(["docker", "logs", "reelos-jellyfin-1", "--tail", "25"], 2500).trim(),
     "=== reelos.service ===",
-    shOut(["journalctl", "-u", "reelos", "-n", "30", "--no-pager"], 2500).trim(),
+    shOut(["journalctl", "-u", "reelos.service", "-n", "20", "--no-pager", "--output=short-iso"], 8000).trim(),
     "=== caddy.service ===",
-    shOut(["journalctl", "-u", "caddy", "-n", "20", "--no-pager"], 2500).trim(),
+    shOut(["journalctl", "-u", "caddy.service", "-n", "20", "--no-pager", "--output=short-iso"], 8000).trim(),
     "=== ota.log ===",
     tailFile("/var/lib/reelos/ota.log", 40).trim(),
     "=== wire.log ===",

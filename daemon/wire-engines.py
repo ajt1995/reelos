@@ -212,7 +212,6 @@ WantedBy=multi-user.target
     path = Path("/etc/systemd/system/reelos-mnt-shared.service")
     try:
         if path.exists() and path.read_text() == unit:
-            subprocess.run(["systemctl", "start", "reelos-mnt-shared"], check=False, capture_output=True)
             return
         path.write_text(unit)
         subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
@@ -1485,7 +1484,10 @@ def share_mnt() -> None:
     Path("/mnt").mkdir(parents=True, exist_ok=True)
     Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
     Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
-    subprocess.run(["mount", "--bind", "/mnt", "/mnt"], check=False, capture_output=True)
+    persist_mnt_shared()
+    if fuse_on_host():
+        log_wire("share_mnt: fuse on host — not bind-mounting /mnt")
+        return
     r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
     if r.returncode:
         log_wire(f"rshared /mnt skipped: {(r.stderr or r.stdout or '')[:160]}")
