@@ -1,14 +1,29 @@
 #!/usr/bin/env python3
-"""Catch VERSION skew and stale OTA canaries before they brick an apply.
+"""Push-time gate. If this fails, do not push and do not tell the house to Apply.
 
-  check-ota.py ROOT           # push-time: skew + missing files + grep must match
-  check-ota.py ROOT --apply   # box: skew + missing files fatal; grep miss is warn
+Never print 'applied' unless :80 is ReelOS. Never start a second Apply.
+Never leave Caddy dead after FUSE/engine restarts.
 """
 from __future__ import annotations
 
 import re
 import sys
 from pathlib import Path
+
+# Always fatal, even on the box (--apply). These are the UX lies we already shipped.
+CONTRACTS = (
+    ("daemon/reelos-update.sh", "apply already running"),
+    ("daemon/reelos-update.sh", "ensure_door"),
+    ("daemon/reelos-update.sh", "not printing applied"),
+    ("daemon/reelos-update.sh", "door :80 is ReelOS"),
+    ("scripts/reelos-lookup-plugin.mjs", "Update already running"),
+    ("daemon/wire-engines.py", "door caddy/reelos started after fuse"),
+)
+
+
+def fail(msg: str) -> int:
+    print(msg, file=sys.stderr)
+    return 1
 
 
 def main() -> int:
@@ -23,9 +38,22 @@ def main() -> int:
     s = shipped.group(1) if shipped else ""
     l = latest.group(1) if latest else ""
     if ver != chan or ver != s or ver != l:
-        print(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}", file=sys.stderr)
-        return 1
+        return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
+
     updater = (root / "daemon/reelos-update.sh").read_text()
+    for rel, needle in CONTRACTS:
+        text = (root / rel).read_text() if (root / rel).is_file() else ""
+        if needle not in text:
+            return fail(f"OTA contract missing {rel} ~ {needle}")
+
+    stamp = updater.find('echo "$REMOTE" >"$ROOT/VERSION"')
+    applied = updater.find('echo "ReelOS $REMOTE applied."')
+    door = updater.find("if ! ensure_door")
+    if door < 0 or stamp < 0 or applied < 0:
+        return fail("OTA contract: ensure_door / VERSION stamp / applied. missing")
+    if not (door < stamp < applied):
+        return fail("OTA contract: stamp/applied must come after ensure_door")
+
     fatal = 0
     warns = 0
     for line in updater.splitlines():
@@ -46,9 +74,8 @@ def main() -> int:
             else:
                 fatal += 1
     if fatal:
-        print(f"check-ota fail fatal={fatal} warn={warns}", file=sys.stderr)
-        return 1
-    print(f"check-ota ok version={ver} warn={warns}")
+        return fail(f"check-ota fail fatal={fatal} warn={warns}")
+    print(f"check-ota ok version={ver} warn={warns} contracts={len(CONTRACTS)}")
     return 0
 
 

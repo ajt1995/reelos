@@ -1,13 +1,14 @@
 # STATUS.md
 
-Xorriso. **2026-09-07 20:01 CDT.** House **1.2.42** SHA `10d8096`.
+Xorriso. **2026-09-07 20:22 CDT.** VERSION **1.2.42**. House door was killed by a double Apply. Do not tell them to Apply while :80 is refused.
 
-Rick and Morty: TorBox grabbed S04–S09. Host `/mnt/debrid` empty. Decypharr FUSE never left the container (`rslave` / `/mnt` not shared). Same hole as Jurassic/Mario dump dirs.
+## Process (enforced by `scripts/check-ota.py`)
 
-This tree (VERSION stays 1.2.42):
-- `reelos-mnt-shared.service` makes `/mnt` rshared before Docker
-- If `__all__` missing, recreate Decypharr, restart arrs, Sonarr/Radarr import scan, Jellyfin refresh
-- Doctor hop **Debrid files**
-- `privileged: true` on Decypharr
+I do not push if this fails. I do not say `applied.` if :80 is not ReelOS.
 
-Did not merge #13 #15 #16 #17 #19 #20.
+- One Apply at a time (`flock` + UI 409)
+- `ensure_door` before VERSION stamp
+- FUSE remount starts `caddy` + `reelos` when it finishes
+- Contracts in check-ota.py are fatal on the box too
+
+House: start Caddy, then `wire-engines.py fuse`. Do not Apply until `curl :80` is 200.

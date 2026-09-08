@@ -225,6 +225,8 @@ need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'door :80 is ReelOS'
+need daemon/reelos-update.sh 'not printing applied'
+need scripts/reelos-lookup-plugin.mjs 'Update already running'
 need scripts/check-ota.py 'VERSION skew'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
   log "canary fail pinned extra_hosts"
