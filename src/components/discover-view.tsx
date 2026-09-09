@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { BookOpen, Search } from "lucide-react";
+import type { BookResult } from "@/components/books-view";
 import { Chip, FilterChip } from "@/components/chip";
 import { Page, PageTitle } from "@/components/page";
 import { Row, TitleCard } from "@/components/title-card";
@@ -32,6 +33,7 @@ export function DiscoverView() {
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
+  const [bookHits, setBookHits] = useState<BookResult[]>([]);
   const [discover, setDiscover] = useState<DiscoverPayload>({});
   const [discoverBusy, setDiscoverBusy] = useState(true);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
@@ -125,7 +127,31 @@ export function DiscoverView() {
     };
   }, [q, kind, rememberTitles]);
 
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) {
+      setBookHits([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void fetch(`/api/books?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+        .then((res) => res.json() as Promise<{ results?: BookResult[] }>)
+        .then((r) => {
+          if (!cancelled) setBookHits(Array.isArray(r.results) ? r.results.slice(0, 3) : []);
+        })
+        .catch(() => {
+          if (!cancelled) setBookHits([]);
+        });
+    }, 320);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [q]);
+
   const searching = q.trim().length >= 2;
+  const typeaheadOpen = searching && (hits.length > 0 || bookHits.length > 0);
   const inFlight = requests.filter(isInFlightRequest);
   const recentShelf = shelf.slice(0, 16);
   const trending = discover.trending ?? [];
@@ -155,11 +181,11 @@ export function DiscoverView() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search movies and shows"
-          aria-label="Search movies and shows"
+          placeholder="Search movies, shows, books"
+          aria-label="Search movies, shows, and books"
           className="field-glow h-12 w-full rounded-2xl bg-card pl-11 pr-4 text-sm placeholder:text-faint"
         />
-        {searching && hits.length > 0 ? (
+        {typeaheadOpen ? (
           <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-cyan)]">
             {hits.slice(0, 8).map((t) => (
               <li key={t.id}>
@@ -180,7 +206,37 @@ export function DiscoverView() {
                 </Link>
               </li>
             ))}
+            {bookHits.length > 0 ? (
+              <>
+                <li className="border-t border-border px-4 pb-1 pt-2 font-mono text-[10px] tracking-[0.18em] text-magenta uppercase">
+                  Books
+                </li>
+                {bookHits.map((book) => (
+                  <li key={book.id}>
+                    <Link
+                      to="/books"
+                      search={{ q: book.title } as never}
+                      className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-magenta/8"
+                      onClick={() => setQ("")}
+                    >
+                      <span
+                        aria-hidden
+                        className="flex h-10 w-7 items-center justify-center rounded bg-magenta/12 text-magenta shadow-[var(--shadow-magenta)]"
+                      >
+                        <BookOpen className="size-3.5" />
+                      </span>
+                      <span className="flex-1 truncate">{book.title}</span>
+                      <span className="text-xs text-magenta">{book.source}</span>
+                    </Link>
+                  </li>
+                ))}
+              </>
+            ) : null}
           </ul>
+        ) : searching ? (
+          <p className="mt-2 text-xs text-muted">
+            {lookupBusy ? "Looking up movies and shows…" : lookupErr ?? "No titles from Seerr for that search."}
+          </p>
         ) : null}
       </form>
 
@@ -195,80 +251,63 @@ export function DiscoverView() {
           TV
         </FilterChip>
         <Chip live>Seerr</Chip>
+        <Chip magenta>Books</Chip>
       </div>
 
-      {searching ? (
-        hits.length > 0 ? (
-          <Row label="Results">
-            {hits.map((t) => (
-              <TitleCard key={t.id} title={t} />
-            ))}
-          </Row>
-        ) : (
-          <p className="mt-10 text-sm text-muted">
-            {lookupBusy
-              ? "Looking up movies and shows…"
-              : lookupErr ?? "No titles from Seerr for that search."}
-          </p>
-        )
-      ) : (
-        <>
-          {inFlight.length > 0 ? (
-            <Row label="In progress">
-              {inFlight.map((r) => {
-                const t = getTitle(r.titleId);
-                return t ? <TitleCard key={r.id} title={t} request={r} /> : null;
-              })}
-            </Row>
-          ) : null}
+      {inFlight.length > 0 ? (
+        <Row label="In progress" tone="magenta">
+          {inFlight.map((r) => {
+            const t = getTitle(r.titleId);
+            return t ? <TitleCard key={r.id} title={t} request={r} /> : null;
+          })}
+        </Row>
+      ) : null}
 
-          {trending.length > 0 ? (
-            <Row label="Trending">
-              {trending.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
+      {trending.length > 0 ? (
+        <Row label="Trending">
+          {trending.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
 
-          {movies.length > 0 && kind !== "tv" ? (
-            <Row label="Popular movies">
-              {movies.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
+      {movies.length > 0 && kind !== "tv" ? (
+        <Row label="Popular movies">
+          {movies.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
 
-          {tv.length > 0 && kind !== "movie" ? (
-            <Row label="Popular TV">
-              {tv.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
+      {tv.length > 0 && kind !== "movie" ? (
+        <Row label="Popular TV">
+          {tv.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
 
-          {recentShelf.length > 0 ? (
-            <Row label="Recently added">
-              {recentShelf.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
+      {recentShelf.length > 0 ? (
+        <Row label="Recently added">
+          {recentShelf.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
 
-          {!idleHasRows ? (
-            <p className="mt-10 text-sm text-muted">
-              {discoverBusy
-                ? "Loading trending from Seerr…"
-                : discover.error ||
-                  shelfError ||
-                  (shelfReady
-                    ? "Seerr has nothing to show yet. Type a title above — Request still creates a real *arr job."
-                    : "Loading library…")}
-            </p>
-          ) : discover.error ? (
-            <p className="mt-6 text-xs text-faint">{discover.error}</p>
-          ) : null}
-        </>
-      )}
+      {!idleHasRows ? (
+        <p className="mt-10 text-sm text-muted">
+          {discoverBusy
+            ? "Loading trending from Seerr…"
+            : discover.error ||
+              shelfError ||
+              (shelfReady
+                ? "Seerr has nothing to show yet. Type a title above — Request still creates a real *arr job."
+                : "Loading library…")}
+        </p>
+      ) : discover.error ? (
+        <p className="mt-6 text-xs text-faint">{discover.error}</p>
+      ) : null}
     </Page>
   );
 }

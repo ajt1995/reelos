@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { FilterChip } from "@/components/chip";
 import { Page, PageTitle } from "@/components/page";
 import { TitleCard } from "@/components/title-card";
@@ -52,6 +53,14 @@ export function LibraryView() {
             {t.label}
           </FilterChip>
         ))}
+        {intent.books !== false ? (
+          <Link
+            to="/books"
+            className="inline-flex h-9 items-center rounded-full px-4 text-sm text-magenta shadow-[var(--shadow-magenta)]"
+          >
+            Books
+          </Link>
+        ) : null}
       </div>
       {shown.length === 0 ? (
         <p className="mt-12 text-sm text-muted">

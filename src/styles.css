@@ -100,19 +100,27 @@
 }
 
 .tron-grid {
+  position: relative;
+  isolation: isolate;
   background-color: var(--color-background);
   background-image:
-    linear-gradient(rgb(0 229 255 / 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(0 229 255 / 0.08) 1px, transparent 1px),
     radial-gradient(ellipse 80% 50% at 50% -10%, rgb(0 229 255 / 0.16), transparent 55%),
     radial-gradient(ellipse 50% 40% at 100% 90%, rgb(255 60 174 / 0.12), transparent 50%),
     radial-gradient(ellipse 40% 30% at 0% 80%, rgb(61 139 255 / 0.12), transparent 50%);
-  background-size:
-    48px 48px,
-    48px 48px,
-    100% 100%,
-    100% 100%,
-    100% 100%;
+  background-size: 100% 100%;
+}
+
+.tron-grid::before {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgb(0 229 255 / 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(0 229 255 / 0.08) 1px, transparent 1px);
+  background-size: 48px 48px;
+  animation: grid-breathe 8s ease-in-out infinite alternate;
 }
 
 .glow-line {
@@ -253,7 +261,8 @@
   .kenburns,
   .page-enter,
   .live-dot,
-  .card-glow {
+  .card-glow,
+  .tron-grid::before {
     animation: none;
     transition: none;
   }
