@@ -59,3 +59,7 @@ New kind = one chip + one row + one Connect destination. Not a new palette.
 6. Connect (destination card)
 
 When this becomes a job: owner names a version. Until then do not open it.
+
+## Landed as 1.2.51 Tron-night (not Light)
+
+Owner asked for glow / neon cyan-magenta on deep black instead of one-gold Light. Tokens, motion, and Books slot shipped on **1.2.51**. Light stays a parked sketch — do not paint a second facelift on top without an owner name.

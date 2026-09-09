@@ -3,15 +3,18 @@ import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
+import { requestStatusWord } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { RequestStatus } from "@/lib/types";
-import { cn, formatWhen } from "@/lib/utils";
+import { formatWhen } from "@/lib/utils";
+import { FilterChip } from "@/components/chip";
+import { Page, PageTitle } from "@/components/page";
 import { Button } from "@/components/ui/button";
 
 const FILTERS: { id: "all" | RequestStatus; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "available", label: "Available" },
-  { id: "downloading", label: "Downloading" },
+  { id: "available", label: "Ready" },
+  { id: "downloading", label: "Grabbing" },
   { id: "waiting", label: "Waiting" },
   { id: "failed", label: "Failed" },
 ];
@@ -26,22 +29,15 @@ export function RequestsView() {
   const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
-      <p className="mt-2 text-sm text-muted">Household asks. Admin can auto-approve.</p>
+    <Page className="py-6 md:py-8">
+      <PageTitle sub="Household asks. Status comes from Seerr / *arr — Grabbing, Waiting, or Ready. No fake percent.">
+        Requests
+      </PageTitle>
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              filter === f.id ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
-            )}
-          >
+          <FilterChip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)}>
             {f.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
       <ul className="mt-6 divide-y divide-border">
@@ -52,6 +48,10 @@ export function RequestsView() {
           const t = getTitle(r.titleId);
           const titleId = t?.id || r.titleId;
           const label = t?.title || r.titleId || "Title";
+          const watchHref =
+            typeof window !== "undefined"
+              ? `http://${window.location.hostname}:8096`
+              : "http://127.0.0.1:8096";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
@@ -78,10 +78,10 @@ export function RequestsView() {
                   <p className="mt-1 text-sm text-danger">{r.reason}</p>
                 ) : (
                   <p className="mt-1 text-xs text-muted">
-                    {r.reason ||
-                      viaLabel(r.via, r.status) ||
-                      (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                    {r.status === "downloading" && r.progress > 0 && !r.reason ? ` · ${Math.round(r.progress)}%` : ""}
+                    {requestStatusWord(r.status)}
+                    {r.reason ? ` · ${r.reason}` : ""}
+                    {!r.reason && viaLabel(r.via, r.status) ? ` · ${viaLabel(r.via, r.status)}` : ""}
+                    {r.status === "downloading" && r.progress > 0 ? ` · ${Math.round(r.progress)}%` : ""}
                     {r.release ? ` · ${r.release}` : ""}
                   </p>
                 )}
@@ -90,23 +90,19 @@ export function RequestsView() {
                 <Button size="sm" variant="ghost" onClick={() => retry(r.id)}>
                   Retry
                 </Button>
-              ) : r.status !== "available" ? (
+              ) : r.status === "available" ? (
+                <a href={watchHref} target="_blank" rel="noreferrer" className="text-sm text-gold hover:text-gold-bright">
+                  Watch
+                </a>
+              ) : (
                 <Button size="sm" variant="quiet" onClick={() => cancel(r.id)}>
                   Cancel
                 </Button>
-              ) : (
-                <Link
-                  to="/play/$id"
-                  params={{ id: titleId }}
-                  className="text-sm text-gold hover:text-gold-bright"
-                >
-                  Play
-                </Link>
               )}
             </li>
           );
         })}
       </ul>
-    </div>
+    </Page>
   );
 }

@@ -44,18 +44,18 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.18)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.51)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.18");
-  assert.equal(chan.version, "1.2.50.18");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.18"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.18"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.18"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.18"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.18/);
+  assert.equal(ver, "1.2.51");
+  assert.equal(chan.version, "1.2.51");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.51"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.51"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.51"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.51"/);
+  assert.match(read("STATUS.md"), /1\.2\.51/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -168,4 +168,37 @@ test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () =>
   }
   assert.equal(joinParts(join(root, "install/bin/wire-engines.parts")), joinParts(join(root, "daemon/wire-engines.parts")));
   assert.equal(read("install/bin/reelos-update.sh"), read("daemon/reelos-update.sh"));
+});
+
+test("stack: Books is off by default; Kavita profile has no dns; phone Download is attachment", () => {
+  const types = read("src/lib/types.ts");
+  const store = read("src/lib/store.ts");
+  const plugin = read("scripts/reelos-lookup-plugin.mjs");
+  const books = read("scripts/reelos-books.mjs");
+  const compose = read("compose/docker-compose.yml");
+  const wizard = read("src/components/wizard.tsx");
+  const view = read("src/components/books-view.tsx");
+  assert.match(types, /books: boolean/);
+  assert.match(store, /books: false/);
+  assert.match(wizard, /key: "books"/);
+  assert.match(wizard, /Music and Books stay off unless you ask/);
+  assert.match(compose, /profiles: \["books"\]/);
+  assert.match(compose, /lscr\.io\/linuxserver\/kavita/);
+  assert.match(compose, /\/srv\/media\/books:\/books/);
+  assert.doesNotMatch(compose, /^\s+dns:\s*$/m);
+  assert.doesNotMatch(compose, /^\s+- 1\.1\.1\.1\s*$/m);
+  assert.match(plugin, /pathOnly === "\/api\/books"/);
+  assert.match(plugin, /\/api\/books\/file/);
+  assert.match(plugin, /\/api\/books\/fetch/);
+  assert.match(plugin, /\/api\/books\/opds/);
+  assert.match(plugin, /if \(intent\.books\) p\.push\("books"\)/);
+  assert.doesNotMatch(plugin, /intent\.books !== false/);
+  assert.match(books, /Content-Disposition: attachment/);
+  assert.match(books, /function contentDisposition/);
+  assert.match(books, /ownsDownload/);
+  assert.doesNotMatch(view, /Legal only/);
+  assert.match(view, /Download/);
+  assert.doesNotMatch(view, /epubjs|react-reader|ebook-player/i);
+  assert.equal(read("install/compose/Caddyfile"), read("compose/Caddyfile"));
+  assert.match(read("compose/Caddyfile"), /handle \/kavita\*/);
 });

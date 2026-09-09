@@ -7,6 +7,7 @@ import {
   isInFlightRequest,
   mergeServerRequests,
   overlayLibraryPresence,
+  requestStatusWord,
   showRequestQueueControls,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
@@ -226,4 +227,11 @@ test("duplicate active rows for the same title+season collapse when one is avail
   assert.equal(collapsed.length, 1);
   assert.equal(collapsed[0]?.status, "available");
   assert.equal(collapsed[0]?.progress, 100);
+});
+
+test("request status words are Grabbing / Waiting / Ready", () => {
+  assert.equal(requestStatusWord("downloading"), "Grabbing");
+  assert.equal(requestStatusWord("waiting"), "Waiting");
+  assert.equal(requestStatusWord("available"), "Ready");
+  assert.equal(requestStatusWord("failed"), "Failed");
 });

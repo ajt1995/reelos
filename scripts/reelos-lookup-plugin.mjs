@@ -18,6 +18,15 @@ import {
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import {
+  BOOKS_DIR,
+  downloadLegalBook,
+  listShelfBooks,
+  opdsFeed,
+  pipeBookFile,
+  resolveShelfPath,
+  searchLegalBooks,
+} from "./reelos-books.mjs";
+import {
   createLibraryCache,
   createTokenCache,
   JELLYFIN_ITEMS_TIMEOUT_MS,
@@ -373,6 +382,96 @@ async function handleDiscover(_req, res) {
   send(res, 200, { movies, tv, error });
 }
 
+async function handleBooks(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  const raw = req.url ?? "";
+  const u = new URL(raw, "http://reelos.local");
+  const pathOnly = (raw.split("?", 1)[0] ?? "").replace(/\/$/, "") || "/api/books";
+
+  if (pathOnly === "/api/books/opds") {
+    try {
+      const books = await listShelfBooks(BOOKS_DIR);
+      const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "127.0.0.1:8080");
+      const proto = String(req.headers["x-forwarded-proto"] ?? "http");
+      const xml = opdsFeed(books, `${proto}://${host}`);
+      res.statusCode = 200;
+      res.setHeader("content-type", "application/atom+xml; charset=utf-8");
+      res.setHeader("cache-control", "no-store");
+      res.end(xml);
+    } catch (e) {
+      send(res, 200, { books: [], error: String(e) });
+    }
+    return;
+  }
+
+  if (pathOnly === "/api/books/shelf") {
+    try {
+      send(res, 200, { books: await listShelfBooks(BOOKS_DIR) });
+    } catch (e) {
+      send(res, 200, { books: [], error: String(e) });
+    }
+    return;
+  }
+
+  if (pathOnly === "/api/books/file") {
+    const id = u.searchParams.get("id") || "";
+    const filePath = resolveShelfPath(id, BOOKS_DIR);
+    if (!filePath || !existsSync(filePath)) {
+      send(res, 404, { ok: false, error: "File is not on this box." });
+      return;
+    }
+    try {
+      pipeBookFile(res, filePath);
+    } catch (e) {
+      send(res, 404, { ok: false, error: String(e) });
+    }
+    return;
+  }
+
+  if (pathOnly === "/api/books/fetch") {
+    const book = {
+      title: u.searchParams.get("title") || "Untitled",
+      author: u.searchParams.get("author") || "Unknown Author",
+      downloadUrl: u.searchParams.get("url") || "",
+    };
+    const result = await downloadLegalBook(book, BOOKS_DIR);
+    if (!result.ok || !result.path) {
+      send(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    try {
+      pipeBookFile(res, result.path);
+    } catch (e) {
+      send(res, 500, { ok: false, error: String(e) });
+    }
+    return;
+  }
+
+  if (pathOnly !== "/api/books") {
+    send(res, 404, { ok: false, error: "Unknown books path." });
+    return;
+  }
+
+  if (method === "GET") {
+    const q = u.searchParams.get("q")?.trim() || "";
+    try {
+      const data = await searchLegalBooks(q);
+      send(res, 200, data);
+    } catch (e) {
+      send(res, 200, { results: [], unavailable: [], error: String(e) });
+    }
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false, error: "GET search, GET file/fetch/shelf/opds, or POST grab" });
+    return;
+  }
+  const body = await readBody(req);
+  const book = body.book || body;
+  const result = await downloadLegalBook(book, BOOKS_DIR);
+  send(res, result.ok ? 200 : 400, result);
+}
+
 async function probeJson(url, ms = 3000) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
@@ -388,7 +487,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.18"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.51"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -1505,6 +1604,20 @@ async function handleIntent(req, res) {
   } else {
     spawnSync("docker", ["compose", "stop", "lidarr"], { cwd: compose, encoding: "utf8", timeout: 20000 });
   }
+  if (a.intent?.books) {
+    try {
+      mkdirSync("/srv/media/books", { recursive: true });
+    } catch {
+      /* */
+    }
+    spawnSync("docker", ["compose", "--profile", "books", "up", "-d", "kavita"], {
+      cwd: compose,
+      encoding: "utf8",
+      timeout: 60000,
+    });
+  } else {
+    spawnSync("docker", ["compose", "stop", "kavita"], { cwd: compose, encoding: "utf8", timeout: 20000 });
+  }
   send(res, 200, { ok: true, intent: a.intent });
 }
 
@@ -1774,6 +1887,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (intent.books) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") {
     p.push("jellyfin");
@@ -1799,6 +1913,7 @@ async function handleProvision(req, res) {
   try {
     mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
     mkdirSync(`${composeDir}/configs/decypharr`, { recursive: true });
+    if (a.intent?.books) mkdirSync("/srv/media/books", { recursive: true });
     seedJellyfinNetworkXml(composeDir);
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
     const profiles = composeProfiles(a).join(",");
@@ -2016,6 +2131,9 @@ export function reelosLookupPlugin() {
         try {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
           if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
+          if (pathOnly === "/api/books" || pathOnly.startsWith("/api/books/")) {
+            return void (await handleBooks(req, res));
+          }
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));

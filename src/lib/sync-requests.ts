@@ -6,6 +6,14 @@ export function isInFlightRequest(r: { status: string }): boolean {
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
+export function requestStatusWord(status: RequestStatus | string): string {
+  if (status === "available") return "Ready";
+  if (status === "downloading") return "Grabbing";
+  if (status === "waiting") return "Waiting";
+  if (status === "failed") return "Failed";
+  return String(status);
+}
+
 /** Movies: hide Request/Grabbing/Waiting once the title is available. TV/anime: hide only when this season is available. */
 export function showRequestQueueControls(opts: {
   kind: Kind;

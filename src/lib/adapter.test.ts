@@ -47,6 +47,10 @@ test("Discover search cards do not take request, progress, or Cached glow", () =
   assert.doesNotMatch(discover, /progress=\{/);
   assert.doesNotMatch(discover, /In progress/i);
   assert.doesNotMatch(discover, /Movies on this box/);
+  assert.doesNotMatch(discover, /Recently added/);
+  assert.doesNotMatch(discover, /hydrateShelf/);
+  assert.match(discover, /intent\.books/);
+  assert.match(discover, /to="\/books"/);
   assert.match(card, /showCache/);
   assert.match(adapter, /isLiveEngineTitleId/);
   assert.match(adapter, /tmdb-\|tvdb-\|jf-/);

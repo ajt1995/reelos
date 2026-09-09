@@ -6,6 +6,7 @@ function composeProfiles(answers: WizardAnswers): string[] {
   if (answers.intent.movies) p.push("movies");
   if (answers.intent.tv || answers.intent.anime) p.push("tv");
   if (answers.intent.music) p.push("music");
+  if (answers.intent.books) p.push("books");
   if (answers.intent.movies || answers.intent.tv || answers.intent.anime) p.push("subtitles");
   if (answers.frontend === "jellyfin" || answers.frontend === "both") {
     p.push("jellyfin");
@@ -31,6 +32,7 @@ export const provisionAppliance = createServerFn({ method: "POST" })
     const composeDir = path.join(root, "compose");
     fs.mkdirSync(stateDir, { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.join(composeDir, "configs", "decypharr"), { recursive: true });
+    if (answers.intent.books) fs.mkdirSync("/srv/media/books", { recursive: true });
     const answers = data.answers;
     fs.writeFileSync(path.join(stateDir, "answers.json"), JSON.stringify(answers, null, 2), { mode: 0o600 });
     const profiles = composeProfiles(answers).join(",");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HOSTNAME } from "@/lib/catalog";
 import {
@@ -24,6 +24,7 @@ export function LibraryPanel() {
             ["anime", "Anime"],
             ["kids", "Kids"],
             ["music", "Music"],
+            ["books", "Books"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -40,7 +41,11 @@ export function LibraryPanel() {
             }}
             className={cn(
               "h-9 rounded-full px-4 text-sm",
-              answers.intent[k] ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+              answers.intent[k]
+                ? k === "books"
+                  ? "bg-magenta/10 text-magenta shadow-[var(--shadow-magenta)]"
+                  : "bg-cyan/10 text-cyan shadow-[var(--shadow-cyan)]"
+                : "bg-card-2 text-muted",
             )}
           >
             {label}
@@ -181,5 +186,91 @@ export function NotesPanel() {
         />
       </label>
     </>
+  );
+}
+
+export function WatchReadPanel() {
+  const intent = useReelStore((s) => s.answers.intent);
+  const [box, setBox] = useState<{
+    ipv4?: string;
+    watch?: string;
+    tailscaleIp?: string | null;
+    tailscaleDns?: string | null;
+    tailscaleUp?: boolean;
+  }>({});
+  useEffect(() => {
+    void fetch("/api/box", { cache: "no-store" })
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            ipv4?: string;
+            watch?: string;
+            tailscaleIp?: string | null;
+            tailscaleDns?: string | null;
+            tailscaleUp?: boolean;
+          }>,
+      )
+      .then((b) => setBox(b))
+      .catch(() => {});
+  }, []);
+
+  const lan = box.ipv4 || HOSTNAME;
+  const jellyfin = box.watch || `http://${lan}:8096`;
+  const kavita = `http://${lan}:5000`;
+  const origin = typeof window !== "undefined" ? window.location.origin : `http://${lan}`;
+  const opds = `${origin}/api/books/opds`;
+  const away = box.tailscaleDns || box.tailscaleIp || null;
+  const awayJellyfin = away ? `http://${away}:8096` : null;
+
+  return (
+    <div className="space-y-4 text-sm text-muted">
+      <div>
+        <p className="font-display text-foreground">Movies and TV</p>
+        <p className="mt-1">
+          Request here. Watch in Jellyfin — phone browser or the Jellyfin app, same House user. LAN:{" "}
+          <a href={jellyfin} target="_blank" rel="noreferrer" className="font-mono text-xs text-cyan">
+            {jellyfin}
+          </a>
+          {awayJellyfin ? (
+            <>
+              . Away (Tailscale / MagicDNS):{" "}
+              <a href={awayJellyfin} target="_blank" rel="noreferrer" className="font-mono text-xs text-gold">
+                {awayJellyfin}
+              </a>
+            </>
+          ) : (
+            <>
+              . Away: enable Tailscale in Connect, then open Jellyfin on that host.
+            </>
+          )}
+        </p>
+      </div>
+      <div>
+        <p className="font-display text-foreground">Books</p>
+        <p className="mt-1">
+          Not TorBox. Not a ReelOS player. Download the file from the Books tab — the reader on this
+          phone opens it (Apple Books, Kindle, Drive). Files live in{" "}
+          <span className="font-mono text-xs text-magenta">/srv/media/books</span>
+          {intent.books ? (
+            <>
+              . Android OPDS:{" "}
+              <a href={opds} target="_blank" rel="noreferrer" className="font-mono text-xs text-magenta">
+                {opds}
+              </a>
+              . Optional library on the box:{" "}
+              <a href={kavita} target="_blank" rel="noreferrer" className="font-mono text-xs text-magenta">
+                {kavita}
+              </a>{" "}
+              or <span className="font-mono text-xs">/kavita</span>
+            </>
+          ) : (
+            <>
+              . Turn on Books in Library above to start Kavita.
+            </>
+          )}
+          .
+        </p>
+      </div>
+    </div>
   );
 }

@@ -36,6 +36,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: false,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -57,11 +58,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.18";
-export const SHIPPED_VERSION = "1.2.50.18";
+export const LATEST_VERSION = "1.2.51";
+export const SHIPPED_VERSION = "1.2.51";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.51: Tron-night phone chrome plus Books. Phone Download is a real file (epub/pdf/mobi) with Content-Disposition: attachment — the device reader opens it. Kavita is the box library, not a ReelOS player. Legal catalogs stay allowlisted in grab code. Movie/TV grab-path, Discover unowned Seerr, mailman, and Docker DNS unchanged.",
   "1.2.50.18: FUSE dumps named [Bitsearch.to] Show.S01… now relink into the Sonarr series folder, so a requested season can import without a tap. TV Requests say searching / linked / unmonitored instead of silent 0%. Library Items send MediaBrowser Token (JF 12 401 on X-Emby-Token alone). Complements #69 Discover. Not 1.2.51 (Tron #52).",
   "1.2.50.17: Discover browse is Seerr popular movies/shows this box does not have — not the Jellyfin shelf. Search still lookup. TorBox wizard ping sends a named User-Agent. Wait longer for Seerr first-run so Finish can login. Not 1.2.51 (Tron #52).",
   "1.2.50.16: Live *arr v4 lists Torznab YTS with enable=null (search flags on). Heal treated that as no indexer — MoviesSearch worked, Apply stayed heal_red. Count RSS/search flags. Complements #69 DNS + mailman. Not 1.2.51 (Tron #52).",
@@ -192,6 +194,7 @@ function logFor(id: string, label: string) {
     sonarr: "Root folder /srv/media/tv. Quality profile applied.",
     anime: "Anime-sane profile attached to Sonarr.",
     lidarr: "Root folder /srv/media/music.",
+    kavita: "Root folder /srv/media/books.",
     seerr: "Request UI linked. No setup screen left.",
     jellyfin: "Libraries published. Hardware transcode noted.",
     plex: "Claim accepted. Libraries published.",
@@ -221,6 +224,7 @@ export function buildPlan(answers: WizardAnswers): BuildStep[] {
   if (answers.intent.tv) steps.push({ id: "sonarr", label: "TV engine" });
   if (answers.intent.anime) steps.push({ id: "anime", label: "Anime profile" });
   if (answers.intent.music) steps.push({ id: "lidarr", label: "Music engine" });
+  if (answers.intent.books) steps.push({ id: "kavita", label: "Book library" });
   steps.push({ id: "seerr", label: "Request UI" });
   if (answers.frontend !== "plex") steps.push({ id: "jellyfin", label: "Jellyfin" });
   if (answers.frontend !== "jellyfin") steps.push({ id: "plex", label: "Plex" });
@@ -248,7 +252,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "RD-LAB-KEY-7F3A",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: false },
   quality: "hybrid",
   frontend: "jellyfin",
 };

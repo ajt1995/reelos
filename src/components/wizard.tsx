@@ -56,14 +56,14 @@ export function Wizard() {
   };
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-background">
+    <div className="tron-grid relative min-h-dvh overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-gold/10 blur-[90px]"
+        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-cyan/12 blur-[90px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-live/8 blur-[80px]"
+        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-magenta/10 blur-[80px]"
       />
       <header className="flex items-center justify-between px-6 py-5 md:px-10">
         <Wordmark markClassName="size-7" />
@@ -114,7 +114,7 @@ function canContinue(step: number, a: ReturnType<typeof useReelStore.getState>["
   }
   if (step === 3) {
     const i = a.intent;
-    return i.movies || i.tv || i.anime || i.kids || i.music;
+    return i.movies || i.tv || i.anime || i.kids || i.music || i.books;
   }
   if (step === 5) {
     if (a.frontend === "plex" || a.frontend === "both") return a.plexClaim.trim().length >= 4;
@@ -160,14 +160,14 @@ function Card({
       className={cn(
         "relative w-full rounded-2xl p-5 text-left transition-[box-shadow,background-color,transform] duration-150 ease-out",
         selected
-          ? "bg-gold/8 shadow-[var(--shadow-gold)]"
+          ? "bg-cyan/8 shadow-[var(--shadow-cyan)]"
           : "bg-card shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
         disabled && "opacity-45",
         className,
       )}
     >
       {selected ? (
-        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-gold text-gold-fg">
+        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-cyan text-background shadow-[var(--shadow-cyan)]">
           <Check className="size-3.5" strokeWidth={3} />
         </span>
       ) : null}
@@ -219,7 +219,7 @@ function StepStorage() {
         {options.map((o) => (
           <Card key={o.id} selected={mode === o.id} onClick={() => patch({ storageMode: o.id })}>
             <div className="flex gap-4 pr-8">
-              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-gold" : "text-muted")} />
+              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-cyan" : "text-muted")} />
               <div>
                 <p className="font-display text-lg font-medium">{o.title}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{o.body}</p>
@@ -352,7 +352,7 @@ function StepSource() {
               <span
                 className={cn(
                   "flex size-10 items-center justify-center rounded-lg font-display text-xs tracking-wide",
-                  answers.source === s.id ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+                  answers.source === s.id ? "bg-cyan/15 text-cyan shadow-[var(--shadow-cyan)]" : "bg-card-2 text-muted",
                 )}
               >
                 {s.mark}
@@ -377,7 +377,7 @@ function StepSource() {
                 className={cn(
                   "h-10 rounded-xl capitalize",
                   answers.vpnProvider === v
-                    ? "bg-gold text-gold-fg"
+                    ? "bg-cyan/10 text-cyan shadow-[var(--shadow-cyan)]"
                     : "bg-card text-muted shadow-[var(--shadow-border)]",
                 )}
               >
@@ -427,12 +427,13 @@ function StepIntent() {
     { key: "uhd", label: "4K" },
     { key: "kids", label: "Kids" },
     { key: "music", label: "Music" },
+    { key: "books", label: "Books" },
   ];
   return (
     <div>
       <Heading
         title="What are you collecting?"
-        sub="We only install engines you need. Movies and TV are on by default. Music never appears unless you ask."
+        sub="We only install engines you need. Movies and TV are on by default. Music and Books stay off unless you ask."
       />
       <div className="flex flex-wrap gap-2">
         {chips.map((c) => {
@@ -444,7 +445,11 @@ function StepIntent() {
               onClick={() => patchIntent({ [c.key]: !on })}
               className={cn(
                 "h-11 rounded-full px-5 text-sm font-medium transition-colors duration-150",
-                on ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
+                on
+                  ? c.key === "books"
+                    ? "bg-magenta/10 text-magenta shadow-[var(--shadow-magenta)]"
+                    : "bg-cyan/10 text-cyan shadow-[var(--shadow-cyan)]"
+                  : "bg-card text-muted shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
               )}
             >
               {c.label}

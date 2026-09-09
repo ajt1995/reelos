@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Bell,
+  BookOpen,
   ChevronRight,
   HardDrive,
   KeyRound,
@@ -25,6 +26,7 @@ import {
   NotesPanel,
   QualityPanel,
   UsersPanel,
+  WatchReadPanel,
 } from "@/components/settings-accordions";
 import { PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panels";
 import { SourcePanel } from "@/components/settings-source";
@@ -79,6 +81,15 @@ export function SettingsView() {
           onClick={() => setPanel(panel === "library" ? null : "library")}
         >
           <LibraryPanel />
+        </Row>
+        <Row
+          icon={BookOpen}
+          title="How to watch / read"
+          hint="Jellyfin for movies and TV. Download a file for books."
+          open={panel === "watch"}
+          onClick={() => setPanel(panel === "watch" ? null : "watch")}
+        >
+          <WatchReadPanel />
         </Row>
         <PwaRow />
         <PerformanceRow />

@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import type { BookResult } from "@/components/books-view";
+import { BooksShelfRow } from "@/components/books-view";
+import { FilterChip } from "@/components/chip";
+import { Page, PageTitle } from "@/components/page";
 import { TitleCard } from "@/components/title-card";
 import { useReelStore } from "@/lib/store";
 import type { Kind } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const TABS: { id: "all" | Kind; label: string }[] = [
   { id: "all", label: "All" },
@@ -15,15 +19,36 @@ const TABS: { id: "all" | Kind; label: string }[] = [
 
 export function LibraryView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
+  const [books, setBooks] = useState<BookResult[]>([]);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const items = useReelStore((s) => s.shelf);
   const err = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
   const intent = useReelStore((s) => s.answers.intent);
+  const booksOn = Boolean(intent.books);
 
   useEffect(() => {
     hydrateShelf();
   }, [hydrateShelf]);
+
+  useEffect(() => {
+    if (!booksOn) {
+      setBooks([]);
+      return;
+    }
+    let stop = false;
+    void fetch("/api/books/shelf", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ books?: BookResult[] }>)
+      .then((j) => {
+        if (!stop) setBooks(Array.isArray(j.books) ? j.books : []);
+      })
+      .catch(() => {
+        if (!stop) setBooks([]);
+      });
+    return () => {
+      stop = true;
+    };
+  }, [booksOn]);
 
   const shown = useMemo(
     () => items.filter((t) => (tab === "all" ? true : t.kind === tab)),
@@ -41,28 +66,29 @@ export function LibraryView() {
   });
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Library</h1>
-      <p className="mt-2 text-sm text-muted">What Jellyfin has. If it is not there, it is not on this row.</p>
+    <Page className="py-6 md:py-8">
+      <PageTitle sub="What Jellyfin has. If it is not there, it is not on this row. Books are files on disk — Download, not Watch.">
+        Library
+      </PageTitle>
       <div className="mt-6 flex flex-wrap gap-2">
         {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              tab === t.id ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
-            )}
-          >
+          <FilterChip key={t.id} active={tab === t.id} onClick={() => setTab(t.id)}>
             {t.label}
-          </button>
+          </FilterChip>
         ))}
+        {booksOn ? (
+          <Link
+            to="/books"
+            className="inline-flex h-9 items-center rounded-full px-4 text-sm text-magenta shadow-[var(--shadow-magenta)]"
+          >
+            Books
+          </Link>
+        ) : null}
       </div>
+      {booksOn && books.length > 0 ? <BooksShelfRow books={books} /> : null}
       {shown.length === 0 ? (
         <p className="mt-12 text-sm text-muted">
-          {err ??
-            (shelfReady ? "Nothing in Jellyfin yet. Request a title from Home." : "Loading library…")}
+          {err ?? (shelfReady ? "Nothing in Jellyfin yet. Request a title from Discover." : "Loading library…")}
         </p>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -71,6 +97,6 @@ export function LibraryView() {
           ))}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

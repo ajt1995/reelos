@@ -42,6 +42,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
   const patchSettings = useReelStore((s) => s.patchSettings);
   const openReelOS = useReelStore((s) => s.openReelOS);
+  const intent = useReelStore((s) => s.answers.intent);
   const [box, setBox] = useState<Box>(empty);
   const [away, setAway] = useState<"house" | "out" | null>(null);
   const [idxName, setIdxName] = useState("Indexer");
@@ -178,14 +179,47 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
         </div>
       </Card>
 
+      {intent.books ? (
+        <Card accent="magenta">
+          <div className="w-full">
+            <p className="font-display font-medium">Books</p>
+            <p className="mt-1 text-sm text-muted">
+              Download the file from the Books tab. The reader on this phone opens it. Android OPDS
+              readers can subscribe to{" "}
+              <span className="font-mono text-xs text-magenta">
+                {typeof window !== "undefined" ? `${window.location.origin}/api/books/opds` : "/api/books/opds"}
+              </span>
+              . Kavita on the box is optional.
+            </p>
+            {box.ipv4 ? (
+              <>
+                <p className="mt-4 break-all font-mono text-xl text-magenta">{`http://${box.ipv4}:5000`}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <a href="/books">
+                    <Button size="lg">Open Books</Button>
+                  </a>
+                  <a href={`http://${box.ipv4}:5000`} target="_blank" rel="noreferrer">
+                    <Button variant="ghost" size="lg">
+                      Kavita
+                    </Button>
+                  </a>
+                </div>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted">Waiting on LAN address.</p>
+            )}
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div className="w-full">
           <p className="font-display font-medium">Away from home</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant={away === "house" ? "default" : "ghost"} onClick={() => setAway("house")}>
+            <Button variant={away === "house" ? "gold" : "ghost"} onClick={() => setAway("house")}>
               Only this house
             </Button>
-            <Button variant={away === "out" ? "default" : "ghost"} onClick={() => setAway("out")}>
+            <Button variant={away === "out" ? "gold" : "ghost"} onClick={() => setAway("out")}>
               Also my phone when I'm out
             </Button>
           </div>
@@ -298,11 +332,12 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   );
 }
 
-function Card({ children, locked }: { children: React.ReactNode; locked?: boolean }) {
+function Card({ children, locked, accent }: { children: React.ReactNode; locked?: boolean; accent?: "magenta" }) {
   return (
     <div
       className={cn(
-        "mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]",
+        "mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4",
+        accent === "magenta" ? "shadow-[var(--shadow-magenta)]" : "shadow-[var(--shadow-border)]",
         locked && "opacity-50",
       )}
     >
