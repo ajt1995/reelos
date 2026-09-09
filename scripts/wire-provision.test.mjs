@@ -71,6 +71,7 @@ test("Finish /api/provision does not spawnSync compose pull on the Vite thread",
 
 test("Seerr bootstrap turns preventSearch off on an existing Radarr/Sonarr", () => {
   const part = read("daemon/wire-engines.parts/09.part");
+  assert.match(part, /Final ok must re-read post-apply rows/);
   assert.match(part, /def seerr_needs_search_enable/);
   assert.match(part, /def ensure_seerr_arr_service/);
   assert.match(part, /preventSearch": False/);

@@ -408,13 +408,22 @@ def enabled_indexer_names(rows) -> list[str]:
     return names
 
 
+def indexer_is_rss_only(ix: dict) -> bool:
+    """TorrentRss EZTV/ShowRSS cannot MoviesSearch or SeasonSearch, even with search flags on."""
+    if not isinstance(ix, dict):
+        return False
+    impl = str(ix.get("implementation") or "").lower()
+    name = str(ix.get("name") or "").lower()
+    return impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name
+
+
 def sonarr_indexer_kind(ix: dict) -> str:
     """search | rss | none — TorrentRss EZTV is not SeasonSearch."""
     if not isinstance(ix, dict) or not ix.get("enable"):
         return "none"
     name = str(ix.get("name") or "").lower()
     impl = str(ix.get("implementation") or "").lower()
-    if impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name:
+    if indexer_is_rss_only(ix):
         return "rss"
     cats: list = []
     for f in ix.get("fields") or []:
@@ -475,21 +484,61 @@ def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
     return listed, True
 
 
-def indexer_can_search(ix: dict) -> bool:
-    """Radarr MoviesSearch: enabled + automatic or interactive search on."""
+def radarr_indexer_kind(ix: dict) -> str:
+    """search | rss | none — TorrentRss EZTV is not MoviesSearch, even with search flags on."""
     if not isinstance(ix, dict) or not ix.get("enable"):
-        return False
-    if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
-        return False
-    return True
+        return "none"
+    name = str(ix.get("name") or "").lower()
+    impl = str(ix.get("implementation") or "").lower()
+    if indexer_is_rss_only(ix):
+        return "rss"
+    cats: list = []
+    for f in ix.get("fields") or []:
+        if not isinstance(f, dict):
+            continue
+        if f.get("name") in ("categories", "animeCategories"):
+            raw = f.get("value") or []
+            if isinstance(raw, list):
+                cats.extend(raw)
+    movie_cats = False
+    for c in cats:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 2000 <= n < 3000:
+            movie_cats = True
+            break
+    auto = ix.get("enableAutomaticSearch")
+    interactive = ix.get("enableInteractiveSearch")
+    if auto is False and interactive is False:
+        return "none"
+    if movie_cats or "yts" in name or "yify" in name or "tpb" in name or "pirate" in name or "1337" in name or impl in (
+        "thepiratebay",
+        "yts",
+        "cardigann",
+        "torznab",
+        "newznab",
+    ):
+        return "search"
+    return "none"
+
+
+def indexer_can_search(ix: dict) -> bool:
+    """Radarr MoviesSearch: a search-capable indexer, not RSS-only with flags flipped on."""
+    return radarr_indexer_kind(ix) == "search"
 
 
 def doctor_radarr_indexers_detail(rows) -> tuple[str, bool]:
     """Prowlarr-green is not a request hop. Radarr must have a search indexer."""
-    enabled = [ix for ix in (rows or []) if indexer_can_search(ix)]
+    enabled = [ix for ix in (rows or []) if isinstance(ix, dict) and ix.get("enable")]
     names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
+    kinds = [radarr_indexer_kind(ix) for ix in enabled]
     if not enabled:
         return "Radarr has no search indexer — MoviesSearch cannot land", False
+    if "search" not in kinds:
+        listed = ",".join(names) if names else "none"
+        return f"{listed} (RSS-only — MoviesSearch needs a search indexer)", False
     return ",".join(names), True
 
 
@@ -497,11 +546,7 @@ def indexer_is_search_source(ix: dict) -> bool:
     """Prowlarr indexer *arr can MoviesSearch/SeasonSearch through — not TorrentRss EZTV."""
     if not isinstance(ix, dict) or not ix.get("enable"):
         return False
-    impl = str(ix.get("implementation") or "").lower()
-    name = str(ix.get("name") or "").lower()
-    if impl == "torrentrssindexer" or "rss" in impl:
-        return False
-    if "eztv" in name or "showrss" in name:
+    if indexer_is_rss_only(ix):
         return False
     return True
 
@@ -529,6 +574,8 @@ def arr_search_flags(ix: dict) -> dict:
 
 def indexer_needs_search_enable(ix: dict) -> bool:
     if not isinstance(ix, dict) or ix.get("id") is None:
+        return False
+    if indexer_is_rss_only(ix):
         return False
     if ix.get("enable") is False:
         return True
@@ -816,6 +863,44 @@ def _self_test() -> int:
             self.assertFalse(muted_ok)
             self.assertIn("RSS-only", muted_detail)
             unknown, unknown_ok = doctor_sonarr_indexers_detail(
+                [{"enable": True, "name": "Mystery", "implementation": "Unknown", "fields": []}]
+            )
+            self.assertFalse(unknown_ok)
+
+        def test_radarr_rss_only_is_not_a_search_path(self):
+            rss = {
+                "enable": True,
+                "name": "ReelOS-eztv",
+                "implementation": "TorrentRssIndexer",
+                "enableAutomaticSearch": True,
+                "enableInteractiveSearch": True,
+                "fields": [{"name": "categories", "value": [8000]}],
+            }
+            yts = {
+                "enable": True,
+                "name": "ReelOS-yts",
+                "implementation": "Torznab",
+                "fields": [{"name": "categories", "value": [2000]}],
+            }
+            detail, good = doctor_radarr_indexers_detail([rss])
+            self.assertFalse(good)
+            self.assertIn("RSS-only", detail)
+            self.assertIn("ReelOS-eztv", detail)
+            self.assertFalse(indexer_can_search(rss))
+            self.assertEqual(radarr_indexer_kind(rss), "rss")
+            empty, empty_ok = doctor_radarr_indexers_detail([])
+            self.assertFalse(empty_ok)
+            self.assertIn("no search indexer", empty)
+            ok_detail, ok = doctor_radarr_indexers_detail([rss, yts])
+            self.assertTrue(ok)
+            self.assertIn("ReelOS-yts", ok_detail)
+            muted = dict(yts)
+            muted["enableAutomaticSearch"] = False
+            muted["enableInteractiveSearch"] = False
+            muted_detail, muted_ok = doctor_radarr_indexers_detail([rss, muted])
+            self.assertFalse(muted_ok)
+            self.assertIn("RSS-only", muted_detail)
+            unknown, unknown_ok = doctor_radarr_indexers_detail(
                 [{"enable": True, "name": "Mystery", "implementation": "Unknown", "fields": []}]
             )
             self.assertFalse(unknown_ok)

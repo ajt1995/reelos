@@ -56,6 +56,8 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /def ensure_indexers_and_sync/);
   assert.match(main, /def ensure_arr_search_indexers/);
   assert.match(main, /apply_arr_search_indexers/);
+  assert.match(main, /Final ok must re-read post-apply rows/);
+  assert.match(main, /read_arr_rows/);
   assert.match(main, /torznab/);
   assert.match(main, /widen_sonarr_hybrid/);
   assert.match(main, /research-missing/);
@@ -109,6 +111,7 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   assert.match(out, /test_empty_schema_still_posts_eztv_showrss/);
   assert.match(out, /test_sandbox_house_tpb_only_http_posts_eztv_showrss/);
   assert.match(out, /test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync/);
+  assert.match(out, /test_radarr_rss_only_is_not_a_search_path/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);
 });

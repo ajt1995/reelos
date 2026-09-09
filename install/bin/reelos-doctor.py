@@ -248,8 +248,17 @@ def _arr_json(url: str, key: str):
         return json.loads(resp.read().decode() or "[]")
 
 
+def _indexer_is_rss_only(ix: dict) -> bool:
+    impl = str(ix.get("implementation") or "").lower()
+    name = str(ix.get("name") or "").lower()
+    return impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name
+
+
 def _indexer_can_search(ix: dict) -> bool:
+    """Fail-closed on RSS-only. Search flags on EZTV/ShowRSS are not MoviesSearch."""
     if not isinstance(ix, dict) or not ix.get("enable"):
+        return False
+    if _indexer_is_rss_only(ix):
         return False
     if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
         return False
@@ -268,9 +277,15 @@ def request_hop_detail(*, radarr_up: bool, clients, indexers, lookup=None) -> tu
         return "request dead — Radarr", False
     if not _decypharr_client_ok(clients):
         return "Radarr has no Decypharr client — MoviesSearch cannot land", False
-    enabled = [ix for ix in (indexers or []) if _indexer_can_search(ix)]
-    if not enabled:
-        return "Radarr has no search indexer — MoviesSearch cannot land", False
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "doctor_radarr_indexers_detail", None):
+        _detail, ix_ok = mod.doctor_radarr_indexers_detail(indexers or [])
+        if not ix_ok:
+            return _detail, False
+    else:
+        enabled = [ix for ix in (indexers or []) if _indexer_can_search(ix)]
+        if not enabled:
+            return "Radarr has no search indexer — MoviesSearch cannot land", False
     if lookup is not None and not lookup_is_usable(lookup):
         return "Radarr movie lookup failed — add/search path dead", False
     return "Radarr accepts adds + search path", True
@@ -656,6 +671,32 @@ def _self_test() -> int:
             )
             self.assertFalse(muted_ok)
             self.assertIn("search indexer", muted)
+            rss_only, rss_ok = request_hop_detail(
+                radarr_up=True,
+                clients=[client],
+                indexers=[
+                    {
+                        "enable": True,
+                        "name": "ReelOS-eztv",
+                        "implementation": "TorrentRssIndexer",
+                        "enableAutomaticSearch": True,
+                        "enableInteractiveSearch": True,
+                    }
+                ],
+            )
+            self.assertFalse(rss_ok)
+            self.assertIn("RSS-only", rss_only)
+            self.assertFalse(
+                _indexer_can_search(
+                    {
+                        "enable": True,
+                        "name": "ReelOS-eztv",
+                        "implementation": "TorrentRssIndexer",
+                        "enableAutomaticSearch": True,
+                        "enableInteractiveSearch": True,
+                    }
+                )
+            )
             dead_lookup, dl_ok = request_hop_detail(
                 radarr_up=True,
                 clients=[client],

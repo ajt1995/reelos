@@ -207,15 +207,17 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
             log_wire(f"{name} indexer enable {e}")
             return False
 
-    arr_rows: list = []
-    for attempt in range(5):
+    def read_arr_rows() -> list:
         try:
-            arr_rows = call(f"{origin}/indexer", arr_key) or []
+            rows = call(f"{origin}/indexer", arr_key) or []
         except NET_ERR as e:
             log_wire(f"{name} indexer list {e}")
-            arr_rows = []
-        if not isinstance(arr_rows, list):
-            arr_rows = []
+            rows = []
+        return rows if isinstance(rows, list) else []
+
+    arr_rows: list = []
+    for attempt in range(5):
+        arr_rows = read_arr_rows()
         detail, good = mod.arr_search_indexers_ok(arr_rows, role)
         if good:
             log_wire(f"{name} search indexers {detail}")
@@ -223,8 +225,16 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         landed = mod.apply_arr_search_indexers(prow_rows, arr_rows, role, prow_key, post, put)
         if landed:
             log_wire(f"{name} attached {','.join(landed)}")
+            # Re-read immediately so a last-attempt attach is not judged on stale pre-apply rows.
+            arr_rows = read_arr_rows()
+            detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+            if good:
+                log_wire(f"{name} search indexers {detail}")
+                return True
         elif attempt < 4:
             time.sleep(0.4)
+    # Final ok must re-read post-apply rows, not stale pre-apply.
+    arr_rows = read_arr_rows()
     detail, good = mod.arr_search_indexers_ok(arr_rows, role)
     if not good:
         log_wire(f"{name} search indexers heal red {detail}")
