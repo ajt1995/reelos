@@ -62,10 +62,56 @@ def prowlarr_app_sync_level() -> str:
     return "fullSync"
 
 
+SONARR_SYNC_CATEGORIES = (5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 8000)
+RADARR_SYNC_CATEGORIES = (2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 8000)
+
+
+def prowlarr_sync_categories(name: str) -> tuple[int, ...] | None:
+    if name == "Sonarr":
+        return SONARR_SYNC_CATEGORIES
+    if name == "Radarr":
+        return RADARR_SYNC_CATEGORIES
+    return None
+
+
+def prowlarr_app_fields(name: str, fields) -> list[dict]:
+    """TorrentRss is 8000/Other. Radarr must opt into movie cats or YTS/TPB never land."""
+    out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
+    cats = prowlarr_sync_categories(name)
+    if not cats:
+        return out
+    hit = next((f for f in out if f.get("name") == "syncCategories"), None)
+    extra = (8000,) if name == "Sonarr" else cats
+    if hit is None:
+        out.append({"name": "syncCategories", "value": list(cats)})
+        return out
+    values = hit.get("value") if isinstance(hit.get("value"), list) else []
+    hit["value"] = list(dict.fromkeys([*values, *extra]))
+    return out
+
+
 def prowlarr_app_needs_update(app: dict | None) -> bool:
     if not app:
         return False
-    return str(app.get("syncLevel") or "") != prowlarr_app_sync_level()
+    if app.get("enable") is False:
+        return True
+    if str(app.get("syncLevel") or "") != prowlarr_app_sync_level():
+        return True
+    name = str(app.get("name") or "")
+    cats = prowlarr_sync_categories(name)
+    if not cats:
+        return False
+    fields = app.get("fields") or []
+    sync = next((f for f in fields if isinstance(f, dict) and f.get("name") == "syncCategories"), None)
+    have = sync.get("value") if sync and isinstance(sync.get("value"), list) else []
+    if name == "Sonarr":
+        return not sync or 8000 not in have
+    return not sync or not any(c in have for c in cats)
+
+
+def prowlarr_sync_command_body(name: str = "ApplicationIndexerSync") -> dict:
+    """Without forceSync, Prowlarr no-ops when it thinks *arr is already synced."""
+    return {"name": name, "forceSync": True}
 
 
 def schema_blob(schema: dict) -> str:
@@ -429,6 +475,147 @@ def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
     return listed, True
 
 
+def indexer_can_search(ix: dict) -> bool:
+    """Radarr MoviesSearch: enabled + automatic or interactive search on."""
+    if not isinstance(ix, dict) or not ix.get("enable"):
+        return False
+    if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
+        return False
+    return True
+
+
+def doctor_radarr_indexers_detail(rows) -> tuple[str, bool]:
+    """Prowlarr-green is not a request hop. Radarr must have a search indexer."""
+    enabled = [ix for ix in (rows or []) if indexer_can_search(ix)]
+    names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
+    if not enabled:
+        return "Radarr has no search indexer — MoviesSearch cannot land", False
+    return ",".join(names), True
+
+
+def indexer_is_search_source(ix: dict) -> bool:
+    """Prowlarr indexer *arr can MoviesSearch/SeasonSearch through — not TorrentRss EZTV."""
+    if not isinstance(ix, dict) or not ix.get("enable"):
+        return False
+    impl = str(ix.get("implementation") or "").lower()
+    name = str(ix.get("name") or "").lower()
+    if impl == "torrentrssindexer" or "rss" in impl:
+        return False
+    if "eztv" in name or "showrss" in name:
+        return False
+    return True
+
+
+def indexer_matches_role(ix: dict, role: str) -> bool:
+    name = str(ix.get("name") or "")
+    for n, _hints, r in PUBLIC_INDEXERS:
+        if n == name:
+            return r == role or r == "both"
+    if role == "movie":
+        return "yts" in name.lower() or "yify" in name.lower() or "tpb" in name.lower() or "1337" in name.lower()
+    if role == "tv":
+        return "tpb" in name.lower() or "1337" in name.lower() or "pirate" in name.lower()
+    return True
+
+
+def arr_search_flags(ix: dict) -> dict:
+    body = dict(ix)
+    body["enable"] = True
+    body["enableRss"] = True
+    body["enableAutomaticSearch"] = True
+    body["enableInteractiveSearch"] = True
+    return body
+
+
+def indexer_needs_search_enable(ix: dict) -> bool:
+    if not isinstance(ix, dict) or ix.get("id") is None:
+        return False
+    if ix.get("enable") is False:
+        return True
+    if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
+        return True
+    return False
+
+
+def torznab_indexer_body(name: str, base_url: str, api_key: str, categories) -> dict:
+    return {
+        "enable": True,
+        "enableRss": True,
+        "enableAutomaticSearch": True,
+        "enableInteractiveSearch": True,
+        "priority": 25,
+        "name": name,
+        "protocol": "torrent",
+        "implementation": "Torznab",
+        "implementationName": "Torznab",
+        "configContract": "TorznabSettings",
+        "fields": [
+            {"name": "baseUrl", "value": base_url},
+            {"name": "apiPath", "value": "/api"},
+            {"name": "apiKey", "value": api_key},
+            {"name": "categories", "value": list(categories or [])},
+        ],
+    }
+
+
+def prowlarr_torznab_base(indexer_id) -> str:
+    return f"http://prowlarr:9696/{int(indexer_id)}/"
+
+
+def role_categories(role: str) -> list[int]:
+    if role == "movie":
+        return list(RADARR_SYNC_CATEGORIES)
+    return list(SONARR_SYNC_CATEGORIES)
+
+
+def plan_arr_indexer_enable(arr_rows) -> list[dict]:
+    return [arr_search_flags(ix) for ix in (arr_rows or []) if indexer_needs_search_enable(ix)]
+
+
+def plan_arr_indexer_attach(prowlarr_rows, arr_rows, role: str, prow_key: str) -> list[dict]:
+    """Torznab clones of searchable Prowlarr indexers missing on *arr."""
+    have = {str(ix.get("name") or "") for ix in (arr_rows or []) if isinstance(ix, dict) and ix.get("name")}
+    out = []
+    cats = role_categories(role)
+    for ix in prowlarr_rows if isinstance(prowlarr_rows, list) else []:
+        if not indexer_is_search_source(ix) or not indexer_matches_role(ix, role):
+            continue
+        name = str(ix.get("name") or "").strip()
+        iid = ix.get("id")
+        if not name or iid is None or name in have:
+            continue
+        out.append(torznab_indexer_body(name, prowlarr_torznab_base(iid), prow_key, cats))
+        have.add(name)
+    return out
+
+
+def apply_arr_search_indexers(prowlarr_rows, arr_rows, role: str, prow_key: str, post, put) -> list[str]:
+    """Enable existing *arr indexers and POST missing searchable Torznab clones.
+
+    post(name, body) -> bool. put(id, body) -> bool.
+    """
+    landed: list[str] = []
+    for body in plan_arr_indexer_enable(arr_rows):
+        iid = body.get("id")
+        if iid is None:
+            continue
+        if put(iid, body):
+            n = str(body.get("name") or "")
+            if n:
+                landed.append(n)
+    for body in plan_arr_indexer_attach(prowlarr_rows, arr_rows, role, prow_key):
+        name = str(body.get("name") or "")
+        if post(name, body):
+            landed.append(name)
+    return landed
+
+
+def arr_search_indexers_ok(arr_rows, role: str) -> tuple[str, bool]:
+    if role == "movie":
+        return doctor_radarr_indexers_detail(arr_rows)
+    return doctor_sonarr_indexers_detail(arr_rows)
+
+
 def hybrid_quality_should_allow(name: str) -> bool:
     """Wizard hybrid = 1080p / 4K when available. EZTV is typically 720p WEB-DL."""
     n = str(name or "").lower().replace(" ", "").replace("-", "").replace("_", "")
@@ -550,7 +737,20 @@ def _self_test() -> int:
         def test_prowlarr_sonarr_sync_is_full(self):
             self.assertEqual(prowlarr_app_sync_level(), "fullSync")
             self.assertTrue(prowlarr_app_needs_update({"name": "Sonarr", "syncLevel": "addOnly"}))
-            self.assertFalse(prowlarr_app_needs_update({"name": "Sonarr", "syncLevel": "fullSync"}))
+            self.assertTrue(prowlarr_app_needs_update({"name": "Radarr", "syncLevel": "fullSync", "enable": False}))
+            sonarr_ok = {
+                "name": "Sonarr",
+                "syncLevel": "fullSync",
+                "enable": True,
+                "fields": [{"name": "syncCategories", "value": [5000, 8000]}],
+            }
+            self.assertFalse(prowlarr_app_needs_update(sonarr_ok))
+            self.assertEqual(prowlarr_sync_command_body()["forceSync"], True)
+            radarr_fields = prowlarr_app_fields("Radarr", [])
+            cats = next(f["value"] for f in radarr_fields if f["name"] == "syncCategories")
+            self.assertIn(2000, cats)
+            self.assertIn(8000, cats)
+            self.assertTrue(prowlarr_app_needs_update({"name": "Radarr", "syncLevel": "fullSync", "fields": []}))
 
         def test_no_cardigann_schema_uses_torrent_rss_fallback(self):
             plan = pick_add_plan("ReelOS-eztv", ("eztv",), list(HOUSE_TPB_YTS_SCHEMAS))
@@ -619,6 +819,70 @@ def _self_test() -> int:
                 [{"enable": True, "name": "Mystery", "implementation": "Unknown", "fields": []}]
             )
             self.assertFalse(unknown_ok)
+
+        def test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync(self):
+            prow = [
+                {"id": 1, "name": "ReelOS-tpb", "enable": True, "implementation": "ThePirateBay"},
+                {"id": 2, "name": "ReelOS-yts", "enable": True, "implementation": "YTS"},
+                {
+                    "id": 3,
+                    "name": "ReelOS-eztv",
+                    "enable": True,
+                    "implementation": "TorrentRssIndexer",
+                },
+            ]
+            radarr_have = [
+                {
+                    "id": 11,
+                    "name": "ReelOS-yts",
+                    "enable": True,
+                    "implementation": "Torznab",
+                    "enableAutomaticSearch": False,
+                    "enableInteractiveSearch": False,
+                }
+            ]
+            sonarr_have = []
+            radarr_puts, radarr_posts, sonarr_posts = [], [], []
+
+            def radarr_put(iid, body):
+                radarr_puts.append((iid, body))
+                return True
+
+            def radarr_post(name, body):
+                radarr_posts.append(body)
+                return True
+
+            def sonarr_post(name, body):
+                sonarr_posts.append(body)
+                return True
+
+            apply_arr_search_indexers(prow, radarr_have, "movie", "prow-key", radarr_post, radarr_put)
+            apply_arr_search_indexers(prow, sonarr_have, "tv", "prow-key", sonarr_post, lambda *_a: True)
+            self.assertEqual(radarr_puts[0][0], 11)
+            self.assertTrue(radarr_puts[0][1]["enableAutomaticSearch"])
+            radarr_names = [b["name"] for b in radarr_posts]
+            self.assertIn("ReelOS-tpb", radarr_names)
+            self.assertNotIn("ReelOS-yts", radarr_names)
+            self.assertNotIn("ReelOS-eztv", radarr_names)
+            tpb = next(b for b in radarr_posts if b["name"] == "ReelOS-tpb")
+            self.assertEqual(tpb["implementation"], "Torznab")
+            self.assertTrue(tpb["enableAutomaticSearch"])
+            self.assertEqual(tpb["fields"][0]["value"], "http://prowlarr:9696/1/")
+            sonarr_names = [b["name"] for b in sonarr_posts]
+            self.assertIn("ReelOS-tpb", sonarr_names)
+            self.assertNotIn("ReelOS-yts", sonarr_names)
+            self.assertNotIn("ReelOS-eztv", sonarr_names)
+            enabled_radarr = [arr_search_flags(radarr_have[0]), tpb]
+            detail, ok = doctor_radarr_indexers_detail(enabled_radarr)
+            self.assertTrue(ok, detail)
+            self.assertIn("ReelOS-tpb", detail)
+            sonarr_landed = sonarr_posts
+            s_detail, s_ok = doctor_sonarr_indexers_detail(sonarr_landed)
+            self.assertTrue(s_ok, s_detail)
+            self.assertIn("ReelOS-tpb", s_detail)
+            empty, empty_ok = doctor_radarr_indexers_detail([])
+            self.assertFalse(empty_ok)
+            self.assertIn("no search indexer", empty)
 
         def test_doctor_lists_all_and_fails_when_tv_publics_missing(self):
             detail, ok = doctor_releases_detail(["ReelOS-tpb"])

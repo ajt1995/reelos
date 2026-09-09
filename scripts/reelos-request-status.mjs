@@ -420,12 +420,31 @@ export function pickRadarrRootPath(roots) {
   return String(prefer?.path || rows[0]?.path || "/symlinks/radarr");
 }
 
-/** Seerr 200 but Radarr never got the movie (National Treasure). Lookup + add, then MoviesSearch. */
+export function radarrLookupUrls(tmdb) {
+  const id = encodeURIComponent(String(tmdb));
+  return [
+    `http://127.0.0.1:7878/api/v3/movie/lookup/tmdb?tmdbId=${id}`,
+    `http://127.0.0.1:7878/api/v3/movie/lookup?term=${encodeURIComponent(`tmdb:${tmdb}`)}`,
+  ];
+}
+
+export function pickRadarrLookupMovie(hits, tmdb) {
+  if (Array.isArray(hits)) {
+    return hits.find((m) => String(m?.tmdbId) === String(tmdb)) || hits[0] || null;
+  }
+  if (hits && typeof hits === "object" && !hits.empty && (hits.tmdbId != null || hits.title)) return hits;
+  return null;
+}
+
+/** Seerr 200 but Radarr never got the movie (National Treasure). Lookup/tmdb + add, then MoviesSearch. */
 export async function addRadarrMovie({ fetchArr = arrJson, radarrKey, tmdb } = {}) {
   if (!radarrKey || tmdb == null) return null;
-  const term = encodeURIComponent(`tmdb:${tmdb}`);
-  const hits = await fetchArr(`http://127.0.0.1:7878/api/v3/movie/lookup?term=${term}`, radarrKey);
-  const movie = Array.isArray(hits) ? hits[0] : hits;
+  let movie = null;
+  for (const url of radarrLookupUrls(tmdb)) {
+    const hits = await fetchArr(url, radarrKey);
+    movie = pickRadarrLookupMovie(hits, tmdb);
+    if (movie) break;
+  }
   if (!movie || typeof movie !== "object") return null;
   const roots = await fetchArr("http://127.0.0.1:7878/api/v3/rootfolder", radarrKey);
   const profiles = await fetchArr("http://127.0.0.1:7878/api/v3/qualityprofile", radarrKey);
@@ -433,18 +452,24 @@ export async function addRadarrMovie({ fetchArr = arrJson, radarrKey, tmdb } = {
   const fb = pickFallbackProfile(rows, movie.qualityProfileId);
   const profileId = fb.id != null ? fb.id : rows[0]?.id;
   if (profileId == null) return null;
+  const { id: _dropId, ...rest } = movie;
   const body = {
-    ...movie,
+    ...rest,
+    tmdbId: Number(tmdb),
     qualityProfileId: profileId,
     rootFolderPath: pickRadarrRootPath(roots),
     monitored: true,
     minimumAvailability: movie.minimumAvailability || "released",
-    addOptions: { searchForMovie: false },
+    addOptions: { searchForMovie: false, monitor: "movieOnly" },
   };
-  return fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey, 15000, {
+  const created = await fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey, 15000, {
     method: "POST",
     body,
   });
+  if (created?.id) return created;
+  const again = await fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey);
+  const hit = (Array.isArray(again) ? again : []).find((m) => String(m?.tmdbId) === String(tmdb));
+  return hit || created;
 }
 
 export async function kickArrRecover({

@@ -26,14 +26,26 @@ def ensure_indexers_and_sync() -> int:
     intent = a.get("intent") or {}
     radarr_key = wait_key(COMPOSE / "configs" / "radarr" / "config.xml") if intent.get("movies", True) else None
     sonarr_key = wait_key(COMPOSE / "configs" / "sonarr" / "config.xml") if intent.get("tv") or intent.get("anime") else None
+    rc_sync = True
     try:
         if radarr_key:
             ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
         if sonarr_key:
             ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
         sync_prowlarr_apps(prow_key)
+        if radarr_key and not ensure_arr_search_indexers(
+            "Radarr", "http://127.0.0.1:7878/api/v3", radarr_key, prow_key, "movie"
+        ):
+            rc_sync = False
+        if sonarr_key and not ensure_arr_search_indexers(
+            "Sonarr", "http://127.0.0.1:8989/api/v3", sonarr_key, prow_key, "tv"
+        ):
+            rc_sync = False
+        if not rc_sync:
+            log_wire("prowlarr fullSync did not land search indexers on *arr")
     except Exception as e:
         log_wire(f"prowlarr sync {type(e).__name__} {e}")
+        rc_sync = False
     try:
         widen_sonarr_hybrid()
     except Exception as e:
@@ -42,7 +54,7 @@ def ensure_indexers_and_sync() -> int:
         widen_radarr_hybrid()
     except Exception as e:
         log_wire(f"radarr hybrid {type(e).__name__} {e}")
-    rc = 0
+    rc = 0 if rc_sync else 1
     try:
         jf_token = jellyfin_token()
         frontend = (a.get("frontend") or "jellyfin")
@@ -159,6 +171,66 @@ def widen_radarr_hybrid() -> None:
         except NET_ERR as e:
             log_wire(f"radarr hybrid profile {e}")
         return
+
+
+def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: str, role: str) -> bool:
+    """After ApplicationIndexerSync: enable search flags, then Torznab-attach if *arr is still empty."""
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "apply_arr_search_indexers", None):
+        log_wire(f"{name} search indexers skip — no public_indexers")
+        return False
+    try:
+        prow_rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"{name} prow list {e}")
+        prow_rows = []
+
+    def post(ix_name, body):
+        try:
+            call(f"{origin}/indexer", arr_key, method="POST", body=body)
+            log_wire(f"{name} torznab {ix_name}")
+            return True
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"{name} torznab {ix_name} {e.code}: {err}")
+            return e.code == 400 and ix_name.lower() in err.lower()
+        except NET_ERR as e:
+            log_wire(f"{name} torznab {ix_name} {e}")
+            return False
+
+    def put(iid, body):
+        try:
+            call(f"{origin}/indexer/{iid}", arr_key, method="PUT", body=body)
+            log_wire(f"{name} indexer {body.get('name')} search enabled")
+            return True
+        except NET_ERR as e:
+            log_wire(f"{name} indexer enable {e}")
+            return False
+
+    arr_rows: list = []
+    for attempt in range(5):
+        try:
+            arr_rows = call(f"{origin}/indexer", arr_key) or []
+        except NET_ERR as e:
+            log_wire(f"{name} indexer list {e}")
+            arr_rows = []
+        if not isinstance(arr_rows, list):
+            arr_rows = []
+        detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+        if good:
+            log_wire(f"{name} search indexers {detail}")
+            return True
+        landed = mod.apply_arr_search_indexers(prow_rows, arr_rows, role, prow_key, post, put)
+        if landed:
+            log_wire(f"{name} attached {','.join(landed)}")
+        elif attempt < 4:
+            time.sleep(0.4)
+    detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+    if not good:
+        log_wire(f"{name} search indexers heal red {detail}")
+    else:
+        log_wire(f"{name} search indexers {detail}")
+    return good
 
 
 def research_missing_after_indexers() -> None:

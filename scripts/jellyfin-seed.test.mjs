@@ -39,7 +39,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
       encoding: "utf8",
     });
     assert.equal(r.status, 0, `${rel} compile\n${r.stderr}`);
-    assert.match(code, /Authorization.*MediaBrowser Client="ReelOS".*DeviceId="reelos"/);
+    assert.match(code, /MediaBrowser Client="ReelOS".*DeviceId="reelos"/);
+    assert.match(code, /def jellyfin_headers/);
+    assert.match(code, /Token=/);
     assert.match(code, /reveal_jellyfin_admin/);
     assert.match(code, /IsHidden/);
     assert.match(code, /seed_jellyfin_network_xml/);

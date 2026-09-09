@@ -611,9 +611,10 @@ test("kickArrRecover adds National Treasure when Seerr requested but Radarr is e
     fetchArr: async (url, _key, _ms, opts = {}) => {
       const method = opts.method || "GET";
       calls.push({ method, url, body: opts.body });
-      if (String(url).includes("lookup")) {
-        return [{ tmdbId: 2059, title: "National Treasure", year: 2004, titleSlug: "national-treasure-2059" }];
+      if (String(url).includes("/movie/lookup/tmdb")) {
+        return { tmdbId: 2059, title: "National Treasure", year: 2004, titleSlug: "national-treasure-2059" };
       }
+      if (String(url).includes("/movie/lookup")) return [];
       if (String(url).includes("/rootfolder")) return [{ path: "/symlinks/radarr" }];
       if (String(url).includes("/qualityprofile") && method === "GET") {
         return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
@@ -647,6 +648,7 @@ test("kickArrRecover adds National Treasure when Seerr requested but Radarr is e
   assert.equal(add?.body?.tmdbId, 2059);
   assert.equal(add?.body?.rootFolderPath, "/symlinks/radarr");
   assert.equal(add?.body?.addOptions?.searchForMovie, false);
+  assert.ok(calls.some((c) => String(c.url).includes("/movie/lookup/tmdb?tmdbId=2059")));
   const search = calls.find((c) => c.url.includes("/command"));
   assert.equal(search?.body?.name, "MoviesSearch");
 });
