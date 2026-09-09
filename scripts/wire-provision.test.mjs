@@ -71,6 +71,8 @@ test("heal pulls wire-engines.parts, not only the shim", () => {
   for (const rel of ["install/bin/reelos-heal.sh", "daemon/reelos-heal.sh"]) {
     const src = read(rel);
     assert.match(src, /wire-engines\.parts\/\$i\.part/);
+    assert.match(src, /relink_dumps\.py/);
+    assert.match(src, /stuck-downloads\.py/);
   }
 });
 

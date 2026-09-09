@@ -10,7 +10,12 @@ import {
   findExistingSeasonRequest,
   pickSeerrRequestForTitle,
   honestifyRequests,
+  assembleRequestPayload,
   mapSeerrStatus,
+  mergeUnfinishedRows,
+  missingArrRequests,
+  seerrAvailableIsGhost,
+  seerrMediaGhostRows,
   parseTitleId,
   realSeasonNumbers,
   seasonCount,
@@ -76,6 +81,10 @@ test("Seerr media/request status maps onto the phone pills", () => {
   assert.equal(mapSeerrStatus(4, 2), "grabbing");
   assert.equal(mapSeerrStatus(2, 1), "queued");
   assert.equal(mapSeerrStatus(1, 4), "failed");
+  assert.equal(mapSeerrStatus(5, 2, 3), "grabbing");
+  assert.equal(mapSeerrStatus(5, 2, 5), "downloaded");
+  assert.equal(mapSeerrStatus(4, 2, 5), "downloaded");
+  assert.equal(mapSeerrStatus(4, 2, 3), "grabbing");
 });
 
 test("request rows survive Apply because they come from Seerr ids", () => {
@@ -330,6 +339,233 @@ test("library presence beats a stuck-failed movie", () => {
   assert.equal(honest[0].progress, 100);
 });
 
+test("series AVAILABLE does not close a season Seerr still lists as processing", () => {
+  const row = seerrRequestRow(
+    {
+      id: 4,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: {
+        tmdbId: 1402,
+        status: 5,
+        seasons: [
+          { seasonNumber: 1, status: 3 },
+          { seasonNumber: 2, status: 5 },
+        ],
+      },
+    },
+    {},
+  );
+  assert.equal(row.status, "downloading");
+  assert.equal(row.progress, 0);
+});
+
+test("ghost Seerr AVAILABLE + Sonarr season files=0 stays downloading", () => {
+  const row = seerrRequestRow(
+    {
+      id: 4,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1402, status: 5 },
+    },
+    {},
+  );
+  assert.equal(row.status, "available");
+  const arrIndex = buildArrIndex({
+    series: [{ tmdbId: 1402, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 0 } }] }],
+  });
+  assert.equal(seerrAvailableIsGhost(row, { arrIndex, arrReady: true }), true);
+  const honest = honestifyRequests([row], { arrIndex, arrReady: true });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].progress, 0);
+});
+
+test("movie Available still wins when the JF shelf has the title", () => {
+  const row = seerrRequestRow(
+    {
+      id: 2,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 1593, status: 5 },
+    },
+    {},
+  );
+  const honest = honestifyRequests([row], {
+    libraryTitles: [{ id: "tmdb-1593", kind: "movie" }],
+    arrReady: true,
+    arrIndex: buildArrIndex({ movies: [{ tmdbId: 1593, hasFile: false }] }),
+  });
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].progress, 100);
+});
+
+test("empty series synthesizes only the first missing season, not S02–S11", () => {
+  const extras = missingArrRequests([
+    {
+      id: 9,
+      tmdbId: 1402,
+      monitored: true,
+      statistics: { episodeFileCount: 0 },
+      seasons: [
+        { seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } },
+        { seasonNumber: 2, monitored: true, statistics: { episodeFileCount: 0 } },
+      ],
+    },
+  ]);
+  assert.equal(extras.length, 1);
+  assert.equal(extras[0].season, 1);
+});
+
+test("partial series still lists a later missing season", () => {
+  const extras = missingArrRequests([
+    {
+      id: 9,
+      tmdbId: 1402,
+      monitored: true,
+      statistics: { episodeFileCount: 6 },
+      seasons: [
+        { seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 6 } },
+        { seasonNumber: 2, monitored: true, statistics: { episodeFileCount: 0 } },
+      ],
+    },
+  ]);
+  assert.equal(extras.length, 1);
+  assert.equal(extras[0].season, 2);
+});
+
+test("empty Seerr list still shows unfinished TWD from Sonarr", () => {
+  const extras = missingArrRequests(
+    [
+      {
+        id: 9,
+        title: "The Walking Dead",
+        tmdbId: 1402,
+        added: "2026-09-09T01:00:00.000Z",
+        monitored: true,
+        seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } }],
+      },
+    ],
+    [{ id: 1, title: "Night at the Museum", tmdbId: 1593, hasFile: true }],
+  );
+  assert.equal(extras.length, 1);
+  assert.equal(extras[0].titleId, "tmdb-tv-1402");
+  assert.equal(extras[0].season, 1);
+  const merged = mergeUnfinishedRows([], extras, {
+    libraryTitles: [{ id: "tmdb-1593", kind: "movie" }],
+    arrIndex: buildArrIndex({
+      movies: [{ tmdbId: 1593, hasFile: true }],
+      series: [{ tmdbId: 1402, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 0 } }] }],
+    }),
+    arrReady: true,
+  });
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].status, "downloading");
+  assert.equal(merged[0].titleId, "tmdb-tv-1402");
+});
+
+test("empty Seerr + Museum already in library does not invent an Available request", () => {
+  const extras = missingArrRequests(
+    [],
+    [{ id: 1, title: "Night at the Museum", tmdbId: 1593, hasFile: false, monitored: true }],
+  );
+  const merged = mergeUnfinishedRows([], extras, {
+    libraryTitles: [{ id: "tmdb-1593", kind: "movie" }],
+    arrReady: true,
+    arrIndex: buildArrIndex({ movies: [{ tmdbId: 1593, hasFile: false }] }),
+  });
+  assert.equal(merged.length, 0);
+});
+
+test("duplicate collapse still prefers a done sibling after extras merge", () => {
+  const seerr = seerrRequestRow(
+    {
+      id: 3,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T01:00:00.000Z",
+      updatedAt: "2026-09-09T01:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1402, status: 3 },
+    },
+    {},
+  );
+  const extras = missingArrRequests([
+    {
+      id: 9,
+      tmdbId: 1402,
+      monitored: true,
+      seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 6 } }],
+    },
+  ]);
+  const merged = mergeUnfinishedRows([seerr], extras, {
+    arrReady: true,
+    arrIndex: buildArrIndex({
+      series: [{ tmdbId: 1402, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 6 } }] }],
+    }),
+  });
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].status, "available");
+  assert.equal(merged[0].progress, 100);
+});
+
+test("Seerr media ghost (request list empty, media still processing) becomes a row", () => {
+  const ghosts = seerrMediaGhostRows([
+    {
+      id: 7,
+      mediaType: "tv",
+      tmdbId: 1402,
+      status: 3,
+      seasons: [{ seasonNumber: 1, status: 3 }],
+      createdAt: "2026-09-09T01:00:00.000Z",
+      updatedAt: "2026-09-09T01:00:00.000Z",
+    },
+  ]);
+  assert.equal(ghosts.length, 1);
+  assert.equal(ghosts[0].titleId, "tmdb-tv-1402");
+  assert.equal(ghosts[0].season, 1);
+  assert.equal(ghosts[0].status, "downloading");
+});
+
+test("assembleRequestPayload exposes pipeline counts for HTTP house hops", () => {
+  const assembled = assembleRequestPayload(
+    [],
+    {
+      series: [
+        {
+          id: 9,
+          tmdbId: 1402,
+          title: "The Walking Dead",
+          monitored: true,
+          seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } }],
+        },
+      ],
+      movies: [],
+      torrents: [{ name: "The.Walking.Dead.S01", category: "sonarr", hash: "aa" }],
+      dumps: { sonarr: [], radarr: ["Night at the Museum"] },
+      catalog: ["The.Walking.Dead.S01.2010.2160p.WEB-DL", "Night.at.the.Museum.2006"],
+      arrReady: true,
+      arrIndex: buildArrIndex({
+        series: [{ tmdbId: 1402, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 0 } }] }],
+      }),
+    },
+    [],
+  );
+  assert.equal(assembled.requests.length, 1);
+  assert.equal(assembled.pipeline.seerr, 0);
+  assert.equal(assembled.pipeline.sonarrMissing.length, 1);
+  assert.equal(assembled.pipeline.dumps.sonarr, 0);
+  assert.equal(assembled.pipeline.fuseTv, 1);
+  assert.equal(assembled.pipeline.decypharr, 1);
+});
+
 test("by-id request pick is season-scoped, not reqs[0]", () => {
   const media = { tmdbId: 1402, status: 3, mediaType: "tv" };
   const reqs = [
@@ -355,11 +591,15 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   const progress = readFileSync(join(root, "scripts/reelos-request-progress-plugin.mjs"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
   const seerr = readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8");
-  assert.match(progress, /honestifyRequests/);
+  assert.match(progress, /assembleRequestPayload/);
   assert.match(progress, /loadPresenceFacts/);
-  assert.match(lookup, /honestifyRequests/);
+  assert.match(progress, /recover/);
+  assert.match(lookup, /assembleRequestPayload/);
+  assert.match(lookup, /kickTvSeasonRecover/);
+  assert.match(lookup, /seerr reuse/);
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
+  assert.match(seerr, /Ghost: Seerr AVAILABLE/);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {

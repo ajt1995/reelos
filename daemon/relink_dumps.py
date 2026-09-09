@@ -130,6 +130,26 @@ def match_catalog(dump_name: str, catalog: dict[str, Path]) -> Path | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def decide_missing_action(
+    *,
+    has_files: bool,
+    dump_has_media: bool,
+    has_catalog_hit: bool,
+    has_torrent: bool,
+    torrent_complete: bool,
+) -> str:
+    """ignore | import | relink | wait | search — used by stuck-downloads for 0-file seasons."""
+    if has_files:
+        return "ignore"
+    if dump_has_media:
+        return "import"
+    if has_catalog_hit or (has_torrent and torrent_complete):
+        return "relink"
+    if has_torrent and not torrent_complete:
+        return "wait"
+    return "search"
+
+
 def relink_dumps(
     *,
     all_root: Path,
@@ -324,6 +344,44 @@ def _self_test() -> int:
             )
             self.assertIn("thewalkingdead", wanted["sonarr"])
             self.assertEqual(classify_pack("The.Walking.Dead.2010.2160p", wanted), "sonarr")
+
+        def test_decide_missing_empty_symlink_relinks_then_searches(self):
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=True, dump_has_media=False, has_catalog_hit=False, has_torrent=False, torrent_complete=False
+                ),
+                "ignore",
+            )
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=False, dump_has_media=True, has_catalog_hit=False, has_torrent=False, torrent_complete=False
+                ),
+                "import",
+            )
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=False, dump_has_media=False, has_catalog_hit=True, has_torrent=False, torrent_complete=False
+                ),
+                "relink",
+            )
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=False, dump_has_media=False, has_catalog_hit=False, has_torrent=True, torrent_complete=True
+                ),
+                "relink",
+            )
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=False, dump_has_media=False, has_catalog_hit=False, has_torrent=True, torrent_complete=False
+                ),
+                "wait",
+            )
+            self.assertEqual(
+                decide_missing_action(
+                    has_files=False, dump_has_media=False, has_catalog_hit=False, has_torrent=False, torrent_complete=False
+                ),
+                "search",
+            )
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Relink)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

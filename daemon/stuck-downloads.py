@@ -26,6 +26,7 @@ DECYPHARR = "http://127.0.0.1:8282"
 STUCK_ZERO_SEC = int(os.environ.get("REELOS_STUCK_DOWNLOAD_SEC", "900"))
 STUCK_SYMLINK_SEC = int(os.environ.get("REELOS_STUCK_SYMLINK_SEC", "180"))
 IMPORT_RETRY_SEC = int(os.environ.get("REELOS_IMPORT_RETRY_SEC", "90"))
+SEARCH_INTERVAL_SEC = int(os.environ.get("REELOS_MISSING_SEARCH_SEC", "900"))
 FUSE_RESTART_BACKOFF = 300
 MEDIA_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts", ".iso"}
 
@@ -738,6 +739,137 @@ def kick_import() -> None:
         log(f"import {type(e).__name__} {e}")
 
 
+def _load_relink_mod():
+    import importlib.util
+
+    for raw in (
+        Path(__file__).resolve().with_name("relink_dumps.py"),
+        Path("/opt/reelos/bin/relink_dumps.py"),
+        Path("/opt/reelos/daemon/relink_dumps.py"),
+    ):
+        if not raw.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_relink_dumps", raw)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+def _catalog_paths() -> dict:
+    root = Path("/mnt/debrid/__all__")
+    try:
+        return {p.name.lower(): p for p in root.iterdir()}
+    except OSError:
+        return {}
+
+
+def _dump_has_media(mod, category: str, title: str) -> bool:
+    stem = mod.relink_stem(title) if mod else ""
+    if len(stem) < 8:
+        return False
+    for root in (Path(f"/mnt/symlinks/{category}"), Path(f"/symlinks/{category}")):
+        try:
+            kids = list(root.iterdir())
+        except OSError:
+            continue
+        for dump in kids:
+            if not mod.stems_equal(mod.relink_stem(dump.name), stem):
+                continue
+            if getattr(mod, "dump_has_media", None) and mod.dump_has_media(dump):
+                return True
+            if path_is_readable(str(dump)):
+                return True
+    return False
+
+
+def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
+    """Empty sonarr dumps + 0 files: relink from FUSE or SeasonSearch. No TorBox re-add spam."""
+    if app["name"] != "sonarr":
+        return False
+    mod = _load_relink_mod()
+    if mod is None:
+        return False
+    try:
+        series = call(f"{app['base']}/series", key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(series, list):
+        return False
+    catalog = _catalog_paths()
+    searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
+    now = time.time()
+    kicked = False
+    for s in series:
+        if not isinstance(s, dict) or not s.get("id"):
+            continue
+        title = str(s.get("title") or "")
+        for season in s.get("seasons") or []:
+            if not isinstance(season, dict):
+                continue
+            try:
+                n = int(season.get("seasonNumber"))
+            except (TypeError, ValueError):
+                continue
+            if n <= 0:
+                continue
+            stats = season.get("statistics") if isinstance(season.get("statistics"), dict) else {}
+            try:
+                files = int(stats.get("episodeFileCount") or 0)
+            except (TypeError, ValueError):
+                files = 0
+            if files > 0 or season.get("monitored") is False or s.get("monitored") is False:
+                continue
+            hit = mod.match_catalog(title, catalog) if catalog else None
+            has_torrent = False
+            torrent_complete = False
+            for t in torrents or []:
+                if not isinstance(t, dict):
+                    continue
+                tname = str(t.get("name") or t.get("title") or "")
+                if hit and hit.name.lower() in tname.lower():
+                    has_torrent = True
+                    torrent_complete = debrid_complete(t)
+                    break
+                if title and title.lower() in tname.lower():
+                    has_torrent = True
+                    torrent_complete = debrid_complete(t)
+                    break
+            action = mod.decide_missing_action(
+                has_files=False,
+                dump_has_media=_dump_has_media(mod, "sonarr", title),
+                has_catalog_hit=bool(hit),
+                has_torrent=has_torrent,
+                torrent_complete=torrent_complete,
+            )
+            sk = f"missing:{s['id']}:s{n}"
+            if action == "relink":
+                log(f"sonarr recover empty-symlink {title} S{n:02d} — create dump from FUSE")
+                kicked = True
+            elif action == "import":
+                log(f"sonarr recover dump-present {title} S{n:02d} — ManualImport")
+                kicked = True
+            elif action == "search":
+                last = float(searched.get(sk) or 0)
+                if now - last < SEARCH_INTERVAL_SEC:
+                    continue
+                try:
+                    call(
+                        f"{app['base']}/command",
+                        key,
+                        method="POST",
+                        body={"name": "SeasonSearch", "seriesId": int(s["id"]), "seasonNumber": n},
+                    )
+                    log(f"sonarr SeasonSearch {title} S{n:02d} — no FUSE/cache hit")
+                    searched[sk] = now
+                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+                    log(f"sonarr SeasonSearch {title} {type(e).__name__} {e}")
+    state["searched"] = searched
+    return kicked
+
+
 def movie_id_of(item: dict) -> int | None:
     raw = item.get("movieId")
     if raw:
@@ -985,6 +1117,13 @@ def sweep() -> int:
                 "recoverAt": prev.get("recoverAt"),
                 "retryAt": prev.get("retryAt"),
             }
+
+    for app in APPS:
+        key = api_key(app["xml"])
+        if not key:
+            continue
+        if recover_missing_series(app, key, torrents, state):
+            recover = True
 
     if recover:
         kick_import()
@@ -1407,6 +1546,13 @@ def _self_test() -> int:
             self.assertIn("_sonarr_manual_import", src)
             self.assertIn("sonarr_manual_import.py", src)
             self.assertIn('elif app["name"] == "sonarr"', src)
+
+        def test_empty_symlink_recovery_is_wired(self):
+            src = Path(__file__).read_text()
+            self.assertIn("recover_missing_series", src)
+            self.assertIn("relink_dumps.py", src)
+            self.assertIn("SeasonSearch", src)
+            self.assertIn("empty-symlink", src)
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

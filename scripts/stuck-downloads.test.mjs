@@ -19,6 +19,11 @@ test("lock-clients timer invokes the stuck-download sweep after the client lock"
   const daemon = readFileSync(join(root, "daemon/lock-download-clients.py"), "utf8");
   assert.match(lock, /stuck-downloads\.py/);
   assert.match(daemon, /stuck-downloads\.py/);
+  assert.match(lock, /removeCompletedDownloads": False/);
+  const r = spawnSync("python3", [join(root, "install/bin/lock-download-clients.py"), "--self-test"], {
+    encoding: "utf8",
+  });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
 });
 
 test("daemon stuck-downloads stays twin with install/bin", () => {

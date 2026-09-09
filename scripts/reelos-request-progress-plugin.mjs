@@ -1,6 +1,15 @@
 /** GET /api/request — Seerr + library + *arr hasFile. Registered before lookup. */
-import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit, honestifyRequests, pickSeerrRequestForTitle } from "./reelos-seerr.mjs";
-import { loadPresenceFacts } from "./reelos-request-status.mjs";
+import {
+  parseTitleId,
+  seerrApiKey,
+  seerrFetch,
+  seerrRequestRow,
+  seerrSearchHit,
+  honestifyRequests,
+  pickSeerrRequestForTitle,
+  assembleRequestPayload,
+} from "./reelos-seerr.mjs";
+import { kickTvSeasonRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -21,7 +30,33 @@ function mediaFromDetail(json) {
   return json?.mediaInfo || json?.media || null;
 }
 
-async function handleList(res) {
+async function maybeRecover(u, facts) {
+  const flag = String(u.searchParams.get("recover") || "");
+  if (flag !== "1" && flag !== "true") return null;
+  const missing = (facts?.series || []).flatMap((s) => {
+    const tmdb = s?.tmdbId;
+    if (tmdb == null) return [];
+    const out = [];
+    for (const season of s.seasons || []) {
+      const n = Number(season?.seasonNumber);
+      const files = Number(season?.statistics?.episodeFileCount || 0);
+      if (!Number.isFinite(n) || n <= 0 || files > 0) continue;
+      if (season?.monitored === false || s.monitored === false) continue;
+      out.push({ tmdb, season: n });
+    }
+    return out.length ? [out[0]] : [];
+  });
+  const kicks = [];
+  for (const m of missing) {
+    kicks.push(await kickTvSeasonRecover({ tmdb: m.tmdb, season: m.season }));
+  }
+  if (!kicks.length) {
+    kicks.push(await kickTvSeasonRecover({}));
+  }
+  return { recover: true, kicks };
+}
+
+async function handleList(res, recoverNote = null) {
   const key = seerrApiKey();
   if (!key) {
     send(res, 200, { requests: [], titles: [], error: "Seerr has no API key yet" });
@@ -61,11 +96,20 @@ async function handleList(res) {
       }
     }
     const facts = await loadPresenceFacts();
-    const honest = honestifyRequests(requests, { ...facts, seerrMediaByTitleId });
+    let mediaItems = [];
+    try {
+      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 12000 });
+      mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
+    } catch {
+      mediaItems = [];
+    }
+    const assembled = assembleRequestPayload(requests, { ...facts, seerrMediaByTitleId }, mediaItems);
     send(res, 200, {
-      requests: honest,
+      requests: assembled.requests,
       titles: details.map((d) => d?.hit).filter(Boolean),
       engine: "seerr",
+      pipeline: assembled.pipeline,
+      ...(recoverNote ? { recover: recoverNote } : {}),
     });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
@@ -76,7 +120,9 @@ async function handleGet(req, res) {
   const u = new URL(req.url || "/", "http://reelos.local");
   const id = requestIdFromQuery(u);
   if (!id) {
-    return handleList(res);
+    const facts = await loadPresenceFacts();
+    const recoverNote = await maybeRecover(u, facts);
+    return handleList(res, recoverNote);
   }
   const key = seerrApiKey();
   if (!key) {

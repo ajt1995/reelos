@@ -81,6 +81,9 @@ export function mapSeerrStatus(mediaStatus, requestStatus, seasonStatus) {
   if (r === 4 || r === 3) return "failed";
   const season = Number(seasonStatus || 0);
   if (season === 5) return "downloaded";
+  // A requested season still processing/partial/pending is not closed by series AVAILABLE.
+  if (season === 3 || season === 4) return "grabbing";
+  if (season === 1 || season === 2) return "queued";
   const m = Number(mediaStatus || 0);
   if (m === 5) return "downloaded";
   const effective = season || m;
@@ -164,29 +167,70 @@ export function arrHasFile(row, index) {
   return false;
 }
 
+export function isTvSeasonRow(row) {
+  if (!row?.titleId) return false;
+  const parsed = parseTitleId(row.titleId);
+  return parsed?.mediaType === "tv" && row.season != null;
+}
+
+/** Seerr AVAILABLE is a ghost when *arr is up and this movie/season has no file. */
+export function seerrAvailableIsGhost(row, { arrIndex = null, arrReady = false, libraryTitles = [] } = {}) {
+  if (!row) return false;
+  if (libraryHit(row, libraryTitles)) return false;
+  if (arrHasFile(row, arrIndex)) return false;
+  if (!arrReady || !arrIndex) return false;
+  const parsed = parseTitleId(row.titleId);
+  if (!parsed) return false;
+  if (parsed.mediaType === "movie") return true;
+  if (parsed.mediaType === "tv" && row.season != null) return true;
+  return false;
+}
+
+function demoteGhost(row) {
+  return {
+    ...row,
+    status: "downloading",
+    engine: "grabbing",
+    progress: 0,
+    reason: undefined,
+  };
+}
+
 /**
  * Honest request status, no fake %:
  * 1. Seerr declined/failed → failed
- * 2. Seerr media or requested-season AVAILABLE (5) → available
+ * 2. Seerr media or requested-season AVAILABLE (5) → available *if* JF/*arr agree (or *arr is down)
  * 3. Jellyfin library hit (movie TMDB) → available
  * 4. Radarr hasFile / Sonarr season episodeFileCount > 0 → available
  * 5. Else processing/partial → downloading at progress 0
  * 6. Else pending/approved → waiting
  * Same titleId+season collapses to one row; a done sibling upgrades the rest.
+ * Ghost: Seerr AVAILABLE + Sonarr season files=0 stays downloading (TWD after empty symlink).
  */
-export function overlayPresence(rows, { libraryTitles = [], arrIndex = null, seerrMediaByTitleId = null } = {}) {
+export function overlayPresence(
+  rows,
+  { libraryTitles = [], arrIndex = null, seerrMediaByTitleId = null, arrReady = false } = {},
+) {
   const mediaOf = (row) => {
     if (!seerrMediaByTitleId) return null;
     if (typeof seerrMediaByTitleId.get === "function") return seerrMediaByTitleId.get(row.titleId) || null;
     return seerrMediaByTitleId[row.titleId] || null;
   };
+  const facts = { arrIndex, arrReady, libraryTitles };
   return (rows || []).map((row) => {
     if (!row) return row;
-    if (row.status === "available" || row.engine === "downloaded") return markAvailable(row);
+    if (row.status === "available" || row.engine === "downloaded") {
+      if (seerrAvailableIsGhost(row, facts)) return demoteGhost(row);
+      return markAvailable(row);
+    }
     const media = mediaOf(row);
     if (media) {
       const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
-      if (engine === "downloaded") return markAvailable(row);
+      if (engine === "downloaded") {
+        const promoted = markAvailable(row);
+        if (seerrAvailableIsGhost(promoted, facts)) return demoteGhost(row);
+        return promoted;
+      }
     }
     if (libraryHit(row, libraryTitles)) return markAvailable(row);
     if (arrHasFile(row, arrIndex)) return markAvailable(row);
@@ -221,6 +265,232 @@ export function reconcileRequestRows(rows) {
 
 export function honestifyRequests(rows, facts = {}) {
   return reconcileRequestRows(overlayPresence(rows, facts));
+}
+
+export function looksLikeTvName(name) {
+  return /(?:[Ss]\d{1,2}|[Ss]eason[\s._-]*\d)/.test(String(name || ""));
+}
+
+export function missingArrRequests(series = [], movies = []) {
+  const rows = [];
+  for (const s of series || []) {
+    const tmdb = s?.tmdbId;
+    if (tmdb == null) continue;
+    const added = Date.parse(s.added) || 0;
+    const candidates = [];
+    for (const season of s.seasons || []) {
+      const n = Number(season?.seasonNumber);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const files = Number(season?.statistics?.episodeFileCount || 0);
+      const monitored = season?.monitored !== false && s.monitored !== false;
+      if (files > 0 || !monitored) continue;
+      candidates.push(n);
+    }
+    const totalFiles = Number(s.statistics?.episodeFileCount || 0);
+    // Whole show empty (TWD after wipe): only the first missing season — do not invent S02–S11.
+    const emit = totalFiles > 0 ? candidates : candidates.slice(0, 1);
+    for (const n of emit) {
+      rows.push({
+        id: `sonarr-${s.id}-s${n}`,
+        titleId: titleIdFor("tv", tmdb),
+        status: "downloading",
+        progress: 0,
+        season: n,
+        createdAt: added,
+        updatedAt: added || Date.now(),
+        requester: "house",
+        tmdb,
+        mediaType: "tv",
+        engine: "grabbing",
+        source: "sonarr-missing",
+      });
+    }
+  }
+  for (const m of movies || []) {
+    if (!m || m.tmdbId == null) continue;
+    if (m.monitored === false) continue;
+    const files = Number(m.statistics?.movieFileCount || 0);
+    if (m.hasFile === true || files > 0) continue;
+    const added = Date.parse(m.added) || 0;
+    rows.push({
+      id: `radarr-${m.id}`,
+      titleId: titleIdFor("movie", m.tmdbId),
+      status: "downloading",
+      progress: 0,
+      createdAt: added,
+      updatedAt: added || Date.now(),
+      requester: "house",
+      tmdb: m.tmdbId,
+      mediaType: "movie",
+      engine: "grabbing",
+      source: "radarr-missing",
+    });
+  }
+  return rows;
+}
+
+export function seerrMediaGhostRows(mediaItems = []) {
+  const rows = [];
+  for (const media of mediaItems || []) {
+    const mediaType = media?.mediaType === "tv" ? "tv" : media?.mediaType === "movie" ? "movie" : null;
+    const tmdb = media?.tmdbId;
+    if (!mediaType || tmdb == null) continue;
+    const titleId = titleIdFor(mediaType, tmdb);
+    if (mediaType === "tv") {
+      const seasons = Array.isArray(media.seasons) ? media.seasons : [];
+      const unfinished = seasons.filter((s) => {
+        const n = Number(s?.seasonNumber);
+        const st = Number(s?.status || 0);
+        return Number.isFinite(n) && n > 0 && st !== 5 && st !== 0;
+      });
+      const targets = unfinished.length
+        ? unfinished
+        : Number(media.status) === 3 || Number(media.status) === 4
+          ? [{ seasonNumber: undefined, status: media.status }]
+          : [];
+      for (const s of targets) {
+        const season = s.seasonNumber == null ? undefined : Number(s.seasonNumber);
+        const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, season));
+        if (engine === "downloaded") continue;
+        rows.push({
+          id: `seerr-media-${media.id || tmdb}${season != null ? `-s${season}` : ""}`,
+          titleId,
+          status: engine === "failed" ? "failed" : engine === "queued" ? "waiting" : "downloading",
+          progress: 0,
+          season,
+          createdAt: Date.parse(media.createdAt) || Date.now(),
+          updatedAt: Date.parse(media.updatedAt) || Date.now(),
+          requester: "house",
+          tmdb,
+          mediaType,
+          engine: engine === "unknown" ? "grabbing" : engine,
+          source: "seerr-media",
+        });
+      }
+      continue;
+    }
+    const engine = mapSeerrStatus(media.status, null, 0);
+    if (engine === "downloaded") continue;
+    if (engine === "unknown") continue;
+    rows.push({
+      id: `seerr-media-${media.id || tmdb}`,
+      titleId,
+      status: engine === "failed" ? "failed" : engine === "queued" ? "waiting" : "downloading",
+      progress: 0,
+      createdAt: Date.parse(media.createdAt) || Date.now(),
+      updatedAt: Date.parse(media.updatedAt) || Date.now(),
+      requester: "house",
+      tmdb,
+      mediaType,
+      engine,
+      source: "seerr-media",
+    });
+  }
+  return rows;
+}
+
+export function torrentRequests(torrents = [], { series = [], movies = [] } = {}) {
+  const rows = [];
+  const byStem = new Map();
+  for (const s of series || []) {
+    const stem = String(s?.title || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    if (stem.length >= 8 && s.tmdbId != null) byStem.set(stem, { mediaType: "tv", tmdb: s.tmdbId, title: s.title, id: s.id });
+  }
+  for (const m of movies || []) {
+    const stem = String(m?.title || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    if (stem.length >= 8 && m.tmdbId != null) byStem.set(stem, { mediaType: "movie", tmdb: m.tmdbId, title: m.title, id: m.id });
+  }
+  for (const t of torrents || []) {
+    const name = String(t?.name || t?.title || "");
+    if (!name) continue;
+    const stem = name.toLowerCase().replace(/[^a-z0-9]+/g, "").split(/(?:19|20)\d{2}|2160p|1080p|720p|webdl/)[0];
+    let hit = null;
+    if (stem.length >= 8) {
+      for (const [k, v] of byStem) {
+        if (k === stem || (stem.startsWith(k) && k.length >= 8) || (k.startsWith(stem) && stem.length >= 8)) {
+          hit = v;
+          break;
+        }
+      }
+    }
+    const cat = String(t?.category || "").toLowerCase();
+    const tv = cat === "sonarr" || looksLikeTvName(name) || hit?.mediaType === "tv";
+    if (!hit) continue;
+    const hash = String(t.hash || t.infohash || t.infoHash || "").toLowerCase() || name;
+    rows.push({
+      id: `debrid-${hash.slice(0, 16)}`,
+      titleId: titleIdFor(hit.mediaType, hit.tmdb),
+      status: "downloading",
+      progress: 0,
+      season: tv && looksLikeTvName(name) ? Number((name.match(/[Ss](\d{1,2})/) || [])[1] || 0) || undefined : undefined,
+      createdAt: Number(t.added_on || t.completion_on || 0) * (Number(t.added_on) > 1e12 ? 1 : 1000) || Date.now(),
+      updatedAt: Date.now(),
+      requester: "house",
+      tmdb: hit.tmdb,
+      mediaType: hit.mediaType,
+      engine: "grabbing",
+      source: "decypharr",
+    });
+  }
+  return rows;
+}
+
+export function buildPipeline({
+  seerrRows = [],
+  series = [],
+  movies = [],
+  torrents = [],
+  dumps = {},
+  catalog = [],
+} = {}) {
+  const missing = missingArrRequests(series, movies);
+  const fuseTv = (catalog || []).filter(looksLikeTvName);
+  return {
+    seerr: (seerrRows || []).length,
+    sonarrMissing: missing
+      .filter((r) => r.mediaType === "tv")
+      .map((r) => ({ titleId: r.titleId, season: r.season })),
+    radarrMissing: missing.filter((r) => r.mediaType === "movie").map((r) => r.titleId),
+    dumps: {
+      sonarr: Array.isArray(dumps.sonarr) ? dumps.sonarr.length : dumps.sonarr ?? -1,
+      radarr: Array.isArray(dumps.radarr) ? dumps.radarr.length : dumps.radarr ?? -1,
+    },
+    fuse: Array.isArray(catalog) ? catalog.length : -1,
+    fuseTv: fuseTv.length,
+    decypharr: (torrents || []).length,
+  };
+}
+
+export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
+  const seerrKeys = new Set((seerrRows || []).map((r) => requestMatchKey(r)).filter(Boolean));
+  const honest = honestifyRequests([...(seerrRows || []), ...(extras || [])], facts);
+  // Do not invent a Requests row for a title that is already on the shelf when Seerr dropped it.
+  return honest.filter(
+    (r) => seerrKeys.has(requestMatchKey(r)) || (r.status !== "available" && r.engine !== "downloaded"),
+  );
+}
+
+export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
+  const extras = [
+    ...missingArrRequests(facts.series, facts.movies),
+    ...seerrMediaGhostRows(mediaItems),
+    ...torrentRequests(facts.torrents, { series: facts.series, movies: facts.movies }),
+  ];
+  return {
+    requests: mergeUnfinishedRows(seerrRows, extras, facts),
+    pipeline: buildPipeline({
+      seerrRows,
+      series: facts.series,
+      movies: facts.movies,
+      torrents: facts.torrents,
+      dumps: facts.dumps,
+      catalog: facts.catalog,
+    }),
+  };
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
