@@ -272,6 +272,10 @@ async function main() {
   await page.waitForTimeout(900);
   await shot(page, "discover-typeahead.png");
 
+  await page.goto(`${ORIGIN}/requests`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(700);
+  await shot(page, "requests.png");
+
   await page.goto(`${ORIGIN}/books?q=Dracula`, { waitUntil: "networkidle" });
   await page.waitForTimeout(900);
   await shot(page, "books.png");

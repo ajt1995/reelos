@@ -9,7 +9,7 @@ Hal. **2026-09-09.** Named stamp **1.2.51** (Tron UI + Discover + legal Books). 
 3. Owner phone: Settings → Check → Apply.
 4. Proof:
    - Phone chrome is Tron-night (cyan/magenta/neon-gold on black). Home / Discover / Library / Requests / Settings / title share the system.
-   - Discover idle shows Seerr trending/popular (or an honest Seerr error) plus in-progress requests and recently added. Search hits `/api/lookup` in typeahead (no duplicate Results row); a Books group in the same bar hops to `/books?q=`. Request still season-by-season for TV.
+   - Discover idle shows Seerr trending/popular (or an honest Seerr error) plus recently added. Active grabs live on **Requests** only — not Discover. Search hits `/api/lookup` in typeahead (no duplicate Results row); a Books group in the same bar hops to `/books?q=`. Request still season-by-season for TV.
    - Books tab search returns real catalog rows; Add writes under `/srv/media/books`. Kavita on `:5000` / `/kavita`.
    - Stack from **1.2.50** stays: Home/Library lean `/api/library`. Finish does not wedge `:8080`. `/api/box` Jellyfin **green**. Cached TorBox grab imports when FUSE is readable (`retry import`). Host `ls /mnt/debrid` is not enough — *arr containers must also list (rslave / `reelos-mnt-rshared.service`). Search hop red is OK.
 

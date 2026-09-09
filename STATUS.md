@@ -16,7 +16,7 @@ Rebased onto **1.2.50** `main` (PR #51). Stack overlay / FUSE rslave / importPen
 Idle Discover was a pretty empty room if Jellyfin had nothing. That fails this stamp.
 
 1. **Search** still hits live `GET /api/lookup?q=` (Seerr `/api/v1/search`). Typeahead is the primary hit list (no duplicate Results row). Kind filter `movie|tv` is passed through. Tap opens `/title/$id`. Request is the existing `/api/request` path (Seerr/*arr). No fake %. A small **Books** group in the same typeahead hops to `/books?q=` (legal catalogs only).
-2. **Idle rows** from `GET /api/discover`: Seerr `/discover/trending`, `/discover/movies`, `/discover/tv`, plus in-progress requests and recently added shelf. Honest error if Seerr has no key. Idle shelves stay visible while typing.
+2. **Idle rows** from `GET /api/discover`: Seerr `/discover/trending`, `/discover/movies`, `/discover/tv`, plus recently added shelf. No in-progress / transferring row — that lives on **Requests** only. Honest error if Seerr has no key. Idle shelves stay visible while typing.
 3. **TV seasons** on the title page stay one-season-per-tap (`Request Sxx`). Unchanged contract.
 
 ## Books (legal only)
@@ -32,7 +32,7 @@ Folded the useful bits of #40 (Kavita compose, wizard chip, Connect card) and #4
 
 Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on `#03060c`). Page enter, card hover glow, live chips. `prefers-reduced-motion` kills motion. Contrast kept readable (cool white + `#8aa3b8` muted).
 
-Design dialect after polish: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Row labels: magenta **In progress**, gold **Continue**, cyan otherwise. Home after provision says “On the shelf”, not the install slogan. `.tron-grid` breathes via `grid-breathe` (reduced-motion off). Phone header Settings gear has title + cyan glow.
+Design dialect after polish: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Row labels: magenta **In progress** (Requests only), gold **Continue** (Home), cyan otherwise. Discover idle has no active-request chrome. Home after provision says “On the shelf”, not the install slogan. `.tron-grid` breathes via `grid-breathe` (reduced-motion off). Phone header Settings gear has title + cyan glow.
 
 ## Stack kept from 1.2.50
 

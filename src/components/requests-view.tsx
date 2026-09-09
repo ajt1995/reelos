@@ -3,11 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
+import { isInFlightRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { RequestStatus } from "@/lib/types";
 import { formatWhen } from "@/lib/utils";
 import { FilterChip } from "@/components/chip";
 import { Page, PageTitle } from "@/components/page";
+import { Row, TitleCard } from "@/components/title-card";
 import { Button } from "@/components/ui/button";
 
 const FILTERS: { id: "all" | RequestStatus; label: string }[] = [
@@ -26,12 +28,21 @@ export function RequestsView() {
   useSyncRequests();
 
   const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
+  const inFlight = requests.filter(isInFlightRequest);
 
   return (
     <Page className="py-6 md:py-8">
       <PageTitle sub="Household asks. Status comes from Seerr / *arr — no fake percent.">
         Requests
       </PageTitle>
+      {inFlight.length > 0 ? (
+        <Row label="In progress" tone="magenta">
+          {inFlight.map((r) => {
+            const t = getTitle(r.titleId);
+            return t ? <TitleCard key={r.id} title={t} request={r} /> : null;
+          })}
+        </Row>
+      ) : null}
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <FilterChip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)}>
