@@ -8,6 +8,7 @@ import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
+import { showRequestQueueControls } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
 
 export function TitleView({ id }: { id: string }) {
@@ -192,42 +193,48 @@ export function TitleView({ id }: { id: string }) {
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
-            ) : request?.status === "downloading" ? (
-              <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
-                {typeof request.progress === "number" && request.progress > 0
-                  ? `Grabbing · ${Math.round(request.progress)}%`
-                  : request.via === "cache"
-                    ? "Cache hit · importing"
-                    : "Grabbing"}
-              </span>
-            ) : request?.status === "waiting" || engineStatus === "queued" ? (
-              <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">
-                {request?.via === "uncached" ? "No cache · looking for a transfer" : "Waiting for a release"}
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="lg"
-                disabled={
-                  (resolved.kind === "tv" || resolved.kind === "anime") && seasonNumbers.length === 0
-                }
-                onClick={() => {
-                  requestTitle(
-                    resolved.id,
-                    resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
-                  );
-                  sendRequest({
-                    titleId: resolved.id,
-                    season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
-                  });
-                }}
-              >
-                <Plus className="size-4" />
-                {resolved.kind === "tv" || resolved.kind === "anime"
-                  ? `Request S${String(season).padStart(2, "0")}`
-                  : "Request"}
-              </Button>
-            )}
+            ) : showRequestQueueControls({
+                kind: resolved.kind,
+                available,
+                requestStatus: request?.status,
+              }) ? (
+              request?.status === "downloading" ? (
+                <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
+                  {typeof request.progress === "number" && request.progress > 0
+                    ? `Grabbing · ${Math.round(request.progress)}%`
+                    : request.via === "cache"
+                      ? "Cache hit · importing"
+                      : "Grabbing"}
+                </span>
+              ) : request?.status === "waiting" || engineStatus === "queued" ? (
+                <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">
+                  {request?.via === "uncached" ? "No cache · looking for a transfer" : "Waiting for a release"}
+                </span>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  disabled={
+                    (resolved.kind === "tv" || resolved.kind === "anime") && seasonNumbers.length === 0
+                  }
+                  onClick={() => {
+                    requestTitle(
+                      resolved.id,
+                      resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                    );
+                    sendRequest({
+                      titleId: resolved.id,
+                      season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                    });
+                  }}
+                >
+                  <Plus className="size-4" />
+                  {resolved.kind === "tv" || resolved.kind === "anime"
+                    ? `Request S${String(season).padStart(2, "0")}`
+                    : "Request"}
+                </Button>
+              )
+            ) : null}
           </div>
           {failed ? (
             <p className="mt-4 text-sm text-danger">{failed.reason}</p>

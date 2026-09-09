@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { getTitle, rememberCatalogTitles } from "@/lib/catalog";
+import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import type { MediaRequest, RequestStatus, Title } from "@/lib/types";
+import { useSyncRequests } from "@/lib/use-sync-requests";
+import type { RequestStatus } from "@/lib/types";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -20,42 +21,7 @@ export function RequestsView() {
   const requests = useReelStore((s) => s.requests);
   const retry = useReelStore((s) => s.retryRequest);
   const cancel = useReelStore((s) => s.cancelRequest);
-
-  useEffect(() => {
-    let stop = false;
-    const tick = async () => {
-      try {
-        const j = (await fetch("/api/request", { cache: "no-store" }).then((res) => res.json())) as {
-          requests?: MediaRequest[];
-          titles?: Title[];
-        };
-        if (stop) return;
-        const titles = Array.isArray(j.titles) ? j.titles : [];
-        rememberCatalogTitles(titles);
-        useReelStore.getState().rememberTitles?.(titles);
-        const live = Array.isArray(j.requests) ? j.requests : [];
-        if (live.length) {
-          useReelStore.setState((s) => ({
-            requests: live,
-            library: [
-              ...new Set([
-                ...s.library,
-                ...live.filter((r) => r.status === "available").map((r) => r.titleId),
-              ]),
-            ],
-          }));
-        }
-      } catch {
-        /* */
-      }
-    };
-    void tick();
-    const id = window.setInterval(() => void tick(), 8000);
-    return () => {
-      stop = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  useSyncRequests();
 
   const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
 

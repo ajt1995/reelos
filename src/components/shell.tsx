@@ -11,6 +11,7 @@ import {
 import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
+import { isInFlightRequest } from "@/lib/sync-requests";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -25,9 +26,7 @@ const NAV = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const frontend = useReelStore((s) => s.answers.frontend);
-  const downloading = useReelStore(
-    (s) => s.requests.filter((r) => r.status === "downloading").length,
-  );
+  const transferring = useReelStore((s) => s.requests.filter(isInFlightRequest).length);
 
   return (
     <div className="min-h-dvh bg-background md:flex">
@@ -52,9 +51,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
               >
                 <n.icon className="size-4" />
                 {n.label}
-                {n.to === "/requests" && downloading > 0 ? (
+                {n.to === "/requests" && transferring > 0 ? (
                   <span className="ml-auto font-mono text-[11px] text-gold tabular-nums">
-                    {downloading}
+                    {transferring}
                   </span>
                 ) : null}
               </Link>
