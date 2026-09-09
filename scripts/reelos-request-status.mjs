@@ -254,7 +254,7 @@ export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series }
   const rows = Array.isArray(profiles) ? profiles : [];
   const ultra = rows.find((p) => p?.name === "Ultra-HD");
   if (ultra && !profileAllowsHd(ultra)) {
-    const items = ultra.items || [];
+    const items = structuredClone(ultra.items || []);
     if (widenHybridProfileItems(items)) {
       const widened = await fetchArr(
         `http://127.0.0.1:8989/api/v3/qualityprofile/${ultra.id}`,
