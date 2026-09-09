@@ -147,7 +147,7 @@ media_root = Path(td) / "media" / "tv"
 media_root.mkdir(parents=True)
 (media_root / "Brooklyn Nine-Nine").mkdir()
 (media_root / "Brooklyn Nine-Nine S01").mkdir()
-assert g["collapse_season_named_dumps"](str(media_root)) == 0
+assert g["collapse_season_named_dumps"](str(media_root), allow=[str(media_root)]) == 0
 assert (media_root / "Brooklyn Nine-Nine S01").is_dir()
 # refuse anything that is not the sonarr dump root
 assert g["collapse_season_named_dumps"](str(Path(td) / "other")) == 0
@@ -160,16 +160,64 @@ dump.mkdir()
 (dump / "The Walking Dead").mkdir()
 (dump / "The Walking Dead" / "video.mkv").write_bytes(b"x")
 (dump / "The Walking Dead - Season 1").mkdir()
+# the allowlist is a parameter, never the ambient environment
 os.environ["REELOS_TEST_DUMP_ROOT"] = str(dump)
 try:
-    n = g["collapse_season_named_dumps"](str(dump))
+    assert g["collapse_season_named_dumps"](str(dump)) == 0
 finally:
     os.environ.pop("REELOS_TEST_DUMP_ROOT", None)
+assert (dump / "Brooklyn Nine-Nine S01").is_dir()
+n = g["collapse_season_named_dumps"](str(dump), allow=[str(dump)])
 assert n == 2, n
 assert (dump / "Brooklyn Nine-Nine").is_dir()
 assert not (dump / "Brooklyn Nine-Nine S01").exists()
 assert (dump / "The Walking Dead").is_dir()
 assert not (dump / "The Walking Dead - Season 1").exists()
+
+# A leftover library is deleted only once every path it holds is safe to lose.
+CANON = {
+    "Name": "Movies",
+    "CollectionType": "movies",
+    "Locations": ["/symlinks/radarr", "/media/movies"],
+    "LibraryOptions": {"PathInfos": []},
+}
+
+
+def plan(paths, mode="both", canon=CANON):
+    extra = {"Name": "Dupe", "CollectionType": "movies", "Locations": list(paths), "LibraryOptions": {}}
+    return g["plan_extra_library_drop"](extra, "Movies", canon, {"storageMode": mode})
+
+
+# the dump path the canonical library already scans is dropped, never re-added
+p = plan(["/symlinks/radarr", "/mnt/symlinks/radarr", "/symlinks"])
+assert p == {"drop": True, "migrate": [], "blocked": []}, p
+# the wizard's own disk root migrates onto Movies first
+p = plan(["/symlinks", "/media/movies"], canon={"Name": "Movies", "Locations": ["/symlinks/radarr"]})
+assert p["drop"] is True and p["migrate"] == ["/media/movies"], p
+# a /media root we cannot hand over blocks the delete on a local/both house
+for path in ("/media", "/media/Movies", "/media/films", "/mnt/media/movies"):
+    p = plan([path])
+    assert p["drop"] is False and p["blocked"] == [path], (path, p)
+# debrid-only never writes to /media, so those views may go
+for path in ("/media", "/media/films"):
+    p = plan([path], mode="debrid")
+    assert p == {"drop": True, "migrate": [], "blocked": []}, (path, p)
+# never delete an extra before the canonical library exists
+p = plan(["/symlinks/radarr"], canon=None)
+assert p["drop"] is False, p
+# a kept library must not spin libraries_ready for 60s every Apply
+blocked_pair = [CANON, {"Name": "Kids", "CollectionType": "movies", "Locations": ["/media/kids"], "LibraryOptions": {}}]
+g["answers"] = lambda: {"storageMode": "both"}
+assert g["libraries_ready"](blocked_pair, [("Movies", "movies")]) is True
+droppable_pair = [CANON, {"Name": "Kids", "CollectionType": "movies", "Locations": ["/symlinks"], "LibraryOptions": {}}]
+assert g["libraries_ready"](droppable_pair, [("Movies", "movies")]) is False
+posted = []
+g["call"] = lambda url, key=None, **kw: posted.append((kw.get("method", "GET"), url))
+g["log_wire"] = lambda m: None
+assert g["drop_extra_jellyfin_libraries"]("tok", blocked_pair, [("Movies", "movies")]) == 0
+assert posted == [], posted
+assert g["drop_extra_jellyfin_libraries"]("tok", droppable_pair, [("Movies", "movies")]) == 1
+assert [m for m, _u in posted] == ["DELETE"], posted
 print("ok")
 `,
     ],

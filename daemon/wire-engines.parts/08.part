@@ -45,18 +45,17 @@ def dump_dir_has_media(path: Path) -> bool:
     return False
 
 
-def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr") -> int:
+def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) -> int:
     """Remove leftover season-folder dumps when the series folder already has media.
 
     House Home still double-counted Brooklyn Nine-Nine S01 and The Walking Dead - Season 1
-    next to the real series. Never touch /media (local/both disk libraries).
+    next to the real series. Never touch /media (local/both disk libraries). `allow` is the
+    test seam: the shipped allowlist must not be widenable from the environment.
     """
     base = Path(root)
     resolved = str(base).rstrip("/")
     allowed = {"/mnt/symlinks/sonarr", "/symlinks/sonarr"}
-    extra = str(os.environ.get("REELOS_TEST_DUMP_ROOT") or "").rstrip("/")
-    if extra:
-        allowed.add(extra)
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
     if resolved not in allowed:
         return 0
     if "/media/" in resolved or resolved == "/media":
@@ -85,25 +84,18 @@ def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr") -> int:
     return dropped
 
 
-def migrate_keep_paths_from_extra(token: str, extra: dict, canon_name: str) -> None:
-    keep = {str(p).rstrip("/") for p in jellyfin_keep_paths(canon_name) if p}
-    for path in jellyfin_folder_paths(extra):
-        if path in keep:
-            add_jellyfin_path(token, canon_name, path)
-            log_wire(f"jellyfin keep path {canon_name} {path}")
-
-
 def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
-    """Delete leftover Movies/Shows virtual folders. Keep /media roots on the canonical lib."""
-    type_to_name = {str(ctype).lower(): name for name, ctype in want}
+    """Delete leftover Movies/Shows virtual folders once every path they hold is safe to lose."""
     n = 0
-    for extra in extra_jellyfin_libraries(folders, want):
+    for extra, canon, plan in planned_extra_library_drops(folders, want):
         name = str(extra.get("Name") or "")
-        ctype = str(extra.get("CollectionType") or extra.get("collectionType") or "").lower()
-        canon = type_to_name.get(ctype)
+        if not plan["drop"]:
+            log_wire(f"jellyfin keep extra library {name} ({', '.join(plan['blocked'])})")
+            continue
         try:
-            if canon:
-                migrate_keep_paths_from_extra(token, extra, canon)
+            for path in plan["migrate"]:
+                add_jellyfin_path(token, canon, path)
+                log_wire(f"jellyfin keep path {canon} {path}")
             delete_jellyfin_library(token, name)
             log_wire(f"jellyfin drop extra library {name}")
             n += 1
@@ -123,7 +115,9 @@ def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
             return False
         if extra_jellyfin_paths(folder, jellyfin_keep_paths(name)):
             return False
-    if extra_jellyfin_libraries(folders, want):
+    # Only a library the heal is actually willing to delete keeps the house un-ready;
+    # one we deliberately keep must not spin the retry loop for 60s every Apply.
+    if any(plan["drop"] for _extra, _canon, plan in planned_extra_library_drops(folders, want)):
         return False
     return True
 
