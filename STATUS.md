@@ -18,12 +18,14 @@
 
 ## Owner / house Apply
 
-**GO.** Merge `#51` → `main`. One Check→Apply. No house SSH required.
+**GO for CLI Apply of 1.2.49 now** (`main` `c3fa807`). Do not wait for `#51`. Expect `ReelOS 1.2.49 applied.` Search hop red is OK.
+
+`#51` is optional follow-up (overlay + named **1.2.50**). If merged before Apply instead, expect `ReelOS 1.2.50 applied.`
 
 See `docs/STACK-RISK.md`. Short form:
 
-1. Merge to **main**. Channel tarball stays `main.tar.gz`. VERSION **1.2.50**.
-2. Phone Check→Apply. Must print `ReelOS 1.2.50 applied.` Search hop red is OK.
+1. House CLI: `/opt/reelos/bin/reelos-update.sh apply` (or phone Check→Apply). Tarball `main.tar.gz`.
+2. `cat /opt/reelos/VERSION` → `1.2.49` (or `1.2.50` if this tip landed first).
 3. Home/Library still lean-cached. Finish must not wedge `:8080`.
 4. `/api/box` Jellyfin green. Next cached grab should import when FUSE is readable (`#50`). Host listing is not enough — *arr containers must also `ls /mnt/debrid`.
 

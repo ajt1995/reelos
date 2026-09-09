@@ -4,11 +4,11 @@
 
 ## Verdict
 
-**GO** to merge this integration tip (**1.2.50**), then **house Check→Apply once**. Expect `ReelOS 1.2.50 applied.`
+**GO** for house **CLI Apply of 1.2.49** on current `main` (`c3fa807`, `#45`–`#50`) **now**. Do not wait for this PR. Expect `ReelOS 1.2.49 applied.` Search hop red is OK. SHA drift if 1.2.49 is already local (`#49` only).
 
-Do **not** merge anything else in this stack. `#50` is already on `main`.
+`check-ota.py --apply` on that tree exits 0 (3 stale canary **warns**, not fatal). Swap copies app/bin/systemd/yml/Caddyfile only — live `compose/configs` stay put. `#49`/`#50` do not change `docker-compose.yml`, so hops stay fail-open on FUSE/Jellyfin.
 
-A house Apply of current `main` (`#45`–`#50` / 1.2.49) alone is **GO** but incomplete — misses the configs overlay (nesting after `#49` seed) and this named stamp.
+This PR (**1.2.50**) is optional hygiene: overlay so `#49` seed cannot nest staging `configs/configs`, retarget those three canaries, stack-smoke. Merge it after the 1.2.49 Apply (or instead, if the house has not Applied yet — then expect `ReelOS 1.2.50 applied.`).
 
 ## Ordered merge list
 
