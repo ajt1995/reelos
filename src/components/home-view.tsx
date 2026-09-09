@@ -29,6 +29,7 @@ export function HomeView() {
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
   const shelfError = useReelStore((s) => s.shelfError);
+  const shelfReady = useReelStore((s) => s.shelfReady);
   const navigate = useNavigate();
   const requests = useReelStore((s) => s.requests);
   const library = useReelStore((s) => s.library);
@@ -39,7 +40,7 @@ export function HomeView() {
   const transferring = requests.filter(isInFlightRequest).length;
   useSyncRequests();
   useEffect(() => {
-    hydrateShelf();
+    hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
 
   const catalogHits: Title[] = [];
@@ -185,7 +186,10 @@ export function HomeView() {
         </Row>
       ) : q.trim().length < 2 ? (
         <p className="mt-16 text-center text-sm text-muted">
-          {shelfError || "Nothing in Jellyfin yet. Search and Request — it lands here."}
+          {shelfError ||
+            (shelfReady
+              ? "Nothing in Jellyfin yet. Search and Request — it lands here."
+              : "Loading library…")}
         </p>
       ) : null}
     </div>

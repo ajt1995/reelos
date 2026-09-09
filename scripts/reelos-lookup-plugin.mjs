@@ -8,6 +8,59 @@ import {
   seerrRequestRow,
   seerrSearchHit,
 } from "./reelos-seerr.mjs";
+import {
+  createLibraryCache,
+  createTokenCache,
+  JELLYFIN_ITEMS_TIMEOUT_MS,
+  LIBRARY_CACHE_FILE,
+  libraryItemsUrl,
+  mapJellyfinItem,
+  readLibraryCacheFile,
+  serveLibrary,
+  writeLibraryCacheFile,
+} from "./reelos-library.mjs";
+
+const jellyfinTokens = createTokenCache();
+const libraryCache = createLibraryCache();
+const seeded = readLibraryCacheFile(LIBRARY_CACHE_FILE);
+if (seeded) libraryCache.write(seeded.titles, { now: seeded.at, complete: seeded.complete });
+
+function persistLibraryCache() {
+  const entry = libraryCache.read();
+  if (!entry) return;
+  try {
+    writeLibraryCacheFile(LIBRARY_CACHE_FILE, entry);
+  } catch {
+    /* */
+  }
+}
+
+let libraryRefresh = null;
+async function refreshLibraryFull(host) {
+  if (libraryRefresh) return libraryRefresh;
+  libraryRefresh = (async () => {
+    const a = answers();
+    const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    if (!auth?.token) return;
+    const r = await fetch(libraryItemsUrl(), {
+      headers: { "X-Emby-Token": auth.token },
+      signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    const items = Array.isArray(data.Items) ? data.Items : [];
+    libraryCache.write(
+      items.map((it) => mapJellyfinItem(it, host)),
+      { complete: true },
+    );
+    persistLibraryCache();
+  })()
+    .catch(() => {})
+    .finally(() => {
+      libraryRefresh = null;
+    });
+  return libraryRefresh;
+}
 
 function xmlKey(file) {
   if (!existsSync(file)) return null;
@@ -280,6 +333,8 @@ async function probeJson(url, ms = 3000) {
 }
 
 async function jellyfinToken(user, password) {
+  const cached = jellyfinTokens.get(user, password);
+  if (cached) return cached;
   try {
     const r = await fetch("http://127.0.0.1:8096/Users/AuthenticateByName", {
       method: "POST",
@@ -289,10 +344,13 @@ async function jellyfinToken(user, password) {
           'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"',
       },
       body: JSON.stringify({ Username: user, Pw: password }),
+      signal: AbortSignal.timeout(8000),
     });
     if (!r.ok) return null;
     const j = await r.json();
-    return { token: j.AccessToken, id: j.User?.Id };
+    const auth = { token: j.AccessToken, id: j.User?.Id };
+    jellyfinTokens.set(user, password, auth);
+    return auth;
   } catch {
     return null;
   }
@@ -1153,6 +1211,7 @@ async function handlePassword(req, res) {
     return;
   }
   a.adminPassword = next;
+  jellyfinTokens.clear();
   try {
     mkdirSync("/var/lib/reelos", { recursive: true });
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
@@ -1426,62 +1485,32 @@ async function handleWire(req, res) {
 }
 
 async function handleLibrary(req, res) {
-  const a = answers();
-  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
-  if (!auth?.token) {
-    send(res, 200, { titles: [], error: "Jellyfin has no matching user/PIN" });
-    return;
-  }
-  try {
-    const r = await fetch(
-      "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Fields=Overview,ProviderIds&ImageTypeLimit=1&SortBy=DateCreated&SortOrder=Descending",
-      { headers: { "X-Emby-Token": auth.token } },
-    );
-    if (!r.ok) {
-      send(res, 200, { titles: [], error: `Jellyfin ${r.status}` });
-      return;
-    }
-    const data = await r.json();
-    const items = Array.isArray(data.Items) ? data.Items : [];
-    const host = String(req.headers.host || "")
+  const host =
+    String(req.headers.host || "")
       .split(":")[0]
-      .replace(/[^a-zA-Z0-9.-]/g, "") || ipv4() || "127.0.0.1";
-    const titles = items.map((it) => {
-      const tmdb = it.ProviderIds?.Tmdb;
-      const tvdb = it.ProviderIds?.Tvdb;
-      const kind = it.Type === "Series" ? "tv" : "movie";
-      const ids = [
-        tmdb ? `tmdb-${tmdb}` : "",
-        tvdb ? `tvdb-${tvdb}` : "",
-        it.Id ? `jf-${it.Id}` : "",
-      ].filter(Boolean);
-      const id =
-        kind === "tv"
-          ? tvdb
-            ? `tvdb-${tvdb}`
-            : ids[0]
-          : tmdb
-            ? `tmdb-${tmdb}`
-            : ids[0];
-      const poster = it.Id ? `http://${host}:8096/Items/${it.Id}/Images/Primary` : "";
-      return {
-        id,
-        ids,
-        kind,
-        title: String(it.Name || "Untitled"),
-        year: Number(it.ProductionYear) || 0,
-        overview: String(it.Overview || ""),
-        poster,
-        jellyfinId: it.Id,
-        maxQuality: "4k",
-        popularity: 50,
-        genres: [],
-      };
-    });
-    send(res, 200, { titles, error: null });
-  } catch (e) {
-    send(res, 200, { titles: [], error: String(e) });
-  }
+      .replace(/[^a-zA-Z0-9.-]/g, "") ||
+    ipv4() ||
+    "127.0.0.1";
+  const result = await serveLibrary({
+    url: req.url || "/api/library",
+    host,
+    cache: libraryCache,
+    getAuth: async () => {
+      const a = answers();
+      return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    },
+    fetchItems: async (auth, limit) => {
+      const r = await fetch(libraryItemsUrl({ limit }), {
+        headers: { "X-Emby-Token": auth.token },
+        signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
+      });
+      if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
+      return r.json();
+    },
+    refresh: () => refreshLibraryFull(host),
+  });
+  persistLibraryCache();
+  send(res, 200, { titles: result.titles, error: result.error });
 }
 
 async function handleDisks(_req, res) {

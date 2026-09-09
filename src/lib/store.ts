@@ -20,6 +20,7 @@ import type {
 } from "./types";
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
+import { mergeShelf } from "./shelf";
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -113,6 +114,7 @@ export interface ReelState {
   library: string[];
   shelf: Title[];
   shelfError: string | null;
+  shelfReady: boolean;
   watchProgress: Record<string, number>;
   activity: ActivityEvent[];
   users: HouseholdUser[];
@@ -146,8 +148,10 @@ export interface ReelState {
   removeIndexer: (id: string) => void;
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
-  hydrateShelf: () => void;
+  hydrateShelf: (opts?: { limit?: number }) => void;
 }
+
+const shelfFetches = new Map<string, Promise<void>>();
 
 function uid(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
@@ -240,6 +244,9 @@ function labState(): Pick<
   | "provisioned"
   | "requests"
   | "library"
+  | "shelf"
+  | "shelfError"
+  | "shelfReady"
   | "watchProgress"
   | "activity"
   | "users"
@@ -302,6 +309,7 @@ function labState(): Pick<
     library: ["night-harbor", "ember-season", "glass-orchard", "iron-parish", "paper-moons", "maple-pilot"],
     shelf: [] as Title[],
     shelfError: null as string | null,
+    shelfReady: true,
     watchProgress: { "night-harbor": 0.42, "ember-season": 0.18, "iron-parish": 0.71 },
     activity: [
       event("import", "Cache hit — Night Harbor on Real-Debrid", "night-harbor"),
@@ -352,6 +360,7 @@ const initial = {
   library: [] as string[],
   shelf: [] as Title[],
   shelfError: null as string | null,
+  shelfReady: false,
   watchProgress: {} as Record<string, number>,
   activity: [] as ActivityEvent[],
   users: [] as HouseholdUser[],
@@ -461,7 +470,7 @@ export const useReelStore = create<ReelState>()(
       removeUser: (id) => set({ users: get().users.filter((u) => u.id !== id) }),
       loadLab: () => set({ ...labState() }),
       startRepair: () => set({ phase: "wizard", wizardStep: 1 }),
-      factoryReset: () => set({ ...initial, hydrated: true }),
+      factoryReset: () => set({ ...initial, hydrated: true, shelfReady: true }),
       checkForUpdate: () => {
         const s = get();
         if (s.update.status === "checking" || s.update.status === "applying") return;
@@ -654,20 +663,29 @@ export const useReelStore = create<ReelState>()(
         rememberCatalogTitles(extra);
         set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
       },
-      hydrateShelf: () => {
-        if (get().shelf.length) return;
-        void fetch("/api/library", { cache: "no-store" })
+      hydrateShelf: (opts) => {
+        const limit = opts?.limit;
+        const key = limit ? `n${limit}` : "all";
+        if (shelfFetches.has(key)) return;
+        const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+        const p = fetch(`/api/library${qs}`, { cache: "no-store" })
           .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
           .then((j) => {
             const titles = Array.isArray(j.titles) ? j.titles : [];
             rememberCatalogTitles(titles);
+            const shelf = mergeShelf(get().shelf, titles, Boolean(limit));
             set({
-              shelf: titles,
+              shelf,
               shelfError: j.error || null,
-              library: titles.map((t) => t.id),
+              shelfReady: true,
+              library: shelf.map((t) => t.id),
             });
           })
-          .catch((e) => set({ shelfError: String(e) }));
+          .catch((e) => set({ shelfError: String(e), shelfReady: true }))
+          .finally(() => {
+            shelfFetches.delete(key);
+          });
+        shelfFetches.set(key, p);
       },
     }),
     {
@@ -683,6 +701,7 @@ export const useReelStore = create<ReelState>()(
         provisioned: s.provisioned,
         requests: s.requests,
         library: s.library,
+        shelf: s.shelf,
         watchProgress: s.watchProgress,
         activity: s.activity,
         users: s.users,
@@ -694,6 +713,7 @@ export const useReelStore = create<ReelState>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.update = idleUpdate();
+        if (state.shelf?.length) state.shelfReady = true;
       },
     },
   ),

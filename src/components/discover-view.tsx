@@ -13,6 +13,7 @@ export function DiscoverView() {
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
   const shelfError = useReelStore((s) => s.shelfError);
+  const shelfReady = useReelStore((s) => s.shelfReady);
 
   useEffect(() => {
     installHonestRequest();
@@ -100,7 +101,10 @@ export function DiscoverView() {
           ) : null}
           {shelf.length === 0 ? (
             <p className="mt-10 text-sm text-muted">
-              {shelfError || "Nothing in Jellyfin yet. Search above, then Request."}
+              {shelfError ||
+                (shelfReady
+                  ? "Nothing in Jellyfin yet. Search above, then Request."
+                  : "Loading library…")}
             </p>
           ) : null}
         </>
