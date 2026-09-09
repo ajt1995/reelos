@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -305,22 +305,33 @@ test("cli: a non-game with a compliant card passes", () => {
 
 const readDoc = (rel) => readFileSync(join(TEMPLATE_ROOT, rel), "utf8");
 
-test("SKILL.md and AGENTS.md name the marker path and bound this script uses", () => {
-  // Prose wraps, so the minute count may straddle a line break.
-  const bound = new RegExp(`${OG_PENDING_MAX_AGE_MS / 60_000}\\s+minutes`);
-  for (const rel of [".grok/skills/og/SKILL.md", "AGENTS.md"]) {
-    const doc = readDoc(rel);
-    assert.ok(doc.includes(`/workspace/${OG_PENDING_REL_PATH}`), `${rel}: marker path`);
-    assert.ok(bound.test(doc), `${rel}: staleness bound`);
-  }
-});
+// The prompts live in the agent harness, not in this app: `.grok/` is gitignored
+// and AGENTS.md is written per workspace. Where a workspace carries one, the pin
+// below still holds it to the code; a checkout without them has nothing to pin.
+const OG_SKILL = ".grok/skills/og/SKILL.md";
+const docPresent = (rel) => existsSync(join(TEMPLATE_ROOT, rel));
+const NO_PROMPTS = "this checkout ships no agent prompt docs to pin";
+
+test(
+  "SKILL.md and AGENTS.md name the marker path and bound this script uses",
+  { skip: [OG_SKILL, "AGENTS.md"].some(docPresent) ? false : NO_PROMPTS },
+  () => {
+    // Prose wraps, so the minute count may straddle a line break.
+    const bound = new RegExp(`${OG_PENDING_MAX_AGE_MS / 60_000}\\s+minutes`);
+    for (const rel of [OG_SKILL, "AGENTS.md"].filter(docPresent)) {
+      const doc = readDoc(rel);
+      assert.ok(doc.includes(`/workspace/${OG_PENDING_REL_PATH}`), `${rel}: marker path`);
+      assert.ok(bound.test(doc), `${rel}: staleness bound`);
+    }
+  },
+);
 
 // The two places that own "never wait on the brand task". Scanning the whole
 // of AGENTS.md instead would make every unrelated `wait_tasks` mention a future
 // feature adds to it this test's business.
 const PROHIBITION_SECTIONS = [
   {
-    rel: ".grok/skills/og/SKILL.md",
+    rel: OG_SKILL,
     label: '§ "Brand-asset pass"',
     from: "## Brand-asset pass:",
     until: /\n## /,
@@ -343,31 +354,39 @@ function prohibitionSection({ rel, label, from, until }) {
   return (from + (end === -1 ? rest : rest.slice(0, end))).replace(/[`*]/g, "").replace(/\s+/g, " ");
 }
 
-test("the sections that own the brand-task prohibition never affirm a wait", () => {
-  // Pinned on the shape of the prohibition, not on a negation being somewhere
-  // nearby: "So: wait_tasks before the final verify, but never get_task_output"
-  // keeps a negation in the sentence while instructing exactly the wait.
-  const connectors = /(?:\s|[/,;]|\band\b|\bor\b|\bwait_tasks\b|\bget_task_output\b)+$/i;
-  const negation = /\b(?:no|never|not|don['’]t)$/i;
-  for (const section of PROHIBITION_SECTIONS) {
-    const where = `${section.rel} ${section.label}`;
-    const prose = prohibitionSection(section);
-    const mentions = [...prose.matchAll(/wait_tasks|get_task_output/g)];
-    assert.ok(mentions.length >= 2, `${where}: the prohibition itself went missing`);
-    for (const match of mentions) {
-      const before = prose.slice(0, match.index).replace(connectors, "");
-      const context = prose.slice(Math.max(0, match.index - 60), match.index + 20);
-      assert.ok(negation.test(before), `${where}: not a prohibition: …${context}…`);
+test(
+  "the sections that own the brand-task prohibition never affirm a wait",
+  { skip: PROHIBITION_SECTIONS.some((s) => docPresent(s.rel)) ? false : NO_PROMPTS },
+  () => {
+    // Pinned on the shape of the prohibition, not on a negation being somewhere
+    // nearby: "So: wait_tasks before the final verify, but never get_task_output"
+    // keeps a negation in the sentence while instructing exactly the wait.
+    const connectors = /(?:\s|[/,;]|\band\b|\bor\b|\bwait_tasks\b|\bget_task_output\b)+$/i;
+    const negation = /\b(?:no|never|not|don['’]t)$/i;
+    for (const section of PROHIBITION_SECTIONS.filter((s) => docPresent(s.rel))) {
+      const where = `${section.rel} ${section.label}`;
+      const prose = prohibitionSection(section);
+      const mentions = [...prose.matchAll(/wait_tasks|get_task_output/g)];
+      assert.ok(mentions.length >= 2, `${where}: the prohibition itself went missing`);
+      for (const match of mentions) {
+        const before = prose.slice(0, match.index).replace(connectors, "");
+        const context = prose.slice(Math.max(0, match.index - 60), match.index + 20);
+        assert.ok(negation.test(before), `${where}: not a prohibition: …${context}…`);
+      }
     }
-  }
-});
+  },
+);
 
-test("SKILL.md tells the pass to self-check with the flag this CLI accepts", () => {
-  const skill = readDoc(".grok/skills/og/SKILL.md");
-  const invocations = skill.match(/node scripts\/brand-check\.mjs[^\n`]*/g) ?? [];
-  assert.ok(invocations.length > 0);
-  for (const line of invocations) {
-    const argv = line.replace("node scripts/brand-check.mjs", "").trim().split(/\s+/);
-    assert.equal(parseBrandCheckArgs(argv.filter(Boolean)).error, undefined, line);
-  }
-});
+test(
+  "SKILL.md tells the pass to self-check with the flag this CLI accepts",
+  { skip: docPresent(OG_SKILL) ? false : NO_PROMPTS },
+  () => {
+    const skill = readDoc(OG_SKILL);
+    const invocations = skill.match(/node scripts\/brand-check\.mjs[^\n`]*/g) ?? [];
+    assert.ok(invocations.length > 0);
+    for (const line of invocations) {
+      const argv = line.replace("node scripts/brand-check.mjs", "").trim().split(/\s+/);
+      assert.equal(parseBrandCheckArgs(argv.filter(Boolean)).error, undefined, line);
+    }
+  },
+);
