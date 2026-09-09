@@ -188,6 +188,46 @@ test("Home shelf collapses JF season-folder names onto the real series row", () 
   assert.equal(shelfTitleKey(twd), shelfTitleKey(twds1));
 });
 
+test("two matched series that differ only by a season suffix stay two rows", () => {
+  // Anime split seasons are separate TVDB series that can share a production year.
+  const s1 = titleFrom({
+    Id: "jf-vs1",
+    Name: "Vinland Saga",
+    Type: "Series",
+    ProductionYear: 2019,
+    ProviderIds: { Tvdb: "359274" },
+  });
+  const s2 = titleFrom({
+    Id: "jf-vs2",
+    Name: "Vinland Saga S2",
+    Type: "Series",
+    ProductionYear: 2019,
+    ProviderIds: { Tvdb: "421739" },
+  });
+  const out = dedupeLibraryTitles([s1, s2]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(
+    out.map((t) => t.title).sort(),
+    ["Vinland Saga", "Vinland Saga S2"],
+  );
+  // An unmatched dump of the same name still collapses onto the series row.
+  const dump = titleFrom({ Id: "jf-vs3", Name: "Vinland Saga S2", Type: "Series", ProductionYear: 2019 });
+  dump.poster = "";
+  assert.equal(dedupeLibraryTitles([s1, s2, dump]).length, 2);
+});
+
+test("a bare season folder name is not stripped to an empty shelf key", () => {
+  for (const name of [" S01", "- Season 1", "  Season 2", ".s1"]) {
+    assert.equal(stripSeasonFolderSuffix(name), name.trim());
+    assert.notEqual(shelfTitleKey({ title: name, kind: "tv" }), "tv:");
+  }
+  const rows = dedupeLibraryTitles([
+    titleFrom({ Id: "jf-a", Name: " S01", Type: "Series" }),
+    titleFrom({ Id: "jf-b", Name: "- Season 1", Type: "Series" }),
+  ]);
+  assert.equal(rows.length, 2);
+});
+
 test("an unmatched copy with no year still collapses into the matched row", () => {
   const matched = titleFrom({
     Id: "jf-wick",
