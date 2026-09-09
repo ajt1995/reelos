@@ -161,16 +161,34 @@ def series_title_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", strip_season_folder_suffix(name).lower())
 
 
+def season_folder_item_path(path: str) -> bool:
+    """Jellyfin's DELETE /Items removes the files too, so only a season-named directory
+    inside our own dump root may be handed to it. `/media` is the house's disk library
+    and a dump root itself is every show at once — both are refused.
+    """
+    p = str(path or "").rstrip("/")
+    if not p or local_disk_path(p) or not dump_view_path(p):
+        return False
+    parts = [x for x in p.split("/") if x]
+    depth = 3 if parts[0] == "symlinks" else 4
+    if len(parts) < depth:
+        return False
+    return looks_like_season_folder_title(parts[-1])
+
+
 def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
     """jf-only season-folder Series: delete when a real series exists, else rename.
 
     Two series that both carry different tvdb/tmdb ids stay (anime split seasons).
     Season-folder PremiereDate ≠ series start year is ignored here — names + ids decide.
+    Only a season-named dump directory is ever touched; see `season_folder_item_path`.
     """
     if not isinstance(item, dict):
         return None
     name = str(item.get("Name") or "")
     if not looks_like_season_folder_title(name):
+        return None
+    if not season_folder_item_path(item.get("Path")):
         return None
     item_id = item.get("Id") or item.get("id")
     if not item_id:

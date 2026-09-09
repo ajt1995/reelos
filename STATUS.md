@@ -20,7 +20,7 @@
 ## Code changes
 
 1. **`reelos-library.mjs`** — `yearsCompatible` / `isSeasonFolderAlias`: year gate does not block a season-folder alias. `aliasSafe` still keeps two real-id series apart.
-2. **`wire-engines` Jellyfin heal** — `plan_season_folder_item` + `heal_season_folder_items` (DELETE / rename leftover Series). `collapse_season_named_dumps` moves media onto an empty series stub, then drops the season-named dir.
+2. **`wire-engines` Jellyfin heal** — `plan_season_folder_item` + `heal_season_folder_items` (DELETE / rename leftover Series). `season_folder_item_path` is the gate: Jellyfin's `DELETE /Items` deletes the files, so only a season-named directory under `/symlinks` / `/mnt/symlinks` is ever named — `/media`, a dump root itself, and a canonical series folder are refused. `collapse_season_named_dumps` moves media onto an empty series stub, then drops the season-named dir.
 3. **`movieRequestReason`** — after no-movie / no-client: unmonitored, quality floor, queue, else `Searching — no file yet`.
 4. **`kickArrRecover` / `listUnmonitoredMovieRecoverTargets`** — monitor a Seerr movie Radarr left unmonitored, then MoviesSearch. GET recover refreshes facts after the kick.
 

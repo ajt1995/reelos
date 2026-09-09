@@ -20,7 +20,7 @@ After Apply+recover: tmdb-2059 / seerr-9 still `downloading@0` `engine=grabbing`
 ## 1.2.50.9
 
 1. Year gate skips for a season-folder alias. Remakes with real ids + different years stay two rows. Anime split seasons with different tvdb/tmdb stay two rows.
-2. Apply: move season-folder dump media onto the series folder (even an empty stub), then drop the season-named dir. Delete a jf-only season-folder Series when the real series exists; rename it when it is the only leftover. Anime split ids stay.
+2. Apply: move season-folder dump media onto the series folder (even an empty stub), then drop the season-named dir. Delete a jf-only season-folder Series when the real series exists; rename it when it is the only leftover. Anime split ids stay. Jellyfin's `DELETE /Items` removes the files too, so the item heal only ever names a season-named directory **inside a dump root** — a `/media` local-disk row and a canonical series folder are refused.
 3. Requests: always say why a 0-file movie is 0% (`Searching — no file yet` / unmonitored / quality / queue). Recover monitors an unmonitored Seerr movie and MoviesSearchs.
 
 ## xorriso — do this
@@ -34,7 +34,7 @@ After Apply+recover: tmdb-2059 / seerr-9 still `downloading@0` `engine=grabbing`
 
 1. `cat /opt/reelos/VERSION` → `1.2.50.9`.
 2. `GET /api/library`: one Walking Dead (2010 / tvdb-153021). One Brooklyn Nine-Nine. Dune-style remakes still two rows.
-3. Jellyfin Shows matches Home — no leftover `The Walking Dead - Season 1` Series.
+3. Jellyfin Shows matches Home — no leftover `The Walking Dead - Season 1` Series. A `local`/`both` house still has every `/media/tv` folder it started with.
 4. National Treasure: Requests shows a real reason (not silent 0%). `?recover=1` monitors + MoviesSearchs.
 
 Do not Apply the Tron feature tarball as if it were main.

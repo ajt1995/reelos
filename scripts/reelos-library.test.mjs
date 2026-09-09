@@ -239,6 +239,32 @@ test("remakes with real ids and different years stay separate after season-year 
   );
 });
 
+test("a season folder joins the remake it shares a year with, not the first one scanned", () => {
+  const bridge = (id, year, tvdb) =>
+    titleFrom({
+      Id: id,
+      Name: "The Bridge",
+      Type: "Series",
+      ProductionYear: year,
+      ProviderIds: { Tvdb: tvdb },
+    });
+  const seasonFolder = titleFrom({
+    Id: "jf-bridge-s1",
+    Name: "The Bridge - Season 1",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: {},
+  });
+  seasonFolder.poster = "";
+  const out = dedupeLibraryTitles([bridge("jf-bridge-11", 2011, "248975"), bridge("jf-bridge-13", 2013, "264586"), seasonFolder]);
+  assert.equal(out.length, 2, JSON.stringify(out.map((t) => [t.title, t.year, t.id])));
+  assert.deepEqual(
+    out.map((t) => t.year).sort(),
+    [2011, 2013],
+  );
+  assert.equal(out.find((t) => t.year === 2013).id, "tvdb-264586");
+});
+
 test("two matched series that differ only by a season suffix stay two rows", () => {
   // Anime split seasons are separate TVDB series that can share a production year.
   const s1 = titleFrom({

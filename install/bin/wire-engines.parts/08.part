@@ -110,7 +110,7 @@ def fetch_jellyfin_series(token: str) -> list:
         {
             "Recursive": "true",
             "IncludeItemTypes": "Series",
-            "Fields": "ProviderIds",
+            "Fields": "ProviderIds,Path",
             "EnableImages": "false",
             "EnableUserData": "false",
             "EnableTotalRecordCount": "false",
@@ -125,7 +125,11 @@ def fetch_jellyfin_series(token: str) -> list:
 
 
 def heal_season_folder_items(token: str, items=None, call_fn=None) -> int:
-    """Delete or rename leftover season-folder Series items Jellyfin already ingested."""
+    """Delete or rename leftover season-folder Series items Jellyfin already ingested.
+
+    Scoped to season-named dump directories: DELETE /Items takes the files with it, so a
+    `/media` local-disk library or a canonical series folder is never handed to Jellyfin.
+    """
     rows = items if items is not None else fetch_jellyfin_series(token)
     do = call_fn or call
     n = 0

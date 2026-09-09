@@ -136,7 +136,11 @@ export function dedupeLibraryTitles(titles) {
       const b = titleProviderId(t);
       return !a || !b || a === b;
     };
-    const slot = bucket.find((s) => yearsCompatible(s.year, year, s.best, t) && aliasSafe(s));
+    // An exact-year slot wins first: with two remakes on the shelf, a season folder must
+    // land on the one it shares a year with, not on whichever remake was scanned first.
+    const slot =
+      bucket.find((s) => (!s.year || !year || s.year === year) && aliasSafe(s)) ||
+      bucket.find((s) => yearsCompatible(s.year, year, s.best, t) && aliasSafe(s));
     if (!slot) {
       bucket.push({ best: t, year });
       continue;
