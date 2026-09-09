@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.12";
-export const SHIPPED_VERSION = "1.2.50.12";
+export const LATEST_VERSION = "1.2.50.13";
+export const SHIPPED_VERSION = "1.2.50.13";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.13: House Apply of 1.2.50.12 stayed honest (heal red, no stamp) because *arr rejected the Torznab POST (test-on-add, hand-rolled body) and Prowlarr fullSync never landed. Attach now clones /indexer/schema, POSTs ?forceSave=true, waits for ApplicationIndexerSync, and talks to Prowlarr/*arr/Seerr by container IP so compose dns: 1.1.1.1 cannot hide service names. Complements #67. Not 1.2.51 (Tron #52).",
   "1.2.50.12: Prowlarr fullSync force-pushes searchable indexers onto Sonarr and Radarr (enable + Torznab attach if ApplicationIndexerSync leaves them empty). Seerr movie recover/POST adds a missing Radarr row via lookup/tmdb (National Treasure). Doctor Jellyfin VirtualFolders sends MediaBrowser Token headers. Complements #64/#66. Not 1.2.51 (Tron #52).",
   "1.2.50.11: Apply does not stamp VERSION after JF/indexer heal red. Import scans dumps then heals — it does not re-ingest collapsed dumps. Doctor checks JF library paths, Radarr add/search, and Sonarr search indexers. stuck-downloads remonitors + lock/widen before search. kickArrRecover and pipeline.radarrMissing tell the truth. Complements #62/#64. Not 1.2.51 (Tron #52).",
   "1.2.50.10: Disabled Decypharr client is not a lock. Doctor fails closed when it cannot probe download clients. recover=1 only kicks Seerr-requested titles, not the whole *arr backlog. Ghost AVAILABLE and GET-by-id carry a reason. Retry re-POSTs /api/request. Complements #62. Not 1.2.51 (Tron #52).",
