@@ -2,6 +2,22 @@
 
 **Reelist (cloud test-build).** 2026-09-09. Tron-night UI + legal Books from [#52](https://github.com/ajt1995/reelos/pull/52) rebased onto latest `main` through **1.2.50.6** (public TV indexers + Prowlarr→Sonarr). **HOLD.** Do not merge. Do not house Apply.
 
+## QA gate (Austin 2026-09-09)
+
+Purpose: everything-merged `main` + Books/Tron from rebased #52. **Not** for house Apply. Do **not** lift Tron HOLD.
+
+| Gate | Verdict | Evidence |
+| --- | --- | --- |
+| **Books legal-only** | **PASS** | Search modules are Gutenberg + Standard Ebooks + IA only. HTTPS allowlist: `gutenberg.org` / `www.gutenberg.org` / `standardebooks.org` / `archive.org` / `*.archive.org`. Unit + live refuse Anna’s Archive, Libgen, LAN, HTTP, arbitrary hosts. |
+| Search catalogs | **PASS** (with note) | Live SE + IA rows. Gutendex (`gutendex.com`) is Cloudflare **403** on this VM — Gutenberg search reports unavailable honestly. Gutenberg.org download still works. |
+| Download allowlist | **PASS** | `ownsDownload` + `downloadLegalBook` require HTTPS + those hosts. |
+| Refuse pirate / LAN | **PASS** | Anna’s Archive, Libgen, `192.168.1.4`, HTTP gutenberg all refused. |
+| Kavita / Caddy `/books*` | **PASS** | Kavita on profile `books`, `:5000`, `handle /kavita*` in install + compose Caddyfiles. No `handle /books*`. |
+| Tron UI (cloud review) | **PASS** | Phone previews in `docs/tron-previews/`. House stays on 1.2.50.x reliability stamps. |
+| TV/movies Request/grab | **expected FAIL** | No private API keys / debrid. **Not a blocker** for this test-build. |
+
+PR: https://github.com/ajt1995/reelos/pull/59 · agent: https://cursor.com/agents/bc-afdf7214-3c42-4bab-a492-241569773b8e
+
 ## Stamp
 
 - **VERSION / channel:** `1.2.51` (candidate / test-build)

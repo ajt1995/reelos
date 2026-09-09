@@ -2,6 +2,8 @@
 
 Hal. **2026-09-09.** Named stamp **1.2.51 candidate** (Tron-night UI + legal Books on **1.2.50.6** `main`). **HOLD.** Cloud test-build only. Do not merge. Do not house Apply. Do not lift the Tron HOLD.
 
+**QA (Austin 2026-09-09):** Books legal-only **PASS**. TV/movies Request/grab **expected FAIL** without keys — not a blocker. Tron visual OK for cloud review. House stays on 1.2.50.x.
+
 ## xorriso — do this
 
 1. Review this draft test-build PR. Do **not** merge to `main`. Channel tarball on `main` stays `main.tar.gz` at **1.2.50.6**.
