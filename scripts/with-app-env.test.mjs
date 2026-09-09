@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import {
@@ -24,6 +24,22 @@ function makeWorkspace(appEnvJson) {
     writeFileSync(join(root, APP_ENV_REL_PATH), appEnvJson);
   }
   return root;
+}
+
+/**
+ * A workspace that ships both the wrapper and an app-env of its own.
+ *
+ * The wrapper reads the app-env next to itself, and `.grok/` is gitignored
+ * platform state, so a clone has no file for it to find. A CLI test that runs
+ * the checked-out wrapper is therefore asserting on whatever the surrounding
+ * machine happens to carry; it has to bring its own workspace to be about
+ * anything. The wrapper imports only node builtins, so a copy runs as itself.
+ */
+function makeWrapperWorkspace(appEnvJson) {
+  const root = makeWorkspace(appEnvJson);
+  mkdirSync(join(root, "scripts"), { recursive: true });
+  copyFileSync(WRAPPER, join(root, "scripts/with-app-env.mjs"));
+  return join(root, "scripts/with-app-env.mjs");
 }
 
 test("keeps VITE_-prefixed string entries", () => {
@@ -59,9 +75,17 @@ test("an explicit process-env override wins over the file", () => {
   assert.equal(merged.PATH, "/usr/bin");
 });
 
-test("the template ships auth off", () => {
-  assert.deepEqual(readAppEnv(projectRoot()), { VITE_AUTH_ENABLED: "false" });
-});
+test(
+  "the app-env this workspace ships keeps sign-in off",
+  {
+    skip: existsSync(join(projectRoot(), APP_ENV_REL_PATH))
+      ? false
+      : `${APP_ENV_REL_PATH} is gitignored platform state and this checkout carries none`,
+  },
+  () => {
+    assert.deepEqual(readAppEnv(projectRoot()), { VITE_AUTH_ENABLED: "false" });
+  },
+);
 
 test("vite loadEnv resolves the wrapped value", () => {
   // What `import.meta.env.VITE_AUTH_ENABLED` becomes: loadEnv prefix-matches
@@ -74,13 +98,26 @@ test("vite loadEnv resolves the wrapped value", () => {
 });
 
 test("the wrapped command runs with the app env applied", async () => {
+  const wrapper = makeWrapperWorkspace('{"VITE_AUTH_ENABLED":"false"}');
   const { stdout } = await execFileAsync(process.execPath, [
-    WRAPPER,
+    wrapper,
     process.execPath,
     "-e",
     PRINT_FLAG,
   ]);
   assert.equal(stdout, "false");
+});
+
+test("a workspace with no app-env starts the command anyway, flag unset", async () => {
+  const wrapper = makeWrapperWorkspace();
+  const env = { ...process.env };
+  delete env.VITE_AUTH_ENABLED;
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    [wrapper, process.execPath, "-e", PRINT_FLAG],
+    { env },
+  );
+  assert.equal(stdout, "undefined");
 });
 
 test("the wrapped command sees an explicit override, not the file value", async () => {
@@ -116,8 +153,9 @@ test("a signal-killed command is never reported as success", async () => {
 test("the CLI still runs when invoked through a symlinked path", async () => {
   // node realpaths import.meta.url but not process.argv[1], so a raw comparison
   // turns the wrapper into a no-op that exits 0 without starting anything.
+  const wrapper = makeWrapperWorkspace('{"VITE_AUTH_ENABLED":"false"}');
   const link = join(mkdtempSync(join(tmpdir(), "app-env-link-")), "scripts");
-  symlinkSync(join(projectRoot(), "scripts"), link);
+  symlinkSync(dirname(wrapper), link);
   const { stdout } = await execFileAsync(process.execPath, [
     join(link, "with-app-env.mjs"),
     process.execPath,

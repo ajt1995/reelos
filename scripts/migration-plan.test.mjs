@@ -56,10 +56,33 @@ test("non-.sql entries are dropped (readdir also yields the auth/ directory)", (
   assert.deepEqual(pendingMigrations(["auth", "README.md"], []), []);
 });
 
-test("the auth schema ships outside the globbed directory", () => {
-  const migrationsDir = join(projectRoot(), "migrations");
-  assert.deepEqual(pendingMigrations(readdirSync(migrationsDir), []), []);
-  assert.ok(readdirSync(join(migrationsDir, "auth")).includes("0001_auth.sql"));
+test(
+  "the auth schema ships outside the globbed directory",
+  {
+    // An app with no schema of its own has no migrations/ at all — scripts/migrate.mjs
+    // treats that as nothing to do. There is no directory to hold the layout to here.
+    skip: existsSync(join(projectRoot(), "migrations"))
+      ? false
+      : "this app ships no migrations/ directory",
+  },
+  () => {
+    const migrationsDir = join(projectRoot(), "migrations");
+    assert.deepEqual(pendingMigrations(readdirSync(migrationsDir), []), []);
+    assert.ok(readdirSync(join(migrationsDir, "auth")).includes(AUTH_MIGRATION));
+  },
+);
+
+test("a workspace that does ship the auth schema keeps it out of the glob", () => {
+  const root = mkdtempSync(join(tmpdir(), "auth-glob-"));
+  mkdirSync(join(root, "migrations/auth"), { recursive: true });
+  writeFileSync(join(root, "migrations/auth", AUTH_MIGRATION), "create table t ();\n");
+  writeFileSync(join(root, "migrations", "0002_todos.sql"), "create table todos ();\n");
+  const entries = readdirSync(join(root, "migrations"));
+  assert.deepEqual(
+    pendingMigrations(entries, []).map((m) => m.name),
+    ["0002_todos.sql"],
+  );
+  assert.ok(readdirSync(join(root, "migrations/auth")).includes(AUTH_MIGRATION));
 });
 
 test("this workspace's auth schema copy is byte-identical to its source", () => {
