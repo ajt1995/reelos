@@ -105,6 +105,55 @@ def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) 
     return dropped
 
 
+def collapse_movie_named_dumps(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """Park release-named movie dumps into Title (Year) when that folder exists.
+
+    House Jellyfin Movies showed Interstellar×3 because Decypharr left
+    `Interstellar.2014.2160p…` next to `Interstellar (2014)`. Never touch /media.
+    `allow` is the test seam — not widenable from the environment.
+    """
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/radarr", "/symlinks/radarr"}
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
+    if resolved not in allowed:
+        return 0
+    if "/media/" in resolved or resolved == "/media":
+        return 0
+    if not base.is_dir():
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir()]
+    except OSError:
+        return 0
+    canons: dict[str, Path] = {}
+    for p in kids:
+        if not is_canonical_movie_folder(p.name):
+            continue
+        key = movie_dump_key(p.name)
+        if key and key not in canons:
+            canons[key] = p
+    dropped = 0
+    for p in kids:
+        if is_canonical_movie_folder(p.name):
+            continue
+        key = movie_dump_key(p.name)
+        if not key:
+            continue
+        canon = canons.get(key)
+        if canon is None:
+            continue
+        try:
+            if dump_dir_has_media(p):
+                move_dump_media(p, canon)
+            shutil.rmtree(p)
+            dropped += 1
+            log_wire(f"jellyfin drop movie dump {p.name}")
+        except OSError as e:
+            log_wire(f"jellyfin movie dump {p.name} {e}")
+    return dropped
+
+
 def fetch_jellyfin_series(token: str) -> list:
     q = urllib.parse.urlencode(
         {
@@ -161,6 +210,54 @@ def heal_season_folder_items(token: str, items=None, call_fn=None) -> int:
             log_wire(f"jellyfin season-folder item {plan['name']} {e.code} {err}")
         except NET_ERR as e:
             log_wire(f"jellyfin season-folder item {plan['name']} {e}")
+    return n
+
+
+def fetch_jellyfin_movies(token: str) -> list:
+    q = urllib.parse.urlencode(
+        {
+            "Recursive": "true",
+            "IncludeItemTypes": "Movie",
+            "Fields": "ProviderIds,Path",
+            "EnableImages": "false",
+            "EnableUserData": "false",
+            "EnableTotalRecordCount": "false",
+        }
+    )
+    try:
+        data = call(f"http://127.0.0.1:8096/Items?{q}", headers=jellyfin_headers(token)) or {}
+    except NET_ERR:
+        return []
+    items = data.get("Items") if isinstance(data, dict) else data
+    return items if isinstance(items, list) else []
+
+
+def heal_movie_dump_items(token: str, items=None, call_fn=None) -> int:
+    """Delete leftover release-folder Movie items Jellyfin already ingested.
+
+    Scoped to dump directories under radarr: DELETE /Items takes the files with it,
+    so `/media` and `Title (Year)` are never handed to Jellyfin.
+    """
+    rows = items if items is not None else fetch_jellyfin_movies(token)
+    do = call_fn or call
+    n = 0
+    for item in rows:
+        plan = plan_movie_dump_item(item, rows)
+        if not plan:
+            continue
+        try:
+            do(
+                f"http://127.0.0.1:8096/Items/{plan['id']}",
+                method="DELETE",
+                headers=jellyfin_headers(token),
+            )
+            log_wire(f"jellyfin drop movie dump item {plan['name']}")
+            n += 1
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"jellyfin movie dump item {plan['name']} {e.code} {err}")
+        except NET_ERR as e:
+            log_wire(f"jellyfin movie dump item {plan['name']} {e}")
     return n
 
 
@@ -244,7 +341,9 @@ def heal_after_import() -> bool:
     If #62's heal_season_folder_items is present, call it.
     """
     dropped = collapse_season_named_dumps()
+    dropped += collapse_movie_named_dumps()
     log_wire("import collapse season-folder dumps before jellyfin refresh")
+    log_wire("import collapse movie dumps before jellyfin refresh")
     token = jellyfin_token()
     healed = 0
     if token:
@@ -252,6 +351,10 @@ def heal_after_import() -> bool:
             healed = int(heal_season_folder_items(token) or 0)
         except Exception as e:
             log_wire(f"jellyfin season-folder item {e}")
+        try:
+            healed += int(heal_movie_dump_items(token) or 0)
+        except Exception as e:
+            log_wire(f"jellyfin movie dump item {e}")
     ready = True
     if token:
         want = jellyfin_want_libraries()
@@ -277,7 +380,10 @@ def heal_after_import() -> bool:
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collapse_dumps: bool = True) -> bool:
     dropped = collapse_season_named_dumps() if collapse_dumps else 0
-    healed = heal_season_folder_items(token) if collapse_dumps else 0
+    dropped += collapse_movie_named_dumps() if collapse_dumps else 0
+    healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
+        heal_movie_dump_items(token) if collapse_dumps else 0
+    )
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
