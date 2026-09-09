@@ -79,14 +79,31 @@ def last_releases_error() -> str:
     return t[:240]
 
 
+def _load_public_indexers():
+    import importlib.util
+
+    for raw in (
+        Path(__file__).resolve().with_name("public_indexers.py"),
+        Path("/opt/reelos/bin/public_indexers.py"),
+        Path("/workspace/daemon/public_indexers.py"),
+    ):
+        if not raw.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_public_indexers_doc", raw)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
 def releases_hop(answers: dict) -> dict:
-    src = answers.get("source") or ""
-    want = f"ReelOS-{src}"
+    """List every enabled Prowlarr indexer. Do not hide EZTV behind a TPB live test."""
     key = xml_key_text(COMPOSE / "configs" / "prowlarr" / "config.xml")
     if not key:
         return ok("releases", last_releases_error() or "Prowlarr has no API key", False)
     try:
-        import urllib.error
         import urllib.request
 
         req = urllib.request.Request(
@@ -98,29 +115,18 @@ def releases_hop(answers: dict) -> dict:
     except Exception as e:
         return ok("releases", last_releases_error() or f"{type(e).__name__}: {e}", False)
     rows = data if isinstance(data, list) else []
-    enabled = [ix for ix in rows if ix.get("enable")]
+    mod = _load_public_indexers()
+    if mod:
+        names = mod.enabled_indexer_names(rows)
+        detail, good = mod.doctor_releases_detail(names)
+        if not names:
+            return ok("releases", last_releases_error() or "No indexer enabled", False)
+        return ok("releases", detail, good)
+    enabled = [ix for ix in rows if isinstance(ix, dict) and ix.get("enable")]
     if not enabled:
         return ok("releases", last_releases_error() or "No indexer enabled", False)
-    last = last_releases_error()
-    for hit in enabled:
-        try:
-            import urllib.error
-            import urllib.request
-
-            req = urllib.request.Request(
-                "http://127.0.0.1:9696/api/v1/indexer/test",
-                data=json.dumps(hit).encode(),
-                method="POST",
-                headers={"X-Api-Key": key, "Content-Type": "application/json"},
-            )
-            with urllib.request.urlopen(req, timeout=20) as resp:
-                resp.read()
-            return ok("releases", str(hit.get("name") or "indexer"), True)
-        except urllib.error.HTTPError as e:
-            last = e.read().decode()[:240] if e.fp else str(e)
-        except Exception as e:
-            last = f"{type(e).__name__}: {e}"
-    return ok("releases", last or "Indexer test failed", False)
+    names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
+    return ok("releases", ",".join(names), True)
 
 
 def tailscale_hop() -> dict:
@@ -201,7 +207,21 @@ def main() -> int:
             except json.JSONDecodeError:
                 detail = "Decypharr config unreadable"
         checks.append(ok("Source adapter", detail, good))
-        checks.append(ok("Download lock", "Decypharr is the only client path", True))
+        failed = False
+        try:
+            r = subprocess.run(
+                ["systemctl", "is-failed", "reelos-lock-clients.service"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            failed = r.returncode == 0
+        except Exception:
+            failed = False
+        if failed:
+            checks.append(ok("Download lock", "reelos-lock-clients.service FAILED", False))
+        else:
+            checks.append(ok("Download lock", "Decypharr is the only client path", True))
     else:
         checks.append(ok("Source adapter", "Local + VPN (Gluetun)", listening(8085)))
 
@@ -267,5 +287,35 @@ def main() -> int:
     return 0
 
 
+def _self_test() -> int:
+    import unittest
+
+    class Doctor(unittest.TestCase):
+        def test_releases_lists_every_indexer_not_first_live_test(self):
+            src = Path(__file__).read_text()
+            hop = src[src.find("def releases_hop") : src.find("def tailscale_hop")]
+            self.assertIn("doctor_releases_detail", hop)
+            self.assertIn("enabled_indexer_names", hop)
+            self.assertNotIn("/indexer/" + "test", hop)
+            self.assertIn('ok("releases", detail, good)', hop)
+
+        def test_tpb_only_house_is_a_failed_releases_hop(self):
+            mod = _load_public_indexers()
+            self.assertIsNotNone(mod)
+            detail, good = mod.doctor_releases_detail(["ReelOS-tpb"])
+            self.assertFalse(good)
+            self.assertIn("ReelOS-tpb", detail)
+            self.assertIn("ReelOS-eztv", detail)
+            self.assertIn("ReelOS-showrss", detail)
+
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(Doctor)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    return 0 if result.wasSuccessful() else 1
+
+
 if __name__ == "__main__":
+    import sys
+
+    if "--self-test" in sys.argv:
+        raise SystemExit(_self_test())
     raise SystemExit(main())

@@ -819,6 +819,13 @@ def _should_search_missing(searched: dict, sk: str, now: float) -> bool:
     return now - last >= SEARCH_INTERVAL_SEC
 
 
+def clear_missing_search_cooldown(state: dict) -> dict:
+    """After EZTV/ShowRSS land, 0-file seasons must search again immediately."""
+    searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
+    state["searched"] = {k: v for k, v in searched.items() if not str(k).startswith("missing:")}
+    return state
+
+
 def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
     """0-file monitored seasons: relink from FUSE or SeasonSearch. Relink mod optional."""
     if app["name"] != "sonarr":
@@ -1656,6 +1663,20 @@ def _self_test() -> int:
             self.assertFalse(_should_search_missing({"missing:movie:1": 50.0}, "missing:movie:1", 100.0))
             self.assertTrue(_should_search_missing({"missing:movie:1": 50.0}, "missing:movie:1", 50.0 + SEARCH_INTERVAL_SEC))
 
+        def test_indexer_sync_clears_season_search_cooldown(self):
+            state = {
+                "searched": {
+                    "missing:9:s1": 50.0,
+                    "missing:movie:1": 50.0,
+                    "other": 1,
+                }
+            }
+            out = clear_missing_search_cooldown(state)
+            self.assertNotIn("missing:9:s1", out["searched"])
+            self.assertNotIn("missing:movie:1", out["searched"])
+            self.assertEqual(out["searched"]["other"], 1)
+            self.assertTrue(_should_search_missing(out["searched"], "missing:9:s1", 100.0))
+
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
     return 0 if result.wasSuccessful() else 1
@@ -1664,4 +1685,9 @@ def _self_test() -> int:
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         raise SystemExit(_self_test())
+    if "--research-missing" in sys.argv:
+        state = load_json(STATE / "stuck-downloads.json", {"seen": {}, "searched": {}})
+        if not isinstance(state, dict):
+            state = {"seen": {}, "searched": {}}
+        save_json(STATE / "stuck-downloads.json", clear_missing_search_cooldown(state))
     raise SystemExit(sweep())

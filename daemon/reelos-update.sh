@@ -326,8 +326,15 @@ need scripts/reelos-lookup-plugin.mjs 'kickArrRecover'
 need daemon/wire-engines.parts/09.part 'seerr_needs_search_enable'
 need daemon/public_indexers.py 'ReelOS-eztv'
 need daemon/public_indexers.py 'ReelOS-showrss'
+need daemon/public_indexers.py 'TorrentRssIndexer'
+need daemon/public_indexers.py 'doctor_releases_detail'
 need daemon/wire-engines.parts/04.part 'OTA: added missing public indexers'
+need daemon/wire-engines.parts/04.part 'rss fallback'
 need daemon/wire-engines.parts/02.part 'fullSync'
+need daemon/wire-engines.parts/09.part 'widen_sonarr_hybrid'
+need daemon/wire-engines.parts/09.part 'research-missing'
+need daemon/reelos-doctor.py 'doctor_releases_detail'
+need daemon/stuck-downloads.py 'clear_missing_search_cooldown'
 need daemon/reelos-update.sh 'wire-engines.py" indexers'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
@@ -925,7 +932,7 @@ PY
 if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
   if [ -x "$ROOT/bin/wire-engines.py" ]; then
-    log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS; YTS is movies-only)"
+    log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
     python3 "$ROOT/bin/wire-engines.py" indexers || log "indexers non-fatal"
     log "import after hops (TV/movies into the library)"
     python3 "$ROOT/bin/wire-engines.py" import || log "import non-fatal"
