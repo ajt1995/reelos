@@ -117,6 +117,9 @@ export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}
   const out = [];
   const seen = new Set();
   for (const row of seerrRows || []) {
+    // Only stuck rows. A row Seerr already calls available is in the library; re-adding
+    // it to Radarr and searching would re-grab the whole back catalogue on one recover.
+    if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
     const tmdb = row?.tmdb ?? row?.tmdbId;

@@ -382,6 +382,18 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
     orphans.map((t) => t.tmdb),
     [2059],
   );
+  // A row Seerr already calls available is in the library: recover must not re-add + re-grab it.
+  assert.deepEqual(
+    listSeerrOrphanMovieTargets({
+      seerrRows: [
+        { titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059, status: "available", engine: "downloaded" },
+        { titleId: "tmdb-603", mediaType: "movie", tmdb: 603, status: "available", progress: 100 },
+        { titleId: "tmdb-604", mediaType: "movie", tmdb: 604, status: "downloading" },
+      ],
+      movies: [],
+    }).map((t) => t.tmdb),
+    [604],
+  );
   const targets = listRecoverTargets({
     series: [],
     movies: [{ tmdbId: 157336, monitored: true, hasFile: false, statistics: { movieFileCount: 0 } }],
