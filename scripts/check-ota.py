@@ -71,7 +71,12 @@ def main() -> int:
             print(f"canary missing {path}", file=sys.stderr)
             fatal += 1
             continue
-        if pat and pat not in f.read_text():
+        textc = f.read_text()
+        if path.endswith("wire-engines.py"):
+            parts_dir = f.parent / "wire-engines.parts"
+            if parts_dir.is_dir():
+                textc += "".join(p.read_text() for p in sorted(parts_dir.glob("*.part")))
+        if pat and pat not in textc:
             print(f"canary grep miss {path} ~ {pat}", file=sys.stderr)
             if apply:
                 warns += 1

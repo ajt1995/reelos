@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronDown, LoaderCircle } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { ConnectView } from "@/components/connect-view";
@@ -18,15 +18,17 @@ function Building() {
   const total = build.length || 1;
   const current = build.find((s) => s.status === "running");
   const setPhase = useReelStore((s) => s.setPhase);
+  const [provisionErr, setProvisionErr] = useState("");
 
   useEffect(() => {
     let stop = false;
     const tick = () => {
       void fetch("/api/box", { cache: "no-store" })
-        .then((r) => r.json() as Promise<{ provisioned?: boolean; jellyfin?: { state?: string } }>)
+        .then((r) => r.json() as Promise<{ provisioned?: boolean; provisionError?: string; jellyfin?: { state?: string } }>)
         .then((b) => {
           if (stop) return;
           if (b.provisioned) setPhase("ready");
+          if (b.provisionError) setProvisionErr(b.provisionError);
         })
         .catch(() => {});
     };
@@ -49,6 +51,7 @@ function Building() {
         <p className="font-display text-xs tracking-[0.22em] text-gold uppercase">Building your stack</p>
         <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">Standing up ReelOS</h1>
         <p className="mt-3 text-sm text-muted">Waiting for engines. Libraries are not claimed until the box says so.</p>
+        {provisionErr ? <p className="mt-3 text-sm text-danger">{provisionErr}</p> : null}
         <div className="mt-6 h-1 overflow-hidden rounded-full bg-card-2">
           <div
             className="h-full bg-gold transition-[width] duration-500 ease-out"

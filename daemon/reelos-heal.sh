@@ -59,8 +59,13 @@ for f in src/lib/appliance.ts src/lib/catalog.ts src/components/home-view.tsx sr
 done
 
 # Always take GitHub wire-engines (ISO copy still sets use_webdav).
+# The shim execs wire-engines.parts — pulling only the loader bricks heal.
 pull "$RAW/daemon/wire-engines.py" "$ROOT/bin/wire-engines.py" || true
 chmod +x "$ROOT/bin/wire-engines.py" 2>/dev/null || true
+mkdir -p "$ROOT/bin/wire-engines.parts"
+for i in 00 01 02 03 04 05 06 07 08 09; do
+  pull "$RAW/daemon/wire-engines.parts/$i.part" "$ROOT/bin/wire-engines.parts/$i.part" || true
+done
 
 if [ -f "$COMPOSE/.env" ]; then
   set -a

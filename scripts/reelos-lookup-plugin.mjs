@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync } from "node:fs";
+import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync, unlinkSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
@@ -332,6 +332,30 @@ async function probeJson(url, ms = 3000) {
   }
 }
 
+const JF_AUTH =
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"';
+
+async function revealJellyfinAdmin(token, user) {
+  try {
+    let me = user;
+    if (!me?.Id || !me.Policy) {
+      const r = await fetch("http://127.0.0.1:8096/Users/Me", {
+        headers: { "X-Emby-Token": token },
+      });
+      me = r.ok ? await r.json() : null;
+    }
+    if (!me?.Id || !me.Policy || typeof me.Policy !== "object") return;
+    if (me.Policy.IsHidden === false) return;
+    await fetch(`http://127.0.0.1:8096/Users/${me.Id}/Policy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Emby-Token": token },
+      body: JSON.stringify({ ...me.Policy, IsHidden: false }),
+    });
+  } catch {
+    /* */
+  }
+}
+
 async function jellyfinToken(user, password) {
   const cached = jellyfinTokens.get(user, password);
   if (cached) return cached;
@@ -340,8 +364,8 @@ async function jellyfinToken(user, password) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Emby-Authorization":
-          'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"',
+        Authorization: JF_AUTH,
+        "X-Emby-Authorization": JF_AUTH,
       },
       body: JSON.stringify({ Username: user, Pw: password }),
       signal: AbortSignal.timeout(8000),
@@ -350,6 +374,7 @@ async function jellyfinToken(user, password) {
     const j = await r.json();
     const auth = { token: j.AccessToken, id: j.User?.Id };
     jellyfinTokens.set(user, password, auth);
+    if (auth.token) void revealJellyfinAdmin(auth.token, j.User);
     return auth;
   } catch {
     return null;
@@ -433,6 +458,10 @@ async function handleBox(_req, res) {
   const ts = tailscaleState();
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
+    provisioning: existsSync("/var/lib/reelos/provisioning"),
+    provisionError: existsSync("/var/lib/reelos/provision.error")
+      ? readFileSync("/var/lib/reelos/provision.error", "utf8").trim()
+      : "",
     ipv4: ip,
     watch: ip ? `http://${ip}:8096` : "",
     seerr: ip ? `http://${ip}:5055` : "",
@@ -1652,41 +1681,34 @@ async function handleProvision(req, res) {
     return;
   }
   const profiles = composeProfiles(a).join(",");
-  const env = { ...process.env, COMPOSE_PROFILES: profiles };
-  const run = (args, timeout) =>
-    spawnSync("docker", ["compose", ...args], {
-      cwd: composeDir,
-      env,
-      encoding: "utf8",
-      timeout,
-      maxBuffer: 8 * 1024 * 1024,
-    });
-  const pull = run(["pull"], 900000);
-  if (pull.status !== 0 && pull.error) {
-    send(res, 200, {
-      ok: false,
-      simulated: false,
-      error: (pull.stderr || pull.stdout || String(pull.error) || "compose pull failed").slice(0, 800),
-    });
-    return;
-  }
-  const up = run(["up", "-d"], 300000);
-  if (up.status !== 0) {
-    send(res, 200, {
-      ok: false,
-      simulated: false,
-      error: (up.stderr || up.stdout || pull.stderr || `compose ${up.status}`).slice(0, 800),
-    });
-    return;
-  }
   const wire = existsSync(`${root}/bin/wire-engines.py`)
     ? `${root}/bin/wire-engines.py`
     : "/workspace/daemon/wire-engines.py";
-  if (existsSync(wire)) {
-    spawn("python3", [wire], { detached: true, stdio: "ignore" }).unref();
+  try {
+    unlinkSync("/var/lib/reelos/provision.error");
+  } catch {
+    /* */
   }
-  writeFileSync("/var/lib/reelos/provisioned", "1\n");
-  send(res, 200, { ok: true, simulated: false });
+  if (!existsSync("/var/lib/reelos/provisioning")) {
+    writeFileSync("/var/lib/reelos/provisioning", "1\n");
+    const log = openSync("/var/lib/reelos/provision.log", "a");
+    const env = { ...process.env, COMPOSE_PROFILES: profiles };
+    const cmd = [
+      `cd ${JSON.stringify(composeDir)}`,
+      `export COMPOSE_PROFILES=${JSON.stringify(profiles)}`,
+      // `up -d` pulls missing images. Do not spawnSync `compose pull` here —
+      // a 15-minute pull wedges the Vite event loop (phone TypeError: Failed to fetch).
+      "if docker compose up -d; then",
+      "  printf '1\\n' > /var/lib/reelos/provisioned",
+      existsSync(wire) ? `  python3 ${JSON.stringify(wire)} || true` : "  true",
+      "else",
+      "  printf 'compose up failed\\n' > /var/lib/reelos/provision.error",
+      "fi",
+      "rm -f /var/lib/reelos/provisioning",
+    ].join("\n");
+    spawn("bash", ["-lc", cmd], { detached: true, stdio: ["ignore", log, log], env }).unref();
+  }
+  send(res, 200, { ok: true, simulated: false, started: true });
 }
 
 async function handlePing(req, res) {
