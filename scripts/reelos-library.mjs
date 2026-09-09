@@ -68,20 +68,40 @@ export function shelfTitleKey(t) {
   return `${t?.kind || "movie"}:${title}`;
 }
 
+export function titleYear(t) {
+  return Number(t?.year) || 0;
+}
+
+/** One dump scanned twice repeats the year; a remake does not. Dune 1984 is not Dune 2021. */
 export function dedupeLibraryTitles(titles) {
   const score = (x) => {
     const ids = Array.isArray(x?.ids) ? x.ids : [];
     const hasId = ids.some((i) => /^tmdb-|^tvdb-/.test(String(i)));
     return (x?.poster ? 2 : 0) + (hasId ? 4 : 0) + (x?.jellyfinId ? 1 : 0);
   };
-  const best = new Map();
+  const groups = new Map();
   for (const t of titles || []) {
     if (!t) continue;
     const key = shelfTitleKey(t);
-    const prev = best.get(key);
-    if (!prev || score(t) > score(prev)) best.set(key, t);
+    const year = titleYear(t);
+    const bucket = groups.get(key);
+    if (!bucket) {
+      groups.set(key, [{ best: t, year }]);
+      continue;
+    }
+    const slot = bucket.find((s) => !s.year || !year || s.year === year);
+    if (!slot) {
+      bucket.push({ best: t, year });
+      continue;
+    }
+    // A copy Jellyfin never matched has year 0. Keep the resolved year so the
+    // next unmatched copy still collapses and a real remake still does not.
+    slot.year = slot.year || year;
+    if (score(t) > score(slot.best)) slot.best = t;
   }
-  return [...best.values()];
+  return [...groups.values()]
+    .flat()
+    .map((s) => (s.year && !titleYear(s.best) ? { ...s.best, year: s.year } : s.best));
 }
 
 export function withPosterHost(titles, host) {
