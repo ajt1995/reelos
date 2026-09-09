@@ -31,6 +31,7 @@ import {
   titleIdFor,
   tmdbPoster,
   tvSeasonsForRequest,
+  movieRequestReason,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -524,6 +525,66 @@ test("duplicate collapse still prefers a done sibling after extras merge", () =>
   assert.equal(merged[0].progress, 100);
 });
 
+test("National Treasure stuck downloading@0 is honest when Radarr never got the movie", () => {
+  const row = seerrRequestRow(
+    {
+      id: 9,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 2059, status: 3 },
+    },
+    {},
+  );
+  assert.equal(row.status, "downloading");
+  assert.equal(row.progress, 0);
+  assert.equal(
+    movieRequestReason(row, { movies: [], arrMoviesReady: true }),
+    "Requested — Radarr has no movie yet",
+  );
+  const honest = honestifyRequests([row], { movies: [], arrMoviesReady: true, arrReady: true });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].progress, 0);
+  assert.equal(honest[0].reason, "Requested — Radarr has no movie yet");
+  const assembled = assembleRequestPayload([row], {
+    movies: [],
+    series: [],
+    arrMoviesReady: true,
+    arrReady: true,
+    arrIndex: buildArrIndex({ movies: [] }),
+  });
+  assert.equal(assembled.pipeline.radarrMissing.length, 0);
+  assert.equal(assembled.requests[0].reason, "Requested — Radarr has no movie yet");
+});
+
+test("0-file Radarr movie with no Decypharr client surfaces the missing hop", () => {
+  const row = seerrRequestRow(
+    {
+      id: 9,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 2059, status: 3 },
+    },
+    {},
+  );
+  const honest = honestifyRequests([row], {
+    movies: [{ tmdbId: 2059, hasFile: false, statistics: { movieFileCount: 0 } }],
+    arrMoviesReady: true,
+    arrReady: true,
+    radarrClients: [],
+    arrIndex: buildArrIndex({ movies: [{ tmdbId: 2059, hasFile: false }] }),
+  });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].reason, "No grab client — search cannot land");
+  assert.equal(
+    movieRequestReason(row, { movies: [{ tmdbId: 157336, hasFile: true }], arrMoviesReady: false }),
+    undefined,
+  );
+});
+
 test("Seerr media ghost (request list empty, media still processing) becomes a row", () => {
   const ghosts = seerrMediaGhostRows([
     {
@@ -602,6 +663,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /assembleRequestPayload/);
   assert.match(progress, /loadPresenceFacts/);
   assert.match(progress, /recover/);
+  assert.match(progress, /listRecoverTargets/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);
@@ -609,6 +671,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
+  assert.match(seerr, /Requested — Radarr has no movie yet/);
 });
 
 test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", () => {

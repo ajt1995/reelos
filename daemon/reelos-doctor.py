@@ -129,8 +129,27 @@ def releases_hop(answers: dict) -> dict:
     return ok("releases", ",".join(names), True)
 
 
+def _decypharr_client_ok(rows) -> bool:
+    clients = rows if isinstance(rows, list) else []
+    for c in clients:
+        if not isinstance(c, dict) or c.get("implementation") != "QBittorrent":
+            continue
+        host = ""
+        port = None
+        for f in c.get("fields") or []:
+            if not isinstance(f, dict):
+                continue
+            if f.get("name") == "host":
+                host = str(f.get("value") or "")
+            if f.get("name") == "port":
+                port = f.get("value")
+        if host == "decypharr" and int(port or 0) == 8282:
+            return True
+    return False
+
+
 def download_lock_hop() -> dict:
-    """Do not always-OK. SeasonSearch with no Decypharr client grabs nothing."""
+    """Do not always-OK. SeasonSearch/MoviesSearch with no Decypharr client grabs nothing."""
     failed = False
     try:
         r = subprocess.run(
@@ -142,44 +161,40 @@ def download_lock_hop() -> dict:
         failed = r.returncode == 0
     except Exception:
         failed = False
-    key = xml_key_text(COMPOSE / "configs" / "sonarr" / "config.xml")
-    if key:
-        try:
-            import urllib.request
+    import urllib.request
 
+    parts = []
+    missing = []
+    for name, port, missing_detail in (
+        ("Sonarr", 8989, "Sonarr has no Decypharr client — SeasonSearch cannot grab"),
+        ("Radarr", 7878, "Radarr has no Decypharr client — MoviesSearch cannot grab"),
+    ):
+        key = xml_key_text(COMPOSE / "configs" / name.lower() / "config.xml")
+        if not key:
+            continue
+        try:
             req = urllib.request.Request(
-                "http://127.0.0.1:8989/api/v3/downloadclient",
+                f"http://127.0.0.1:{port}/api/v3/downloadclient",
                 headers={"X-Api-Key": key},
             )
             with urllib.request.urlopen(req, timeout=8) as resp:
                 rows = json.loads(resp.read().decode() or "[]")
-            clients = rows if isinstance(rows, list) else []
-            dec = False
-            for c in clients:
-                if not isinstance(c, dict) or c.get("implementation") != "QBittorrent":
-                    continue
-                host = ""
-                port = None
-                for f in c.get("fields") or []:
-                    if not isinstance(f, dict):
-                        continue
-                    if f.get("name") == "host":
-                        host = str(f.get("value") or "")
-                    if f.get("name") == "port":
-                        port = f.get("value")
-                if host == "decypharr" and int(port or 0) == 8282:
-                    dec = True
-                    break
-            if dec:
-                detail = "Sonarr → Decypharr"
-                if failed:
-                    detail += " (lock-clients unit failed last run)"
-                return ok("Download lock", detail, True)
-            return ok("Download lock", "Sonarr has no Decypharr client — SeasonSearch cannot grab", False)
+            if _decypharr_client_ok(rows):
+                parts.append(f"{name} → Decypharr")
+            else:
+                missing.append(missing_detail)
         except Exception as e:
-            if failed:
-                return ok("Download lock", "reelos-lock-clients.service FAILED", False)
-            return ok("Download lock", f"Sonarr downloadclient {type(e).__name__}", False)
+            missing.append(f"{name} downloadclient {type(e).__name__}")
+    if missing:
+        detail = "; ".join(missing)
+        if failed:
+            detail += " (lock-clients unit failed last run)"
+        return ok("Download lock", detail, False)
+    if parts:
+        detail = ", ".join(parts)
+        if failed:
+            detail += " (lock-clients unit failed last run)"
+        return ok("Download lock", detail, True)
     if failed:
         return ok("Download lock", "reelos-lock-clients.service FAILED", False)
     return ok("Download lock", "Decypharr is the only client path", True)
@@ -343,11 +358,13 @@ def _self_test() -> int:
 
         def test_download_lock_probes_sonarr_decypharr_client(self):
             src = Path(__file__).read_text()
-            hop = src[src.find("def download_lock_hop") : src.find("def tailscale_hop")]
+            hop = src[src.find("def _decypharr_client_ok") : src.find("def tailscale_hop")]
             self.assertIn("/downloadclient", hop)
             self.assertIn("decypharr", hop)
             self.assertIn("8282", hop)
             self.assertIn("SeasonSearch cannot grab", hop)
+            self.assertIn("7878", hop)
+            self.assertIn("MoviesSearch cannot grab", hop)
 
         def test_tpb_only_house_is_a_failed_releases_hop(self):
             mod = _load_public_indexers()

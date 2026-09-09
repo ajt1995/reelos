@@ -61,11 +61,37 @@ export function mapJellyfinItem(it, host) {
   };
 }
 
-export function shelfTitleKey(t) {
-  const title = String(t?.title || "")
+/** JF season-folder names are the same show: "B99 S01", "TWD - Season 1". Trailing only. */
+export function stripSeasonFolderSuffix(title) {
+  const raw = String(title || "").trim();
+  // "- Season 1" is a bare season folder, not a suffix: stripping it to "" would
+  // give every such dump the same shelf key and collapse unrelated shows.
+  return raw.replace(/[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$/i, "").trim() || raw;
+}
+
+export function looksLikeSeasonFolderTitle(title) {
+  const raw = String(title || "").trim();
+  return Boolean(raw) && stripSeasonFolderSuffix(raw) !== raw;
+}
+
+function normalizeTitle(title) {
+  return String(title || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
-  return `${t?.kind || "movie"}:${title}`;
+}
+
+export function shelfTitleKey(t) {
+  return `${t?.kind || "movie"}:${normalizeTitle(stripSeasonFolderSuffix(t?.title))}`;
+}
+
+/** The name as Jellyfin has it, season suffix intact. */
+export function shelfLiteralKey(t) {
+  return `${t?.kind || "movie"}:${normalizeTitle(t?.title)}`;
+}
+
+export function titleProviderId(t) {
+  const ids = Array.isArray(t?.ids) ? t.ids : [];
+  return String(ids.find((i) => /^tmdb-|^tvdb-/.test(String(i))) || "");
 }
 
 export function titleYear(t) {
@@ -89,7 +115,16 @@ export function dedupeLibraryTitles(titles) {
       groups.set(key, [{ best: t, year }]);
       continue;
     }
-    const slot = bucket.find((s) => !s.year || !year || s.year === year);
+    // A season folder Jellyfin never matched carries no tmdb/tvdb id. Two rows that
+    // differ by a season suffix and both carry a *different* id are two real series
+    // (anime split seasons), so they must not share a row.
+    const aliasSafe = (s) => {
+      if (shelfLiteralKey(s.best) === shelfLiteralKey(t)) return true;
+      const a = titleProviderId(s.best);
+      const b = titleProviderId(t);
+      return !a || !b || a === b;
+    };
+    const slot = bucket.find((s) => (!s.year || !year || s.year === year) && aliasSafe(s));
     if (!slot) {
       bucket.push({ best: t, year });
       continue;
@@ -97,7 +132,12 @@ export function dedupeLibraryTitles(titles) {
     // A copy Jellyfin never matched has year 0. Keep the resolved year so the
     // next unmatched copy still collapses and a real remake still does not.
     slot.year = slot.year || year;
-    if (score(t) > score(slot.best)) slot.best = t;
+    const betterScore = score(t) > score(slot.best);
+    const preferSeriesName =
+      score(t) === score(slot.best) &&
+      looksLikeSeasonFolderTitle(slot.best?.title) &&
+      !looksLikeSeasonFolderTitle(t?.title);
+    if (betterScore || preferSeriesName) slot.best = t;
   }
   return [...groups.values()]
     .flat()

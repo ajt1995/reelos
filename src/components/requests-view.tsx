@@ -78,9 +78,10 @@ export function RequestsView() {
                   <p className="mt-1 text-sm text-danger">{r.reason}</p>
                 ) : (
                   <p className="mt-1 text-xs text-muted">
-                    {viaLabel(r.via, r.status) ??
+                    {r.reason ||
+                      viaLabel(r.via, r.status) ||
                       (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                    {r.status === "downloading" && r.progress > 0 ? ` · ${Math.round(r.progress)}%` : ""}
+                    {r.status === "downloading" && r.progress > 0 && !r.reason ? ` · ${Math.round(r.progress)}%` : ""}
                     {r.release ? ` · ${r.release}` : ""}
                   </p>
                 )}

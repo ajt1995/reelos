@@ -129,6 +129,92 @@ def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
     return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
 
 
+_SEASON_FOLDER = re.compile(r"[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$", re.I)
+
+
+def strip_season_folder_suffix(name: str) -> str:
+    """Brooklyn Nine-Nine S01 / The Walking Dead - Season 1 → the series name."""
+    return _SEASON_FOLDER.sub("", str(name or "")).strip()
+
+
+def extra_jellyfin_libraries(folders: list, want: list[tuple[str, str]]) -> list[dict]:
+    """Second Movies/Shows virtual folders leftover after path cleanup. Keep canonical names."""
+    canonical = {str(name) for name, _ctype in want}
+    want_types = {str(ctype).lower() for _name, ctype in want}
+    extras: list[dict] = []
+    for folder in folders or []:
+        if not isinstance(folder, dict):
+            continue
+        name = str(folder.get("Name") or "")
+        if name in canonical:
+            continue
+        ctype = str(folder.get("CollectionType") or folder.get("collectionType") or "").lower()
+        if ctype and ctype in want_types:
+            extras.append(folder)
+    return extras
+
+
+def dump_view_path(path: str) -> bool:
+    """/symlinks and its /mnt bind are two views of the same *arr dumps, never real files."""
+    p = str(path or "").rstrip("/")
+    return p in ("/symlinks", "/mnt/symlinks") or p.startswith(("/symlinks/", "/mnt/symlinks/"))
+
+
+def local_disk_path(path: str) -> bool:
+    p = str(path or "").rstrip("/")
+    return p == "/media" or p.startswith("/media/")
+
+
+def folder_collection_type(folder: dict) -> str:
+    return str(folder.get("CollectionType") or folder.get("collectionType") or "").lower()
+
+
+def plan_extra_library_drop(
+    extra: dict,
+    canon_name: str | None,
+    canon_folder: dict | None,
+    a: dict | None = None,
+) -> dict:
+    """Decide whether a leftover virtual folder is safe to delete, and what to migrate first.
+
+    Deleting a library un-lists everything it scans. A `local`/`both` house has real
+    files under /media, so any path we can neither hand to the canonical library nor
+    recognise as a dump view blocks the delete — that is the #60 class of bug. Paths
+    the canonical library already scans are skipped: re-POSTing one makes Jellyfin
+    scan the same dump twice and puts the duplicate rows straight back.
+    """
+    if not canon_name or not isinstance(canon_folder, dict):
+        return {"drop": False, "migrate": [], "blocked": ["no canonical library yet"]}
+    have = set(jellyfin_folder_paths(canon_folder))
+    keep = {str(p).rstrip("/") for p in jellyfin_keep_paths(canon_name, a) if p}
+    on_disk = ((a or answers()).get("storageMode") or "both") in ("local", "both")
+    migrate: list[str] = []
+    blocked: list[str] = []
+    for path in jellyfin_folder_paths(extra):
+        if path in have or dump_view_path(path):
+            continue
+        if path in keep:
+            migrate.append(path)
+        elif local_disk_path(path) and not on_disk:
+            continue
+        else:
+            blocked.append(path)
+    if blocked:
+        return {"drop": False, "migrate": [], "blocked": blocked}
+    return {"drop": True, "migrate": migrate, "blocked": []}
+
+
+def planned_extra_library_drops(folders: list, want: list[tuple[str, str]], a: dict | None = None) -> list[tuple]:
+    by_name = {str(f.get("Name") or ""): f for f in folders or [] if isinstance(f, dict)}
+    type_to_name = {str(ctype).lower(): name for name, ctype in want}
+    out = []
+    for extra in extra_jellyfin_libraries(folders, want):
+        canon = type_to_name.get(folder_collection_type(extra))
+        plan = plan_extra_library_drop(extra, canon, by_name.get(canon) if canon else None, a)
+        out.append((extra, canon, plan))
+    return out
+
+
 JF_NETWORK_XML = (
     '<?xml version="1.0" encoding="utf-8"?>\n'
     '<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '

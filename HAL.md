@@ -1,42 +1,40 @@
 # HAL.md
 
-Hal. **2026-09-09.** Named stamp **1.2.50.7** (EZTV/ShowRSS actually land; doctor lists them). Does **not** take 1.2.51 (Tron reserved).
+Hal. **2026-09-09.** Named stamp **1.2.50.8** (Home/JF season-folder aliases; National Treasure MoviesSearch honesty). Does **not** take 1.2.51 (Tron reserved).
 
-## Why public TV defs never appear after 1.2.50.6 Apply
+## Why Home still doubled B99 / TWD after 1.2.50.7
 
-House doctor releases = **ReelOS-tpb only**. Not lock-clients. Not catalog. Jellyfin Interstellar×3 is extra library paths (`/media/movies` + `/symlinks` parent + `/mnt/symlinks` bind), not a second grab.
+#60 keyed Home dedupe on `kind:title` + year. Jellyfin also listed the same show as a season-folder series with no Tvdb id:
 
-| # | Hypothesis | Verdict |
-| --- | --- | --- |
-| 1 | `ensure_public_indexers` / OTA hop not run | Hop **does** run on bin-only Apply (`wire-engines.py indexers` even when compose.yml unchanged). |
-| 2 | Schema miss for eztv/showrss | **This.** `#58` POSTed only when Cardigann blob contained `eztv`/`showrss`. Native `TorrentRssIndexer` does not. Log `no schema`, Apply succeeded. |
-| 3 | fullSync never pushes to Sonarr | Secondary. Defs never landed on **Prowlarr**, so Sonarr had nothing to sync. |
-| 4 | Doctor only listing a subset | Also true on 1.2.50.6 (first live-test pass). 1.2.50.7 lists every enabled name and fails closed if EZTV/ShowRSS missing. |
-| 5 | lock-clients failure blocking the indexer hop | **False.** Boot unit FAILED does not skip `indexers`. Lock runs after adds (`--quick` before SeasonSearch only). |
+- `Brooklyn Nine-Nine` (`tvdb-269586`) vs `Brooklyn Nine-Nine S01` (`jf-…`)
+- `The Walking Dead` (`tvdb-153021`) vs `The Walking Dead - Season 1` (`jf-…`)
 
-## QA five checks (house 1.2.50.6)
+Those keys never collided. Movies (Interstellar / Wick / Museum) were already unique.
 
-1. **Why lock-clients FAILED.** Unit had **no** `TimeoutStartSec` (systemd oneshot default **90s**). Script waited **90s for every app including Lidarr**, then `stuck-downloads` timeout **90s**. Movies+TV house has no Lidarr key → wait never breaks → systemd kills the unit. Sweep (SeasonSearch) never runs. OTA 1.2.50.6 did **not** copy the unit file.
-2. **EZTV/ShowRSS POSTed + fullSync.** No. `#58` skipped adds unless Cardigann schema contained `eztv`/`showrss`. Native TorrentRss does not. Prowlarr stayed TPB-only; Sonarr had nothing to sync.
-3. **SeasonSearch post-reboot.** Not from lock-clients (unit died in the Lidarr wait). `?recover=1` **did** fire SeasonSearch (`searched=true`) against TPB-only + Ultra-HD → 0 files.
-4. **Quality cutoff.** Wizard hybrid → Sonarr Ultra-HD (2160p-only). EZTV 720p WEB-DL rejected. Expanse 4K packs pass.
-5. **Wiring.** Schema miss; doctor first-pass hid missing EZTV; lock wait-all-apps; recover did not upsert Decypharr or fall back quality.
+Jellyfin itself still showed the extras because leftover virtual folders/paths from overlapping dumps survived Apply, and `/mnt/symlinks/sonarr` still had season-named dump dirs next to the imported series folder.
 
-1.2.50.7: skip missing Lidarr; wait+sweep **< 90s**; `TimeoutStartSec=180`; OTA copies the unit; HTTP sandbox POSTs `ReelOS-Decypharr` when missing; TorrentRss EZTV/ShowRSS; Ultra-HD → 720p or Any.
+## Why National Treasure sat on downloading@0
+
+Seerr had `seerr-9` (tmdb-2059). `pipeline.radarrMissing=[]` — Radarr had no 0-file row to recover. POST reuse waited for a Radarr movie that never appeared, skipped MoviesSearch, and did not lock Decypharr / widen Ultra-HD the way TV SeasonSearch does after #60. UI showed `0%` with no reason.
+
+## 1.2.50.8
+
+1. Collapse trailing `S01` / `Season 1` folder names on `/api/library`. Remakes with different years stay separate.
+2. Apply: drop extra Jellyfin libraries, but only once every path they hold is safe to lose — keep-paths migrate onto Movies/Shows first, dump views (`/symlinks`, `/mnt/symlinks`) just go, and any other `/media` path on a `local`/`both` house **blocks the delete**. Remove season-named sonarr dumps only when the series folder already has media. **Do not wipe `/media`.**
+3. Movie recover: add to Radarr if missing, lock client, quality fallback, MoviesSearch. Honest request reason when the hop never ran.
 
 ## xorriso — do this
 
 1. Merge this PR onto **main** (separate from Tron #52).
-2. House CLI or phone Check→Apply of current `main`. Expect `ReelOS 1.2.50.7 applied.`
+2. House CLI or phone Check→Apply of current `main`. Expect `ReelOS 1.2.50.8 applied.`
 3. On `main`, **`channel.json` tarball = `main.tar.gz`**.
 4. Hold Tron redesign. Do not wipe TorBox. Do not paste private tracker keys.
 
 ## Proof after Apply
 
-1. `cat /opt/reelos/VERSION` → `1.2.50.7`.
-2. Doctor **releases** detail includes **ReelOS-eztv** and **ReelOS-showrss** (comma list). TPB-only is a **red** hop: `ReelOS-tpb (missing ReelOS-eztv,ReelOS-showrss)`.
-3. Prowlarr has those two (TorrentRss RSS if Cardigann YAML was missing). Sonarr indexers include them after `fullSync`.
-4. Next hop **and** `?recover=1`: lock Sonarr → Decypharr, fall Ultra-HD back to Any if needed, SeasonSearch B99/TWD immediately.
-5. Doctor **Download lock** is `Sonarr → Decypharr` (not a static OK). Interstellar / John Wick / Expanse stay Available.
+1. `cat /opt/reelos/VERSION` → `1.2.50.8`.
+2. `GET /api/library`: one Brooklyn Nine-Nine, one Walking Dead. Dune-style remakes still two rows if both years exist.
+3. Jellyfin Shows matches Home. Movies library still has `/media/movies` on a local/both house.
+4. National Treasure: recover adds/searches; Requests says `Requested — Radarr has no movie yet` or `No grab client — search cannot land` instead of a silent 0% if that hop is still missing.
 
 Do not Apply the Tron feature tarball as if it were main.

@@ -49,6 +49,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /extra_jellyfin_paths/);
     assert.match(code, /remove_jellyfin_path/);
     assert.match(code, /jellyfin drop extra path/);
+    assert.match(code, /delete_jellyfin_library/);
+    assert.match(code, /collapse_season_named_dumps/);
+    assert.match(code, /extra_jellyfin_libraries/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
   }
@@ -119,6 +122,102 @@ assert "path=%2Fmedia%2Fmovies" in url, url
 assert "refreshLibrary=true" in url, url
 assert kwargs["method"] == "DELETE", kwargs
 assert "body" not in kwargs, kwargs
+
+# Extra virtual folders (TV + Movies 2) drop; /media migrates onto Movies for local/both.
+g["answers"] = lambda: {"storageMode": "both"}
+folders = [
+    folder,
+    {"Name": "TV", "CollectionType": "tvshows", "Locations": ["/symlinks"], "LibraryOptions": {"PathInfos": []}},
+    {
+        "Name": "Movies 2",
+        "CollectionType": "movies",
+        "Locations": ["/media/movies"],
+        "LibraryOptions": {"PathInfos": [{"Path": "/media/movies"}]},
+    },
+]
+extras = g["extra_jellyfin_libraries"](folders, [("Movies", "movies"), ("Shows", "tvshows")])
+assert {f["Name"] for f in extras} == {"TV", "Movies 2"}, extras
+assert g["strip_season_folder_suffix"]("Brooklyn Nine-Nine S01") == "Brooklyn Nine-Nine"
+assert g["strip_season_folder_suffix"]("The Walking Dead - Season 1") == "The Walking Dead"
+import tempfile, os
+from pathlib import Path
+td = tempfile.mkdtemp()
+# collapse must refuse /media
+media_root = Path(td) / "media" / "tv"
+media_root.mkdir(parents=True)
+(media_root / "Brooklyn Nine-Nine").mkdir()
+(media_root / "Brooklyn Nine-Nine S01").mkdir()
+assert g["collapse_season_named_dumps"](str(media_root), allow=[str(media_root)]) == 0
+assert (media_root / "Brooklyn Nine-Nine S01").is_dir()
+# refuse anything that is not the sonarr dump root
+assert g["collapse_season_named_dumps"](str(Path(td) / "other")) == 0
+dump = Path(td) / "sonarr"
+dump.mkdir()
+(dump / "Brooklyn Nine-Nine").mkdir()
+(dump / "Brooklyn Nine-Nine" / "S01E01.mkv").write_bytes(b"x")
+(dump / "Brooklyn Nine-Nine S01").mkdir()
+(dump / "Brooklyn Nine-Nine S01" / "ep.mkv").write_bytes(b"x")
+(dump / "The Walking Dead").mkdir()
+(dump / "The Walking Dead" / "video.mkv").write_bytes(b"x")
+(dump / "The Walking Dead - Season 1").mkdir()
+# the allowlist is a parameter, never the ambient environment
+os.environ["REELOS_TEST_DUMP_ROOT"] = str(dump)
+try:
+    assert g["collapse_season_named_dumps"](str(dump)) == 0
+finally:
+    os.environ.pop("REELOS_TEST_DUMP_ROOT", None)
+assert (dump / "Brooklyn Nine-Nine S01").is_dir()
+n = g["collapse_season_named_dumps"](str(dump), allow=[str(dump)])
+assert n == 2, n
+assert (dump / "Brooklyn Nine-Nine").is_dir()
+assert not (dump / "Brooklyn Nine-Nine S01").exists()
+assert (dump / "The Walking Dead").is_dir()
+assert not (dump / "The Walking Dead - Season 1").exists()
+
+# A leftover library is deleted only once every path it holds is safe to lose.
+CANON = {
+    "Name": "Movies",
+    "CollectionType": "movies",
+    "Locations": ["/symlinks/radarr", "/media/movies"],
+    "LibraryOptions": {"PathInfos": []},
+}
+
+
+def plan(paths, mode="both", canon=CANON):
+    extra = {"Name": "Dupe", "CollectionType": "movies", "Locations": list(paths), "LibraryOptions": {}}
+    return g["plan_extra_library_drop"](extra, "Movies", canon, {"storageMode": mode})
+
+
+# the dump path the canonical library already scans is dropped, never re-added
+p = plan(["/symlinks/radarr", "/mnt/symlinks/radarr", "/symlinks"])
+assert p == {"drop": True, "migrate": [], "blocked": []}, p
+# the wizard's own disk root migrates onto Movies first
+p = plan(["/symlinks", "/media/movies"], canon={"Name": "Movies", "Locations": ["/symlinks/radarr"]})
+assert p["drop"] is True and p["migrate"] == ["/media/movies"], p
+# a /media root we cannot hand over blocks the delete on a local/both house
+for path in ("/media", "/media/Movies", "/media/films", "/mnt/media/movies"):
+    p = plan([path])
+    assert p["drop"] is False and p["blocked"] == [path], (path, p)
+# debrid-only never writes to /media, so those views may go
+for path in ("/media", "/media/films"):
+    p = plan([path], mode="debrid")
+    assert p == {"drop": True, "migrate": [], "blocked": []}, (path, p)
+# never delete an extra before the canonical library exists
+p = plan(["/symlinks/radarr"], canon=None)
+assert p["drop"] is False, p
+# a kept library must not spin libraries_ready for 60s every Apply
+blocked_pair = [CANON, {"Name": "Kids", "CollectionType": "movies", "Locations": ["/media/kids"], "LibraryOptions": {}}]
+g["answers"] = lambda: {"storageMode": "both"}
+assert g["libraries_ready"](blocked_pair, [("Movies", "movies")]) is True
+droppable_pair = [CANON, {"Name": "Kids", "CollectionType": "movies", "Locations": ["/symlinks"], "LibraryOptions": {}}]
+assert g["libraries_ready"](droppable_pair, [("Movies", "movies")]) is False
+posted = []
+g["call"] = lambda url, key=None, **kw: posted.append((kw.get("method", "GET"), url))
+g["log_wire"] = lambda m: None
+assert g["drop_extra_jellyfin_libraries"]("tok", blocked_pair, [("Movies", "movies")]) == 0
+assert posted == [], posted
+assert g["drop_extra_jellyfin_libraries"]("tok", droppable_pair, [("Movies", "movies")]) == 1
+assert [m for m, _u in posted] == ["DELETE"], posted
 print("ok")
 `,
     ],
@@ -129,6 +228,11 @@ print("ok")
   const hop = read("daemon/wire-engines.parts/09.part");
   assert.match(hop, /ensure_jellyfin_libraries/);
   assert.match(hop, /jellyfin libraries one dump path each/);
+  assert.match(hop, /widen_radarr_hybrid/);
+  const eight = read("daemon/wire-engines.parts/08.part");
+  assert.match(eight, /delete_jellyfin_library/);
+  assert.match(eight, /collapse_season_named_dumps/);
+  assert.match(eight, /drop_extra_jellyfin_libraries/);
 });
 
 test("install and daemon wire-engines bodies stay twins", () => {
