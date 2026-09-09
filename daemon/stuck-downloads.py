@@ -826,6 +826,69 @@ def clear_missing_search_cooldown(state: dict) -> dict:
     return state
 
 
+def _load_public_mod():
+    import importlib.util
+
+    for raw in (
+        Path(__file__).resolve().with_name("public_indexers.py"),
+        Path("/opt/reelos/bin/public_indexers.py"),
+        Path("/workspace/daemon/public_indexers.py"),
+    ):
+        if not raw.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_public_indexers", raw)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+def ensure_item_grab_path(app: dict, key: str, item: dict) -> dict:
+    """Remonitor + lock Decypharr + Ultra-HD→Any before SeasonSearch/MoviesSearch."""
+    out = {"monitored": item.get("monitored") is not False, "profileFallback": "ok"}
+    kind = "movie" if app.get("name") == "radarr" else "series"
+    if item.get("monitored") is False:
+        try:
+            body = dict(item)
+            body["monitored"] = True
+            call(f"{app['base']}/{kind}/{item['id']}", key, method="PUT", body=body)
+            item["monitored"] = True
+            out["monitored"] = True
+            log(f"{app['name']} remonitor {item.get('title')}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"{app['name']} remonitor {item.get('title')} {type(e).__name__} {e}")
+            out["monitored"] = False
+    lock = Path(__file__).resolve().with_name("lock-download-clients.py")
+    if lock.is_file():
+        try:
+            subprocess.run([sys.executable, str(lock), "--quick"], check=False, timeout=20)
+        except Exception:
+            pass
+    mod = _load_public_mod()
+    if not mod or not getattr(mod, "pick_fallback_profile", None):
+        return out
+    try:
+        profiles = call(f"{app['base']}/qualityprofile", key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return out
+    fb = mod.pick_fallback_profile(profiles if isinstance(profiles, list) else [], item.get("qualityProfileId"))
+    out["profileFallback"] = fb.get("reason") or "ok"
+    if fb.get("reason") not in (None, "ok", "none") and fb.get("id") is not None and fb.get("id") != item.get("qualityProfileId"):
+        try:
+            body = dict(item)
+            body["qualityProfileId"] = fb["id"]
+            body["monitored"] = True
+            call(f"{app['base']}/{kind}/{item['id']}", key, method="PUT", body=body)
+            item["qualityProfileId"] = fb["id"]
+            log(f"{app['name']} profile {item.get('title')} → {fb.get('name')}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            out["profileFallback"] = "failed"
+            log(f"{app['name']} profile {item.get('title')} {type(e).__name__} {e}")
+    return out
+
+
 def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
     """0-file monitored seasons: relink from FUSE or SeasonSearch. Relink mod optional."""
     if app["name"] != "sonarr":
@@ -859,8 +922,12 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
                 files = int(stats.get("episodeFileCount") or 0)
             except (TypeError, ValueError):
                 files = 0
-            if files > 0 or season.get("monitored") is False or s.get("monitored") is False:
+            if files > 0:
                 continue
+            if season.get("monitored") is False or s.get("monitored") is False:
+                ensure_item_grab_path(app, key, s)
+                if season.get("monitored") is False:
+                    season["monitored"] = True
             hit = mod.match_catalog(title, catalog) if mod and catalog else None
             has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
             if mod:
@@ -887,6 +954,7 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
             elif action == "search":
                 if not _should_search_missing(searched, sk, now):
                     continue
+                ensure_item_grab_path(app, key, s)
                 try:
                     call(
                         f"{app['base']}/command",
@@ -918,7 +986,7 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
     now = time.time()
     kicked = False
     for m in movies:
-        if not isinstance(m, dict) or not m.get("id") or m.get("monitored") is False:
+        if not isinstance(m, dict) or not m.get("id"):
             continue
         stats = m.get("statistics") if isinstance(m.get("statistics"), dict) else {}
         try:
@@ -927,6 +995,8 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
             files = 0
         if m.get("hasFile") is True or files > 0:
             continue
+        if m.get("monitored") is False:
+            ensure_item_grab_path(app, key, m)
         title = str(m.get("title") or "")
         hit = mod.match_catalog(title, catalog) if mod and catalog else None
         has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
@@ -954,6 +1024,7 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
         elif action == "search":
             if not _should_search_missing(searched, sk, now):
                 continue
+            ensure_item_grab_path(app, key, m)
             try:
                 call(
                     f"{app['base']}/command",
@@ -1657,6 +1728,55 @@ def _self_test() -> int:
             self.assertIn("MoviesSearch", src)
             self.assertIn("empty-symlink", src)
             self.assertIn('body={"name": "MoviesSearch"', src)
+            self.assertIn("ensure_item_grab_path", src)
+            self.assertIn("pick_fallback_profile", src)
+            self.assertIn("remonitor", src)
+            movies_fn = src[src.find("def recover_missing_movies") : src.find("def movie_id_of")]
+            self.assertIn('if m.get("monitored") is False', movies_fn)
+            self.assertIn("ensure_item_grab_path", movies_fn)
+            search_at = movies_fn.rfind('body={"name": "MoviesSearch"')
+            prep_at = movies_fn.find("ensure_item_grab_path")
+            self.assertGreaterEqual(prep_at, 0)
+            self.assertGreater(search_at, prep_at)
+
+        def test_grab_path_remonitors_and_falls_ultra_hd_back(self):
+            ultra = {
+                "id": 6,
+                "name": "Ultra-HD",
+                "items": [
+                    {"quality": {"name": "WEBDL-720p"}, "allowed": False},
+                    {"quality": {"name": "WEBDL-2160p"}, "allowed": True},
+                ],
+            }
+            anyp = {"id": 1, "name": "Any", "items": [{"quality": {"name": "WEBDL-720p"}, "allowed": True}]}
+            mod = _load_public_mod()
+            self.assertIsNotNone(mod)
+            fb = mod.pick_fallback_profile([ultra, anyp], 6)
+            self.assertEqual(fb["reason"], "any")
+            self.assertEqual(fb["id"], 1)
+            movie = {"id": 12, "title": "National Treasure", "monitored": False, "qualityProfileId": 6}
+            puts = []
+
+            def fake_call(url, key=None, method="GET", body=None, form=None):
+                puts.append({"url": url, "method": method, "body": body})
+                if "qualityprofile" in str(url) and method == "GET":
+                    return [ultra, anyp]
+                return {"ok": True}
+
+            orig = call
+            try:
+                globals()["call"] = fake_call
+                out = ensure_item_grab_path(
+                    {"name": "radarr", "base": "http://127.0.0.1:7878/api/v3"},
+                    "k",
+                    movie,
+                )
+            finally:
+                globals()["call"] = orig
+            self.assertTrue(out["monitored"])
+            self.assertTrue(movie["monitored"])
+            self.assertEqual(movie["qualityProfileId"], 1)
+            self.assertTrue(any(p["method"] == "PUT" and p["body"] and p["body"].get("monitored") for p in puts))
 
         def test_search_interval_allows_first_missing_movie(self):
             self.assertTrue(_should_search_missing({}, "missing:movie:1", 100.0))

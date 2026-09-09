@@ -23,6 +23,7 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "package.json or package-lock.json changed"),
     ("daemon/reelos-update.sh", "staging missing package.json"),
     ("daemon/reelos-update.sh", "hop search red — not blocking UI-only stamp"),
+    ("daemon/reelos-update.sh", "not printing applied — jellyfin/indexer heal red"),
     ("daemon/reelos-update.sh", "npm ci failed — not swapping"),
     ("daemon/reelos-update.sh", "overlay house compose/configs onto staging"),
     ("daemon/reelos-update.sh", "still copying node_modules"),

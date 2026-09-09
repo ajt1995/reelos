@@ -144,7 +144,7 @@ def wait_fuse_ready(seconds: int = 40) -> bool:
     return False
 
 
-def kick_imports() -> None:
+def kick_imports() -> bool:
     if wait_fuse_ready(40):
         log_wire("import — FUSE ready")
     else:
@@ -190,15 +190,10 @@ def kick_imports() -> None:
                 log_wire(f"sonarr scan try {attempt + 1} {type(e).__name__} {e}")
                 time.sleep(8)
         sonarr_manual_import(sk)
-    token = jellyfin_token()
-    if token:
-        try:
-            call("http://127.0.0.1:8096/Library/Refresh", method="POST", headers={"X-Emby-Token": token})
-            log_wire("jellyfin refresh after import")
-        except Exception as e:
-            log_wire(f"jellyfin refresh {type(e).__name__} {e}")
-    else:
-        log_wire("jellyfin refresh skipped — no token")
+    # Scan/relink first. Collapse + JF refresh happen in heal_after_import so
+    # this Apply cannot re-ingest the duplicate dumps it just healed.
+    log_wire("import collapse season-folder dumps before jellyfin refresh")
+    return heal_after_import()
 
 
 d

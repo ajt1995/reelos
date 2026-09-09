@@ -1053,11 +1053,19 @@ async function handleRequest(req, res) {
       const reuseSeason =
         season != null && season !== "" ? Number(season) : reused.season != null ? Number(reused.season) : 1;
       note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${reuseSeason}`);
-      send(res, 200, { ok: true, engine: "seerr", added: false, reused: true, id: reused.id, title: body.title || titleId });
-      // House: Interstellar already in Radarr / TWD in Sonarr with 0 files — reuse must still search.
+      let recover = null;
       if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-        void kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, mediaType: parsed.mediaType });
+        recover = await kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, mediaType: parsed.mediaType });
       }
+      send(res, 200, {
+        ok: recover ? recover.ok !== false : true,
+        engine: "seerr",
+        added: false,
+        reused: true,
+        id: reused.id,
+        title: body.title || titleId,
+        recover,
+      });
       return;
     }
     const payload = buildSeerrAddPayload({
@@ -1078,10 +1086,17 @@ async function handleRequest(req, res) {
       return;
     }
     note(`seerr add ${added.status} type=${parsed.mediaType} season=${seasonN ?? ""}`);
-    send(res, 200, { ok: true, engine: "seerr", added: added.ok || added.status === 409, title: body.title || titleId });
+    let recover = null;
     if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-      void kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, mediaType: parsed.mediaType });
+      recover = await kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, mediaType: parsed.mediaType });
     }
+    send(res, 200, {
+      ok: recover ? recover.ok !== false : true,
+      engine: "seerr",
+      added: added.ok || added.status === 409,
+      title: body.title || titleId,
+      recover,
+    });
   } catch (e) {
     const error = String(e?.name === "AbortError" ? "Request UI timed out" : e);
     note(`request err ${error}`);

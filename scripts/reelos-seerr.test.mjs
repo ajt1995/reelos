@@ -33,6 +33,7 @@ import {
   tvSeasonsForRequest,
   movieRequestReason,
   qualityFloorRejectsHd,
+  pipelineMovieGaps,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -556,8 +557,23 @@ test("National Treasure stuck downloading@0 is honest when Radarr never got the 
     arrReady: true,
     arrIndex: buildArrIndex({ movies: [] }),
   });
-  assert.equal(assembled.pipeline.radarrMissing.length, 0);
+  assert.deepEqual(assembled.pipeline.radarrMissing, ["tmdb-2059"]);
+  assert.deepEqual(assembled.pipeline.radarrOrphans, ["tmdb-2059"]);
+  assert.deepEqual(assembled.pipeline.radarrUnmonitored, []);
   assert.equal(assembled.requests[0].reason, "Requested — Radarr has no movie yet");
+  assert.equal(assembled.requests[0].engine, "grabbing");
+  assert.equal(assembled.pipeline.decypharr, 0);
+  assert.deepEqual(
+    pipelineMovieGaps({
+      seerrRows: [row],
+      movies: [{ tmdbId: 2059, hasFile: false, monitored: false, statistics: { movieFileCount: 0 } }],
+    }),
+    {
+      radarrMissing: ["tmdb-2059"],
+      radarrOrphans: [],
+      radarrUnmonitored: ["tmdb-2059"],
+    },
+  );
 });
 
 test("0-file Radarr movie with a grab client is honest about the silent 0%", () => {

@@ -19,18 +19,18 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: VERSION / channel / stamps agree (1.2.50.10)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.11)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.10");
-  assert.equal(chan.version, "1.2.50.10");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.10"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.10"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.10"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.10"/);
-  assert.match(read("HAL.md"), /1\.2\.50\.10/);
+  assert.equal(ver, "1.2.50.11");
+  assert.equal(chan.version, "1.2.50.11");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.11"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.11"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.11"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.11"/);
+  assert.match(read("HAL.md"), /1\.2\.50\.11/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -77,6 +77,8 @@ test("stack: search hop is advisory; FUSE/Jellyfin fail-close only if compose ym
   assert.match(updater, /need src\/components\/title-view-live\.tsx '\/api\/request'/);
   assert.match(updater, /need src\/components\/settings-terminal\.tsx 'title="Terminal"'/);
   assert.match(updater, /need scripts\/reelos-lookup-plugin\.mjs 'serveLibrary'/);
+  assert.match(updater, /not printing applied — jellyfin\/indexer heal red/);
+  assert.match(updater, /HEAL_FAIL=1/);
 });
 
 test("stack: importPending retries when FUSE is readable (does not ignore)", () => {
@@ -113,6 +115,7 @@ test("stack: TV season import stays on sonarr dumps and twins", () => {
   const part = read("install/bin/wire-engines.parts/01.part");
   assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\)/);
   assert.match(part, /relink_dumps/);
+  assert.match(part, /return heal_after_import\(\)/);
   assert.equal(read("install/bin/relink_dumps.py"), read("daemon/relink_dumps.py"));
   assert.match(read("install/bin/relink_dumps.py"), /relink created/);
 });
@@ -130,6 +133,8 @@ test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () =>
     assert.match(code, /seed_jellyfin_network_xml/);
     assert.match(code, /wait_fuse_ready/);
     assert.match(code, /kick_imports/);
+    assert.match(code, /heal_after_import/);
+    assert.match(code, /collapse_dumps=False/);
     assert.match(code, /restart_fuse_readers/);
   }
   assert.equal(joinParts(join(root, "install/bin/wire-engines.parts")), joinParts(join(root, "daemon/wire-engines.parts")));

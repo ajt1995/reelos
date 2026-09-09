@@ -362,6 +362,58 @@ def enabled_indexer_names(rows) -> list[str]:
     return names
 
 
+def sonarr_indexer_kind(ix: dict) -> str:
+    """search | rss | none — TorrentRss EZTV is not SeasonSearch."""
+    if not isinstance(ix, dict) or not ix.get("enable"):
+        return "none"
+    name = str(ix.get("name") or "").lower()
+    impl = str(ix.get("implementation") or "").lower()
+    if impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name:
+        return "rss"
+    cats: list = []
+    for f in ix.get("fields") or []:
+        if not isinstance(f, dict):
+            continue
+        if f.get("name") in ("categories", "animeCategories"):
+            raw = f.get("value") or []
+            if isinstance(raw, list):
+                cats.extend(raw)
+    tv_cats = False
+    for c in cats:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 5000 <= n < 6000:
+            tv_cats = True
+            break
+    auto = ix.get("enableAutomaticSearch")
+    interactive = ix.get("enableInteractiveSearch")
+    if auto is False and interactive is False:
+        return "none"
+    if tv_cats or "tpb" in name or "pirate" in name or "1337" in name or impl in (
+        "thepiratebay",
+        "cardigann",
+        "torznab",
+        "newznab",
+    ):
+        return "search"
+    return "none"
+
+
+def doctor_sonarr_indexers_detail(rows) -> tuple[str, bool]:
+    """Prowlarr-green is not enough. Sonarr must have a search-capable indexer."""
+    enabled = [ix for ix in (rows or []) if isinstance(ix, dict) and ix.get("enable")]
+    names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
+    kinds = [sonarr_indexer_kind(ix) for ix in enabled]
+    if not enabled:
+        return "Sonarr has no enabled indexer — SeasonSearch cannot land", False
+    if "search" not in kinds:
+        listed = ",".join(names) if names else "none"
+        return f"{listed} (RSS-only — SeasonSearch needs a search indexer)", False
+    return ",".join(names), True
+
+
 def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
     """Doctor must list every enabled indexer, not the first live-test pass.
 
@@ -533,6 +585,40 @@ def _self_test() -> int:
             plan = pick_add_plan("ReelOS-eztv", ("eztv",), schemas)
             self.assertEqual(plan["method"], "schema")
             self.assertEqual(plan["schema"]["name"], "EZTV")
+
+        def test_sonarr_rss_only_is_not_a_search_path(self):
+            rss = {
+                "enable": True,
+                "name": "ReelOS-eztv",
+                "implementation": "TorrentRssIndexer",
+                "fields": [{"name": "categories", "value": [8000]}],
+            }
+            tpb = {
+                "enable": True,
+                "name": "ReelOS-tpb",
+                "implementation": "ThePirateBay",
+                "fields": [{"name": "categories", "value": [5000, 5040]}],
+            }
+            detail, good = doctor_sonarr_indexers_detail([rss])
+            self.assertFalse(good)
+            self.assertIn("RSS-only", detail)
+            self.assertIn("ReelOS-eztv", detail)
+            empty, empty_ok = doctor_sonarr_indexers_detail([])
+            self.assertFalse(empty_ok)
+            self.assertIn("no enabled indexer", empty)
+            ok_detail, ok = doctor_sonarr_indexers_detail([rss, tpb])
+            self.assertTrue(ok)
+            self.assertIn("ReelOS-tpb", ok_detail)
+            muted = dict(tpb)
+            muted["enableAutomaticSearch"] = False
+            muted["enableInteractiveSearch"] = False
+            muted_detail, muted_ok = doctor_sonarr_indexers_detail([rss, muted])
+            self.assertFalse(muted_ok)
+            self.assertIn("RSS-only", muted_detail)
+            unknown, unknown_ok = doctor_sonarr_indexers_detail(
+                [{"enable": True, "name": "Mystery", "implementation": "Unknown", "fields": []}]
+            )
+            self.assertFalse(unknown_ok)
 
         def test_doctor_lists_all_and_fails_when_tv_publics_missing(self):
             detail, ok = doctor_releases_detail(["ReelOS-tpb"])

@@ -1,7 +1,8 @@
 {
-  "version": "1.2.50.10",
+  "version": "1.2.50.11",
   "channel": "stable",
   "notes": [
+    "1.2.50.11: Apply does not stamp VERSION after JF/indexer heal red. Import scans dumps then heals — it does not re-ingest collapsed dumps. Doctor checks JF library paths, Radarr add/search, and Sonarr search indexers. stuck-downloads remonitors + lock/widen before search. kickArrRecover and pipeline.radarrMissing tell the truth. Complements #62/#64. Not 1.2.51 (Tron #52).",
     "1.2.50.10: Disabled Decypharr client is not a lock. Doctor fails closed when it cannot probe download clients. recover=1 only kicks Seerr-requested titles, not the whole *arr backlog. Ghost AVAILABLE and GET-by-id carry a reason. Retry re-POSTs /api/request. Complements #62. Not 1.2.51 (Tron #52).",
     "1.2.50.9: Home merges a jf-only season-folder row (TWD - Season 1 / 2011) onto the tvdb series even when PremiereDate ≠ series year. Remakes and anime split seasons with real ids stay separate. Apply heals leftover JF Series items (delete/rename) — season-named dump dirs only, never a /media local-disk row. Requests never sit on silent 0% — say searching / unmonitored / quality / queue; recover monitors and MoviesSearchs. Not 1.2.51 (Tron #52).",
     "1.2.50.8: Home collapses JF season-folder aliases (B99 S01 / TWD - Season 1) without hiding remakes. Apply heals leftover JF libraries/paths and season-named dumps; keeps /media on local/both. Movie POST/recover locks Decypharr, widens quality, adds to Radarr if Seerr never pushed, then MoviesSearch. Honest reason when Radarr has no movie or no grab client. Not 1.2.51 (Tron #52).",

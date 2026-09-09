@@ -37,11 +37,11 @@ async function arrJson(url, key, ms = 10000, { method = "GET", body } = {}) {
     });
     if (!res.ok) return null;
     const text = await res.text();
-    if (!text) return { ok: true };
+    if (!text) return { ok: true, empty: true };
     try {
       return JSON.parse(text);
     } catch {
-      return { ok: true };
+      return { ok: true, empty: true };
     }
   } catch {
     return null;
@@ -61,6 +61,20 @@ export function planTvPostRecover({ mediaType, season, arrHasSeasonFile = false 
 }
 
 /** Movie POST/reuse must MoviesSearch. TV stays SeasonSearch. Seerr add is async. */
+export function commandPosted(posted) {
+  if (!posted || typeof posted !== "object") return false;
+  if (posted.empty) return false;
+  if (posted.ok === false) return false;
+  return posted.id != null || Boolean(posted.name);
+}
+
+export function recoverKickOk({ wantedSearch = false, searched = false, command = null, grabPath = null } = {}) {
+  if (grabPath?.missing) return false;
+  if (grabPath?.profileFallback === "failed") return false;
+  if (wantedSearch) return Boolean(searched && command);
+  return true;
+}
+
 export function planArrPostRecover({ mediaType, season, arrHasFile = false } = {}) {
   if (mediaType === "movie") return { search: !arrHasFile, import: true };
   return planTvPostRecover({ mediaType, season, arrHasSeasonFile: arrHasFile });
@@ -450,6 +464,7 @@ export async function kickArrRecover({
   let searched = false;
   let command = null;
   let grabPath = null;
+  let wantedSearch = false;
   if (type === "tv" && sonarrKey && tmdb) {
     const n = Number(season);
     const wantSeason = Number.isFinite(n) && n > 0 ? n : null;
@@ -473,12 +488,13 @@ export async function kickArrRecover({
         arrHasFile: hasFile,
       });
       if (plan.search) {
+        wantedSearch = true;
         grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
         const posted = await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
           method: "POST",
           body: { name: "SeasonSearch", seriesId: hit.id, seasonNumber: wantSeason },
         });
-        searched = Boolean(posted);
+        searched = commandPosted(posted);
         command = searched ? "SeasonSearch" : null;
       }
     }
@@ -520,13 +536,14 @@ export async function kickArrRecover({
       const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
       const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
       if (plan.search) {
+        wantedSearch = true;
         grabPath = await ensureMovieGrabPath({ fetchArr, radarrKey, movie: hit });
         grabPath.added = added;
         const posted = await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
           method: "POST",
           body: { name: "MoviesSearch", movieIds: [hit.id] },
         });
-        searched = Boolean(posted);
+        searched = commandPosted(posted);
         command = searched ? "MoviesSearch" : null;
       } else if (added) {
         grabPath = { added, clientAdded: false, profileFallback: "ok", profileWidened: false };
@@ -536,7 +553,8 @@ export async function kickArrRecover({
     }
   }
   const importSpawned = spawnImport();
-  return { ok: true, seriesId, movieId, searched, command, importSpawned, grabPath };
+  const ok = recoverKickOk({ wantedSearch, searched, command, grabPath });
+  return { ok, wantedSearch, seriesId, movieId, searched, command, importSpawned, grabPath };
 }
 
 export async function kickTvSeasonRecover(opts = {}) {

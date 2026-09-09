@@ -42,19 +42,41 @@ def ensure_indexers_and_sync() -> int:
         widen_radarr_hybrid()
     except Exception as e:
         log_wire(f"radarr hybrid {type(e).__name__} {e}")
+    rc = 0
     try:
         jf_token = jellyfin_token()
+        frontend = (a.get("frontend") or "jellyfin")
         if jf_token:
             want = jellyfin_want_libraries()
-            if ensure_jellyfin_libraries(jf_token, want):
+            if ensure_jellyfin_libraries(jf_token, want, collapse_dumps=False):
                 log_wire("jellyfin libraries one dump path each")
+            else:
+                log_wire("jellyfin libraries missing after retry")
+                rc = 1
+        elif frontend in ("jellyfin", "both"):
+            log_wire("jellyfin libraries skip — no token")
+            rc = 1
     except Exception as e:
         log_wire(f"jellyfin libraries {type(e).__name__} {e}")
+        rc = 1
+    if prow_key:
+        try:
+            rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            mod = _load_public_indexers()
+            names = mod.enabled_indexer_names(rows) if mod else []
+            if mod:
+                _detail, good = mod.doctor_releases_detail(names)
+                if not good:
+                    log_wire(f"indexers heal red {_detail}")
+                    rc = 1
+        except Exception as e:
+            log_wire(f"indexers verify {type(e).__name__} {e}")
+            rc = 1
     try:
         research_missing_after_indexers()
     except Exception as e:
         log_wire(f"research-missing {type(e).__name__} {e}")
-    return 0
+    return rc
 
 
 def widen_sonarr_hybrid() -> None:
@@ -522,9 +544,10 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if "fuse" in sys.argv:
         raise SystemExit(0 if ensure_fuse() is None else 0)
+    if "heal" in sys.argv:
+        raise SystemExit(0 if heal_after_import() else 1)
     if "import" in sys.argv:
-        kick_imports()
-        raise SystemExit(0)
+        raise SystemExit(0 if kick_imports() else 1)
     if "indexers" in sys.argv:
         raise SystemExit(ensure_indexers_and_sync())
     raise SystemExit(main())
