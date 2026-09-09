@@ -255,17 +255,18 @@ need() {
   log "canary warn $f ~ $pat (copy drift, not fatal)"
 }
 need src/components/home-view.tsx '/api/lookup'
-need src/components/title-view.tsx '/api/request'
+need src/components/title-view-live.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Get Tailscale login'
 need src/components/advanced-view.tsx TerminalRow
-need src/components/settings-view.tsx 'title="Terminal"'
+need src/components/settings-terminal.tsx 'title="Terminal"'
 need src/components/library-view.tsx hydrateShelf
 need install/compose/docker-compose.yml '0.0.0.0:8096'
 need install/compose/docker-compose.yml rshared
 need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
-need scripts/reelos-lookup-plugin.mjs 'sonarr hits='
+need scripts/reelos-lookup-plugin.mjs 'serveLibrary'
+need daemon/reelos-update.sh 'overlay house compose/configs onto staging'
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
 need scripts/reelos-lookup-plugin.mjs '/api/activity'
@@ -340,8 +341,15 @@ if [ -d "$WORK/src/daemon" ]; then
 fi
 chmod 755 "$NEXT/bin/"* 2>/dev/null || true
 if [ -d "$ROOT/compose/configs" ]; then
-  mkdir -p "$NEXT/compose"
-  cp -a "$ROOT/compose/configs" "$NEXT/compose/configs" || log "config copy skipped vanished sqlite sidecars"
+  mkdir -p "$NEXT/compose/configs"
+  # Overlay: cp -a src dest on an existing dest dir nests as dest/src.
+  # House sqlite + metadata live at $ROOT/compose/configs — copy *contents*
+  # so they stay at $NEXT/compose/configs, not $NEXT/compose/configs/configs.
+  # #49 seeds install/compose/configs/jellyfin/config/network.xml; without
+  # overlay, mailman `cp -a install/. $NEXT` then this copy would nest the
+  # house tree and Jellyfin would lose Network.xml after swap.
+  cp -a "$ROOT/compose/configs/." "$NEXT/compose/configs/" || log "config copy skipped vanished sqlite sidecars"
+  log "overlay house compose/configs onto staging"
   [ -f "$ROOT/compose/.env" ] && cp -a "$ROOT/compose/.env" "$NEXT/compose/.env"
 fi
 if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
