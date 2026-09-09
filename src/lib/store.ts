@@ -691,7 +691,9 @@ export const useReelStore = create<ReelState>()(
               library: shelf.map((t) => t.id),
             });
           })
-          .catch((e) => set({ shelfError: String(e), shelfReady: true }))
+          .catch((e) => {
+            set({ shelfError: String(e), shelfReady: true });
+          })
           .finally(() => {
             shelfFetches.delete(key);
           });
