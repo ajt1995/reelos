@@ -388,7 +388,16 @@ export function arrHasFile(row, index) {
   if (!parsed) return false;
   if (parsed.mediaType === "movie") return Boolean(index.movieHasFile?.has(String(parsed.tmdb)));
   const season = row.season;
-  if (season == null) return false;
+  if (season == null) {
+    const tmdbPrefix = parsed.tmdb ? `tmdb:${parsed.tmdb}:` : "";
+    const tvdbPrefix = parsed.tvdb ? `tvdb:${parsed.tvdb}:` : "";
+    for (const key of index.seasonHasFile || []) {
+      const k = String(key);
+      if (tmdbPrefix && k.startsWith(tmdbPrefix)) return true;
+      if (tvdbPrefix && k.startsWith(tvdbPrefix)) return true;
+    }
+    return false;
+  }
   if (parsed.tmdb && index.seasonHasFile?.has(`tmdb:${parsed.tmdb}:${season}`)) return true;
   if (parsed.tvdb && index.seasonHasFile?.has(`tvdb:${parsed.tvdb}:${season}`)) return true;
   return false;
@@ -462,6 +471,41 @@ export function movieInRadarrQueue(queue, hit, tmdb) {
   });
 }
 
+function seriesSeasonFiles(hit, season) {
+  if (!hit) return 0;
+  if (season == null) return Number(hit.statistics?.episodeFileCount || 0);
+  const row = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === Number(season));
+  if (row) return Number(row.statistics?.episodeFileCount || 0);
+  return Number(hit.statistics?.episodeFileCount || 0);
+}
+
+function sonarrDumpNamed(dumps, title) {
+  const want = String(title || "").toLowerCase();
+  if (!want) return false;
+  return (dumps?.sonarr || []).some((n) => String(n || "").toLowerCase() === want);
+}
+
+/** Seerr requested a show, Sonarr has 0 files. Keep downloading@0, say why. */
+export function tvRequestReason(row, { series, arrSeriesReady, dumps } = {}) {
+  if (!row?.titleId) return undefined;
+  const parsed = parseTitleId(row.titleId);
+  if (parsed?.mediaType !== "tv") return undefined;
+  if (row.status === "available" || row.engine === "downloaded") return undefined;
+  if (arrSeriesReady === false || !Array.isArray(series)) return undefined;
+  const hit = series.find(
+    (s) =>
+      String(s?.tmdbId) === String(parsed.tmdb) ||
+      (parsed.tvdb != null && String(s?.tvdbId) === String(parsed.tvdb)),
+  );
+  if (!hit) return "Requested — Sonarr has no series yet";
+  if (seriesSeasonFiles(hit, row.season) > 0) return undefined;
+  if (hit.monitored === false) return "Unmonitored in Sonarr — search will not run";
+  const seasonRow = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === Number(row.season));
+  if (seasonRow && seasonRow.monitored === false) return "Season unmonitored in Sonarr — search will not run";
+  if (sonarrDumpNamed(dumps, hit.title)) return "Files linked — waiting for Sonarr import";
+  return "Searching — no file yet";
+}
+
 /** Seerr requested but Radarr never searched / has no grab client. Keep downloading@0, say why. */
 export function movieRequestReason(
   row,
@@ -528,7 +572,7 @@ export function overlayPresence(
     }
     if (libraryHit(row, libraryTitles)) return markAvailable(row);
     if (arrHasFile(row, arrIndex)) return markAvailable(row);
-    const reason = movieRequestReason(row, facts);
+    const reason = movieRequestReason(row, facts) || tvRequestReason(row, facts);
     return reason ? { ...row, reason } : row;
   });
 }

@@ -52,7 +52,7 @@ async function refreshLibraryFull(host) {
     const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     if (!auth?.token) return;
     const r = await fetch(libraryItemsUrl(), {
-      headers: { "X-Emby-Token": auth.token },
+      headers: jellyfinAuthedHeaders(auth.token),
       signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
     });
     if (!r.ok) return;
@@ -388,7 +388,17 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.18"';
+
+function jellyfinAuthedHeaders(token) {
+  const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
+  const headers = {
+    Authorization: auth,
+    "X-Emby-Authorization": auth,
+  };
+  if (token) headers["X-Emby-Token"] = token;
+  return headers;
+}
 
 const JF_NETWORK_XML = `<?xml version="1.0" encoding="utf-8"?>
 <NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -441,7 +451,7 @@ async function revealJellyfinAdmin(token, user) {
     let me = user;
     if (!me?.Id || !me.Policy) {
       const r = await fetch("http://127.0.0.1:8096/Users/Me", {
-        headers: { "X-Emby-Token": token },
+        headers: jellyfinAuthedHeaders(token),
       });
       me = r.ok ? await r.json() : null;
     }
@@ -449,7 +459,7 @@ async function revealJellyfinAdmin(token, user) {
     if (me.Policy.IsHidden === false) return;
     await fetch(`http://127.0.0.1:8096/Users/${me.Id}/Policy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Emby-Token": token },
+      headers: { "Content-Type": "application/json", ...jellyfinAuthedHeaders(token) },
       body: JSON.stringify({ ...me.Policy, IsHidden: false }),
     });
   } catch {
@@ -501,7 +511,7 @@ async function jellyfinState(ip) {
   let names = [];
   try {
     const r = await fetch("http://127.0.0.1:8096/Library/VirtualFolders", {
-      headers: { "X-Emby-Token": auth.token },
+      headers: jellyfinAuthedHeaders(auth.token),
     });
     const folders = r.ok ? await r.json() : [];
     names = (Array.isArray(folders) ? folders : []).map((x) => String(x.Name || ""));
@@ -1248,16 +1258,16 @@ async function tvHop() {
     try {
       const r = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       );
       const data = await r.json();
       const movies = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       ).then((x) => x.json());
       const shows = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Series&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       ).then((x) => x.json());
       jf = `jellyfin movies=${movies.TotalRecordCount ?? "?"} series=${shows.TotalRecordCount ?? "?"} total=${data.TotalRecordCount ?? "?"}`;
     } catch (e) {
@@ -1408,7 +1418,7 @@ async function handlePassword(req, res) {
     try {
       const r = await fetch(`http://127.0.0.1:8096/Users/${auth.id}/Password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Emby-Token": auth.token },
+        headers: { "Content-Type": "application/json", ...jellyfinAuthedHeaders(auth.token) },
         body: JSON.stringify({ CurrentPw: current, NewPw: next }),
       });
       jellyfin = r.ok;
@@ -1685,7 +1695,7 @@ async function handleLibrary(req, res) {
     },
     fetchItems: async (auth, limit) => {
       const r = await fetch(libraryItemsUrl({ limit }), {
-        headers: { "X-Emby-Token": auth.token },
+        headers: jellyfinAuthedHeaders(auth.token),
         signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
       });
       if (!r.ok) throw new Error(`Jellyfin ${r.status}`);

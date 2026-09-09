@@ -336,6 +336,8 @@ test("plugin AuthenticateByName sends Authorization MediaBrowser (JF 10.10+/12)"
   assert.match(src, /IsHidden: false/);
   assert.match(src, /seedJellyfinNetworkXml/);
   assert.match(src, /EnablePublishedServerUriByRequest/);
+  assert.match(src, /function jellyfinAuthedHeaders/);
+  assert.match(src, /jellyfinAuthedHeaders\(auth\.token\)/);
 });
 
 test("Finish /api/provision seeds jellyfin network.xml before detached compose up", () => {

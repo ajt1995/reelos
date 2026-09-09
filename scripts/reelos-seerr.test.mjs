@@ -34,6 +34,7 @@ import {
   tmdbPoster,
   tvSeasonsForRequest,
   movieRequestReason,
+  tvRequestReason,
   qualityFloorRejectsHd,
   pipelineMovieGaps,
 } from "./reelos-seerr.mjs";
@@ -278,6 +279,27 @@ test("Sonarr season hasFile upgrades that season only", () => {
   assert.equal(honest.find((r) => r.season === 1)?.progress, 100);
   assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
   assert.equal(honest.find((r) => r.season === 2)?.progress, 0);
+});
+
+test("whole-series grabbing row upgrades when Sonarr has any season files", () => {
+  const row = seerrRequestRow(
+    {
+      id: 11,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 1408, status: 3 },
+    },
+    {},
+  );
+  assert.equal(row.season, undefined);
+  const arrIndex = buildArrIndex({
+    series: [{ tmdbId: 1408, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 13 } }] }],
+  });
+  const honest = honestifyRequests([row], { arrIndex, arrReady: true });
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].progress, 100);
 });
 
 test("duplicate Seerr rows for the same title+season collapse when one is done", () => {
@@ -648,6 +670,54 @@ test("0-file Radarr movie with a grab client is honest about the silent 0%", () 
   );
 });
 
+test("0-file Sonarr season is honest about the silent 0%", () => {
+  const row = seerrRequestRow(
+    {
+      id: 11,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1408, status: 3 },
+    },
+    {},
+  );
+  assert.equal(row.status, "downloading");
+  assert.equal(row.progress, 0);
+  const series = {
+    id: 2,
+    tmdbId: 1408,
+    title: "Justified",
+    monitored: true,
+    statistics: { episodeFileCount: 0 },
+    seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } }],
+  };
+  assert.equal(
+    tvRequestReason(row, { series: [], arrSeriesReady: true }),
+    "Requested — Sonarr has no series yet",
+  );
+  assert.equal(tvRequestReason(row, { series: [series], arrSeriesReady: true }), "Searching — no file yet");
+  assert.equal(
+    tvRequestReason(row, {
+      series: [series],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["Justified"] },
+    }),
+    "Files linked — waiting for Sonarr import",
+  );
+  const honest = honestifyRequests([row], {
+    series: [series],
+    arrSeriesReady: true,
+    arrReady: true,
+    dumps: { sonarr: ["Justified"] },
+    arrIndex: buildArrIndex({ series: [series] }),
+  });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].progress, 0);
+  assert.equal(honest[0].reason, "Files linked — waiting for Sonarr import");
+});
+
 test("0-file Radarr movie with no Decypharr client surfaces the missing hop", () => {
   const row = seerrRequestRow(
     {
@@ -813,6 +883,8 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
   assert.match(seerr, /Requested — Radarr has no movie yet/);
   assert.match(seerr, /Searching — no file yet/);
+  assert.match(seerr, /tvRequestReason/);
+  assert.match(seerr, /Files linked — waiting for Sonarr import/);
 });
 
 test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", () => {

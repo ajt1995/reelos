@@ -18,12 +18,20 @@ MEDIA_EXT = (".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts")
 CATEGORIES = ("sonarr", "radarr")
 SKIP_DUMP_NAMES = {"radarr", "sonarr", "anime", "music", "debrid"}
 _SEASON_TAIL = re.compile(r"(?:s\d{1,2}(?:e\d{1,3})?|season\d{1,2})$")
+_TRACKER_TAG = re.compile(r"^\[+[^\]]+\]+\s*")
+_QUALITY_SPLIT = re.compile(r"(?:19|20)\d{2}|2160p|1080p|720p|webdl|webrip|bluray|bdremux|remux")
 
 
 def relink_stem(name: str) -> str:
     """Title stem only — do not match Museum into a Walking Dead dump via 20-char prefix."""
-    s = re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
-    s = re.split(r"(?:19|20)\d{2}|2160p|1080p|720p|webdl|webrip|bluray", s, maxsplit=1)[0]
+    raw = str(name or "")
+    while True:
+        stripped = _TRACKER_TAG.sub("", raw).strip()
+        if stripped == raw:
+            break
+        raw = stripped
+    s = re.sub(r"[^a-z0-9]+", "", raw.lower())
+    s = _QUALITY_SPLIT.split(s, maxsplit=1)[0]
     s = _SEASON_TAIL.sub("", s)
     return s
 
@@ -128,16 +136,33 @@ def fuse_catalog(all_root: Path) -> dict[str, Path]:
     return catalog
 
 
+def best_pack_for_stem(stem: str, catalog: dict[str, Path], prefer_name: str = "") -> Path | None:
+    """Pick one FUSE pack for a title stem. Prefer the *arr folder name over tracker dumps."""
+    if len(stem) < 8:
+        return None
+    hits = [p for name, p in catalog.items() if stems_equal(relink_stem(name), stem)]
+    if not hits:
+        return None
+    prefer = (prefer_name or "").lower()
+    if prefer:
+        exact = [p for p in hits if p.name.lower() == prefer]
+        if exact:
+            return exact[0]
+    hits.sort(key=lambda p: (len(p.name), p.name.lower()))
+    return hits[0]
+
+
+def best_pack_for_title(title: str, catalog: dict[str, Path]) -> Path | None:
+    return best_pack_for_stem(relink_stem(title), catalog, prefer_name=title)
+
+
 def match_catalog(dump_name: str, catalog: dict[str, Path]) -> Path | None:
     key = dump_name.lower()
     hit = catalog.get(key)
     if hit:
         return hit
     want = relink_stem(key)
-    if len(want) < 8:
-        return None
-    hits = [p for name, p in catalog.items() if stems_equal(relink_stem(name), want)]
-    return hits[0] if len(hits) == 1 else None
+    return best_pack_for_stem(want, catalog, prefer_name=dump_name)
 
 
 def decide_missing_action(
@@ -205,8 +230,36 @@ def relink_dumps(
         for dump in _existing_dumps(symlink_root / cat):
             claimed.add(dump.name.lower())
 
+    filled_stems: set[str] = set()
+    for cat in CATEGORIES:
+        for dump in _existing_dumps(symlink_root / cat):
+            if dump_has_media(dump):
+                filled_stems.add(relink_stem(dump.name))
+        for title in wanted.get(f"{cat}_titles") or []:
+            stem = relink_stem(title)
+            if stem in filled_stems:
+                continue
+            pack = best_pack_for_title(title, catalog)
+            if not pack:
+                continue
+            dest = symlink_root / cat / title
+            if dest.exists() and dump_has_media(dest):
+                filled_stems.add(stem)
+                claimed.add(dest.name.lower())
+                continue
+            added = fill_dump_from_pack(dest, pack)
+            n += added
+            if added:
+                filled_stems.add(stem)
+                claimed.add(dest.name.lower())
+                claimed.add(pack.name.lower())
+                note(f"relink created {cat}/{dest.name} from FUSE")
+
     for pack in catalog.values():
         if pack.name.lower() in claimed:
+            continue
+        stem = relink_stem(pack.name)
+        if stem in filled_stems:
             continue
         cat = classify_pack(pack.name, wanted)
         if not cat:
@@ -221,6 +274,23 @@ def relink_dumps(
             note(f"relink created {cat}/{pack.name} from FUSE")
     note(f"relink {n} links")
     return n
+
+
+def _unique_titles(rows, key: str = "title") -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get(key) or "").strip()
+        if not name:
+            continue
+        folded = name.lower()
+        if folded in seen:
+            continue
+        seen.add(folded)
+        out.append(name)
+    return out
 
 
 def wanted_from_arr_rows(series=None, movies=None, sonarr_queue=None, radarr_queue=None) -> dict:
@@ -249,7 +319,12 @@ def wanted_from_arr_rows(series=None, movies=None, sonarr_queue=None, radarr_que
         radarr.append(str(row.get("title") or ""))
         movie = row.get("movie") if isinstance(row.get("movie"), dict) else {}
         radarr.append(str(movie.get("title") or ""))
-    return {"sonarr": title_stems(sonarr), "radarr": title_stems(radarr)}
+    return {
+        "sonarr": title_stems(sonarr),
+        "radarr": title_stems(radarr),
+        "sonarr_titles": _unique_titles(series),
+        "radarr_titles": _unique_titles(movies),
+    }
 
 
 def _self_test() -> int:
@@ -263,6 +338,13 @@ def _self_test() -> int:
             self.assertEqual(relink_stem("The.Walking.Dead.S01.2160p"), "thewalkingdead")
             self.assertEqual(relink_stem("Night at the Museum"), "nightatthemuseum")
             self.assertEqual(relink_stem("Night.at.the.Museum.2006.2160p.WEB-DL"), "nightatthemuseum")
+            self.assertEqual(
+                relink_stem("[Bitsearch.to] Justified.S01.1080p.BluRay.REMUX.AVC.DTS-HD.MA.5.1-NOGRP[rartv]"),
+                "justified",
+            )
+            self.assertEqual(relink_stem("Justified.S01.BDRemux.1080p.TeamHD"), "justified")
+            self.assertEqual(relink_stem("Justified"), "justified")
+            self.assertNotEqual(relink_stem("Justified.City.Primeval.S01E01.2160p"), "justified")
 
         def test_classify_uses_wanted_only(self):
             wanted = wanted_from_arr_rows(
@@ -308,12 +390,13 @@ def _self_test() -> int:
                     wanted=wanted_from_arr_rows(series=[{"title": "The Walking Dead"}]),
                     log=notes.append,
                 )
-                dest = dumps / "sonarr" / pack.name
+                dest = dumps / "sonarr" / "The Walking Dead"
                 self.assertGreater(n, 0)
                 self.assertTrue((dest / "The.Walking.Dead.S01.E01.mkv").is_symlink())
+                self.assertFalse((dumps / "sonarr" / pack.name).exists())
                 self.assertFalse((dumps / "radarr" / museum.name).exists())
                 self.assertFalse((dumps / "The.Walking.Dead.2010.2160p.WEB-DL.DDP5.1").exists())
-                self.assertTrue(any("relink created sonarr/" in x for x in notes))
+                self.assertTrue(any("relink created sonarr/The Walking Dead" in x for x in notes))
 
         def test_existing_empty_dump_still_fills_without_wanted(self):
             with tempfile.TemporaryDirectory() as tmp:
@@ -346,7 +429,7 @@ def _self_test() -> int:
                 )
                 kids = {p.name for p in dumps.iterdir()}
                 self.assertEqual(kids, {"sonarr", "radarr"})
-                self.assertTrue((dumps / "sonarr" / pack.name / "E01.mkv").is_symlink())
+                self.assertTrue((dumps / "sonarr" / "The Walking Dead" / "E01.mkv").is_symlink())
 
         def test_queue_title_is_enough_wanted(self):
             wanted = wanted_from_arr_rows(
@@ -354,6 +437,55 @@ def _self_test() -> int:
             )
             self.assertIn("thewalkingdead", wanted["sonarr"])
             self.assertEqual(classify_pack("The.Walking.Dead.2010.2160p", wanted), "sonarr")
+
+        def test_tracker_prefix_pack_lands_in_series_folder(self):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                tagged = root / "all" / "[Bitsearch.to] Justified.S01.1080p.BluRay.REMUX[rartv]"
+                tagged.mkdir(parents=True)
+                (tagged / "Justified.S01E01.mkv").write_bytes(b"x")
+                remux = root / "all" / "Justified.S01.BDRemux.1080p.TeamHD"
+                remux.mkdir()
+                (remux / "Justified.s01e02.mkv").write_bytes(b"x")
+                named = root / "all" / "Justified"
+                named.mkdir()
+                (named / "Justified.S01E01.1080p.mkv").write_bytes(b"x")
+                primeval = root / "all" / "Justified.City.Primeval.S01E01.2160p"
+                primeval.mkdir()
+                (primeval / "E01.mkv").write_bytes(b"x")
+                dumps = root / "symlinks"
+                (dumps / "sonarr").mkdir(parents=True)
+                (dumps / "radarr").mkdir()
+                n = relink_dumps(
+                    all_root=root / "all",
+                    symlink_root=dumps,
+                    wanted=wanted_from_arr_rows(series=[{"title": "Justified"}]),
+                )
+                dest = dumps / "sonarr" / "Justified"
+                self.assertGreater(n, 0)
+                self.assertTrue((dest / "Justified.S01E01.1080p.mkv").is_symlink())
+                self.assertFalse((dumps / "sonarr" / tagged.name).exists())
+                self.assertFalse((dumps / "sonarr" / remux.name).exists())
+                self.assertFalse((dumps / "sonarr" / primeval.name).exists())
+
+        def test_does_not_create_title_dump_when_year_dump_already_has_media(self):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pack = root / "all" / "Interstellar"
+                pack.mkdir(parents=True)
+                (pack / "Interstellar.mkv").write_bytes(b"x")
+                dumps = root / "symlinks"
+                existing = dumps / "radarr" / "Interstellar (2014)"
+                existing.mkdir(parents=True)
+                os.symlink(pack / "Interstellar.mkv", existing / "Interstellar.mkv")
+                (dumps / "sonarr").mkdir(parents=True)
+                n = relink_dumps(
+                    all_root=root / "all",
+                    symlink_root=dumps,
+                    wanted=wanted_from_arr_rows(movies=[{"title": "Interstellar"}]),
+                )
+                self.assertEqual(n, 0)
+                self.assertFalse((dumps / "radarr" / "Interstellar").exists())
 
         def test_file_pack_still_fills_dump(self):
             with tempfile.TemporaryDirectory() as tmp:

@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.17";
-export const SHIPPED_VERSION = "1.2.50.17";
+export const LATEST_VERSION = "1.2.50.18";
+export const SHIPPED_VERSION = "1.2.50.18";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.18: FUSE dumps named [Bitsearch.to] Show.S01… now relink into the Sonarr series folder, so a requested season can import without a tap. TV Requests say searching / linked / unmonitored instead of silent 0%. Library Items send MediaBrowser Token (JF 12 401 on X-Emby-Token alone). Complements #69 Discover. Not 1.2.51 (Tron #52).",
   "1.2.50.17: Discover browse is Seerr popular movies/shows this box does not have — not the Jellyfin shelf. Search still lookup. TorBox wizard ping sends a named User-Agent. Wait longer for Seerr first-run so Finish can login. Not 1.2.51 (Tron #52).",
   "1.2.50.16: Live *arr v4 lists Torznab YTS with enable=null (search flags on). Heal treated that as no indexer — MoviesSearch worked, Apply stayed heal_red. Count RSS/search flags. Complements #69 DNS + mailman. Not 1.2.51 (Tron #52).",
   "1.2.50.15: House Apply of 1.2.50.13 left containers 14h old because mailman compared tarball compose yml to the already-swapped live file (always unchanged). Compare against the pre-swap yml so dropping dns: 1.1.1.1 actually recreates *arr. Refuse a second Apply instead of deleting ota.lock. Remount FUSE after compose up before hops. Complements #69 DNS. Not 1.2.51 (Tron #52).",
