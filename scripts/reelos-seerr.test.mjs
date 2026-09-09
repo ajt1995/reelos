@@ -14,6 +14,7 @@ import {
   assembleRequestPayload,
   ERA_QA_TITLES,
   lookupFailureMessage,
+  mapSeerrDiscoverResults,
   mapSeerrSearchResults,
   mapSeerrStatus,
   proveEraLookupRequest,
@@ -21,6 +22,7 @@ import {
   missingArrRequests,
   normalizeMediaType,
   seerrAvailableIsGhost,
+  seerrAlreadyHave,
   seerrMediaGhostRows,
   parseTitleId,
   realSeasonNumbers,
@@ -965,6 +967,25 @@ test("lookup+request: Brooklyn Nine-Nine (2013) S01 only — never seasons=all",
   assert.equal(landed.request.season, 1);
 });
 
+test("Discover browse drops titles this box already has", () => {
+  const hits = [
+    { id: 157336, mediaType: "movie", title: "Interstellar", mediaInfo: { status: 5 } },
+    { id: 27205, mediaType: "movie", title: "Inception", mediaInfo: { status: 1 } },
+    { id: 155, mediaType: "movie", title: "The Dark Knight", mediaInfo: { status: 4 } },
+    { id: 550, mediaType: "movie", title: "Fight Club", mediaInfo: { status: 2 } },
+  ];
+  const out = mapSeerrDiscoverResults(hits, {
+    mediaType: "movie",
+    excludeIds: new Set(["tmdb-27205"]),
+  });
+  assert.deepEqual(
+    out.map((t) => t.id),
+    ["tmdb-550"],
+  );
+  assert.equal(seerrAlreadyHave({ mediaInfo: { status: 5 } }), true);
+  assert.equal(seerrAlreadyHave({ mediaInfo: { status: 1 } }), false);
+});
+
 test("AbortError / timeout is a retryable lookup error, not an empty shelf", () => {
   const abort = new Error("The operation was aborted");
   abort.name = "AbortError";
@@ -981,7 +1002,12 @@ test("Discover stays free of In progress; POST never sends seasons=all", () => {
   assert.doesNotMatch(discover, /request=\{/);
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
+  assert.match(discover, /\/api\/discover/);
+  assert.doesNotMatch(discover, /Movies on this box/);
   assert.match(lookup, /mapSeerrSearchResults/);
+  assert.match(lookup, /mapSeerrDiscoverResults/);
+  assert.match(lookup, /\/api\/discover/);
+  assert.match(lookup, /"User-Agent": "ReelOS"/);
   assert.match(lookup, /buildSeerrAddPayload/);
   assert.match(lookup, /lookupFailureMessage/);
   assert.match(lookup, /ms: 45000/);

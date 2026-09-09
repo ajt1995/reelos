@@ -372,7 +372,9 @@ test("soft-reset re-seeds jellyfin network.xml", () => {
 test("auth-mismatch reset waits for first-run then completes startup", () => {
   const code = joinParts(join(root, "daemon/wire-engines.parts"));
   assert.match(code, /seed_jellyfin_network_xml\(\)/);
-  assert.match(code, /wait_jellyfin\(90, wizard_completed=False\)/);
+  assert.match(code, /EnableLegacyAuthorization>true/);
+  assert.match(code, /seed_jellyfin_legacy_auth/);
+  assert.match(code, /startup endpoints not ready/);
   assert.match(code, /apply_jellyfin_published_uri\(token\)/);
   const reset = code.slice(code.indexOf("def reset_jellyfin_config"), code.indexOf("def wait_jellyfin"));
   assert.ok(reset.indexOf("seed_jellyfin_network_xml") < reset.indexOf('compose("up"'));

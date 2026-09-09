@@ -415,7 +415,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
     user = (a.get("adminName") or "reelos").strip() or "reelos"
     password = (a.get("adminPassword") or "reelos").strip() or "reelos"
     up = False
-    for _ in range(40):
+    for _ in range(90):
         try:
             urllib.request.urlopen("http://127.0.0.1:5055/api/v1/status", timeout=3).read()
             up = True
@@ -528,6 +528,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
         main = s.call("/api/v1/settings/main") or {}
         main["localLogin"] = True
         main["mediaServerLogin"] = True
+        main["hideAvailable"] = True
         main["defaultPermissions"] = SEERR_HOUSEHOLD
         s.call("/api/v1/settings/main", "POST", main)
     except NET_ERR as e:

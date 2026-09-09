@@ -12,6 +12,7 @@ import {
   honestifyRequests,
   assembleRequestPayload,
   mapSeerrSearchResults,
+  mapSeerrDiscoverResults,
   lookupFailureMessage,
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
@@ -309,6 +310,67 @@ async function handleLookup(req, res) {
     note(`seerr ${e}`);
   }
   send(res, 200, { titles, error });
+}
+
+function ownedDiscoverIds() {
+  const ids = new Set();
+  const entry = libraryCache.read();
+  for (const t of entry?.titles || []) {
+    if (t?.id) ids.add(String(t.id));
+    for (const extra of t?.ids || []) {
+      if (extra) ids.add(String(extra));
+    }
+  }
+  return ids;
+}
+
+async function handleDiscover(_req, res) {
+  const movies = [];
+  const tv = [];
+  let error = null;
+  const key = seerrApiKey();
+  note(`api discover seerr=${key ? "yes" : "NO"}`);
+  if (!key) {
+    error = "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.";
+    send(res, 200, { movies, tv, error });
+    return;
+  }
+  try {
+    const [movieRes, tvRes] = await Promise.all([
+      seerrFetch("/api/v1/discover/movies", { key, ms: 45000 }),
+      seerrFetch("/api/v1/discover/tv", { key, ms: 45000 }),
+    ]);
+    if (!movieRes.ok && !tvRes.ok) {
+      error =
+        movieRes.status === 403 || tvRes.status === 403
+          ? "Request UI is still finishing setup. Wait, then refresh Discover."
+          : `seerr ${movieRes.status || tvRes.status}`;
+      note(`seerr discover movies=${movieRes.status} tv=${tvRes.status}`);
+      send(res, 200, { movies, tv, error });
+      return;
+    }
+    const excludeIds = ownedDiscoverIds();
+    if (movieRes.ok) {
+      const hits = Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || [];
+      movies.push(...mapSeerrDiscoverResults(hits, { mediaType: "movie", limit: 16, excludeIds }));
+    } else {
+      note(`seerr discover movies ${movieRes.status}`);
+    }
+    if (tvRes.ok) {
+      const hits = Array.isArray(tvRes.json) ? tvRes.json : tvRes.json?.results || [];
+      tv.push(...mapSeerrDiscoverResults(hits, { mediaType: "tv", limit: 16, excludeIds }));
+    } else {
+      note(`seerr discover tv ${tvRes.status}`);
+    }
+    if (!movies.length && !tv.length) {
+      error = error || "Seerr has nothing new to show yet.";
+    }
+    note(`seerr discover movies=${movies.length} tv=${tv.length}`);
+  } catch (e) {
+    error = lookupFailureMessage(e);
+    note(`seerr discover ${e}`);
+  }
+  send(res, 200, { movies, tv, error });
 }
 
 async function probeJson(url, ms = 3000) {
@@ -1843,7 +1905,11 @@ async function handlePing(req, res) {
     }
     if (source === "torbox") {
       const r = await fetch("https://api.torbox.app/v1/api/user/me", {
-        headers: { Authorization: `Bearer ${key}` },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          "User-Agent": "ReelOS",
+        },
         signal: AbortSignal.timeout(8000),
       });
       if (!r.ok) {
@@ -1939,6 +2005,7 @@ export function reelosLookupPlugin() {
         const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
         try {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
+          if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));

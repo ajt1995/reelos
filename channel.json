@@ -1,7 +1,8 @@
 {
-  "version": "1.2.50.16",
+  "version": "1.2.50.17",
   "channel": "stable",
   "notes": [
+    "1.2.50.17: Discover browse is Seerr popular movies/shows this box does not have — not the Jellyfin shelf. Search still lookup. TorBox wizard ping sends a named User-Agent. Wait longer for Seerr first-run so Finish can login. Not 1.2.51 (Tron #52).",
     "1.2.50.16: Live *arr v4 lists Torznab YTS with enable=null (search flags on). Heal treated that as no indexer — MoviesSearch worked, Apply stayed heal_red. Count RSS/search flags. Complements #69 DNS + mailman. Not 1.2.51 (Tron #52).",
     "1.2.50.15: House Apply of 1.2.50.13 left containers 14h old because mailman compared tarball compose yml to the already-swapped live file (always unchanged). Compare against the pre-swap yml so dropping dns: 1.1.1.1 actually recreates *arr. Refuse a second Apply instead of deleting ota.lock. Remount FUSE after compose up before hops. Complements #69 DNS. Not 1.2.51 (Tron #52).",
     "1.2.50.14: House Apply of 1.2.50.13 heal_red'd again (still 1.2.50.11). compose dns: 1.1.1.1 hid Docker names (radarr/prowlarr/decypharr); docker compose ps ETIMEDOUT so Torznab fell back to hostname prowlarr which Radarr cannot resolve. Drop per-container dns so embedded DNS works. Keep forceSave. Complements #68. Not 1.2.51 (Tron #52).",

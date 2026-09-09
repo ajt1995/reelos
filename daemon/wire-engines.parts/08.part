@@ -320,6 +320,10 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
 
 def bootstrap_jellyfin() -> None:
     seed_jellyfin_network_xml()
+    if seed_jellyfin_legacy_auth():
+        compose("up", "-d", "jellyfin")
+        subprocess.run(["docker", "restart", "reelos-jellyfin-1"], check=False, capture_output=True)
+        wait_jellyfin(90)
     info = wait_jellyfin(90)
     if not info:
         log_wire("jellyfin not up")

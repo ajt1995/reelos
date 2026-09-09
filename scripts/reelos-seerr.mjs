@@ -110,6 +110,39 @@ export function mapSeerrSearchResults(hits, { q = "", limit = 16 } = {}) {
   return rankLookupTitles(titles, q);
 }
 
+/** Seerr/Jellyseerr: 4 = partially available, 5 = available. Those are already on the box. */
+export function seerrAlreadyHave(hit) {
+  const status = Number(hit?.mediaInfo?.status || 0);
+  return status === 4 || status === 5;
+}
+
+function titleIdSet(titles) {
+  const ids = new Set();
+  for (const t of titles || []) {
+    if (t?.id) ids.add(String(t.id));
+    for (const extra of t?.ids || []) {
+      if (extra) ids.add(String(extra));
+    }
+  }
+  return ids;
+}
+
+/** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
+export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds } = {}) {
+  const owned = excludeIds instanceof Set ? excludeIds : titleIdSet(excludeIds);
+  const titles = [];
+  for (const h of hits || []) {
+    if (seerrAlreadyHave(h)) continue;
+    const type = normalizeMediaType(h?.mediaType || mediaType);
+    if (!type) continue;
+    const t = seerrSearchHit(h, type);
+    if (!t || owned.has(t.id)) continue;
+    titles.push(t);
+    if (titles.length >= limit) break;
+  }
+  return titles;
+}
+
 /**
  * Unit-sandbox: search hits → pick title → Seerr POST body → honest status.
  * Mock Seerr/*arr only. No house keys.

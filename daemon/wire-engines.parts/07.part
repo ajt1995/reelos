@@ -338,6 +338,35 @@ def seed_jellyfin_network_xml() -> None:
     dest.write_text(JF_NETWORK_XML)
 
 
+def seed_jellyfin_legacy_auth() -> bool:
+    """JF 12 defaults EnableLegacyAuthorization=false. Jellyseerr 2.7 still sends X-Emby-Authorization; AuthenticateByName is 400 and wizard Finish cannot login Seerr."""
+    dest = COMPOSE / "configs" / "jellyfin" / "config" / "system.xml"
+    if not dest.exists():
+        return False
+    text = dest.read_text()
+    if re.search(r"<EnableLegacyAuthorization>\s*true\s*<", text, re.I):
+        return False
+    if "<EnableLegacyAuthorization>" in text:
+        dest.write_text(
+            re.sub(
+                r"<EnableLegacyAuthorization>[^<]*</EnableLegacyAuthorization>",
+                "<EnableLegacyAuthorization>true</EnableLegacyAuthorization>",
+                text,
+            )
+        )
+        log_wire("jellyfin EnableLegacyAuthorization so Seerr can login")
+        return True
+    if "</ServerConfiguration>" in text:
+        dest.write_text(
+            text.replace(
+                "</ServerConfiguration>",
+                "  <EnableLegacyAuthorization>true</EnableLegacyAuthorization>\n</ServerConfiguration>",
+            )
+        )
+        return True
+    return False
+
+
 def apply_jellyfin_published_uri(token: str) -> None:
     hdr = jellyfin_headers(token)
     try:
@@ -374,6 +403,27 @@ def jellyfin_want_libraries(a: dict | None = None) -> list[tuple[str, str]]:
     return want
 
 
+def jellyfin_startup_post(path: str, body: dict | None = None, tries: int = 20) -> None:
+    """JF 12 Startup/* 404/503s until first-run routes are up. One 404 must not skip Complete."""
+    url = "http://127.0.0.1:8096" + path
+    last: BaseException | None = None
+    for _ in range(tries):
+        try:
+            call(url, method="POST", body={} if body is None else body)
+            return
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (404, 503):
+                time.sleep(2)
+                continue
+            raise
+        except NET_ERR as e:
+            last = e
+            time.sleep(2)
+    if last:
+        raise last
+
+
 def complete_jellyfin_startup(user: str, password: str) -> None:
     try:
         with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=5) as resp:
@@ -382,27 +432,41 @@ def complete_jellyfin_startup(user: str, password: str) -> None:
         return
     if info.get("StartupWizardCompleted"):
         return
+    ready = False
+    for _ in range(20):
+        try:
+            req = urllib.request.Request(
+                "http://127.0.0.1:8096/Startup/User",
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except urllib.error.HTTPError as e:
+            if e.code not in (404, 503):
+                break
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
+            pass
+        time.sleep(2)
+    if not ready:
+        log_wire("jellyfin startup endpoints not ready")
+        return
     try:
-        call(
-            "http://127.0.0.1:8096/Startup/Configuration",
-            method="POST",
-            body={
+        jellyfin_startup_post(
+            "/Startup/Configuration",
+            {
                 "UICulture": "en-US",
                 "MetadataCountryCode": "US",
                 "PreferredMetadataLanguage": "en",
             },
         )
-        call(
-            "http://127.0.0.1:8096/Startup/RemoteAccess",
-            method="POST",
-            body={"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
+        jellyfin_startup_post(
+            "/Startup/RemoteAccess",
+            {"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
         )
-        call(
-            "http://127.0.0.1:8096/Startup/User",
-            method="POST",
-            body={"Name": user, "Password": password},
-        )
-        call("http://127.0.0.1:8096/Startup/Complete", method="POST", body={})
+        jellyfin_startup_post("/Startup/User", {"Name": user, "Password": password})
+        jellyfin_startup_post("/Startup/Complete", {})
         log_wire("jellyfin startup complete")
         time.sleep(3)
     except NET_ERR as e:

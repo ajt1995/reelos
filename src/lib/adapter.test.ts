@@ -41,10 +41,12 @@ test("Discover search cards do not take request, progress, or Cached glow", () =
   const card = readFileSync(join(root, "src/components/title-card.tsx"), "utf8");
   const adapter = readFileSync(join(root, "src/lib/adapter.ts"), "utf8");
   assert.match(discover, /\/api\/lookup\?q=/);
+  assert.match(discover, /\/api\/discover/);
   assert.match(discover, /<TitleCard key=\{t\.id\} title=\{t\} \/>/);
   assert.doesNotMatch(discover, /request=\{/);
   assert.doesNotMatch(discover, /progress=\{/);
   assert.doesNotMatch(discover, /In progress/i);
+  assert.doesNotMatch(discover, /Movies on this box/);
   assert.match(card, /showCache/);
   assert.match(adapter, /isLiveEngineTitleId/);
   assert.match(adapter, /tmdb-\|tvdb-\|jf-/);
