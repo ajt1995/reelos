@@ -30,6 +30,18 @@ TV_RSS_FEEDS = {
 
 RSS_SCHEMA_HINTS = ("torrentrss", "torrent rss", "torrentrssindexer")
 
+# Per-container dns: 1.1.1.1 replaces Docker's 127.0.0.11. Service names die.
+COMPOSE_DNS_BLOCK = "    dns:\n      - 1.1.1.1\n      - 8.8.8.8\n"
+
+
+def strip_compose_dns_text(text: str) -> tuple[str, int]:
+    """Remove compose dns overrides so radarr can resolve prowlarr/decypharr."""
+    src = str(text or "")
+    n = src.count(COMPOSE_DNS_BLOCK)
+    if not n:
+        return src, 0
+    return src.replace(COMPOSE_DNS_BLOCK, ""), n
+
 
 def plan_missing_public_indexers(have_names) -> list[tuple[str, tuple, str]]:
     have = {str(n) for n in (have_names or [])}
@@ -1309,6 +1321,23 @@ def _self_test() -> int:
             empty, empty_ok = doctor_radarr_indexers_detail([])
             self.assertFalse(empty_ok)
             self.assertIn("no search indexer", empty)
+
+        def test_strip_compose_dns_restores_embedded_resolver(self):
+            yml = (
+                "  seerr:\n    ports:\n      - \"0.0.0.0:5055:5055\"\n"
+                "    dns:\n      - 1.1.1.1\n      - 8.8.8.8\n"
+                "  radarr:\n    ports:\n      - \"127.0.0.1:7878:7878\"\n"
+                "    dns:\n      - 1.1.1.1\n      - 8.8.8.8\n"
+                "  decypharr:\n    ports:\n      - \"127.0.0.1:8282:8282\"\n"
+            )
+            out, n = strip_compose_dns_text(yml)
+            self.assertEqual(n, 2)
+            self.assertNotIn("dns:", out)
+            self.assertNotIn("1.1.1.1", out)
+            self.assertIn("radarr:", out)
+            again, n2 = strip_compose_dns_text(out)
+            self.assertEqual(n2, 0)
+            self.assertEqual(again, out)
 
         def test_house_prowlarr_green_arr_empty_after_false_attach(self):
             """House after #67: Prowlarr eztv/showrss/tpb/yts green; *arr empty.

@@ -186,40 +186,35 @@ def prowlarr_app_needs_update(app: dict | None, *, prow_url: str | None = None, 
 
 
 def docker_service_ip(service: str) -> str | None:
-    """Custom compose dns: 1.1.1.1 can hide Docker service names. *arr still reaches the IP."""
-    try:
-        q = subprocess.run(
-            ["docker", "compose", "ps", "-q", service],
-            cwd=str(COMPOSE),
-            env=compose_env(),
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        cid = next((ln.strip() for ln in (q.stdout or "").splitlines() if ln.strip()), "")
-        if not cid:
-            return None
-        ins = subprocess.run(
-            [
-                "docker",
-                "inspect",
-                "-f",
-                "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
-                cid,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        ip = next((p for p in (ins.stdout or "").split() if p), "")
-        return ip or None
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    """Inspect by container name. `docker compose ps` ETIMEDOUT on the house Apply."""
+    names = [f"reelos-{service}-1", service]
+    if service == "decypharr":
+        names = ["decypharr", "reelos-decypharr-1"]
+    for name in names:
+        try:
+            ins = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "-f",
+                    "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+                    name,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            ip = next((p for p in (ins.stdout or "").split() if p), "")
+            if ip:
+                return ip
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return None
 
 
 def docker_service_url(service: str, port: int, fallback: str) -> str:
-    ip = docker_service_ip(service)
-    return f"http://{ip}:{port}" if ip else f"http://{fallback}:{port}"
+    """Hostname survives recreate. dns: 1.1.1.1 is gone so radarr/prowlarr resolve."""
+    return f"http://{fallback}:{port}"
 
 
 def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:

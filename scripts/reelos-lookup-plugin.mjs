@@ -1237,7 +1237,7 @@ async function handleLogs(_req, res) {
     "=== ota.log ===",
     tailFile("/var/lib/reelos/ota.log", 40).trim(),
     "=== wire.log ===",
-    tailFile("/var/lib/reelos/wire.log", 30).trim(),
+    tailFile("/var/lib/reelos/wire.log", 80).trim(),
     "=== docker ps ===",
     shOut(["docker", "ps", "--format", "table {{.Names}}\\t{{.Status}}"], 2500).trim(),
     "",

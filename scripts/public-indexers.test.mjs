@@ -17,7 +17,8 @@ test("public indexer roster: YTS movies-only; EZTV+ShowRSS for TV sitcoms", () =
   });
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   const roster = read("daemon/public_indexers.py");
-  assert.match(roster, /ReelOS-eztv/);
+  assert.match(roster, /strip_compose_dns_text/);
+  assert.match(roster, /COMPOSE_DNS_BLOCK/);
   assert.match(roster, /ReelOS-showrss/);
   assert.match(roster, /"movie"\),/);
   assert.doesNotMatch(roster, /passkey|apikey.*=.*[a-zA-Z0-9]{16}/);
@@ -47,6 +48,8 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(apps, /ApplicationIndexerSync/);
   assert.match(apps, /forceSync/);
   assert.match(apps, /docker_service_ip/);
+  assert.match(apps, /Inspect by container name/);
+  assert.match(apps, /Hostname survives recreate/);
   assert.match(apps, /SONARR_SYNC_CATEGORIES.*8000/);
   assert.match(apps, /RADARR_SYNC_CATEGORIES/);
   assert.match(apps, /prowlarr_app_fields/);
@@ -66,7 +69,8 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /pick_torznab_schema/);
   assert.match(main, /torznab/);
   assert.match(main, /widen_sonarr_hybrid/);
-  assert.match(main, /research-missing/);
+  assert.match(main, /research-missing skipped/);
+  assert.match(main, /prow_host = "prowlarr"/);
   assert.match(main, /--quick/);
   const updater = read("daemon/reelos-update.sh");
   assert.match(updater, /wire-engines\.py" indexers/);

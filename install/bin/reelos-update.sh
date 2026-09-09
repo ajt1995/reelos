@@ -303,7 +303,7 @@ need scripts/reelos-lookup-plugin.mjs '/api/library'
 need scripts/reelos-lookup-plugin.mjs 'episodeFileCount'
 need scripts/reelos-lookup-plugin.mjs '=== sonarr series ==='
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
-need install/compose/docker-compose.yml '1.1.1.1'
+need install/compose/docker-compose.yml 'Do not set dns: 1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'restart_fuse_readers'
 need daemon/wire-engines.py 'not bind-mounting /mnt'
@@ -384,6 +384,11 @@ need daemon/public_indexers.py 'arr_indexer_write_landed'
 need daemon/wire-engines.parts/02.part 'forceSync'
 need daemon/wire-engines.parts/02.part 'RADARR_SYNC_CATEGORIES'
 need daemon/wire-engines.parts/02.part 'docker_service_ip'
+need daemon/wire-engines.parts/02.part 'Inspect by container name'
+need daemon/wire-engines.parts/03.part 'stripped compose dns'
+need daemon/public_indexers.py 'strip_compose_dns_text'
+need daemon/wire-engines.parts/09.part 'research-missing skipped'
+need daemon/reelos-update.sh 'heal red|torznab |search indexers'
 need daemon/wire-engines.parts/09.part 'ensure_arr_search_indexers'
 need daemon/wire-engines.parts/09.part 'def read_prow_rows'
 need daemon/wire-engines.parts/09.part '400 + name is not attached'
@@ -1012,6 +1017,11 @@ if [ -f /var/lib/reelos/provisioned ]; then
     log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
     if ! python3 "$ROOT/bin/wire-engines.py" indexers; then
       log "indexers heal red"
+      if [ -f /var/lib/reelos/wire.log ]; then
+        grep -E 'heal red|torznab |search indexers |prowlarr api' /var/lib/reelos/wire.log | tail -n 20 | while IFS= read -r line; do
+          log "wire ${line}"
+        done
+      fi
       HEAL_FAIL=1
     fi
     log "import after hops (TV/movies into the library)"
