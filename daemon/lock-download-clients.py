@@ -195,19 +195,23 @@ def lock_app(app: dict) -> None:
 def main() -> int:
     if source() == "local-vpn":
         return 0
-    deadline = time.time() + 90
+    quick = "--quick" in sys.argv
+    apps = [a for a in APPS if a["name"] in ("sonarr", "radarr")] if quick else APPS
+    deadline = time.time() + (8 if quick else 40)
     while time.time() < deadline:
-        for app in APPS:
+        for app in apps:
             lock_app(app)
-        if all(api_key(app["xml"]) for app in APPS):
+        if all(api_key(app["xml"]) for app in apps):
             break
-        time.sleep(3)
-    for app in APPS:
+        time.sleep(1 if quick else 3)
+    for app in apps:
         lock_app(app)
+    if quick:
+        return 0
     sweep = Path(__file__).resolve().with_name("stuck-downloads.py")
     if sweep.is_file():
         try:
-            subprocess.run([sys.executable, str(sweep)], check=False, timeout=90)
+            subprocess.run([sys.executable, str(sweep)], check=False, timeout=60)
         except Exception:
             pass
     return 0
@@ -239,6 +243,11 @@ def _self_test() -> int:
             fields = upsert_field([{"name": "host", "value": "decypharr"}], "tvCategory", "sonarr")
             self.assertEqual(field(fields, "tvCategory"), "sonarr")
             self.assertEqual(field(fields, "host"), "decypharr")
+
+        def test_quick_lock_skips_stuck_sweep(self):
+            src = Path(__file__).read_text()
+            self.assertIn('quick = "--quick" in sys.argv', src)
+            self.assertIn("if quick:", src)
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Lock)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

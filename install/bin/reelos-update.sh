@@ -334,7 +334,10 @@ need daemon/wire-engines.parts/02.part 'fullSync'
 need daemon/wire-engines.parts/09.part 'widen_sonarr_hybrid'
 need daemon/wire-engines.parts/09.part 'research-missing'
 need daemon/reelos-doctor.py 'doctor_releases_detail'
-need daemon/stuck-downloads.py 'clear_missing_search_cooldown'
+need daemon/lock-download-clients.py '--quick'
+need install/systemd/reelos-lock-clients.service 'TimeoutStartSec=180'
+need scripts/reelos-request-status.mjs 'ensureTvGrabPath'
+need daemon/reelos-doctor.py 'Sonarr has no Decypharr client'
 need daemon/reelos-update.sh 'wire-engines.py" indexers'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
@@ -622,6 +625,14 @@ if [ -f "$ROOT/systemd/reelos-mnt-rshared.service" ]; then
   cp "$ROOT/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
   systemctl enable --now reelos-mnt-rshared >/dev/null 2>&1 || true
 fi
+if [ -f "$ROOT/systemd/reelos-lock-clients.service" ]; then
+  cp "$ROOT/systemd/reelos-lock-clients.service" /etc/systemd/system/reelos-lock-clients.service
+fi
+if [ -f "$ROOT/systemd/reelos-lock-clients.timer" ]; then
+  cp "$ROOT/systemd/reelos-lock-clients.timer" /etc/systemd/system/reelos-lock-clients.timer
+  systemctl enable --now reelos-lock-clients.timer >/dev/null 2>&1 || true
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell
 
 probe_home() {

@@ -31,6 +31,8 @@ test("relink_dumps and wire-engines import stay twins and category-only", () => 
   assert.match(updater, /need scripts\/reelos-lookup-plugin\.mjs 'kickArrRecover'/);
   assert.match(updater, /need daemon\/public_indexers\.py 'ReelOS-eztv'/);
   assert.match(updater, /need daemon\/reelos-update\.sh 'wire-engines.py" indexers'/);
+  assert.match(updater, /need daemon\/lock-download-clients\.py '--quick'/);
+  assert.match(updater, /need scripts\/reelos-request-status\.mjs 'ensureTvGrabPath'/);
   assert.match(updater, /need daemon\/public_indexers\.py 'TorrentRssIndexer'/);
   assert.match(updater, /need daemon\/reelos-doctor\.py 'doctor_releases_detail'/);
 });

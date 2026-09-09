@@ -263,6 +263,45 @@ def widen_hybrid_profile_items(items) -> bool:
     return changed
 
 
+def profile_allows_hd(profile: dict | None) -> bool:
+    """True if 720p or 1080p is allowed. 2160p-only Ultra-HD still rejects EZTV."""
+    if not isinstance(profile, dict):
+        return False
+    return _profile_items_allow_web_hd(profile.get("items") or [])
+
+
+def _profile_items_allow_web_hd(items) -> bool:
+    if not isinstance(items, list):
+        return False
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        kids = item.get("items")
+        if isinstance(kids, list) and kids and _profile_items_allow_web_hd(kids):
+            return True
+        q = item.get("quality") if isinstance(item.get("quality"), dict) else {}
+        qname = str(q.get("name") or item.get("name") or "").lower().replace(" ", "").replace("-", "")
+        if item.get("allowed") is True and ("720p" in qname or "1080p" in qname):
+            return True
+    return False
+
+
+def pick_fallback_profile(profiles, current_id) -> dict:
+    """SeasonSearch uses the series profile. Ultra-HD 2160p-only → 0 grabs for EZTV 720p."""
+    rows = [p for p in (profiles or []) if isinstance(p, dict)]
+    current = next((p for p in rows if p.get("id") == current_id), None)
+    if profile_allows_hd(current):
+        return {"id": current_id, "reason": "ok", "name": current.get("name") if current else None}
+    for name in ("Any", "HD-1080p", "HD-720p"):
+        hit = next((p for p in rows if p.get("name") == name), None)
+        if hit and hit.get("id") is not None:
+            return {"id": hit.get("id"), "reason": name.lower().replace("-", ""), "name": name}
+    for p in rows:
+        if profile_allows_hd(p) and p.get("id") is not None:
+            return {"id": p.get("id"), "reason": "hd-profile", "name": p.get("name")}
+    return {"id": current_id, "reason": "none", "name": current.get("name") if current else None}
+
+
 HOUSE_TPB_YTS_SCHEMAS = (
     {"name": "The Pirate Bay", "implementation": "ThePirateBay", "fields": []},
     {"name": "YTS", "implementation": "YTS", "fields": []},
@@ -377,6 +416,25 @@ def _self_test() -> int:
             self.assertIn("WEBDL-2160p", allowed)
             self.assertNotIn("SDTV", allowed)
             self.assertFalse(widen_hybrid_profile_items(items))
+
+        def test_ultra_hd_only_falls_back_to_any_for_eztv_720p(self):
+            ultra = {
+                "id": 6,
+                "name": "Ultra-HD",
+                "items": [
+                    {"quality": {"id": 5, "name": "WEBDL-720p"}, "allowed": False},
+                    {"quality": {"id": 18, "name": "WEBDL-2160p"}, "allowed": True},
+                ],
+            }
+            anyp = {
+                "id": 1,
+                "name": "Any",
+                "items": [{"quality": {"id": 5, "name": "WEBDL-720p"}, "allowed": True}],
+            }
+            fb = pick_fallback_profile([ultra, anyp], 6)
+            self.assertEqual(fb["reason"], "any")
+            self.assertEqual(fb["id"], 1)
+            self.assertEqual(pick_fallback_profile([ultra, anyp], 1)["reason"], "ok")
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Public)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

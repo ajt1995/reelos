@@ -5,4 +5,5 @@ ConditionPathExists=/opt/reelos/bin/lock-download-clients.py
 
 [Service]
 Type=oneshot
+TimeoutStartSec=180
 ExecStart=/usr/bin/python3 /opt/reelos/bin/lock-download-clients.py

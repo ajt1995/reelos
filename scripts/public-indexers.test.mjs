@@ -45,6 +45,7 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /def ensure_indexers_and_sync/);
   assert.match(main, /widen_sonarr_hybrid/);
   assert.match(main, /research-missing/);
+  assert.match(main, /--quick/);
   const updater = read("daemon/reelos-update.sh");
   assert.match(updater, /wire-engines\.py" indexers/);
   assert.match(updater, /EZTV\/ShowRSS/);
@@ -70,7 +71,9 @@ test("doctor lists every enabled indexer and fails closed without EZTV/ShowRSS",
   const doc = read("daemon/reelos-doctor.py");
   assert.match(doc, /doctor_releases_detail/);
   assert.match(doc, /enabled_indexer_names/);
-  const hop = doc.slice(doc.indexOf("def releases_hop"), doc.indexOf("def tailscale_hop"));
+  const hop = doc.slice(doc.indexOf("def releases_hop"), doc.indexOf("def download_lock_hop"));
   assert.doesNotMatch(hop, /\/indexer\/test/);
+  assert.match(doc, /Sonarr has no Decypharr client/);
+  assert.match(doc, /\/api\/v3\/downloadclient/);
   assert.equal(read("install/bin/reelos-doctor.py"), doc);
 });

@@ -12,6 +12,9 @@ import {
   planTvPostRecover,
   resetPresenceFactsCache,
   waitForArrRow,
+  decypharrClientMissing,
+  pickFallbackProfile,
+  hybridQualityShouldAllow,
 } from "./reelos-request-status.mjs";
 
 test("presence facts read the JF shelf cache and *arr hasFile index", async () => {
@@ -134,6 +137,93 @@ test("kickTvSeasonRecover SeasonSearch when Sonarr has TWD S01 with 0 files", as
   assert.equal(posts[0]?.name, "SeasonSearch");
   assert.equal(posts[0]?.seasonNumber, 1);
   assert.equal(posts[0]?.seriesId, 9);
+});
+
+test("Ultra-HD 2160p-only falls back to Any so EZTV 720p can grab", () => {
+  assert.equal(hybridQualityShouldAllow("WEBDL-720p"), true);
+  assert.equal(hybridQualityShouldAllow("SDTV"), false);
+  const ultra = {
+    id: 6,
+    name: "Ultra-HD",
+    items: [
+      { quality: { name: "WEBDL-720p" }, allowed: false },
+      { quality: { name: "WEBDL-2160p" }, allowed: true },
+    ],
+  };
+  const any = {
+    id: 1,
+    name: "Any",
+    items: [{ quality: { name: "WEBDL-720p" }, allowed: true }],
+  };
+  const fb = pickFallbackProfile([ultra, any], 6);
+  assert.equal(fb.reason, "any");
+  assert.equal(fb.id, 1);
+  assert.equal(decypharrClientMissing([]), true);
+  assert.equal(
+    decypharrClientMissing([
+      {
+        implementation: "QBittorrent",
+        fields: [
+          { name: "host", value: "decypharr" },
+          { name: "port", value: 8282 },
+        ],
+      },
+    ]),
+    false,
+  );
+});
+
+test("kickArrRecover POSTs Decypharr client and Any profile before SeasonSearch", async () => {
+  const calls = [];
+  const result = await kickTvSeasonRecover({
+    tmdb: 48891,
+    season: 1,
+    sonarrKey: "test",
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("/series") && method === "GET") {
+        return [
+          {
+            id: 3,
+            tmdbId: 48891,
+            qualityProfileId: 6,
+            seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 0 } }],
+          },
+        ];
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") return [];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [
+          {
+            id: 6,
+            name: "Ultra-HD",
+            items: [
+              { quality: { name: "WEBDL-720p" }, allowed: false },
+              { quality: { name: "WEBDL-2160p" }, allowed: true },
+            ],
+          },
+          { id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] },
+        ];
+      }
+      return { ok: true };
+    },
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.seriesId, 3);
+  assert.equal(result.grabPath?.clientAdded, true);
+  assert.ok(result.grabPath?.profileWidened === true || result.grabPath?.profileFallback === "any");
+  const clientPost = calls.find((c) => c.url.includes("/downloadclient") && c.method === "POST");
+  assert.equal(clientPost?.body?.name, "ReelOS-Decypharr");
+  const search = calls.find((c) => c.url.includes("/command"));
+  assert.equal(search?.body?.name, "SeasonSearch");
+  const searchIdx = calls.indexOf(search);
+  const clientIdx = calls.indexOf(clientPost);
+  assert.ok(clientIdx >= 0 && clientIdx < searchIdx);
+  const widened = calls.some((c) => String(c.url).includes("/qualityprofile/6") && c.method === "PUT");
+  const seriesPut = calls.find((c) => String(c.url).includes("/series/3") && c.method === "PUT");
+  assert.ok(widened || seriesPut?.body?.qualityProfileId === 1);
 });
 
 test("kickTvSeasonRecover does not search a season that already has files", async () => {

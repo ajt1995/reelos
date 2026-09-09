@@ -88,8 +88,16 @@ def widen_sonarr_hybrid() -> None:
 
 
 def research_missing_after_indexers() -> None:
-    """SeasonSearch already ran against TPB-only; 15min cooldown would skip B99.
-    Clear that cooldown and search again now that EZTV/ShowRSS exist."""
+    """Lock Decypharr client, then SeasonSearch 0-file seasons against new EZTV/ShowRSS."""
+    lock = ROOT / "bin" / "lock-download-clients.py"
+    if not lock.is_file():
+        lock = Path("/opt/reelos/bin/lock-download-clients.py")
+    if lock.is_file():
+        try:
+            subprocess.run([sys.executable, str(lock), "--quick"], check=False, timeout=20)
+            log_wire("download client locked before SeasonSearch")
+        except Exception as e:
+            log_wire(f"lock-clients {type(e).__name__} {e}")
     sweep = ROOT / "bin" / "stuck-downloads.py"
     if not sweep.is_file():
         sweep = Path("/opt/reelos/bin/stuck-downloads.py")

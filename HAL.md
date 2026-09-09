@@ -4,14 +4,18 @@ Hal. **2026-09-09.** Named stamp **1.2.50.7** (EZTV/ShowRSS actually land; docto
 
 ## Why 1.2.50.6 was not enough
 
-House `/api/doctor` on 1.2.50.6: releases detail **ReelOS-tpb only**. SeasonSearch `searched=true`, B99/TWD still 0 files.
+House `/api/doctor` on 1.2.50.6: releases detail **ReelOS-tpb only**. `GET /api/request?recover=1` kicked SeasonSearch seriesId 3 and 5 (`searched=true importSpawned=true`) and they stayed `sonarr-missing@0`. Search ran; nothing grabbed.
 
-Two stacked bugs:
+Stacked bugs:
 
-1. **Add skip.** `#58` POSTed EZTV/ShowRSS only when Cardigann schema hints (`eztv`, `showrss`) matched. Prowlarr's always-on native fallback is `TorrentRssIndexer` ("Torrent RSS Feed") — those strings are not in the blob. House 1.2.24 got native TPB. EZTV/ShowRSS logged `no schema` and Apply still succeeded.
-2. **Doctor lie.** `releases_hop` live-tested indexers and returned the **first** pass. TPB passing hid whether EZTV existed.
+1. **Add skip.** `#58` POSTed EZTV/ShowRSS only when Cardigann schema hints (`eztv`, `showrss`) matched. Native `TorrentRssIndexer` does not contain those strings. House kept TPB.
+2. **Doctor lie.** First live-test pass hid missing EZTV.
+3. **Ultra-HD cutoff.** Wizard hybrid → Sonarr 2160p-only. EZTV 720p WEB-DL rejected. Expanse 4K packs pass.
+4. **No grab client.** `reelos-lock-clients.service` FAILED (oneshot default 90s; lock+sweep can exceed it). Recover only POSTed SeasonSearch — never upserted Decypharr. Command succeeds; queue stays empty.
 
-Hybrid `Ultra-HD` is 2160p-only, so even after EZTV lands, 720p WEB-DL sitcom packs can be rejected. Expanse 4K packs pass; B99 EZTV 720p does not.
+`/api/performance {"low": true}` is Jellyfin trickplay only. It does not change *arr search.
+
+recover=1 now: lock Decypharr client on Sonarr, fall Ultra-HD series back to **Any** if 720p is not allowed, then SeasonSearch.
 
 ## xorriso — do this
 
@@ -25,7 +29,7 @@ Hybrid `Ultra-HD` is 2160p-only, so even after EZTV lands, 720p WEB-DL sitcom pa
 1. `cat /opt/reelos/VERSION` → `1.2.50.7`.
 2. Doctor **releases** detail includes **ReelOS-eztv** and **ReelOS-showrss** (comma list). TPB-only is a **red** hop: `ReelOS-tpb (missing ReelOS-eztv,ReelOS-showrss)`.
 3. Prowlarr has those two (TorrentRss RSS if Cardigann YAML was missing). Sonarr indexers include them after `fullSync`.
-4. Next hop SeasonSearchs B99 S01 / TWD S01 **immediately** (indexer-sync clears the 15min cooldown). Hybrid Sonarr allows 720p/1080p/2160p.
-5. Interstellar / John Wick / Expanse already Available stay Available.
+4. Next hop **and** `?recover=1`: lock Sonarr → Decypharr, fall Ultra-HD back to Any if needed, SeasonSearch B99/TWD immediately.
+5. Doctor **Download lock** is `Sonarr → Decypharr` (not a static OK). Interstellar / John Wick / Expanse stay Available.
 
 Do not Apply the Tron feature tarball as if it were main.

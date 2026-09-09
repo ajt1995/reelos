@@ -129,6 +129,62 @@ def releases_hop(answers: dict) -> dict:
     return ok("releases", ",".join(names), True)
 
 
+def download_lock_hop() -> dict:
+    """Do not always-OK. SeasonSearch with no Decypharr client grabs nothing."""
+    failed = False
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-failed", "reelos-lock-clients.service"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        failed = r.returncode == 0
+    except Exception:
+        failed = False
+    key = xml_key_text(COMPOSE / "configs" / "sonarr" / "config.xml")
+    if key:
+        try:
+            import urllib.request
+
+            req = urllib.request.Request(
+                "http://127.0.0.1:8989/api/v3/downloadclient",
+                headers={"X-Api-Key": key},
+            )
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                rows = json.loads(resp.read().decode() or "[]")
+            clients = rows if isinstance(rows, list) else []
+            dec = False
+            for c in clients:
+                if not isinstance(c, dict) or c.get("implementation") != "QBittorrent":
+                    continue
+                host = ""
+                port = None
+                for f in c.get("fields") or []:
+                    if not isinstance(f, dict):
+                        continue
+                    if f.get("name") == "host":
+                        host = str(f.get("value") or "")
+                    if f.get("name") == "port":
+                        port = f.get("value")
+                if host == "decypharr" and int(port or 0) == 8282:
+                    dec = True
+                    break
+            if dec:
+                detail = "Sonarr → Decypharr"
+                if failed:
+                    detail += " (lock-clients unit failed last run)"
+                return ok("Download lock", detail, True)
+            return ok("Download lock", "Sonarr has no Decypharr client — SeasonSearch cannot grab", False)
+        except Exception as e:
+            if failed:
+                return ok("Download lock", "reelos-lock-clients.service FAILED", False)
+            return ok("Download lock", f"Sonarr downloadclient {type(e).__name__}", False)
+    if failed:
+        return ok("Download lock", "reelos-lock-clients.service FAILED", False)
+    return ok("Download lock", "Decypharr is the only client path", True)
+
+
 def tailscale_hop() -> dict:
     bin_path = shutil.which("tailscale")
     if not bin_path:
@@ -207,21 +263,7 @@ def main() -> int:
             except json.JSONDecodeError:
                 detail = "Decypharr config unreadable"
         checks.append(ok("Source adapter", detail, good))
-        failed = False
-        try:
-            r = subprocess.run(
-                ["systemctl", "is-failed", "reelos-lock-clients.service"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-            failed = r.returncode == 0
-        except Exception:
-            failed = False
-        if failed:
-            checks.append(ok("Download lock", "reelos-lock-clients.service FAILED", False))
-        else:
-            checks.append(ok("Download lock", "Decypharr is the only client path", True))
+        checks.append(download_lock_hop())
     else:
         checks.append(ok("Source adapter", "Local + VPN (Gluetun)", listening(8085)))
 
@@ -293,11 +335,19 @@ def _self_test() -> int:
     class Doctor(unittest.TestCase):
         def test_releases_lists_every_indexer_not_first_live_test(self):
             src = Path(__file__).read_text()
-            hop = src[src.find("def releases_hop") : src.find("def tailscale_hop")]
+            hop = src[src.find("def releases_hop") : src.find("def download_lock_hop")]
             self.assertIn("doctor_releases_detail", hop)
             self.assertIn("enabled_indexer_names", hop)
             self.assertNotIn("/indexer/" + "test", hop)
             self.assertIn('ok("releases", detail, good)', hop)
+
+        def test_download_lock_probes_sonarr_decypharr_client(self):
+            src = Path(__file__).read_text()
+            hop = src[src.find("def download_lock_hop") : src.find("def tailscale_hop")]
+            self.assertIn("/downloadclient", hop)
+            self.assertIn("decypharr", hop)
+            self.assertIn("8282", hop)
+            self.assertIn("SeasonSearch cannot grab", hop)
 
         def test_tpb_only_house_is_a_failed_releases_hop(self):
             mod = _load_public_indexers()
