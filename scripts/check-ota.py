@@ -29,6 +29,8 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "still copying node_modules"),
     ("daemon/reelos-update.sh", "ROOT.prev/docker-compose.yml"),
     ("daemon/reelos-update.sh", "compose recreated — remount FUSE before hops"),
+    ("daemon/reelos-update.sh", "clear stale FUSE before compose up"),
+    ("daemon/reelos-update.sh", "fuse_live"),
 )
 
 

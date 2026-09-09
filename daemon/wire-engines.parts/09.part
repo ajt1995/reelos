@@ -556,6 +556,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
 
 
 def share_mnt() -> None:
+    fuse_clear_stale()
     Path("/mnt").mkdir(parents=True, exist_ok=True)
     Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
     Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)

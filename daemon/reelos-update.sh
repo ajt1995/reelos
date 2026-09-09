@@ -806,21 +806,45 @@ EOF
 sshd_open
 
 
+# [ -e /mnt/debrid/__all__ ] is true on an ENOTCONN leftover. listdir is not.
+fuse_live() {
+  ls /mnt/debrid/__all__ >/dev/null 2>&1 && return 0
+  ls /mnt/debrid/version.txt >/dev/null 2>&1
+}
+
+clear_stale_fuse() {
+  if fuse_live; then
+    return 0
+  fi
+  if [ -e /mnt/debrid ] || [ -L /mnt/debrid ] || mount | grep -q ' on /mnt/debrid '; then
+    log "stale /mnt/debrid FUSE — lazy unmount"
+    local i
+    for i in $(seq 1 8); do
+      if ls /mnt/debrid >/dev/null 2>&1 && ! mount | grep -q 'fuse.decypharr on /mnt/debrid'; then
+        break
+      fi
+      fusermount -uz /mnt/debrid 2>/dev/null || umount -l /mnt/debrid 2>/dev/null || true
+      sleep 1
+    done
+  fi
+}
+
+start_fuse_readers() {
+  docker start decypharr 2>/dev/null || true
+  docker start reelos-jellyfin-1 reelos-radarr-1 reelos-sonarr-1 2>/dev/null || true
+}
+
 nudge_fuse() {
   # Stale FUSE (ENOTCONN) makes mkdir -p fail with "Already exists" under set -e.
-  if [ -e /mnt/debrid ] || [ -L /mnt/debrid ]; then
-    if ! ls /mnt/debrid >/dev/null 2>&1; then
-      log "stale /mnt/debrid FUSE — lazy unmount"
-      fusermount -uz /mnt/debrid 2>/dev/null || umount -l /mnt/debrid 2>/dev/null || true
-    fi
-  fi
+  clear_stale_fuse
   mkdir -p /mnt /mnt/debrid /mnt/symlinks
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
-  if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+  if fuse_live; then
     log "fuse already on host — not bind-mounting /mnt"
   elif [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "fuse not on host — remount decypharr"
     python3 "$ROOT/bin/wire-engines.py" fuse || log "fuse remount non-fatal"
+    start_fuse_readers
   else
     log "fuse not mounted — skip remount"
   fi
@@ -829,7 +853,7 @@ nudge_fuse() {
 wait_fuse() {
   local i
   for i in $(seq 1 30); do
-    if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+    if fuse_live; then
       log "fuse ready ($i/30)"
       return 0
     fi
@@ -851,6 +875,8 @@ load_env() {
 }
 
 if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml" ]; then
+  log "clear stale FUSE before compose up"
+  clear_stale_fuse
   mkdir -p /mnt /mnt/symlinks /mnt/debrid
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
   load_env
@@ -884,6 +910,7 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
     log "compose recreated — remount FUSE before hops"
     nudge_fuse
     wait_fuse
+    start_fuse_readers
   fi
 fi
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
@@ -967,14 +994,14 @@ SEARCH_HOP_FAIL=0
 hop_stack() {
   log "hops: FUSE + Jellyfin + search (search advisory)"
   step "Jellyfin"
-  if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+  if fuse_live; then
     log "hop FUSE green"
   else
     if [ "${COMPOSE_CHANGED:-0}" = "1" ]; then
       log "hop FUSE empty after compose — waiting"
       wait_fuse
     fi
-    if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+    if fuse_live; then
       log "hop FUSE green"
     else
       log "hop FUSE red — /mnt/debrid empty"

@@ -1,41 +1,42 @@
 # STATUS.md
 
-***Tracker-tagged FUSE dumps relink into the series folder.*** 2026-09-09. A requested show sat at silent 0% because `[Bitsearch.to] Justified.S01…` never matched Sonarr title `Justified`. Relink strips tracker tags, prefers the *arr folder name, and TV Requests say why they are still at 0%. Library Items send MediaBrowser Token so Jellyfin 12 does not 401 the shelf. Stamp **1.2.50.18**. Complements #69. Does not take Tron.
+***Apply remounts FUSE for real after compose recreate.*** 2026-09-09. House Apply of **1.2.50.18** swapped the tree, then `docker compose up` SIGKILL'd Decypharr/Jellyfin/Radarr/Sonarr and left `/mnt/debrid` ENOTCONN (`d?????????`). Mailman treated `[ -e /mnt/debrid/__all__ ]` as mounted, logged `fuse already on host`, and fail-closed without stamping. Stamp **1.2.50.19**. Complements #69. Does not take Tron.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.18`
-- **Base:** this PR’s 1.2.50.14 DNS + 1.2.50.15 mailman + 1.2.50.16 enable=null + 1.2.50.17 Discover
-- Did **not** take Tron chrome from #52
-- **What it is:** `relink_stem` drops leading `[tracker]` tags and remux quality tokens. Missing dumps are created as `sonarr/<series title>` from the best FUSE pack (exact title folder wins over Bitsearch names). TV GET `/api/request` uses `tvRequestReason` so downloading@0 is not silent. `/api/library` sends `Authorization: MediaBrowser … Token=` so JF 12 returns the shelf.
+- **VERSION / channel:** `1.2.50.19`
+- **Base:** current `main` (1.2.50.18 / #69)
+- Did **not** take Tron chrome from #52 / #70
+- **What it is:** hops/wait use `ls /mnt/debrid/__all__`, not bash `-e`. Lazy-unmount stale FUSE **before** compose up so bind mounts can start. After recreate, remount then `docker start` exited Decypharr/Jellyfin/Radarr/Sonarr. `fuse_on_host()` listdirs; `share_mnt` unmounts before mkdir (FileExistsError on ENOTCONN).
 
-## Live test (this agent VM)
+## House (SSH, this stamp's debug)
 
 | Surface | Result |
-| --- | --- |
-| Movies (Dune, The Matrix) | Radarr hasFile + `/api/library` |
-| Justified S01 | FUSE had the pack; Sonarr 0/13 until 1.2.50.18 relink |
-| Discover empty-search | unowned popular (not Interstellar / B99) |
-| Wizard Finish | not clicked here (full wire storms Prowlarr DNS on this VM) |
-| Wizard steps | Repair wizard renders; TorBox Validate accepts; admin Continue needs name+8 char password |
+|---|---|
+| Apply of 1.2.50.18 | fail-closed; VERSION still 1.2.50.11; app tree already 1.2.50.18 |
+| FUSE | four stacked `fuse.decypharr` ENOTCONN mounts |
+| docker | decypharr/jellyfin/radarr/sonarr Exited (137) |
+| Recover | `fusermount -uz` + `docker start` — FUSE listdir works in host and *arr; lookup Batman; library 6 titles |
+
+Do **not** tap Apply of 1.2.50.18 again (compose vs `.prev` will recreate and kill FUSE). Do **not** Apply 1.2.51 / #70.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-python3 daemon/relink_dumps.py --self-test
 python3 daemon/reelos-doctor.py --self-test
-node --test scripts/reelos-update.test.mjs scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/relink-dumps.test.mjs
+node --test scripts/reelos-update.test.mjs scripts/stack-smoke.test.mjs
 ```
 
 ## Owner / house Apply
 
 1. Merge this to **main**. Phone Check→Apply **once**. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.18`.
-3. Discover should show titles not already in Jellyfin. A requested show that is already on TorBox should relink into the series folder without extra taps.
+2. `cat /opt/reelos/VERSION` → `1.2.50.19`.
+3. After Apply, `ls /mnt/debrid/__all__` works and Radarr/Sonarr/Jellyfin are `Up`.
 
 ## Do not
 
-- Cut 1.2.51 / Tron #52
+- Cut 1.2.51 / Tron #52 / #70 onto this stamp
 - Tap Apply twice
 - Re-add compose `dns: 1.1.1.1`
+- Delete `ota.lock`

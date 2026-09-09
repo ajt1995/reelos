@@ -192,7 +192,38 @@ def restart_fuse_readers() -> None:
 
 
 def fuse_on_host() -> bool:
-    return Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists()
+    """True only when listdir works. Path.exists() is true on ENOTCONN leftovers."""
+    try:
+        os.listdir("/mnt/debrid/__all__")
+        return True
+    except OSError:
+        pass
+    try:
+        return "version.txt" in os.listdir("/mnt/debrid")
+    except OSError:
+        return False
+
+
+def fuse_clear_stale() -> None:
+    """Compose stop leaves /mnt/debrid mounted and ENOTCONN. mkdir then FileExistsError."""
+    try:
+        os.listdir("/mnt/debrid")
+        return
+    except FileNotFoundError:
+        return
+    except OSError:
+        log_wire("stale /mnt/debrid FUSE — lazy unmount")
+    for _ in range(8):
+        subprocess.run(["fusermount", "-uz", "/mnt/debrid"], check=False, capture_output=True)
+        subprocess.run(["umount", "-l", "/mnt/debrid"], check=False, capture_output=True)
+        time.sleep(0.4)
+        try:
+            os.listdir("/mnt/debrid")
+            return
+        except FileNotFoundError:
+            return
+        except OSError:
+            continue
 
 
 def persist_mnt_shared() -> None:
