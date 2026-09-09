@@ -428,12 +428,12 @@ export function radarrLookupUrls(tmdb) {
   ];
 }
 
+/** Radarr text search can answer with a different film. Adding it under the requested
+ *  tmdbId monitors and MoviesSearches the wrong title, so an unmatched hit is no hit. */
 export function pickRadarrLookupMovie(hits, tmdb) {
-  if (Array.isArray(hits)) {
-    return hits.find((m) => String(m?.tmdbId) === String(tmdb)) || hits[0] || null;
-  }
-  if (hits && typeof hits === "object" && !hits.empty && (hits.tmdbId != null || hits.title)) return hits;
-  return null;
+  const want = String(tmdb);
+  const rows = Array.isArray(hits) ? hits : hits && typeof hits === "object" && !hits.empty ? [hits] : [];
+  return rows.find((m) => m && typeof m === "object" && String(m.tmdbId) === want) || null;
 }
 
 /** Seerr 200 but Radarr never got the movie (National Treasure). Lookup/tmdb + add, then MoviesSearch. */
