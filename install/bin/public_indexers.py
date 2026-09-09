@@ -208,6 +208,149 @@ def plan_adds(have_names, schemas) -> list[dict]:
     return out
 
 
+def apply_public_indexers(have_rows, schemas, post, log=None) -> list[str]:
+    """Run the Apply POST loop. Schema miss / empty schema still POSTs TV RSS.
+
+    post(name, body, via) -> bool. House 1.2.50.6 logged `no schema` and skipped.
+    """
+    log = log or (lambda *_a, **_k: None)
+    names: set[str] = set()
+    for ix in have_rows if isinstance(have_rows, list) else []:
+        if isinstance(ix, dict) and ix.get("name"):
+            names.add(str(ix.get("name")))
+    schema_list = schemas if isinstance(schemas, list) else []
+    posted: list[str] = []
+
+    def try_post(name: str, body: dict | None, via: str) -> bool:
+        if not body:
+            return False
+        clean = {k: v for k, v in body.items() if not str(k).startswith("_")}
+        if not post(name, clean, via):
+            return False
+        posted.append(name)
+        names.add(name)
+        return True
+
+    for name, hints, _role in PUBLIC_INDEXERS:
+        if name in names:
+            log(f"public indexer exists {name}")
+            continue
+        plan = pick_add_plan(name, hints, schema_list)
+        body = plan_to_post_body(name, plan)
+        via = str(plan.get("method") or "schema")
+        if try_post(name, body, via):
+            continue
+        feeds = rss_feeds_for(name)
+        if feeds and try_post(
+            name,
+            torrent_rss_body(name, feeds[0], match_schema(schema_list, RSS_SCHEMA_HINTS)),
+            "rss fallback",
+        ):
+            continue
+        log(f"public indexer no schema {name}")
+
+    for req in required_tv_public_names():
+        if req in names:
+            continue
+        feeds = rss_feeds_for(req)
+        if not feeds:
+            continue
+        try_post(
+            req,
+            torrent_rss_body(req, feeds[0], match_schema(schema_list, RSS_SCHEMA_HINTS)),
+            "rss fallback",
+        )
+    return posted
+
+
+def _sandbox_house_prowlarr():
+    """HTTP mock of the house: ReelOS-tpb present, no Cardigann eztv/showrss."""
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+    from urllib.request import Request, urlopen
+
+    store = {
+        "indexers": [
+            {
+                "id": 1,
+                "name": "ReelOS-tpb",
+                "enable": True,
+                "implementation": "ThePirateBay",
+            }
+        ],
+        "posts": [],
+        "schema_ok": True,
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            return
+
+        def _json(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            path = self.path.split("?")[0]
+            if path.endswith("/indexer/schema"):
+                if not store["schema_ok"]:
+                    self._json(500, {"message": "schema down"})
+                    return
+                self._json(200, list(HOUSE_TPB_YTS_SCHEMAS))
+                return
+            if path.endswith("/indexer"):
+                self._json(200, store["indexers"])
+                return
+            self._json(404, {"error": "no"})
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            store["posts"].append(body)
+            row = dict(body)
+            row["id"] = len(store["indexers"]) + 10
+            row.setdefault("enable", True)
+            store["indexers"].append(row)
+            self._json(201, row)
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        base = f"http://127.0.0.1:{port}/api/v1"
+
+        def fetch(path):
+            with urlopen(f"{base}{path}", timeout=5) as resp:
+                return json.loads(resp.read().decode() or "[]")
+
+        def post(name, body, via):
+            req = Request(
+                f"{base}/indexer",
+                data=json.dumps(body).encode(),
+                method="POST",
+                headers={"Content-Type": "application/json", "X-Api-Key": "test"},
+            )
+            with urlopen(req, timeout=5) as resp:
+                return 200 <= getattr(resp, "status", 201) < 300
+
+        have = fetch("/indexer")
+        try:
+            schemas = fetch("/indexer/schema")
+        except Exception:
+            schemas = []
+        posted = apply_public_indexers(have, schemas, post=post)
+        return posted, [p.get("name") for p in store["posts"]], store["indexers"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def enabled_indexer_names(rows) -> list[str]:
     names = []
     for ix in rows if isinstance(rows, list) else []:
@@ -416,6 +559,43 @@ def _self_test() -> int:
             self.assertIn("WEBDL-2160p", allowed)
             self.assertNotIn("SDTV", allowed)
             self.assertFalse(widen_hybrid_profile_items(items))
+
+        def test_empty_schema_still_posts_eztv_showrss(self):
+            posted = []
+
+            def post(name, body, via):
+                posted.append((name, body.get("implementation"), via, body))
+                return True
+
+            names = apply_public_indexers(
+                [{"name": "ReelOS-tpb", "enable": True}],
+                [],
+                post=post,
+            )
+            self.assertIn("ReelOS-eztv", names)
+            self.assertIn("ReelOS-showrss", names)
+            eztv = next(p for p in posted if p[0] == "ReelOS-eztv")
+            self.assertEqual(eztv[1], "TorrentRssIndexer")
+            self.assertEqual(eztv[2], "rss")
+            vals = [f.get("value") for f in eztv[3]["fields"]]
+            self.assertTrue(any(str(v).endswith("ezrss.xml") for v in vals), vals)
+
+        def test_sandbox_house_tpb_only_http_posts_eztv_showrss(self):
+            posted, names, rows = _sandbox_house_prowlarr()
+            self.assertIn("ReelOS-eztv", posted)
+            self.assertIn("ReelOS-showrss", posted)
+            self.assertIn("ReelOS-eztv", names)
+            self.assertIn("ReelOS-showrss", names)
+            enabled = [r["name"] for r in rows if r.get("enable")]
+            detail, ok = doctor_releases_detail(enabled)
+            self.assertTrue(ok, detail)
+            self.assertIn("ReelOS-eztv", detail)
+            self.assertIn("ReelOS-showrss", detail)
+            eztv = next(r for r in rows if r.get("name") == "ReelOS-eztv")
+            self.assertEqual(eztv.get("implementation"), "TorrentRssIndexer")
+            self.assertTrue(
+                any(str(f.get("value") or "").endswith("ezrss.xml") for f in eztv.get("fields") or [])
+            )
 
         def test_ultra_hd_only_falls_back_to_any_for_eztv_720p(self):
             ultra = {

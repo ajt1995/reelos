@@ -2,20 +2,21 @@
 
 Hal. **2026-09-09.** Named stamp **1.2.50.7** (EZTV/ShowRSS actually land; doctor lists them). Does **not** take 1.2.51 (Tron reserved).
 
-## Why 1.2.50.6 was not enough
+## Why public TV defs never appear after 1.2.50.6 Apply
 
-House `/api/doctor` on 1.2.50.6: releases detail **ReelOS-tpb only**. `GET /api/request?recover=1` kicked SeasonSearch seriesId 3 and 5 (`searched=true importSpawned=true`) and they stayed `sonarr-missing@0`. Search ran; nothing grabbed.
+House doctor releases = **ReelOS-tpb only**. Not lock-clients. Not catalog.
 
-Stacked bugs:
+| # | Hypothesis | Verdict |
+| --- | --- | --- |
+| 1 | `ensure_public_indexers` / OTA hop not run | Hop **does** run on bin-only Apply (`wire-engines.py indexers` even when compose.yml unchanged). |
+| 2 | Schema miss for eztv/showrss | **This.** `#58` POSTed only when Cardigann blob contained `eztv`/`showrss`. Native `TorrentRssIndexer` does not. Log `no schema`, Apply succeeded. |
+| 3 | fullSync never pushes to Sonarr | Secondary. Defs never landed on **Prowlarr**, so Sonarr had nothing to sync. |
+| 4 | Doctor only listing a subset | Also true on 1.2.50.6 (first live-test pass). 1.2.50.7 lists every enabled name and fails closed if EZTV/ShowRSS missing. |
+| 5 | lock-clients failure blocking the indexer hop | **False.** Boot unit FAILED does not skip `indexers`. Lock runs after adds (`--quick` before SeasonSearch only). |
 
-1. **Add skip.** `#58` POSTed EZTV/ShowRSS only when Cardigann schema hints (`eztv`, `showrss`) matched. Native `TorrentRssIndexer` does not contain those strings. House kept TPB.
-2. **Doctor lie.** First live-test pass hid missing EZTV.
-3. **Ultra-HD cutoff.** Wizard hybrid → Sonarr 2160p-only. EZTV 720p WEB-DL rejected. Expanse 4K packs pass.
-4. **No grab client.** `reelos-lock-clients.service` FAILED (oneshot default 90s; lock+sweep can exceed it). Recover only POSTed SeasonSearch — never upserted Decypharr. Command succeeds; queue stays empty.
+1.2.50.7 POSTs TorrentRss RSS when Cardigann YAML is missing. Schema GET failure no longer aborts the hop. HTTP sandbox: TPB-only Prowlarr + no eztv schema → POST `ReelOS-eztv` + `ReelOS-showrss`.
 
-`/api/performance {"low": true}` is Jellyfin trickplay only. It does not change *arr search.
-
-recover=1 now: lock Decypharr client on Sonarr, fall Ultra-HD series back to **Any** if 720p is not allowed, then SeasonSearch.
+recover=1 still locks Decypharr + falls Ultra-HD back to Any so a 720p pack can grab.
 
 ## xorriso — do this
 

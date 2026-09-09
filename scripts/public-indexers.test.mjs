@@ -33,7 +33,13 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   );
   assert.match(add, /public indexer added/);
   assert.match(add, /rss fallback/);
-  assert.match(add, /pick_add_plan/);
+  assert.match(add, /apply_public_indexers/);
+  assert.match(add, /schema \{e\} — RSS fallback/);
+  assert.match(add, /"indexers" in sys\.argv/);
+  assert.doesNotMatch(
+    add,
+    /schemas = call\("http:\/\/127\.0\.0\.1:9696\/api\/v1\/indexer\/schema".*\n.*have = call\("http:\/\/127\.0\.0\.1:9696\/api\/v1\/indexer"/,
+  );
   const apps = read("daemon/wire-engines.parts/02.part");
   assert.match(apps, /syncLevel": prowlarr_app_sync_level\(\)/);
   assert.match(apps, /fullSync/);
@@ -59,6 +65,8 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   const out = `${r.stdout}\n${r.stderr}`;
   assert.match(out, /test_tpb_yts_only_house_posts_eztv_and_showrss/);
   assert.match(out, /test_no_cardigann_schema_uses_torrent_rss_fallback/);
+  assert.match(out, /test_empty_schema_still_posts_eztv_showrss/);
+  assert.match(out, /test_sandbox_house_tpb_only_http_posts_eztv_showrss/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);
 });
