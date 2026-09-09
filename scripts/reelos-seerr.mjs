@@ -167,6 +167,79 @@ export function simulateLookupAndRequest(
   return { titles, picked, payload, request: honest[0] || row, parsed };
 }
 
+/** Austin DoD 2026-09-08: two 2012–2016 movies + two TV seasons. */
+export const ERA_QA_TITLES = [
+  {
+    q: "interstellar",
+    id: 157336,
+    mediaType: "movie",
+    title: "Interstellar",
+    year: 2014,
+    releaseDate: "2014-11-07",
+  },
+  {
+    q: "the martian",
+    id: 286217,
+    mediaType: "movie",
+    title: "The Martian",
+    year: 2015,
+    releaseDate: "2015-09-30",
+  },
+  {
+    q: "brooklyn nine-nine",
+    id: 48891,
+    mediaType: "tv",
+    title: "Brooklyn Nine-Nine",
+    year: 2013,
+    firstAirDate: "2013-09-17",
+    season: 1,
+  },
+  {
+    q: "mr robot",
+    id: 62560,
+    mediaType: "tv",
+    title: "Mr. Robot",
+    year: 2015,
+    firstAirDate: "2015-06-24",
+    season: 2,
+  },
+];
+
+export function eraSearchHit(spec) {
+  if (spec.mediaType === "tv") {
+    return {
+      id: spec.id,
+      mediaType: "tv",
+      name: spec.title,
+      firstAirDate: spec.firstAirDate,
+      seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+    };
+  }
+  return {
+    id: spec.id,
+    mediaType: "movie",
+    title: spec.title,
+    releaseDate: spec.releaseDate,
+  };
+}
+
+/** Search → Seerr POST → honest 0% (no file) or AVAILABLE (hasFile). */
+export function proveEraLookupRequest(spec, { hasFile = false } = {}) {
+  return simulateLookupAndRequest(
+    {
+      searchHits: [eraSearchHit(spec)],
+      movieHasFile: spec.mediaType === "movie" && hasFile,
+      seasonFileCount: spec.mediaType === "tv" && hasFile ? 10 : 0,
+      seerrMediaStatus: hasFile ? 5 : 3,
+    },
+    {
+      q: spec.q,
+      pickId: titleIdFor(spec.mediaType, spec.id),
+      season: spec.season,
+    },
+  );
+}
+
 export function tmdbPoster(path) {
   const p = String(path || "");
   if (!p) return "";

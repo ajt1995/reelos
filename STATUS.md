@@ -7,7 +7,7 @@
 - **VERSION / channel:** `1.2.50.5`
 - **Base:** latest `main` (merged #56 = 1.2.50.4)
 - Did **not** take Tron chrome from #52
-- **What it is:** Discover search no longer looks like an empty shelf while Seerr is looking or timed out. TV `POST /api/request` is one season (`[n]` or S01), never `seasons: "all"`. Unit sandbox proves search→Seerr POST→honest 0%/AVAILABLE for a 2012–2016 movie and a 2012–2016 TV season.
+- **What it is:** Discover search no longer looks like an empty shelf while Seerr is looking or timed out. TV `POST /api/request` is one season (`[n]` or S01), never `seasons: "all"`. Live TMDB/Seerr ids do not get a lab **Cached** glow. Unit sandbox locks Austin’s 4-title 2012–2016 gate: Interstellar + The Martian + Brooklyn Nine-Nine S01 + Mr. Robot S02 → search → Seerr POST → honest 0% / AVAILABLE.
 
 ## Kept from 1.2.50.4 (#56)
 
@@ -19,7 +19,8 @@
 
 - Discover typed ≥2 chars and immediately said “No titles from Seerr” (debounce + fetch + AbortError all looked empty).
 - TV POST without a season asked Seerr for **all** seasons (hash paste omitted season).
-- No unit proof that a normal 2012–2016 TMDB movie/TV id survives lookup→request without a year filter or fake %.
+- No unit proof that four 2012–2016 TMDB titles survive lookup→request without a year filter or fake %.
+- Discover search cards glowed **Cached** for every live `tmdb-*` id (`titleInCache` treated them as lab catalog).
 
 ## Code changes (this stamp)
 
@@ -28,7 +29,8 @@
 3. **`GET /api/lookup`** — 45s Seerr search; `AbortError` → “Seerr lookup timed out. Try the search again.”
 4. **Discover** — Looking up… / real error / results. Title cards stay request-free (no In progress).
 5. **Title hash paste** — includes the selected TV season.
-6. **`simulateLookupAndRequest`** — mock Seerr/*arr for Interstellar (2014) + Brooklyn Nine-Nine (2013) S01.
+6. **`ERA_QA_TITLES` / `proveEraLookupRequest`** — Interstellar (2014), The Martian (2015), Brooklyn Nine-Nine S01 (2013), Mr. Robot S02 (2015).
+7. **`titleInCache`** — live `tmdb-` / `tvdb-` / `jf-` ids are never lab-Cached.
 
 ## Residual (no code change)
 
@@ -42,7 +44,7 @@
 ```
 python3 scripts/check-ota.py .
 node --test scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs
-node --experimental-strip-types --test src/lib/sync-requests.test.ts
+node --experimental-strip-types --test src/lib/sync-requests.test.ts src/lib/adapter.test.ts
 ```
 
 ## Owner / house Apply
@@ -51,7 +53,7 @@ node --experimental-strip-types --test src/lib/sync-requests.test.ts
 2. `cat /opt/reelos/VERSION` → `1.2.50.5`. Expect `ReelOS 1.2.50.5 applied.`
 3. Discover: search two 2012–2016 movies and two 2012–2016 shows. Results, not an empty shelf or a silent timeout.
 4. Request each movie. Request **one season** of each show. Seerr → Radarr/Sonarr. Requests: AVAILABLE / Grabbing / Waiting — no fake %.
-5. Discover cards stay free of In progress (that stays on Requests / title).
+5. Discover cards stay free of In progress and **Cached** glow on live TMDB ids (that stays on Requests / title).
 
 ## Do not
 

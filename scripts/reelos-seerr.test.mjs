@@ -12,9 +12,11 @@ import {
   pickSeerrRequestForTitle,
   honestifyRequests,
   assembleRequestPayload,
+  ERA_QA_TITLES,
   lookupFailureMessage,
   mapSeerrSearchResults,
   mapSeerrStatus,
+  proveEraLookupRequest,
   mergeUnfinishedRows,
   missingArrRequests,
   normalizeMediaType,
@@ -658,6 +660,43 @@ test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", (
   assert.equal(b99.year, 2013);
   assert.deepEqual(b99.seasonList, [1, 2]);
   assert.ok(titles.every((t) => t.year >= 2012 && t.year <= 2016));
+});
+
+test("QA gate: 2 movies + 2 TV seasons (2012–2016) search→request→honest 0%/AVAILABLE", () => {
+  assert.equal(ERA_QA_TITLES.length, 4);
+  assert.equal(ERA_QA_TITLES.filter((t) => t.mediaType === "movie").length, 2);
+  assert.equal(ERA_QA_TITLES.filter((t) => t.mediaType === "tv").length, 2);
+  for (const spec of ERA_QA_TITLES) {
+    assert.ok(spec.year >= 2012 && spec.year <= 2016, spec.title);
+    const grabbing = proveEraLookupRequest(spec, { hasFile: false });
+    assert.ok(grabbing.picked, spec.title);
+    assert.equal(grabbing.picked.title, spec.title);
+    assert.equal(grabbing.picked.year, spec.year);
+    assert.ok(grabbing.titles.some((t) => t.id === grabbing.picked.id));
+    if (spec.mediaType === "movie") {
+      assert.deepEqual(grabbing.payload, { mediaType: "movie", mediaId: spec.id });
+      assert.equal("seasons" in grabbing.payload, false);
+      assert.equal(grabbing.request.season, undefined);
+    } else {
+      assert.deepEqual(grabbing.payload, {
+        mediaType: "tv",
+        mediaId: spec.id,
+        seasons: [spec.season],
+      });
+      assert.equal(grabbing.payload.seasons.length, 1);
+      assert.notEqual(grabbing.payload.seasons, "all");
+      assert.equal(grabbing.request.season, spec.season);
+    }
+    assert.equal(grabbing.request.status, "downloading");
+    assert.equal(grabbing.request.progress, 0);
+    assert.ok(![42, 62].includes(grabbing.request.progress), spec.title);
+
+    const landed = proveEraLookupRequest(spec, { hasFile: true });
+    assert.equal(landed.request.status, "available");
+    assert.equal(landed.request.progress, 100);
+    assert.equal(landed.request.engine, "downloaded");
+    if (spec.mediaType === "tv") assert.equal(landed.request.season, spec.season);
+  }
 });
 
 test("lookup+request: Interstellar (2014) movie — Seerr POST, honest 0% then AVAILABLE", () => {

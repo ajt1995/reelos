@@ -15,7 +15,13 @@ const UNCACHED = new Set([
   "hollow-broadcast",
 ]);
 
+/** Live Seerr/Jellyfin ids are not lab catalog — no fake Cached glow. */
+export function isLiveEngineTitleId(id?: string): boolean {
+  return /^(tmdb-|tvdb-|jf-)/.test(String(id || ""));
+}
+
 export function titleInCache(title: Title): boolean {
+  if (!title?.id || isLiveEngineTitleId(title.id)) return false;
   return !UNCACHED.has(title.id);
 }
 
