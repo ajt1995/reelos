@@ -1,40 +1,41 @@
 # STATUS.md
 
-**Reelist (enlisted fixer).** 2026-09-09. Home/Library sat empty ~13s on launch because `/api/library` re-authed Jellyfin, pulled Recursive Movie/Series **with Overview**, and the zustand shelf was neither persisted nor refreshed. Did **not** edit HAL.md. Did **not** bump VERSION.
+**Reelist (enlisted fixer).** 2026-09-09. Audited house Apply path. Mailman was not trustworthy: search hop fail-closed after a live swap, SKIP_NPM ignored lockfile drift, home probe was 45s, compose pull ran before stamp. Lean mailman fixes rebased onto #46 (lean `/api/library` shelf) and #47 (JF12 + non-blocking Finish). Did **not** edit HAL.md. Did **not** bump VERSION.
 
 ## Stamp
 
 - **VERSION / channel:** still `1.2.48`
-- **PR:** https://github.com/ajt1995/reelos/pull/46 (`cursor/library-cold-path-857b`)
-- **What it is:** Cold Home showed “Nothing in Jellyfin yet…” until a large Items payload finished. Home only paints `shelf.slice(0, 24)`.
+- **PR:** https://github.com/ajt1995/reelos/pull/48 (`cursor/ota-apply-audit-c3a3`)
+- **Writeup:** `docs/OTA-APPLY-AUDIT.md`
+- **What it is:** Phone Check→Apply can land a new tree and still refuse `applied-sha` (Seerr Batman hop, short probe, broken `npm ci`). Check then keeps offering the same update.
 
-## Fix
+## Fix (mailman only)
 
-1. **Lean Items query:** `Fields=ProviderIds` only (no Overview), `EnableImages=false`, `EnableTotalRecordCount=false`. Home calls `GET /api/library?limit=24`.
-2. **Jellyfin token TTL cache** (10 min, keyed by user/PIN). Cleared on PIN change.
-3. **Stale-while-revalidate:** last real titles in memory + `/var/lib/reelos/library-shelf.json`. Return immediately; refresh in background. Empty Jellyfin stays empty — no invented rows.
-4. **Client:** persist `shelf`; `hydrateShelf` always refreshes (in-flight dedupe). Limited Home merge does not shrink a larger Library shelf. Empty copy is “Loading library…” until the first fetch.
+- `SKIP_NPM` compares `package.json` **and** `package-lock.json`. Lock present → `npm ci` only (no `npm install` fallback).
+- Refuse swap if staging is missing `package.json` / lockfile. `restore` moves a broken tree aside instead of `rm -rf` live app first.
+- Search hop is advisory (#47’s 4× retry kept; red does not set `HOP_FAIL`). FUSE/Jellyfin fail-close only when compose yml changed.
+- Home probe 90s. `docker compose pull` after `applied.`, 10 min cap.
+- Guard: `scripts/reelos-update.test.mjs` + `check-ota.py` contracts. Existing `package-lock.test.mjs` stays.
+- Already on main, kept: #46 lean cached shelf; #47 JF12 auth + Finish no longer `spawnSync` pull inside Vite.
 
 ## Owner / house Apply
 
-1. Merge to **main** (no VERSION bump). Phone refresh is enough — no daemon overlay.
-2. Proof:
-   - `time curl -sS 'http://127.0.0.1:8080/api/library?limit=24' >/dev/null` — first hit lean; second hit should be milliseconds from cache.
-   - `time curl -sS 'http://127.0.0.1:8080/api/library' >/dev/null` — after a Home visit, full list from cache or one lean uncached pull.
-   - Phone: cold open Home paints last titles (or Loading… then real posters). Pull-to-refresh / revisit updates from Jellyfin. Library still lists real titles only.
+See the checklist at the bottom of `docs/OTA-APPLY-AUDIT.md`. Short form:
 
-## Known gaps (do not block)
-
-- Title overview for Jellyfin-only rows comes from Seerr `/api/lookup`, not the shelf payload.
-- Posters still load one-by-one from `:8096`.
+1. Merge this tip to **main** (no VERSION bump).
+2. If `reelos-ota` is stuck `activating`, wait or reset-failed after the process is gone.
+3. Phone Check→Apply. Must print `ReelOS 1.2.48 applied.` Search hop red is OK.
+4. `applied-sha` is this tip. Second Check is up to date. Home on `:80`.
+5. `/opt/reelos/app/package.json` still exists.
+6. Home/Library still paint from lean cached `/api/library` (#46). Finish must not wedge `:8080` (#47).
 
 ## Do not
 
 - Edit **HAL.md** (Hal owns stamps/spec).
-- Merge `feature/3-books` / pirate book indexers.
+- Bump VERSION for a mailman repair.
 - Apply a feature-branch tarball — **main only**.
-- Bump VERSION for this UI/API lean-up.
+- Scope into TorBox.
 
 ## Hal / xorriso
 
-Hal: STATUS only; no HAL edit. No VERSION stamp. Phone OTA uses `main.tar.gz` + `channel.json` — ISO not required for a phone-shell refresh.
+Hal: STATUS only; no HAL edit. No VERSION stamp. Phone OTA uses `main.tar.gz` + `channel.json`.

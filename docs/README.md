@@ -33,6 +33,7 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | `channel.json` + `VERSION` | OTA. Tarball is the git tag `vX.Y.Z`. |
 | `HAL.md` | Hal → xorriso. Do not edit. |
 | `STATUS.md` | xorriso → Hal. |
+| `docs/OTA-APPLY-AUDIT.md` | Whether Phone Check→Apply is trustworthy. House verify checklist. |
 
 ## Rules that belong here, not in README
 
