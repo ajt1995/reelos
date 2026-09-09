@@ -51,6 +51,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /jellyfin drop extra path/);
     assert.match(code, /delete_jellyfin_library/);
     assert.match(code, /collapse_season_named_dumps/);
+    assert.match(code, /heal_season_folder_items/);
+    assert.match(code, /plan_season_folder_item/);
+    assert.match(code, /season_folder_item_path/);
     assert.match(code, /extra_jellyfin_libraries/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
@@ -139,6 +142,9 @@ extras = g["extra_jellyfin_libraries"](folders, [("Movies", "movies"), ("Shows",
 assert {f["Name"] for f in extras} == {"TV", "Movies 2"}, extras
 assert g["strip_season_folder_suffix"]("Brooklyn Nine-Nine S01") == "Brooklyn Nine-Nine"
 assert g["strip_season_folder_suffix"]("The Walking Dead - Season 1") == "The Walking Dead"
+assert g["strip_season_folder_suffix"]("- Season 1") == "- Season 1"
+assert g["looks_like_season_folder_title"]("The Walking Dead - Season 1") is True
+assert g["looks_like_season_folder_title"]("The Walking Dead") is False
 import tempfile, os
 from pathlib import Path
 td = tempfile.mkdtemp()
@@ -173,6 +179,73 @@ assert (dump / "Brooklyn Nine-Nine").is_dir()
 assert not (dump / "Brooklyn Nine-Nine S01").exists()
 assert (dump / "The Walking Dead").is_dir()
 assert not (dump / "The Walking Dead - Season 1").exists()
+# empty series stub + Season 1 dump: move media, then drop the season-named dir
+empty = Path(td) / "sonarr-empty"
+empty.mkdir()
+(empty / "The Walking Dead").mkdir()
+(empty / "The Walking Dead - Season 1").mkdir()
+(empty / "The Walking Dead - Season 1" / "S01E01.mkv").write_bytes(b"x")
+assert g["collapse_season_named_dumps"](str(empty), allow=[str(empty)]) == 1
+assert (empty / "The Walking Dead" / "S01E01.mkv").is_file()
+assert not (empty / "The Walking Dead - Season 1").exists()
+
+# DELETE /Items takes the files with it: only a season-named dir in a dump root qualifies.
+assert g["season_folder_item_path"]("/symlinks/sonarr/The Walking Dead - Season 1") is True
+assert g["season_folder_item_path"]("/mnt/symlinks/sonarr/The Walking Dead - Season 1") is True
+assert g["season_folder_item_path"]("/media/tv/The Walking Dead - Season 1") is False
+assert g["season_folder_item_path"]("/symlinks/sonarr/The Walking Dead") is False
+assert g["season_folder_item_path"]("/symlinks/sonarr") is False
+assert g["season_folder_item_path"]("/symlinks") is False
+assert g["season_folder_item_path"]("") is False
+
+twd = {
+    "Id": "jf-twd",
+    "Name": "The Walking Dead",
+    "Path": "/symlinks/sonarr/The Walking Dead",
+    "ProviderIds": {"Tvdb": "153021", "Tmdb": "1402"},
+}
+twd_s1 = {
+    "Id": "jf-twd-s1",
+    "Name": "The Walking Dead - Season 1",
+    "Path": "/symlinks/sonarr/The Walking Dead - Season 1",
+    "ProviderIds": {},
+}
+assert g["plan_season_folder_item"](twd_s1, [twd, twd_s1])["action"] == "delete"
+assert g["plan_season_folder_item"](twd, [twd, twd_s1]) is None
+# the same leftover on a local/both disk library is the house's own media — hands off
+disk_s1 = dict(twd_s1, Id="jf-disk-s1", Path="/media/tv/The Walking Dead - Season 1")
+assert g["plan_season_folder_item"](disk_s1, [twd, disk_s1]) is None
+assert g["plan_season_folder_item"](dict(twd_s1, Path=None), [twd, twd_s1]) is None
+orphan = {
+    "Id": "jf-only",
+    "Name": "Brooklyn Nine-Nine S01",
+    "Path": "/symlinks/sonarr/Brooklyn Nine-Nine S01",
+    "ProviderIds": {},
+}
+assert g["plan_season_folder_item"](orphan, [orphan]) == {
+    "action": "rename",
+    "id": "jf-only",
+    "name": "Brooklyn Nine-Nine S01",
+    "as": "Brooklyn Nine-Nine",
+}
+assert g["plan_season_folder_item"](dict(orphan, Path="/media/tv/Brooklyn Nine-Nine S01"), [orphan]) is None
+vs1 = {"Id": "jf-vs1", "Name": "Vinland Saga", "Path": "/symlinks/sonarr/Vinland Saga", "ProviderIds": {"Tvdb": "359274"}}
+vs2 = {
+    "Id": "jf-vs2",
+    "Name": "Vinland Saga S2",
+    "Path": "/symlinks/sonarr/Vinland Saga S2",
+    "ProviderIds": {"Tvdb": "421739"},
+}
+assert g["plan_season_folder_item"](vs2, [vs1, vs2]) is None
+healed = []
+g["log_wire"] = lambda m: None
+assert g["heal_season_folder_items"]("tok", items=[twd, twd_s1], call_fn=lambda url, **kw: healed.append((kw.get("method"), url))) == 1
+assert healed[0][0] == "DELETE"
+assert "jf-twd-s1" in healed[0][1]
+# nothing on /media is ever handed to Jellyfin's delete
+kept = []
+assert g["heal_season_folder_items"]("tok", items=[twd, disk_s1], call_fn=lambda url, **kw: kept.append(url)) == 0
+assert kept == []
 
 # A leftover library is deleted only once every path it holds is safe to lose.
 CANON = {
@@ -232,6 +305,7 @@ print("ok")
   const eight = read("daemon/wire-engines.parts/08.part");
   assert.match(eight, /delete_jellyfin_library/);
   assert.match(eight, /collapse_season_named_dumps/);
+  assert.match(eight, /heal_season_folder_items/);
   assert.match(eight, /drop_extra_jellyfin_libraries/);
 });
 

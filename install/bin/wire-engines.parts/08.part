@@ -45,12 +45,31 @@ def dump_dir_has_media(path: Path) -> bool:
     return False
 
 
+def move_dump_media(src: Path, dest: Path) -> None:
+    """Park season-folder files onto the series folder without clobbering existing names."""
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        kids = list(src.iterdir())
+    except OSError:
+        return
+    for child in kids:
+        target = dest / child.name
+        if target.exists():
+            continue
+        try:
+            shutil.move(str(child), str(target))
+        except OSError:
+            continue
+
+
 def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) -> int:
-    """Remove leftover season-folder dumps when the series folder already has media.
+    """Remove leftover season-folder dumps when the series folder already exists.
 
     House Home still double-counted Brooklyn Nine-Nine S01 and The Walking Dead - Season 1
-    next to the real series. Never touch /media (local/both disk libraries). `allow` is the
-    test seam: the shipped allowlist must not be widenable from the environment.
+    next to the real series. An empty series stub + full Season 1 dump is the leftover
+    case: move media onto the series folder, then drop the season-named dir. Never touch
+    /media (local/both disk libraries). `allow` is the test seam: the shipped allowlist
+    must not be widenable from the environment.
     """
     base = Path(root)
     resolved = str(base).rstrip("/")
@@ -73,15 +92,76 @@ def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) 
         if not series or series == p.name:
             continue
         canon = by_name.get(series)
-        if canon is None or not dump_dir_has_media(canon):
+        if canon is None:
             continue
         try:
+            if dump_dir_has_media(p):
+                move_dump_media(p, canon)
             shutil.rmtree(p)
             dropped += 1
             log_wire(f"jellyfin drop season-folder dump {p.name}")
         except OSError as e:
             log_wire(f"jellyfin season-folder dump {p.name} {e}")
     return dropped
+
+
+def fetch_jellyfin_series(token: str) -> list:
+    q = urllib.parse.urlencode(
+        {
+            "Recursive": "true",
+            "IncludeItemTypes": "Series",
+            "Fields": "ProviderIds,Path",
+            "EnableImages": "false",
+            "EnableUserData": "false",
+            "EnableTotalRecordCount": "false",
+        }
+    )
+    try:
+        data = call(f"http://127.0.0.1:8096/Items?{q}", headers={"X-Emby-Token": token}) or {}
+    except NET_ERR:
+        return []
+    items = data.get("Items") if isinstance(data, dict) else data
+    return items if isinstance(items, list) else []
+
+
+def heal_season_folder_items(token: str, items=None, call_fn=None) -> int:
+    """Delete or rename leftover season-folder Series items Jellyfin already ingested.
+
+    Scoped to season-named dump directories: DELETE /Items takes the files with it, so a
+    `/media` local-disk library or a canonical series folder is never handed to Jellyfin.
+    """
+    rows = items if items is not None else fetch_jellyfin_series(token)
+    do = call_fn or call
+    n = 0
+    for item in rows:
+        plan = plan_season_folder_item(item, rows)
+        if not plan:
+            continue
+        try:
+            if plan["action"] == "delete":
+                do(
+                    f"http://127.0.0.1:8096/Items/{plan['id']}",
+                    method="DELETE",
+                    headers={"X-Emby-Token": token},
+                )
+                log_wire(f"jellyfin drop season-folder item {plan['name']}")
+            else:
+                body = dict(item)
+                body["Name"] = plan["as"]
+                do(
+                    f"http://127.0.0.1:8096/Items/{plan['id']}",
+                    method="POST",
+                    body=body,
+                    headers={"X-Emby-Token": token},
+                )
+                log_wire(f"jellyfin rename season-folder item {plan['name']} -> {plan['as']}")
+            n += 1
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"jellyfin season-folder item {plan['name']} {e.code} {err}")
+        except NET_ERR as e:
+            log_wire(f"jellyfin season-folder item {plan['name']} {e}")
+    return n
 
 
 def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
@@ -159,11 +239,12 @@ def wait_jellyfin(seconds: int = 90, *, wizard_completed: bool | None = None) ->
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
     dropped = collapse_season_named_dumps()
+    healed = heal_season_folder_items(token)
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
         if libraries_ready(folders, want):
-            if dropped:
+            if dropped or healed:
                 try:
                     call(
                         "http://127.0.0.1:8096/Library/Refresh",

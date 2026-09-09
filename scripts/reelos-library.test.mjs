@@ -20,6 +20,7 @@ import {
   shelfTitleKey,
   stripSeasonFolderSuffix,
   titleYear,
+  yearsCompatible,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -188,6 +189,82 @@ test("Home shelf collapses JF season-folder names onto the real series row", () 
   assert.equal(shelfTitleKey(twd), shelfTitleKey(twds1));
 });
 
+test("jf-only TWD Season 1 (2011) collapses onto the 2010 series even when years disagree", () => {
+  // House after 1.2.50.8: PremiereDate year on the season-folder Series ≠ series start.
+  const series = titleFrom({
+    Id: "jf-9b12",
+    Name: "The Walking Dead",
+    Type: "Series",
+    ProductionYear: 2010,
+    ProviderIds: { Tvdb: "153021", Tmdb: "1402" },
+  });
+  const seasonFolder = titleFrom({
+    Id: "jf-c64258",
+    Name: "The Walking Dead - Season 1",
+    Type: "Series",
+    ProductionYear: 2011,
+    ProviderIds: {},
+  });
+  seasonFolder.poster = "";
+  assert.equal(shelfTitleKey(series), "tv:thewalkingdead");
+  assert.equal(shelfTitleKey(seasonFolder), "tv:thewalkingdead");
+  assert.equal(yearsCompatible(2010, 2011, series, seasonFolder), true);
+  for (const order of [
+    [seasonFolder, series],
+    [series, seasonFolder],
+  ]) {
+    const out = dedupeLibraryTitles(order);
+    assert.equal(out.length, 1, JSON.stringify(out.map((t) => [t.title, t.year, t.id])));
+    assert.equal(out[0].title, "The Walking Dead");
+    assert.equal(out[0].year, 2010);
+    assert.equal(out[0].id, "tvdb-153021");
+    assert.deepEqual(out[0].ids.filter((i) => /^tmdb-|^tvdb-/.test(i)).sort(), ["tmdb-1402", "tvdb-153021"]);
+  }
+});
+
+test("remakes with real ids and different years stay separate after season-year relaxation", () => {
+  const dune = (id, year, tmdb) =>
+    titleFrom({
+      Id: id,
+      Name: "Dune",
+      Type: "Movie",
+      ProductionYear: year,
+      ProviderIds: { Tmdb: tmdb },
+    });
+  const out = dedupeLibraryTitles([dune("jf-dune-84", 1984, "841"), dune("jf-dune-21", 2021, "438631")]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(
+    out.map((t) => t.year).sort(),
+    [1984, 2021],
+  );
+});
+
+test("a season folder joins the remake it shares a year with, not the first one scanned", () => {
+  const bridge = (id, year, tvdb) =>
+    titleFrom({
+      Id: id,
+      Name: "The Bridge",
+      Type: "Series",
+      ProductionYear: year,
+      ProviderIds: { Tvdb: tvdb },
+    });
+  const seasonFolder = titleFrom({
+    Id: "jf-bridge-s1",
+    Name: "The Bridge - Season 1",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: {},
+  });
+  seasonFolder.poster = "";
+  const out = dedupeLibraryTitles([bridge("jf-bridge-11", 2011, "248975"), bridge("jf-bridge-13", 2013, "264586"), seasonFolder]);
+  assert.equal(out.length, 2, JSON.stringify(out.map((t) => [t.title, t.year, t.id])));
+  assert.deepEqual(
+    out.map((t) => t.year).sort(),
+    [2011, 2013],
+  );
+  assert.equal(out.find((t) => t.year === 2013).id, "tvdb-264586");
+});
+
 test("two matched series that differ only by a season suffix stay two rows", () => {
   // Anime split seasons are separate TVDB series that can share a production year.
   const s1 = titleFrom({
@@ -214,6 +291,20 @@ test("two matched series that differ only by a season suffix stay two rows", () 
   const dump = titleFrom({ Id: "jf-vs3", Name: "Vinland Saga S2", Type: "Series", ProductionYear: 2019 });
   dump.poster = "";
   assert.equal(dedupeLibraryTitles([s1, s2, dump]).length, 2);
+  // Different premiere years must not override aliasSafe — still two real series.
+  const s2later = titleFrom({
+    Id: "jf-vs2b",
+    Name: "Vinland Saga S2",
+    Type: "Series",
+    ProductionYear: 2023,
+    ProviderIds: { Tvdb: "421739", Tmdb: "135647" },
+  });
+  const splitYears = dedupeLibraryTitles([s1, s2later]);
+  assert.equal(splitYears.length, 2);
+  assert.deepEqual(
+    splitYears.map((t) => t.title).sort(),
+    ["Vinland Saga", "Vinland Saga S2"],
+  );
 });
 
 test("a bare season folder name is not stripped to an empty shelf key", () => {

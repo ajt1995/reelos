@@ -132,12 +132,36 @@ export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}
   return out;
 }
 
+/** Seerr is still grabbing, Radarr has the row, but it is unmonitored — search never fires. */
+export function listUnmonitoredMovieRecoverTargets({ seerrRows = [], movies = [] } = {}) {
+  const requested = new Set();
+  for (const row of seerrRows || []) {
+    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    const mediaType =
+      row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row?.tmdb ?? row?.tmdbId;
+    if (mediaType !== "movie" || tmdb == null) continue;
+    requested.add(String(tmdb));
+  }
+  const out = [];
+  for (const m of movies || []) {
+    if (!m || m.tmdbId == null) continue;
+    if (m.monitored !== false) continue;
+    const files = Number(m.statistics?.movieFileCount || 0);
+    if (m.hasFile === true || files > 0) continue;
+    if (!requested.has(String(m.tmdbId))) continue;
+    out.push({ mediaType: "movie", tmdb: m.tmdbId });
+  }
+  return out;
+}
+
 export function listRecoverTargets({ series = [], movies = [], seerrRows = [] } = {}) {
   const missing = listMissingRecoverTargets({ series, movies });
   const orphans = listSeerrOrphanMovieTargets({ seerrRows, movies });
+  const unmonitored = listUnmonitoredMovieRecoverTargets({ seerrRows, movies });
   const seen = new Set(missing.map((t) => `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`));
   const out = [...missing];
-  for (const t of orphans) {
+  for (const t of [...orphans, ...unmonitored]) {
     const key = `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -465,6 +489,13 @@ export async function kickArrRecover({
     }
     if (hit?.id) {
       movieId = hit.id;
+      if (hit.monitored === false) {
+        const saved = await fetchArr(`http://127.0.0.1:7878/api/v3/movie/${hit.id}`, radarrKey, 12000, {
+          method: "PUT",
+          body: { ...hit, monitored: true },
+        });
+        if (saved) hit = { ...hit, monitored: true };
+      }
       const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
       const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
       if (plan.search) {
@@ -508,20 +539,29 @@ export async function loadPresenceFacts({
   const entry = readLibraryCacheFile(libraryFile);
   const libraryTitles = entry?.titles || [];
   const radarrKey = arrApiKey("radarr");
-  const [movies, series, torrents, radarrClients] = await Promise.all([
+  const [movies, series, torrents, radarrClients, radarrQueue, radarrProfiles] = await Promise.all([
     fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey),
     fetchArr("http://127.0.0.1:8989/api/v3/series", arrApiKey("sonarr")),
     fetchArr("http://127.0.0.1:8282/api/v2/torrents/info", null),
     radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/downloadclient", radarrKey) : Promise.resolve(null),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/queue", radarrKey) : Promise.resolve(null),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/qualityprofile", radarrKey) : Promise.resolve(null),
   ]);
   const movieRows = Array.isArray(movies) ? movies : [];
   const seriesRows = Array.isArray(series) ? series : [];
   const torrentRows = Array.isArray(torrents) ? torrents : [];
+  const queueRows = Array.isArray(radarrQueue)
+    ? radarrQueue
+    : Array.isArray(radarrQueue?.records)
+      ? radarrQueue.records
+      : [];
   const facts = {
     libraryTitles,
     movies: movieRows,
     series: seriesRows,
     torrents: torrentRows,
+    radarrQueue: queueRows,
+    radarrProfiles: Array.isArray(radarrProfiles) ? radarrProfiles : [],
     radarrClients: Array.isArray(radarrClients) ? radarrClients : radarrClients == null ? null : [],
     arrReady: Array.isArray(movies) || Array.isArray(series),
     arrMoviesReady: Array.isArray(movies),

@@ -32,6 +32,7 @@ import {
   tmdbPoster,
   tvSeasonsForRequest,
   movieRequestReason,
+  qualityFloorRejectsHd,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -558,6 +559,76 @@ test("National Treasure stuck downloading@0 is honest when Radarr never got the 
   assert.equal(assembled.requests[0].reason, "Requested — Radarr has no movie yet");
 });
 
+test("0-file Radarr movie with a grab client is honest about the silent 0%", () => {
+  const row = seerrRequestRow(
+    {
+      id: 9,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 2059, status: 3 },
+    },
+    {},
+  );
+  const decypharr = [
+    {
+      implementation: "QBittorrent",
+      fields: [
+        { name: "host", value: "decypharr" },
+        { name: "port", value: 8282 },
+      ],
+    },
+  ];
+  const movie = { id: 12, tmdbId: 2059, hasFile: false, statistics: { movieFileCount: 0 }, qualityProfileId: 1 };
+  const honest = honestifyRequests([row], {
+    movies: [movie],
+    arrMoviesReady: true,
+    arrReady: true,
+    radarrClients: decypharr,
+    radarrProfiles: [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }],
+    arrIndex: buildArrIndex({ movies: [movie] }),
+  });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].progress, 0);
+  assert.equal(honest[0].reason, "Searching — no file yet");
+  assert.equal(
+    movieRequestReason(row, {
+      movies: [{ ...movie, monitored: false }],
+      arrMoviesReady: true,
+      radarrClients: decypharr,
+    }),
+    "Unmonitored in Radarr — search will not run",
+  );
+  const ultra = {
+    id: 6,
+    name: "Ultra-HD",
+    items: [
+      { quality: { name: "WEBDL-720p" }, allowed: false },
+      { quality: { name: "WEBDL-2160p" }, allowed: true },
+    ],
+  };
+  assert.equal(qualityFloorRejectsHd([ultra], 6), true);
+  assert.equal(
+    movieRequestReason(row, {
+      movies: [{ ...movie, qualityProfileId: 6 }],
+      arrMoviesReady: true,
+      radarrClients: decypharr,
+      radarrProfiles: [ultra],
+    }),
+    "Quality floor is rejecting HD releases",
+  );
+  assert.equal(
+    movieRequestReason(row, {
+      movies: [movie],
+      arrMoviesReady: true,
+      radarrClients: decypharr,
+      radarrQueue: [{ movieId: 12 }],
+    }),
+    "Grabbed — waiting on Decypharr",
+  );
+});
+
 test("0-file Radarr movie with no Decypharr client surfaces the missing hop", () => {
   const row = seerrRequestRow(
     {
@@ -672,6 +743,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
   assert.match(seerr, /Requested — Radarr has no movie yet/);
+  assert.match(seerr, /Searching — no file yet/);
 });
 
 test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", () => {

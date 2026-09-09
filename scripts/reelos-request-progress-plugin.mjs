@@ -129,6 +129,7 @@ async function handleGet(req, res) {
   if (!id) {
     const facts = await loadPresenceFacts();
     const recoverNote = await maybeRecover(u, facts);
+    if (recoverNote) await loadPresenceFacts({ force: true });
     return handleList(res, recoverNote);
   }
   const key = seerrApiKey();
