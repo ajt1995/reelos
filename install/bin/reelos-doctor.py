@@ -202,6 +202,152 @@ def download_lock_hop() -> dict:
     return ok("Download lock", "Could not probe Radarr/Sonarr download clients", False)
 
 
+def jellyfin_folder_paths(folder: dict) -> list[str]:
+    locs = folder.get("Locations") or []
+    infos = ((folder.get("LibraryOptions") or {}).get("PathInfos") or [])
+    paths = [str(p) for p in locs if p]
+    for info in infos:
+        if isinstance(info, dict) and info.get("Path"):
+            paths.append(str(info["Path"]))
+    return paths
+
+
+def doctor_jellyfin_library_detail(folders, want=("Movies", "Shows")) -> tuple[str, bool]:
+    """TCP :8096 is not a library heal. Movies/Shows must have dump paths, not extra dump roots."""
+    rows = folders if isinstance(folders, list) else []
+    by_name = {str(f.get("Name") or ""): f for f in rows if isinstance(f, dict)}
+    problems = []
+    parts = []
+    expect = {"Movies": "radarr", "Shows": "sonarr"}
+    for name in want:
+        folder = by_name.get(name)
+        if not folder:
+            problems.append(f"{name} missing")
+            continue
+        paths = jellyfin_folder_paths(folder)
+        needle = expect.get(name) or ""
+        dump_ok = any(needle in p.replace("\\", "/") for p in paths) or any("/media/" in p for p in paths)
+        if not dump_ok:
+            problems.append(f"{name} has no dump/keep path")
+        if any(p.rstrip("/") in ("/symlinks", "/mnt/symlinks") for p in paths):
+            problems.append(f"{name} extra dump root")
+        parts.append(f"{name}:{','.join(paths) or 'none'}")
+    extra = [n for n in by_name if n not in want and n in ("TV", "Movies 2", "TV Shows")]
+    if extra:
+        problems.append("extra " + ",".join(extra))
+    if problems:
+        return f"{'; '.join(problems)} ({'; '.join(parts)})", False
+    return "; ".join(parts) or "no libraries", True
+
+
+def _arr_json(url: str, key: str):
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"X-Api-Key": key, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=8) as resp:
+        return json.loads(resp.read().decode() or "[]")
+
+
+def _indexer_can_search(ix: dict) -> bool:
+    if not isinstance(ix, dict) or not ix.get("enable"):
+        return False
+    if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
+        return False
+    return True
+
+
+def lookup_is_usable(lookup) -> bool:
+    if not isinstance(lookup, list) or not lookup:
+        return False
+    return any(isinstance(x, dict) and (x.get("tmdbId") or x.get("title")) for x in lookup)
+
+
+def request_hop_detail(*, radarr_up: bool, clients, indexers, lookup=None) -> tuple[str, bool]:
+    """Port+key is not a request hop. MoviesSearch needs client + search indexer + lookup."""
+    if not radarr_up:
+        return "request dead — Radarr", False
+    if not _decypharr_client_ok(clients):
+        return "Radarr has no Decypharr client — MoviesSearch cannot land", False
+    enabled = [ix for ix in (indexers or []) if _indexer_can_search(ix)]
+    if not enabled:
+        return "Radarr has no search indexer — MoviesSearch cannot land", False
+    if lookup is not None and not lookup_is_usable(lookup):
+        return "Radarr movie lookup failed — add/search path dead", False
+    return "Radarr accepts adds + search path", True
+
+
+def request_hop() -> dict:
+    key = xml_key_text(COMPOSE / "configs" / "radarr" / "config.xml")
+    up = listening(7878) and bool(key)
+    if not up:
+        return ok("Request hop", "request dead — Radarr", False)
+    try:
+        clients = _arr_json("http://127.0.0.1:7878/api/v3/downloadclient", key)
+        indexers = _arr_json("http://127.0.0.1:7878/api/v3/indexer", key)
+    except Exception as e:
+        return ok("Request hop", f"Radarr API {type(e).__name__}", False)
+    detail, good = request_hop_detail(radarr_up=True, clients=clients, indexers=indexers)
+    if not good:
+        return ok("Request hop", detail, False)
+    try:
+        from urllib.parse import quote
+
+        lookup = _arr_json(f"http://127.0.0.1:7878/api/v3/movie/lookup?term={quote('Batman')}", key)
+    except Exception as e:
+        return ok("Request hop", f"Radarr movie lookup {type(e).__name__}", False)
+    detail, good = request_hop_detail(radarr_up=True, clients=clients, indexers=indexers, lookup=lookup)
+    return ok("Request hop", detail, good)
+
+
+def sonarr_indexers_hop() -> dict:
+    key = xml_key_text(COMPOSE / "configs" / "sonarr" / "config.xml")
+    if not key:
+        return ok("Sonarr indexers", "Sonarr has no API key", False)
+    if not listening(8989):
+        return ok("Sonarr indexers", "Sonarr not up", False)
+    try:
+        rows = _arr_json("http://127.0.0.1:8989/api/v3/indexer", key)
+    except Exception as e:
+        return ok("Sonarr indexers", f"{type(e).__name__}: {e}", False)
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "doctor_sonarr_indexers_detail", None):
+        detail, good = mod.doctor_sonarr_indexers_detail(rows if isinstance(rows, list) else [])
+        return ok("Sonarr indexers", detail, good)
+    enabled = [ix for ix in (rows or []) if isinstance(ix, dict) and ix.get("enable")]
+    if not enabled:
+        return ok("Sonarr indexers", "Sonarr has no enabled indexer — SeasonSearch cannot land", False)
+    return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
+
+
+def jellyfin_api_token() -> str:
+    try:
+        return (STATE / "jellyfin.token").read_text().strip()
+    except OSError:
+        return ""
+
+
+def jellyfin_libraries_hop() -> dict:
+    """TCP :8096 is not a library. Read VirtualFolders with the house token."""
+    if not listening(8096):
+        return ok("Jellyfin libraries", "Not up", False)
+    token = jellyfin_api_token()
+    if not token:
+        return ok("Jellyfin libraries", "Cannot read virtual folders (no token)", False)
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(
+            "http://127.0.0.1:8096/Library/VirtualFolders",
+            headers={"X-Emby-Token": token, "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            folders = json.loads(resp.read().decode() or "[]")
+    except Exception as e:
+        return ok("Jellyfin libraries", f"Cannot read virtual folders ({type(e).__name__})", False)
+    detail, good = doctor_jellyfin_library_detail(folders if isinstance(folders, list) else [])
+    return ok("Jellyfin libraries", detail, good)
+
+
 def tailscale_hop() -> dict:
     bin_path = shutil.which("tailscale")
     if not bin_path:
@@ -296,6 +442,7 @@ def main() -> int:
 
     if frontend in ("jellyfin", "both"):
         checks.append(ok("Jellyfin", "Responding" if listening(8096) else "Not up", listening(8096)))
+        checks.append(jellyfin_libraries_hop())
     if frontend in ("plex", "both"):
         checks.append(ok("Plex", "Responding" if listening(32400) else "Not up", listening(32400)))
 
@@ -320,8 +467,9 @@ def main() -> int:
 
     checks.append(ok("ReelOS", f"Version {version}", True))
 
-    radarr_up = listening(7878) and api_key(COMPOSE / "configs" / "radarr" / "config.xml")
-    checks.append(ok("Request hop", "Radarr accepts adds" if radarr_up else "request dead — Radarr", radarr_up))
+    checks.append(request_hop())
+    if intent.get("tv") or intent.get("anime"):
+        checks.append(sonarr_indexers_hop())
 
     checks.append(container_hop("decypharr", "Decypharr hop", 8282))
     fuse_detail = "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs"
@@ -383,6 +531,83 @@ def _self_test() -> int:
             row["enable"] = True
             self.assertTrue(_decypharr_client_ok([row]))
             self.assertFalse(_decypharr_client_ok([]))
+
+        def test_request_hop_needs_client_and_indexer(self):
+            dead, dead_ok = request_hop_detail(radarr_up=False, clients=[], indexers=[])
+            self.assertFalse(dead_ok)
+            self.assertIn("request dead", dead)
+            no_client, nc_ok = request_hop_detail(radarr_up=True, clients=[], indexers=[{"enable": True, "name": "YTS"}])
+            self.assertFalse(nc_ok)
+            self.assertIn("Decypharr", no_client)
+            client = {
+                "implementation": "QBittorrent",
+                "enable": True,
+                "fields": [{"name": "host", "value": "decypharr"}, {"name": "port", "value": 8282}],
+            }
+            no_ix, nix_ok = request_hop_detail(radarr_up=True, clients=[client], indexers=[])
+            self.assertFalse(nix_ok)
+            self.assertIn("indexer", no_ix)
+            muted, muted_ok = request_hop_detail(
+                radarr_up=True,
+                clients=[client],
+                indexers=[
+                    {
+                        "enable": True,
+                        "name": "ReelOS-yts",
+                        "enableAutomaticSearch": False,
+                        "enableInteractiveSearch": False,
+                    }
+                ],
+            )
+            self.assertFalse(muted_ok)
+            self.assertIn("search indexer", muted)
+            dead_lookup, dl_ok = request_hop_detail(
+                radarr_up=True,
+                clients=[client],
+                indexers=[{"enable": True, "name": "ReelOS-yts"}],
+                lookup=[],
+            )
+            self.assertFalse(dl_ok)
+            self.assertIn("lookup", dead_lookup)
+            ok_detail, good = request_hop_detail(
+                radarr_up=True,
+                clients=[client],
+                indexers=[{"enable": True, "name": "ReelOS-yts"}],
+                lookup=[{"tmdbId": 268, "title": "Batman"}],
+            )
+            self.assertTrue(good)
+            self.assertIn("search path", ok_detail)
+
+        def test_jellyfin_libraries_hop_is_not_tcp_only(self):
+            detail, good = doctor_jellyfin_library_detail(
+                [
+                    {"Name": "Movies", "Locations": ["/symlinks", "/symlinks/radarr"]},
+                    {"Name": "Shows", "Locations": ["/symlinks/sonarr"]},
+                    {"Name": "TV", "Locations": ["/mnt/symlinks/sonarr"]},
+                ]
+            )
+            self.assertFalse(good)
+            self.assertIn("extra dump root", detail)
+            self.assertIn("extra TV", detail)
+            ok_detail, ok = doctor_jellyfin_library_detail(
+                [
+                    {"Name": "Movies", "Locations": ["/symlinks/radarr", "/media/movies"]},
+                    {"Name": "Shows", "Locations": ["/symlinks/sonarr"]},
+                ]
+            )
+            self.assertTrue(ok)
+            self.assertIn("Movies:/symlinks/radarr", ok_detail)
+            missing, miss_ok = doctor_jellyfin_library_detail([{"Name": "Movies", "Locations": ["/media/movies"]}])
+            self.assertFalse(miss_ok)
+            self.assertIn("Shows missing", missing)
+            tcp_only = Path(__file__).read_text()
+            hop = tcp_only[tcp_only.find("def jellyfin_api_token") : tcp_only.find("def tailscale_hop")]
+            self.assertIn("VirtualFolders", hop)
+            self.assertIn("jellyfin.token", hop)
+            self.assertIn("no token", hop)
+            self.assertIn("doctor_jellyfin_library_detail", hop)
+            self.assertIn("X-Emby-Token", hop)
+            self.assertIn("jellyfin_api_token", hop)
 
         def test_tpb_only_house_is_a_failed_releases_hop(self):
             mod = _load_public_indexers()

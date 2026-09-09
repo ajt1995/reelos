@@ -701,6 +701,41 @@ export function torrentRequests(torrents = [], { series = [], movies = [] } = {}
   return rows;
 }
 
+export function pipelineMovieGaps({ seerrRows = [], movies = [] } = {}) {
+  const have = new Map(
+    (movies || []).filter((m) => m && m.tmdbId != null).map((m) => [String(m.tmdbId), m]),
+  );
+  const missing = [];
+  const orphans = [];
+  const unmonitored = [];
+  const seen = new Set();
+  const take = (list, titleId) => {
+    if (seen.has(titleId)) return;
+    seen.add(titleId);
+    list.push(titleId);
+  };
+  for (const row of seerrRows || []) {
+    if (!row || row.status === "available" || row.engine === "downloaded") continue;
+    const mediaType =
+      row.mediaType === "tv" || String(row.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row.tmdb ?? row.tmdbId;
+    if (mediaType !== "movie" || tmdb == null) continue;
+    const titleId = `tmdb-${tmdb}`;
+    const hit = have.get(String(tmdb));
+    const files = Number(hit?.statistics?.movieFileCount || 0);
+    const hasFile = hit?.hasFile === true || files > 0;
+    if (!hit) take(orphans, titleId);
+    else if (hasFile) continue;
+    else if (hit.monitored === false) take(unmonitored, titleId);
+    else take(missing, titleId);
+  }
+  return {
+    radarrMissing: [...missing, ...orphans, ...unmonitored],
+    radarrOrphans: orphans,
+    radarrUnmonitored: unmonitored,
+  };
+}
+
 export function buildPipeline({
   seerrRows = [],
   series = [],
@@ -710,13 +745,16 @@ export function buildPipeline({
   catalog = [],
 } = {}) {
   const missing = missingArrRequests(series, movies);
+  const movieGaps = pipelineMovieGaps({ seerrRows, movies });
   const fuseTv = (catalog || []).filter(looksLikeTvName);
   return {
     seerr: (seerrRows || []).length,
     sonarrMissing: missing
       .filter((r) => r.mediaType === "tv")
       .map((r) => ({ titleId: r.titleId, season: r.season })),
-    radarrMissing: missing.filter((r) => r.mediaType === "movie").map((r) => r.titleId),
+    radarrMissing: movieGaps.radarrMissing.length ? movieGaps.radarrMissing : missing.filter((r) => r.mediaType === "movie").map((r) => r.titleId),
+    radarrOrphans: movieGaps.radarrOrphans,
+    radarrUnmonitored: movieGaps.radarrUnmonitored,
     dumps: {
       sonarr: Array.isArray(dumps.sonarr) ? dumps.sonarr.length : dumps.sonarr ?? -1,
       radarr: Array.isArray(dumps.radarr) ? dumps.radarr.length : dumps.radarr ?? -1,

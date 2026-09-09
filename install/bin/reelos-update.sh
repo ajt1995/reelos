@@ -364,6 +364,19 @@ need scripts/reelos-request-status.mjs 'ensureTvGrabPath'
 need scripts/reelos-request-status.mjs 'ensureMovieGrabPath'
 need scripts/reelos-request-status.mjs 'addRadarrMovie'
 need scripts/reelos-request-status.mjs 'seerrRecoverScope'
+need daemon/wire-engines.parts/08.part 'heal_after_import'
+need daemon/wire-engines.parts/08.part 'jellyfin heal red — no token'
+need daemon/wire-engines.parts/09.part 'collapse_dumps=False'
+need daemon/wire-engines.parts/01.part 'return heal_after_import()'
+need daemon/reelos-update.sh 'not printing applied — jellyfin/indexer heal red'
+need daemon/reelos-doctor.py 'doctor_jellyfin_library_detail'
+need daemon/reelos-doctor.py 'request_hop_detail'
+need daemon/reelos-doctor.py 'movie/lookup'
+need daemon/reelos-doctor.py 'jellyfin.token'
+need daemon/public_indexers.py 'doctor_sonarr_indexers_detail'
+need daemon/stuck-downloads.py 'ensure_item_grab_path'
+need scripts/reelos-request-status.mjs 'recoverKickOk'
+need scripts/reelos-seerr.mjs 'pipelineMovieGaps'
 need scripts/reelos-seerr.mjs 'Seerr says available — no file on disk'
 need daemon/lock-download-clients.py 'client_enabled'
 need daemon/reelos-doctor.py 'Could not probe Radarr/Sonarr download clients'
@@ -971,13 +984,20 @@ PY
   fi
 }
 
+HEAL_FAIL=0
 if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
   if [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
-    python3 "$ROOT/bin/wire-engines.py" indexers || log "indexers non-fatal"
+    if ! python3 "$ROOT/bin/wire-engines.py" indexers; then
+      log "indexers heal red"
+      HEAL_FAIL=1
+    fi
     log "import after hops (TV/movies into the library)"
-    python3 "$ROOT/bin/wire-engines.py" import || log "import non-fatal"
+    if ! python3 "$ROOT/bin/wire-engines.py" import; then
+      log "import/heal red"
+      HEAL_FAIL=1
+    fi
   fi
 fi
 
@@ -1009,6 +1029,12 @@ fi
 if [ "$CANARY_FAIL" = "1" ]; then
   log "not printing applied — hops or indexer red"
   bug_snap "hops-red"
+  log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+  exit 1
+fi
+if [ "${HEAL_FAIL:-0}" = "1" ]; then
+  log "not printing applied — jellyfin/indexer heal red"
+  bug_snap "heal-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
   exit 1
 fi

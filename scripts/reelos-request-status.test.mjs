@@ -18,6 +18,8 @@ import {
   decypharrClientMissing,
   pickFallbackProfile,
   hybridQualityShouldAllow,
+  commandPosted,
+  recoverKickOk,
 } from "./reelos-request-status.mjs";
 
 test("presence facts read the JF shelf cache and *arr hasFile index", async () => {
@@ -66,6 +68,17 @@ test("TV POST recover searches a missing season and always imports", () => {
     search: false,
     import: true,
   });
+});
+
+test("empty command body is not a queued search", () => {
+  assert.equal(commandPosted(null), false);
+  assert.equal(commandPosted({ ok: true, empty: true }), false);
+  assert.equal(commandPosted({ ok: true }), false);
+  assert.equal(commandPosted({ id: 9, name: "MoviesSearch" }), true);
+  assert.equal(recoverKickOk({ wantedSearch: true, searched: false, command: null }), false);
+  assert.equal(recoverKickOk({ wantedSearch: true, searched: true, command: "MoviesSearch" }), true);
+  assert.equal(recoverKickOk({ wantedSearch: false, searched: false }), true);
+  assert.equal(recoverKickOk({ wantedSearch: true, searched: true, command: "MoviesSearch", grabPath: { missing: true } }), false);
 });
 
 test("movie POST recover MoviesSearchs a 0-file title (Interstellar / John Wick)", () => {
@@ -131,12 +144,13 @@ test("kickTvSeasonRecover SeasonSearch when Sonarr has TWD S01 with 0 files", as
       }
       if (String(url).includes("/command")) {
         posts.push(opts.body);
-        return { ok: true };
+        return { id: 1, name: "SeasonSearch" };
       }
       return null;
     },
   });
   assert.equal(result.searched, true);
+  assert.equal(result.ok, true);
   assert.equal(result.seriesId, 9);
   assert.equal(result.importSpawned, true);
   assert.equal(posts[0]?.name, "SeasonSearch");
@@ -225,10 +239,12 @@ test("kickArrRecover POSTs Decypharr client and Any profile before SeasonSearch"
           { id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] },
         ];
       }
+      if (String(url).includes("/command")) return { id: 1, name: "SeasonSearch" };
       return { ok: true };
     },
   });
   assert.equal(result.searched, true);
+  assert.equal(result.ok, true);
   assert.equal(result.seriesId, 3);
   assert.equal(result.grabPath?.clientAdded, true);
   assert.ok(result.grabPath?.profileWidened === true || result.grabPath?.profileFallback === "any");
@@ -282,6 +298,7 @@ test("recover does not claim failed Sonarr writes succeeded", async () => {
     },
   });
   assert.equal(result.searched, false);
+  assert.equal(result.ok, false);
   assert.equal(result.command, null);
   assert.equal(result.importSpawned, false);
   assert.equal(result.grabPath?.clientAdded, false);
@@ -333,15 +350,37 @@ test("kickArrRecover MoviesSearch when Radarr has Interstellar with 0 files", as
       }
       if (String(url).includes("/command")) {
         posts.push(opts.body);
-        return { ok: true };
+        return { id: 4, name: "MoviesSearch" };
       }
       return null;
     },
   });
   assert.equal(result.searched, true);
+  assert.equal(result.ok, true);
   assert.equal(result.movieId, 4);
   assert.equal(result.command, "MoviesSearch");
   assert.deepEqual(posts[0], { name: "MoviesSearch", movieIds: [4] });
+});
+
+test("kickArrRecover does not claim success after an empty MoviesSearch 2xx", async () => {
+  const result = await kickArrRecover({
+    mediaType: "movie",
+    tmdb: 157336,
+    radarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      if (String(url).includes("/movie") && (opts.method || "GET") === "GET") {
+        return [{ id: 4, tmdbId: 157336, title: "Interstellar", hasFile: false }];
+      }
+      if (String(url).includes("/command")) return { ok: true };
+      return null;
+    },
+  });
+  assert.equal(result.searched, false);
+  assert.equal(result.ok, false);
+  assert.equal(result.command, null);
 });
 
 test("kickArrRecover waits for Seerr to land Interstellar in Radarr", async () => {
@@ -362,13 +401,14 @@ test("kickArrRecover waits for Seerr to land Interstellar in Radarr", async () =
       }
       if (String(url).includes("/command")) {
         posts.push(opts.body);
-        return { ok: true };
+        return { id: 4, name: "MoviesSearch" };
       }
       return null;
     },
   });
   assert.ok(lookups >= 3);
   assert.equal(result.searched, true);
+  assert.equal(result.ok, true);
   assert.equal(posts[0]?.name, "MoviesSearch");
 });
 
@@ -594,11 +634,12 @@ test("kickArrRecover adds National Treasure when Seerr requested but Radarr is e
         return movies[0];
       }
       if (String(url).includes("/movie") && method === "GET") return movies;
-      if (String(url).includes("/command")) return { ok: true };
+      if (String(url).includes("/command")) return { id: 9, name: "MoviesSearch" };
       return { ok: true };
     },
   });
   assert.equal(result.searched, true);
+  assert.equal(result.ok, true);
   assert.equal(result.movieId, 9);
   assert.equal(result.command, "MoviesSearch");
   assert.equal(result.grabPath?.added, true);

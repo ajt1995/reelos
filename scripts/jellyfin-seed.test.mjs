@@ -54,6 +54,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /heal_season_folder_items/);
     assert.match(code, /plan_season_folder_item/);
     assert.match(code, /season_folder_item_path/);
+    assert.match(code, /heal_after_import/);
+    assert.match(code, /collapse_dumps=False/);
+    assert.match(code, /import collapse season-folder dumps before jellyfin refresh/);
     assert.match(code, /extra_jellyfin_libraries/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
@@ -300,9 +303,15 @@ print("ok")
   assert.match(r.stdout, /ok/);
   const hop = read("daemon/wire-engines.parts/09.part");
   assert.match(hop, /ensure_jellyfin_libraries/);
+  assert.match(hop, /collapse_dumps=False/);
   assert.match(hop, /jellyfin libraries one dump path each/);
   assert.match(hop, /widen_radarr_hybrid/);
+  const one = read("daemon/wire-engines.parts/01.part");
+  assert.ok(one.indexOf("relink_from_debrid") < one.lastIndexOf("heal_after_import"));
+  assert.ok(one.indexOf("DownloadedMoviesScan") < one.lastIndexOf("return heal_after_import()"));
+  assert.match(one, /return heal_after_import\(\)/);
   const eight = read("daemon/wire-engines.parts/08.part");
+  assert.match(eight, /jellyfin heal red — no token/);
   assert.match(eight, /delete_jellyfin_library/);
   assert.match(eight, /collapse_season_named_dumps/);
   assert.match(eight, /heal_season_folder_items/);
