@@ -119,13 +119,12 @@ export function BooksView() {
     <Page>
       <PageTitle
         kicker="Open catalogs"
-        sub="Project Gutenberg, Standard Ebooks, and freely readable Internet Archive scans. Add lands in /srv/media/books for Kavita. No shadow libraries."
+        sub="Project Gutenberg, Standard Ebooks, and freely readable Internet Archive scans. Add lands in /srv/media/books for Kavita."
       >
         Books
       </PageTitle>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <Chip live>Legal only</Chip>
         <Chip magenta>Gutenberg</Chip>
         <Chip magenta>Standard Ebooks</Chip>
         <Chip magenta>Internet Archive</Chip>
@@ -143,7 +142,7 @@ export function BooksView() {
           <input
             type="search"
             placeholder="Search a book or author"
-            aria-label="Search legal book catalogs"
+            aria-label="Search books"
             className="field-glow h-11 w-full rounded-xl bg-card pl-10 pr-4 text-sm placeholder:text-faint"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
