@@ -36,6 +36,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: true,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -57,16 +58,17 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.6";
-export const SHIPPED_VERSION = "1.2.50.6";
+export const LATEST_VERSION = "1.2.51";
+export const SHIPPED_VERSION = "1.2.51";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "1.2.50.6: OTA adds EZTV/ShowRSS (YTS is movies-only) and fullSyncs Prowlarr→Sonarr. SeasonSearch still fires for 0-file TV. MoviesSearch on movie POST. Not 1.2.51 (Tron #52).",
-  "1.2.50.5: Discover search surfaces Seerr timeout/empty honestly. TV POST is one season (never all). No Cached glow on live TMDB ids. QA gate: 2 movies + 2 TV seasons 2012–2016 search→request→honest 0%. Not 1.2.51 (Tron #52).",
-  "1.2.50.4: SeasonSearch on empty TV season POST/reuse. GET /api/request?recover=1. stuck-downloads searches 0-file monitored seasons. Keep Decypharr dumps. Honest unfinished TV when Seerr is empty. Not 1.2.51 (Tron #52).",
-  "1.2.50.3: Apply Stage 3 heartbeat. Relink recreates empty sonarr/radarr dumps from FUSE. Title page season-honest, no 42%. Not 1.2.51 (Tron #52).",
-  "1.2.50.2: Requests tell the truth. Library / Seerr available / *arr hasFile ⇒ AVAILABLE, not grabbing. Duplicate same title+season collapses. Not 1.2.51 (Tron #52).",
+  "1.2.51 candidate (test-build, HOLD): Tron-night phone UI + legal Books/Kavita on top of 1.2.50.6. TV/movie Request/grab needs house Seerr/TorBox keys — broken by design in this cloud run. Do not house Apply. Do not merge.",
+  "1.2.50.6: OTA adds EZTV/ShowRSS (YTS is movies-only) and fullSyncs Prowlarr→Sonarr. SeasonSearch still fires for 0-file TV. MoviesSearch on movie POST.",
+  "1.2.50.5: Discover search surfaces Seerr timeout/empty honestly. TV POST is one season (never all). No Cached glow on live TMDB ids. QA gate: 2 movies + 2 TV seasons 2012–2016 search→request→honest 0%.",
+  "1.2.50.4: SeasonSearch on empty TV season POST/reuse. GET /api/request?recover=1. stuck-downloads searches 0-file monitored seasons. Keep Decypharr dumps. Honest unfinished TV when Seerr is empty.",
+  "1.2.50.3: Apply Stage 3 heartbeat. Relink recreates empty sonarr/radarr dumps from FUSE. Title page season-honest, no 42%.",
+  "1.2.50.2: Requests tell the truth. Library / Seerr available / *arr hasFile ⇒ AVAILABLE, not grabbing. Duplicate same title+season collapses.",
   "1.2.50.1: TV season grab→symlink→Sonarr import. Skip movie dumps under Sonarr. Match S01.E01 / season packs. Reuse duplicate season requests.",
   "1.2.50: Stacked house Apply (#45–#50). Overlay house compose/configs so #49 seed cannot nest. FUSE rslave ENOTCONN heal + importPending retry. Check then Apply.",
 ];
@@ -180,6 +182,7 @@ function logFor(id: string, label: string) {
     sonarr: "Root folder /srv/media/tv. Quality profile applied.",
     anime: "Anime-sane profile attached to Sonarr.",
     lidarr: "Root folder /srv/media/music.",
+    kavita: "Root folder /srv/media/books.",
     seerr: "Request UI linked. No setup screen left.",
     jellyfin: "Libraries published. Hardware transcode noted.",
     plex: "Claim accepted. Libraries published.",
@@ -209,6 +212,7 @@ export function buildPlan(answers: WizardAnswers): BuildStep[] {
   if (answers.intent.tv) steps.push({ id: "sonarr", label: "TV engine" });
   if (answers.intent.anime) steps.push({ id: "anime", label: "Anime profile" });
   if (answers.intent.music) steps.push({ id: "lidarr", label: "Music engine" });
+  if (answers.intent.books) steps.push({ id: "kavita", label: "Book engine" });
   steps.push({ id: "seerr", label: "Request UI" });
   if (answers.frontend !== "plex") steps.push({ id: "jellyfin", label: "Jellyfin" });
   if (answers.frontend !== "jellyfin") steps.push({ id: "plex", label: "Plex" });
@@ -236,7 +240,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "RD-LAB-KEY-7F3A",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: true },
   quality: "hybrid",
   frontend: "jellyfin",
 };
@@ -720,6 +724,9 @@ export const useReelStore = create<ReelState>()(
         if (!state) return;
         state.update = idleUpdate();
         if (state.shelf?.length) state.shelfReady = true;
+        if (state.answers?.intent && state.answers.intent.books === undefined) {
+          state.answers.intent.books = true;
+        }
       },
     },
   ),

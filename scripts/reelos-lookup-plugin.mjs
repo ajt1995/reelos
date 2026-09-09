@@ -7,6 +7,7 @@ import {
   pickSeerrRequestForTitle,
   seerrApiKey,
   seerrFetch,
+  seerrListHits,
   seerrRequestRow,
   seerrSearchHit,
   honestifyRequests,
@@ -16,6 +17,7 @@ import {
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
+import { downloadLegalBook, searchLegalBooks } from "./reelos-books.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -301,14 +303,80 @@ async function handleLookup(req, res) {
       send(res, 200, { titles, error });
       return;
     }
+    const kind = u.searchParams.get("kind")?.trim() || "";
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
+    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, kind }));
     note(`seerr hits=${hits.length} titles=${titles.length}`);
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
   }
   send(res, 200, { titles, error });
+}
+
+async function handleDiscover(req, res) {
+  const raw = req.url ?? "";
+  const u = new URL(raw, "http://reelos.local");
+  const kind = u.searchParams.get("kind")?.trim() || "all";
+  const key = seerrApiKey();
+  const empty = { trending: [], movies: [], tv: [], error: null };
+  if (!key) {
+    send(res, 200, {
+      ...empty,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const [trendingR, moviesR, tvR] = await Promise.all([
+      seerrFetch("/api/v1/discover/trending", { key, ms: 25000 }),
+      seerrFetch("/api/v1/discover/movies", { key, ms: 25000 }),
+      seerrFetch("/api/v1/discover/tv", { key, ms: 25000 }),
+    ]);
+    const unavailable = [];
+    if (!trendingR.ok) unavailable.push("trending");
+    if (!moviesR.ok) unavailable.push("movies");
+    if (!tvR.ok) unavailable.push("tv");
+    const trending = trendingR.ok ? seerrListHits(trendingR.json) : [];
+    const movies = moviesR.ok ? seerrListHits(moviesR.json, "movie") : [];
+    const tv = tvR.ok ? seerrListHits(tvR.json, "tv") : [];
+    const wantMovies = kind !== "tv";
+    const wantTv = kind !== "movie";
+    send(res, 200, {
+      trending: kind === "all" ? trending : trending.filter((t) => t.kind === kind),
+      movies: wantMovies ? movies : [],
+      tv: wantTv ? tv : [],
+      error: unavailable.length
+        ? `Seerr discover missed ${unavailable.join(", ")} (${trendingR.status || moviesR.status || tvR.status})`
+        : null,
+    });
+  } catch (e) {
+    send(res, 200, { ...empty, error: `seerr ${e}` });
+  }
+}
+
+async function handleBooks(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "GET") {
+    const raw = req.url ?? "";
+    const u = new URL(raw, "http://reelos.local");
+    const q = u.searchParams.get("q")?.trim() || "";
+    try {
+      const data = await searchLegalBooks(q);
+      send(res, 200, data);
+    } catch (e) {
+      send(res, 200, { results: [], unavailable: [], error: String(e) });
+    }
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false, error: "GET search or POST download" });
+    return;
+  }
+  const body = await readBody(req);
+  const book = body.book || body;
+  const result = await downloadLegalBook(book);
+  send(res, result.ok ? 200 : 400, result);
 }
 
 async function probeJson(url, ms = 3000) {
@@ -1418,6 +1486,15 @@ async function handleIntent(req, res) {
   } else {
     spawnSync("docker", ["compose", "stop", "lidarr"], { cwd: compose, encoding: "utf8", timeout: 20000 });
   }
+  if (a.intent?.books) {
+    spawnSync("docker", ["compose", "--profile", "books", "up", "-d", "kavita"], {
+      cwd: compose,
+      encoding: "utf8",
+      timeout: 60000,
+    });
+  } else {
+    spawnSync("docker", ["compose", "stop", "kavita"], { cwd: compose, encoding: "utf8", timeout: 20000 });
+  }
   send(res, 200, { ok: true, intent: a.intent });
 }
 
@@ -1687,6 +1764,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (intent.books !== false) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") {
     p.push("jellyfin");
@@ -1712,6 +1790,7 @@ async function handleProvision(req, res) {
   try {
     mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
     mkdirSync(`${composeDir}/configs/decypharr`, { recursive: true });
+    mkdirSync("/srv/media/books", { recursive: true });
     seedJellyfinNetworkXml(composeDir);
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
     const profiles = composeProfiles(a).join(",");
@@ -1924,6 +2003,8 @@ export function reelosLookupPlugin() {
         const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
         try {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
+          if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
+          if (pathOnly === "/api/books") return void (await handleBooks(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));

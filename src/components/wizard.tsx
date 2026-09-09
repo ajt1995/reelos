@@ -56,14 +56,14 @@ export function Wizard() {
   };
 
   return (
-    <div className="relative min-h-dvh overflow-hidden bg-background">
+    <div className="tron-grid relative min-h-dvh overflow-hidden">
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-gold/10 blur-[90px]"
+        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-cyan/12 blur-[90px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-live/8 blur-[80px]"
+        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-magenta/10 blur-[80px]"
       />
       <header className="flex items-center justify-between px-6 py-5 md:px-10">
         <Wordmark markClassName="size-7" />
@@ -114,7 +114,7 @@ function canContinue(step: number, a: ReturnType<typeof useReelStore.getState>["
   }
   if (step === 3) {
     const i = a.intent;
-    return i.movies || i.tv || i.anime || i.kids || i.music;
+    return i.movies || i.tv || i.anime || i.kids || i.music || i.books;
   }
   if (step === 5) {
     if (a.frontend === "plex" || a.frontend === "both") return a.plexClaim.trim().length >= 4;
@@ -427,12 +427,13 @@ function StepIntent() {
     { key: "uhd", label: "4K" },
     { key: "kids", label: "Kids" },
     { key: "music", label: "Music" },
+    { key: "books", label: "Books" },
   ];
   return (
     <div>
       <Heading
         title="What are you collecting?"
-        sub="We only install engines you need. Movies and TV are on by default. Music never appears unless you ask."
+        sub="We only install engines you need. Movies, TV, and Books are on by default. Music never appears unless you ask."
       />
       <div className="flex flex-wrap gap-2">
         {chips.map((c) => {
@@ -444,7 +445,9 @@ function StepIntent() {
               onClick={() => patchIntent({ [c.key]: !on })}
               className={cn(
                 "h-11 rounded-full px-5 text-sm font-medium transition-colors duration-150",
-                on ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
+                on
+                  ? "bg-gold text-gold-fg shadow-[var(--shadow-gold)]"
+                  : "bg-card text-muted shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
               )}
             >
               {c.label}

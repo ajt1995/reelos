@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { FilterChip } from "@/components/chip";
+import { Page, PageTitle } from "@/components/page";
 import { TitleCard } from "@/components/title-card";
 import { useReelStore } from "@/lib/store";
 import type { Kind } from "@/lib/types";
-import { cn } from "@/lib/utils";
 
 const TABS: { id: "all" | Kind; label: string }[] = [
   { id: "all", label: "All" },
@@ -41,28 +42,20 @@ export function LibraryView() {
   });
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Library</h1>
-      <p className="mt-2 text-sm text-muted">What Jellyfin has. If it is not there, it is not on this row.</p>
+    <Page className="py-6 md:py-8">
+      <PageTitle sub="What Jellyfin has. If it is not there, it is not on this row. Books live on the Books tab.">
+        Library
+      </PageTitle>
       <div className="mt-6 flex flex-wrap gap-2">
         {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              tab === t.id ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
-            )}
-          >
+          <FilterChip key={t.id} active={tab === t.id} onClick={() => setTab(t.id)}>
             {t.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
       {shown.length === 0 ? (
         <p className="mt-12 text-sm text-muted">
-          {err ??
-            (shelfReady ? "Nothing in Jellyfin yet. Request a title from Home." : "Loading library…")}
+          {err ?? (shelfReady ? "Nothing in Jellyfin yet. Request a title from Discover." : "Loading library…")}
         </p>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
@@ -71,6 +64,6 @@ export function LibraryView() {
           ))}
         </div>
       )}
-    </div>
+    </Page>
   );
 }

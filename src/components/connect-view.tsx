@@ -42,6 +42,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   const navigate = useNavigate();
   const patchSettings = useReelStore((s) => s.patchSettings);
   const openReelOS = useReelStore((s) => s.openReelOS);
+  const intent = useReelStore((s) => s.answers.intent);
   const [box, setBox] = useState<Box>(empty);
   const [away, setAway] = useState<"house" | "out" | null>(null);
   const [idxName, setIdxName] = useState("Indexer");
@@ -96,8 +97,8 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   };
 
   return (
-    <div className="px-5 py-8 md:px-10">
-      <p className="font-display text-xs tracking-[0.22em] text-gold uppercase">Connect</p>
+    <div className="page-enter px-5 py-8 md:px-10">
+      <p className="font-display text-xs tracking-[0.22em] text-cyan uppercase">Connect</p>
       <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">Your TV is not ReelOS</h1>
       <p className="mt-2 max-w-xl text-sm text-muted">
         Request in ReelOS (Discover). Watch in Jellyfin. Seerr on :5055 is the TV/admin door.
@@ -121,7 +122,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
             <p className="mt-3 text-sm text-gold">{box.jellyfin.detail}</p>
           ) : (
             <>
-              <p className="mt-4 break-all font-mono text-xl text-gold">{watch}</p>
+              <p className="mt-4 break-all font-mono text-xl text-cyan">{watch}</p>
               {watch ? (
                 <img
                   alt="QR for the TV app"
@@ -178,14 +179,37 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
         </div>
       </Card>
 
+      {intent.books !== false ? (
+        <Card>
+          <div className="w-full">
+            <p className="font-display font-medium">Books (Kavita)</p>
+            <p className="mt-1 text-sm text-muted">
+              Read on the phone. An OPDS reader (Moon+ Reader, KOReader) can use this URL.
+            </p>
+            {box.ipv4 ? (
+              <>
+                <p className="mt-4 break-all font-mono text-xl text-cyan">{`http://${box.ipv4}:5000`}</p>
+                <a href={`http://${box.ipv4}:5000`} target="_blank" rel="noreferrer">
+                  <Button className="mt-3" size="lg">
+                    Open Kavita
+                  </Button>
+                </a>
+              </>
+            ) : (
+              <p className="mt-3 text-sm text-muted">Waiting on LAN address.</p>
+            )}
+          </div>
+        </Card>
+      ) : null}
+
       <Card>
         <div className="w-full">
           <p className="font-display font-medium">Away from home</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant={away === "house" ? "default" : "ghost"} onClick={() => setAway("house")}>
+            <Button variant={away === "house" ? "gold" : "ghost"} onClick={() => setAway("house")}>
               Only this house
             </Button>
-            <Button variant={away === "out" ? "default" : "ghost"} onClick={() => setAway("out")}>
+            <Button variant={away === "out" ? "gold" : "ghost"} onClick={() => setAway("out")}>
               Also my phone when I'm out
             </Button>
           </div>
@@ -302,7 +326,7 @@ function Card({ children, locked }: { children: React.ReactNode; locked?: boolea
   return (
     <div
       className={cn(
-        "mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]",
+        "card-glow mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]",
         locked && "opacity-50",
       )}
     >

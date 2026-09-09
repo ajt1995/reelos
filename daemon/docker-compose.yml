@@ -150,6 +150,20 @@ services:
     security_opt:
       - apparmor:unconfined
 
+  kavita:
+    profiles: ["books"]
+    image: lscr.io/linuxserver/kavita:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/kavita:/config
+      - /srv/media:/media
+    ports:
+      - "0.0.0.0:5000:5000"
+
   gluetun:
     profiles: ["localvpn"]
     image: qmcgaw/gluetun:latest

@@ -29,16 +29,16 @@ export function TitleCard({
       params={{ id: title.id }}
       className={cn("group block w-[148px] shrink-0 sm:w-[168px]", className)}
     >
-      <div className="relative overflow-hidden rounded-xl transition-transform duration-200 ease-out group-hover:-translate-y-0.5">
+      <div className="card-glow relative overflow-hidden rounded-xl">
         <Poster title={title} className="rounded-xl" />
         {showCache ? (
-          <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-medium tracking-wide text-gold-fg">
+          <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-medium tracking-wide text-gold-fg shadow-[var(--shadow-gold)]">
             Cached
           </span>
         ) : null}
         {status === "downloading" ? (
           <div className="absolute inset-x-0 bottom-0 h-1 bg-background/40">
-            <div className="h-full bg-gold" style={{ width: `${request?.progress ?? 0}%` }} />
+            <div className="h-full bg-cyan" style={{ width: `${request?.progress ?? 0}%` }} />
           </div>
         ) : null}
         {typeof progress === "number" && progress > 0 && progress < 0.97 ? (
@@ -72,7 +72,7 @@ export function Row({
 }) {
   return (
     <section className="mt-8">
-      <h2 className="mb-4 font-display text-lg font-medium tracking-tight">{label}</h2>
+      <h2 className="mb-4 font-display text-lg font-medium tracking-tight text-cyan/90">{label}</h2>
       <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{children}</div>
     </section>
   );

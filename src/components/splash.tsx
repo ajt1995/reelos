@@ -9,15 +9,19 @@ export function Splash({ compact = false }: { compact?: boolean }) {
   };
 
   return (
-    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
+    <div className="tron-grid relative flex min-h-dvh flex-col items-center justify-center overflow-hidden px-6 text-center">
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
+        className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyan/15 blur-[120px]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bottom-[12%] left-[20%] size-[18rem] rounded-full bg-magenta/10 blur-[90px]"
       />
       <div className="rise relative">
         <Wordmark className="flex-col gap-5" markClassName="size-20" />
       </div>
-      <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
+      <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-cyan uppercase">
         Install. Point. Stream.
       </p>
       {compact ? null : (

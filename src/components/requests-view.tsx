@@ -5,7 +5,9 @@ import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { RequestStatus } from "@/lib/types";
-import { cn, formatWhen } from "@/lib/utils";
+import { formatWhen } from "@/lib/utils";
+import { FilterChip } from "@/components/chip";
+import { Page, PageTitle } from "@/components/page";
 import { Button } from "@/components/ui/button";
 
 const FILTERS: { id: "all" | RequestStatus; label: string }[] = [
@@ -26,22 +28,15 @@ export function RequestsView() {
   const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
-      <p className="mt-2 text-sm text-muted">Household asks. Admin can auto-approve.</p>
+    <Page className="py-6 md:py-8">
+      <PageTitle sub="Household asks. Status comes from Seerr / *arr — no fake percent.">
+        Requests
+      </PageTitle>
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
-          <button
-            key={f.id}
-            type="button"
-            onClick={() => setFilter(f.id)}
-            className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              filter === f.id ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
-            )}
-          >
+          <FilterChip key={f.id} active={filter === f.id} onClick={() => setFilter(f.id)}>
             {f.label}
-          </button>
+          </FilterChip>
         ))}
       </div>
       <ul className="mt-6 divide-y divide-border">
@@ -71,7 +66,7 @@ export function RequestsView() {
                 </p>
                 {r.status === "downloading" && r.progress > 0 ? (
                   <div className="mt-2 h-1 max-w-xs overflow-hidden rounded-full bg-card-2">
-                    <div className="h-full bg-gold" style={{ width: `${r.progress}%` }} />
+                    <div className="h-full bg-cyan" style={{ width: `${r.progress}%` }} />
                   </div>
                 ) : null}
                 {r.status === "failed" ? (
@@ -97,7 +92,7 @@ export function RequestsView() {
                 <Link
                   to="/play/$id"
                   params={{ id: titleId }}
-                  className="text-sm text-gold hover:text-gold-bright"
+                  className="text-sm text-cyan hover:text-live"
                 >
                   Play
                 </Link>
@@ -106,6 +101,6 @@ export function RequestsView() {
           );
         })}
       </ul>
-    </div>
+    </Page>
   );
 }

@@ -57,6 +57,10 @@ else
 		uri strip_prefix /advanced/downloads
 		reverse_proxy 127.0.0.1:8282
 	}
+	handle /kavita* {
+		uri strip_prefix /kavita
+		reverse_proxy 127.0.0.1:5000
+	}
 	handle {
 		reverse_proxy 127.0.0.1:8080
 	}

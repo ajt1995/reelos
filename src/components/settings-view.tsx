@@ -52,7 +52,8 @@ export function SettingsView() {
   const profile = adapterProfile(answers.source, answers.frontend);
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
+    <div className="page-enter px-5 py-6 md:px-10 md:py-8">
+      <p className="font-display text-[11px] tracking-[0.28em] text-cyan uppercase">House</p>
       <h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-1.5 max-w-xl text-sm text-muted">
         House identity, daily knobs, updates. Engines stay under Advanced.
@@ -63,7 +64,7 @@ export function SettingsView() {
       <div className="mt-6 grid gap-2.5">
         <Link
           to="/connect"
-          className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
+          className="card-glow flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
         >
           <div>
             <p className="font-display font-medium">Connect</p>

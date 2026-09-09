@@ -30,7 +30,10 @@ House still has to apply 1.2.39 for these to be *on the HP*.
 ## Waiting on owner pick — do not start
 
 - #2 Seerr **or** plugin (Request is ReelOS-only today)
-- #3 Kavita **or** Calibre-web (ebooks: nothing built)
+
+## Shipping in 1.2.51
+
+- #3 Kavita + legal catalogs (`/books`, Gutenberg / Standard Ebooks / IA → `/srv/media/books`)
 
 ## Parked
 

@@ -1,65 +1,49 @@
 # STATUS.md
 
-**Reelist (public TV indexers on OTA).** 2026-09-09. House 1.2.50.5: Interstellar / John Wick / Expanse S01 **Available@100 via Decypharr**. B99 S01 + TWD S01 still `sonarr-missing@0`. Austin: thin indexers, not another symlink bug. Separate from Tron #52. Stamp **1.2.50.6**.
+**Reelist (cloud test-build).** 2026-09-09. Tron-night UI + legal Books from [#52](https://github.com/ajt1995/reelos/pull/52) rebased onto latest `main` through **1.2.50.6** (public TV indexers + Prowlarr→Sonarr). **HOLD.** Do not merge. Do not house Apply.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.6`
-- **Base:** latest `main` (merged #57 = 1.2.50.5)
-- Did **not** take Tron chrome from #52
-- **What it is:** OTA Apply adds missing **public** Prowlarr defs (EZTV, ShowRSS, 1337x, TPB; YTS stays movies-only) and **fullSyncs** them to Sonarr. No private tracker credentials.
+- **VERSION / channel:** `1.2.51` (candidate / test-build)
+- **Base:** latest `main` **1.2.50.6** (`61a4922`, #58)
+- **Source:** #52 `cursor/tron-ui-books-2ad2` recreated on that tip
+- **What it is:** Tron-night design system + first-class Discover chrome + Kavita/legal Books, stacked on every reliability stamp already merged (`#45`–`#58`).
 
-## Verdict (indexer gap vs code vs slow)
+## Intentionally broken (no house secrets)
 
-| Title | House now | Why |
-| --- | --- | --- |
-| Interstellar, John Wick | Available@100 | YTS + TorBox + grab path work. Not a symlink bug. |
-| Expanse S01 | Available@100 | SeasonSearch **does fire**. Some TV indexer (TorBox/TPB/1337x) had a pack. |
-| B99 S01, TWD S01 | sonarr-missing@0 | Search likely ran and found nothing useful. YTS has **no TV**. EZTV was in git but **OTA skipped adding it**. Prowlarr→Sonarr was `addOnly`. |
+TV and movie **Request / grab / TorBox / Seerr** are broken or mocked in this cloud VM. No TorBox, Seerr, or house keys were added. Do not treat a failed grab as a Books or Tron regression.
 
-Not “just slow.” Movies and Expanse already finished. Residual after this stamp: publics still thin for some sitcom **Ultra-HD** season packs — then it stays missing (catalog), not a FUSE dump bug.
+## What passed here (Books, no private keys)
 
-## What ReelOS provisions
+- Legal catalogs only: Gutenberg (Gutendex), Standard Ebooks OPDS, Internet Archive public scans.
+- Download: HTTPS + host allowlist. Staged `.part` + size cap. No path traversal. No Anna’s Archive / Libgen.
+- Kavita: compose profile `books`, `:5000`, Caddy `/kavita*` (not `/books` — that is the phone tab).
+- Settings → How to watch / read (Jellyfin for movies/TV, Kavita for books) when present.
 
-1. **TorBox** official yml / `search-api.torbox.app` torznab (`ReelOS-torbox`).
-2. **Public first-party Prowlarr defs (no keys):** 1337x, TPB, YTS (movies), EZTV (TV), ShowRSS (TV).
-3. **Not shipped:** private trackers, passkeys, user-added Torznab from Settings (Connect paste still valid).
+## Discover / Requests (code kept from 1.2.50.x; live grab not this run)
 
-1.2.24 added TPB/YTS so Request could grab while TorBox DNS was dead. Later commits listed EZTV in `PUBLIC_INDEXERS`, but `ensure_public_indexers` **returned immediately on `REELOS_OTA=1`**, and UI-only Apply never ran that hop. House that first-booted on YTS/TPB never got EZTV on Sonarr.
+1. **Search** hits live `GET /api/lookup?q=` when Seerr has a key. Honesty from 1.2.50.5: timeout/empty is not a silent empty shelf. No Cached glow on live TMDB ids.
+2. **TV POST** is one season (`seasons: [n]`, never `all`). SeasonSearch + `?recover=1` from 1.2.50.4. Import/symlink from 1.2.50.1.
+3. **Requests** tell the truth (1.2.50.2): AVAILABLE / Grabbing / Waiting. No invented %.
+4. **Public TV indexers** (1.2.50.6): EZTV/ShowRSS + Prowlarr `fullSync`. YTS is movies-only. No private tracker credentials.
 
-## Code changes
+## UI
 
-1. **`public_indexers.py`** — roster + roles. Unit: YTS ⊄ TV; house-with-only-YTS still needs EZTV/ShowRSS.
-2. **`ensure_public_indexers`** — OTA **adds** missing defs; only live `indexer/test` is skipped.
-3. **`ensure_prowlarr_app`** — `fullSync`; PUT existing `addOnly` apps. `ApplicationIndexerSync`.
-4. **`wire-engines.py indexers`** — mailman runs this on **every** provisioned Apply (not only compose-changed).
-5. Kept from the first audit: MoviesSearch on movie POST, `?recover=1` includes movies, Seerr `preventSearch=false` PUT. Complementary; not why Expanse already landed.
+Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on `#03060c`). Page enter, card hover glow, live chips. `prefers-reduced-motion` kills motion.
 
-## Residual (no code change)
-
-- Ultra-HD (`hybrid`) can reject EZTV’s typical 720p WEB-DL. Expanse 4K packs pass; B99 4K remuxes are rare on publics.
-- If Prowlarr has no EZTV/ShowRSS **schema**, we log `no schema` and skip — first-party Cardigann only.
-- TorBox rate limit / empty cache is house. Doctor hop / `releases-error.txt`.
-
-## Proof
+## Tests
 
 ```
-python3 scripts/check-ota.py .
-python3 daemon/public_indexers.py --self-test
-python3 daemon/stuck-downloads.py --self-test
-node --test scripts/public-indexers.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs scripts/wire-provision.test.mjs scripts/stuck-downloads.test.mjs
+node --test scripts/books-catalog.test.mjs scripts/reelos-seerr.test.mjs
+npx tsc --noEmit
 ```
-
-## Owner / house Apply
-
-1. Merge to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.6`. Expect `ReelOS 1.2.50.6 applied.`
-3. Prowlarr: ReelOS-eztv / ReelOS-showrss present if schema exists. Sonarr indexers include them.
-4. B99 S01 / TWD S01: next lock-clients tick SeasonSearchs. Available if a public/TorBox pack matches the profile. Still 0% + `sonarr-missing` means the publics have no matching release — add your own indexer in Settings if you have one. Do not expect us to invent a private key.
 
 ## Do not
 
-- Cut **1.2.51** (Tron reserved).
-- Commit private tracker credentials.
+- Merge to `main` or mark ready-to-merge for the house.
+- House Apply this tarball.
+- Lift the Tron HOLD.
+- Merge `feature/3-books` / pirate book indexers.
+- Point Caddy `/books*` at Kavita (steals the phone tab).
+- Commit TorBox / Seerr / private tracker secrets.
 - Invent a progress % on Requests.
-- SSH from the agent. Scope into Tron / books / TorBox wipe.

@@ -97,11 +97,13 @@ export function rankLookupTitles(titles, q) {
 }
 
 /** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */
-export function mapSeerrSearchResults(hits, { q = "", limit = 16 } = {}) {
+export function mapSeerrSearchResults(hits, { q = "", limit = 16, kind = "" } = {}) {
   const titles = [];
   for (const h of hits || []) {
     const mediaType = normalizeMediaType(h?.mediaType);
     if (!mediaType) continue;
+    if (kind === "movie" && mediaType !== "movie") continue;
+    if (kind === "tv" && mediaType !== "tv") continue;
     const t = seerrSearchHit(h, mediaType);
     if (!t) continue;
     titles.push(t);
@@ -685,6 +687,22 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
       catalog: facts.catalog,
     }),
   };
+}
+
+/**
+ * Jellyseerr discover/search payloads are either a bare array or `{ results }`.
+ * Movies/TV discover endpoints omit `mediaType` on each hit.
+ */
+export function seerrListHits(payload, mediaTypeHint) {
+  const hits = Array.isArray(payload) ? payload : payload?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const typed = mediaTypeHint && !h?.mediaType ? { ...h, mediaType: mediaTypeHint } : h;
+    const t = seerrSearchHit(typed, mediaTypeHint);
+    if (t) out.push(t);
+    if (out.length >= 16) break;
+  }
+  return out;
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
