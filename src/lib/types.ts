@@ -58,6 +58,7 @@ export interface Title {
   director?: string;
   poster: string;
   jellyfinId?: string;
+  ids?: string[];
   maxQuality: "1080p" | "4k";
   popularity: number;
 }
@@ -74,6 +75,7 @@ export interface MediaRequest {
   requester: string;
   via?: RequestVia;
   release?: string;
+  engine?: string;
 }
 
 export interface AdapterState {

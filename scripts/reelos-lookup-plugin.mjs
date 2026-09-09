@@ -3,13 +3,14 @@ import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
   parseTitleId,
-  collapseDuplicateRequests,
   findExistingSeasonRequest,
   seerrApiKey,
   seerrFetch,
   seerrRequestRow,
   seerrSearchHit,
+  honestifyRequests,
 } from "./reelos-seerr.mjs";
+import { loadPresenceFacts } from "./reelos-request-status.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -958,7 +959,8 @@ async function handleRequestList(res) {
     }
     const details = await Promise.all(need.map((p) => seerrTitleDetail(p).catch(() => null)));
     const titles = details.filter(Boolean);
-    send(res, 200, { requests: collapseDuplicateRequests(requests), titles, engine: "seerr" });
+    const facts = await loadPresenceFacts();
+    send(res, 200, { requests: honestifyRequests(requests, facts), titles, engine: "seerr" });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -986,10 +988,10 @@ async function handleRequestStatus(req, res) {
     const media = r.json?.mediaInfo || r.json?.media || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
     const last = reqs[0] || {};
-    const status = (() => {
-      const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
-      return mapped.engine || "unknown";
-    })();
+    const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
+    const facts = await loadPresenceFacts();
+    const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
+    const status = honest.engine || "unknown";
     if (status === "downloaded") await jellyfinRefresh(id);
     const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
     send(res, 200, {
@@ -998,7 +1000,7 @@ async function handleRequestStatus(req, res) {
       title: title?.title,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
-      progress: status === "downloaded" ? 100 : undefined,
+      progress: honest.status === "available" ? 100 : honest.progress,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });

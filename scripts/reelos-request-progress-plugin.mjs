@@ -1,5 +1,6 @@
-/** GET /api/request — Seerr status (and optional *arr sizeleft). Registered before lookup. */
-import { collapseDuplicateRequests, parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit } from "./reelos-seerr.mjs";
+/** GET /api/request — Seerr + library + *arr hasFile. Registered before lookup. */
+import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit, honestifyRequests } from "./reelos-seerr.mjs";
+import { loadPresenceFacts } from "./reelos-request-status.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -14,6 +15,10 @@ function requestIdFromQuery(u) {
   let id = String(u.searchParams.get("id") || "").trim();
   if (!id && tmdb) id = type === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
   return id;
+}
+
+function mediaFromDetail(json) {
+  return json?.mediaInfo || json?.media || null;
 }
 
 async function handleList(res) {
@@ -39,10 +44,29 @@ async function handleList(res) {
         const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
         const d = await seerrFetch(path, { key, ms: 12000 });
         if (!d.ok || !d.json) return null;
-        return seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+        return {
+          parsed,
+          json: d.json,
+          hit: seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
+        };
       }),
     );
-    send(res, 200, { requests: collapseDuplicateRequests(requests), titles: details.filter(Boolean), engine: "seerr" });
+    const seerrMediaByTitleId = new Map();
+    for (const d of details) {
+      if (!d?.parsed?.tmdb) continue;
+      const media = mediaFromDetail(d.json);
+      if (media) {
+        const titleId = d.parsed.mediaType === "tv" ? `tmdb-tv-${d.parsed.tmdb}` : `tmdb-${d.parsed.tmdb}`;
+        seerrMediaByTitleId.set(titleId, media);
+      }
+    }
+    const facts = await loadPresenceFacts();
+    const honest = honestifyRequests(requests, { ...facts, seerrMediaByTitleId });
+    send(res, 200, {
+      requests: honest,
+      titles: details.map((d) => d?.hit).filter(Boolean),
+      engine: "seerr",
+    });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -67,7 +91,7 @@ async function handleGet(req, res) {
   try {
     const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
     const r = await seerrFetch(path, { key, ms: 15000 });
-    const media = r.json?.mediaInfo || r.json?.media || {};
+    const media = mediaFromDetail(r.json) || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
     const last = reqs[0] || { media, type: parsed.mediaType };
     const mapped = seerrRequestRow({
@@ -75,14 +99,17 @@ async function handleGet(req, res) {
       type: parsed.mediaType,
       media: { ...media, tmdbId: Number(parsed.tmdb) },
     });
+    const facts = await loadPresenceFacts();
+    const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);
+    const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId })[0] || mapped;
     const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
     send(res, 200, {
-      status: mapped.engine || "unknown",
+      status: honest.engine || "unknown",
       engine: "seerr",
       title: title?.title,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
-      progress: mapped.status === "available" ? 100 : mapped.progress,
+      progress: honest.status === "available" ? 100 : honest.progress,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });

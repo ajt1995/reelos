@@ -69,14 +69,158 @@ export function seasonCount(seasons) {
 }
 
 /** Seerr media: 1 unknown, 2 pending, 3 processing, 4 partial, 5 available. Request: 1 pending, 2 approved, 3 declined, 4 failed. */
-export function mapSeerrStatus(mediaStatus, requestStatus) {
-  const m = Number(mediaStatus || 0);
+export function seerrSeasonStatus(media, seasonNumber) {
+  if (seasonNumber == null) return 0;
+  const seasons = Array.isArray(media?.seasons) ? media.seasons : [];
+  const hit = seasons.find((s) => Number(s?.seasonNumber) === Number(seasonNumber));
+  return Number(hit?.status || 0);
+}
+
+export function mapSeerrStatus(mediaStatus, requestStatus, seasonStatus) {
   const r = Number(requestStatus || 0);
   if (r === 4 || r === 3) return "failed";
+  const season = Number(seasonStatus || 0);
+  if (season === 5) return "downloaded";
+  const m = Number(mediaStatus || 0);
   if (m === 5) return "downloaded";
-  if (m === 3 || m === 4) return "grabbing";
-  if (m === 2 || r === 1 || r === 2) return "queued";
+  const effective = season || m;
+  if (effective === 3 || effective === 4) return "grabbing";
+  if (effective === 2 || r === 1 || r === 2) return "queued";
   return "unknown";
+}
+
+export function markAvailable(row) {
+  if (!row) return row;
+  return {
+    ...row,
+    status: "available",
+    engine: "downloaded",
+    progress: 100,
+    reason: undefined,
+  };
+}
+
+export function requestMatchKey(row) {
+  if (!row?.titleId) return "";
+  return row.season == null ? String(row.titleId) : `${row.titleId}#${row.season}`;
+}
+
+export function libraryHit(row, libraryTitles) {
+  if (!row?.titleId || !Array.isArray(libraryTitles)) return false;
+  const parsed = parseTitleId(row.titleId);
+  const wantMovie = parsed?.mediaType === "movie";
+  const wantTv = parsed?.mediaType === "tv";
+  const tmdb = parsed?.tmdb;
+  for (const t of libraryTitles) {
+    const kind = t?.kind === "tv" || t?.kind === "anime" ? "tv" : t?.kind === "movie" ? "movie" : null;
+    if (wantMovie && kind === "tv") continue;
+    if (wantTv && kind === "movie") continue;
+    const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].filter(Boolean);
+    const hit = ids.some((id) => {
+      if (id === row.titleId) return true;
+      if (tmdb && (id === `tmdb-${tmdb}` || id === `tmdb-tv-${tmdb}`)) return true;
+      return false;
+    });
+    if (!hit) continue;
+    // Movies: JF item is watchable. TV: series-in-library is not season proof.
+    return Boolean(wantMovie || (!wantTv && kind !== "tv"));
+  }
+  return false;
+}
+
+export function buildArrIndex({ movies = [], series = [] } = {}) {
+  const movieHasFile = new Set();
+  for (const m of movies) {
+    const tmdb = m?.tmdbId;
+    if (tmdb == null) continue;
+    const files = Number(m?.statistics?.movieFileCount || 0);
+    if (m?.hasFile === true || files > 0) movieHasFile.add(String(tmdb));
+  }
+  const seasonHasFile = new Set();
+  for (const s of series) {
+    const tmdb = s?.tmdbId != null ? String(s.tmdbId) : "";
+    const tvdb = s?.tvdbId != null ? String(s.tvdbId) : "";
+    for (const season of s?.seasons || []) {
+      const n = Number(season?.seasonNumber);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      const files = Number(season?.statistics?.episodeFileCount || 0);
+      if (files <= 0) continue;
+      if (tmdb) seasonHasFile.add(`tmdb:${tmdb}:${n}`);
+      if (tvdb) seasonHasFile.add(`tvdb:${tvdb}:${n}`);
+    }
+  }
+  return { movieHasFile, seasonHasFile };
+}
+
+export function arrHasFile(row, index) {
+  if (!row?.titleId || !index) return false;
+  const parsed = parseTitleId(row.titleId);
+  if (!parsed) return false;
+  if (parsed.mediaType === "movie") return Boolean(index.movieHasFile?.has(String(parsed.tmdb)));
+  const season = row.season;
+  if (season == null) return false;
+  if (parsed.tmdb && index.seasonHasFile?.has(`tmdb:${parsed.tmdb}:${season}`)) return true;
+  if (parsed.tvdb && index.seasonHasFile?.has(`tvdb:${parsed.tvdb}:${season}`)) return true;
+  return false;
+}
+
+/**
+ * Honest request status, no fake %:
+ * 1. Seerr declined/failed → failed
+ * 2. Seerr media or requested-season AVAILABLE (5) → available
+ * 3. Jellyfin library hit (movie TMDB) → available
+ * 4. Radarr hasFile / Sonarr season episodeFileCount > 0 → available
+ * 5. Else processing/partial → downloading at progress 0
+ * 6. Else pending/approved → waiting
+ * Same titleId+season collapses to one row; a done sibling upgrades the rest.
+ */
+export function overlayPresence(rows, { libraryTitles = [], arrIndex = null, seerrMediaByTitleId = null } = {}) {
+  const mediaOf = (row) => {
+    if (!seerrMediaByTitleId) return null;
+    if (typeof seerrMediaByTitleId.get === "function") return seerrMediaByTitleId.get(row.titleId) || null;
+    return seerrMediaByTitleId[row.titleId] || null;
+  };
+  return (rows || []).map((row) => {
+    if (!row) return row;
+    if (row.status === "available" || row.engine === "downloaded") return markAvailable(row);
+    const media = mediaOf(row);
+    if (media) {
+      const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
+      if (engine === "downloaded") return markAvailable(row);
+    }
+    if (libraryHit(row, libraryTitles)) return markAvailable(row);
+    if (arrHasFile(row, arrIndex)) return markAvailable(row);
+    return row;
+  });
+}
+
+const STATUS_RANK = { available: 4, downloading: 3, waiting: 2, failed: 1 };
+
+export function reconcileRequestRows(rows) {
+  const groups = new Map();
+  for (const row of rows || []) {
+    if (!row?.titleId) continue;
+    const key = requestMatchKey(row);
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  const out = [];
+  for (const list of groups.values()) {
+    const anyAvailable = list.some((r) => r.status === "available" || r.engine === "downloaded");
+    const picked = list.reduce((best, row) => {
+      const br = STATUS_RANK[best.status] || 0;
+      const rr = STATUS_RANK[row.status] || 0;
+      if (rr !== br) return rr > br ? row : best;
+      return (row.updatedAt || 0) >= (best.updatedAt || 0) ? row : best;
+    });
+    out.push(anyAvailable ? markAvailable(picked) : picked);
+  }
+  return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+export function honestifyRequests(rows, facts = {}) {
+  return reconcileRequestRows(overlayPresence(rows, facts));
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
@@ -192,7 +336,8 @@ export function seerrRequestRow(r, notes) {
   const tmdb = media.tmdbId || r?.mediaId;
   const titleId = titleIdFor(mediaType, tmdb);
   const seasons = realSeasonNumbers(r?.seasons);
-  const engine = mapSeerrStatus(media.status, r?.status);
+  const season = seasons.length === 1 ? seasons[0] : undefined;
+  const engine = mapSeerrStatus(media.status, r?.status, seerrSeasonStatus(media, season));
   const status =
     engine === "downloaded"
       ? "available"
@@ -206,7 +351,7 @@ export function seerrRequestRow(r, notes) {
     titleId,
     status,
     progress: status === "available" ? 100 : 0,
-    season: seasons.length === 1 ? seasons[0] : undefined,
+    season,
     createdAt: Date.parse(r?.createdAt) || Date.now(),
     updatedAt: Date.parse(r?.updatedAt) || Date.now(),
     requester: r?.requestedBy?.displayName || r?.requestedBy?.username || "house",

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  collapseDuplicateRequests,
   isInFlightRequest,
   mergeServerRequests,
+  overlayLibraryPresence,
   showRequestQueueControls,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
@@ -122,4 +124,54 @@ test("duplicate local rows for the same seerr title collapse to one", () => {
   assert.equal(merged.length, 1);
   assert.equal(merged[0]?.status, "available");
   assert.equal(merged[0]?.progress, 100);
+});
+
+test("library movie hit is AVAILABLE, not downloading/grabbing", () => {
+  const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
+  const honest = overlayLibraryPresence(requests, {
+    libraryIds: ["tmdb-1593"],
+    titles: [{ id: "tmdb-1593", kind: "movie" }],
+  });
+  assert.equal(honest.length, 1);
+  assert.equal(honest[0]?.status, "available");
+  assert.equal(honest[0]?.progress, 100);
+});
+
+test("TV library series does not mark a grabbing season available on the client", () => {
+  const requests = [
+    row({ id: "seerr-5", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+  ];
+  const honest = overlayLibraryPresence(requests, {
+    libraryIds: ["tmdb-tv-1402"],
+    titles: [{ id: "tmdb-tv-1402", kind: "tv" }],
+  });
+  assert.equal(honest[0]?.status, "downloading");
+  assert.equal(honest[0]?.progress, 0);
+});
+
+test("duplicate active rows for the same title+season collapse when one is available", () => {
+  const rows = [
+    row({
+      id: "seerr-2",
+      titleId: "tmdb-tv-1402",
+      status: "available",
+      progress: 100,
+      season: 1,
+      createdAt: 1,
+      updatedAt: 1,
+    }),
+    row({
+      id: "seerr-5",
+      titleId: "tmdb-tv-1402",
+      status: "downloading",
+      progress: 0,
+      season: 1,
+      createdAt: 2,
+      updatedAt: 2,
+    }),
+  ];
+  const collapsed = collapseDuplicateRequests(rows);
+  assert.equal(collapsed.length, 1);
+  assert.equal(collapsed[0]?.status, "available");
+  assert.equal(collapsed[0]?.progress, 100);
 });

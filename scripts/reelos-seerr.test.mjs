@@ -5,8 +5,10 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   applyStuckNotes,
+  buildArrIndex,
   collapseDuplicateRequests,
   findExistingSeasonRequest,
+  honestifyRequests,
   mapSeerrStatus,
   parseTitleId,
   realSeasonNumbers,
@@ -140,6 +142,202 @@ test("duplicate TWD S01 Seerr rows collapse to one phone request", () => {
   assert.equal(collapsed[0].id, "seerr-3");
   assert.equal(findExistingSeasonRequest([a, b], { mediaType: "tv", tmdb: 1402, season: 1 })?.id, "seerr-3");
   assert.equal(findExistingSeasonRequest([a], { mediaType: "tv", tmdb: 1402, season: 2 }), null);
+});
+
+test("requested TV season AVAILABLE beats series still processing", () => {
+  const row = seerrRequestRow(
+    {
+      id: 4,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: {
+        tmdbId: 1402,
+        status: 3,
+        seasons: [
+          { seasonNumber: 1, status: 5 },
+          { seasonNumber: 2, status: 3 },
+        ],
+      },
+    },
+    {},
+  );
+  assert.equal(row.status, "available");
+  assert.equal(row.engine, "downloaded");
+  assert.equal(row.progress, 100);
+  assert.equal(row.season, 1);
+});
+
+test("library hit upgrades a grabbing movie and does not invent progress", () => {
+  const grabbing = seerrRequestRow(
+    {
+      id: 2,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 1593, status: 3 },
+    },
+    {},
+  );
+  assert.equal(grabbing.status, "downloading");
+  assert.equal(grabbing.progress, 0);
+  const honest = honestifyRequests([grabbing], {
+    libraryTitles: [{ id: "tmdb-1593", kind: "movie", ids: ["tmdb-1593"] }],
+  });
+  assert.equal(honest.length, 1);
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].engine, "downloaded");
+  assert.equal(honest[0].progress, 100);
+  assert.equal(honest[0].titleId, "tmdb-1593");
+});
+
+test("TV series in Jellyfin does not close a different season still grabbing", () => {
+  const s2 = seerrRequestRow(
+    {
+      id: 8,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 2 }],
+      media: { tmdbId: 1402, status: 3 },
+    },
+    {},
+  );
+  const honest = honestifyRequests([s2], {
+    libraryTitles: [{ id: "tmdb-tv-1402", kind: "tv", ids: ["tmdb-1402", "tvdb-153021"] }],
+  });
+  assert.equal(honest[0].status, "downloading");
+  assert.equal(honest[0].progress, 0);
+});
+
+test("Sonarr season hasFile upgrades that season only", () => {
+  const s1 = seerrRequestRow(
+    {
+      id: 1,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1402, status: 3 },
+    },
+    {},
+  );
+  const s2 = seerrRequestRow(
+    {
+      id: 2,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:01:00.000Z",
+      updatedAt: "2026-09-09T00:01:00.000Z",
+      seasons: [{ seasonNumber: 2 }],
+      media: { tmdbId: 1402, status: 3 },
+    },
+    {},
+  );
+  const arrIndex = buildArrIndex({
+    series: [
+      {
+        tmdbId: 1402,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 6 } },
+          { seasonNumber: 2, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
+  });
+  const honest = honestifyRequests([s1, s2], { arrIndex });
+  assert.equal(honest.find((r) => r.season === 1)?.status, "available");
+  assert.equal(honest.find((r) => r.season === 1)?.progress, 100);
+  assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
+  assert.equal(honest.find((r) => r.season === 2)?.progress, 0);
+});
+
+test("duplicate Seerr rows for the same title+season collapse when one is done", () => {
+  const older = seerrRequestRow(
+    {
+      id: 2,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T01:00:00.000Z",
+      updatedAt: "2026-09-09T01:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1402, status: 5 },
+    },
+    {},
+  );
+  const newer = seerrRequestRow(
+    {
+      id: 5,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T01:20:00.000Z",
+      updatedAt: "2026-09-09T01:20:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 1402, status: 3 },
+    },
+    {},
+  );
+  assert.equal(older.status, "available");
+  assert.equal(newer.status, "downloading");
+  const honest = honestifyRequests([older, newer], {});
+  assert.equal(honest.length, 1);
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].progress, 100);
+});
+
+test("Radarr hasFile upgrades a movie Seerr still lists as grabbing", () => {
+  const row = seerrRequestRow(
+    {
+      id: 2,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 1593, status: 3 },
+    },
+    {},
+  );
+  const honest = honestifyRequests([row], {
+    arrIndex: buildArrIndex({ movies: [{ tmdbId: 1593, hasFile: true }] }),
+  });
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].progress, 100);
+});
+
+test("library presence beats a stuck-failed movie", () => {
+  const failed = seerrRequestRow(
+    {
+      id: 2,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 1593, status: 3 },
+    },
+    { "tmdb-1593": { status: "failed", reason: "Stuck at 0%" } },
+  );
+  assert.equal(failed.status, "failed");
+  const honest = honestifyRequests([failed], {
+    libraryTitles: [{ id: "tmdb-1593", kind: "movie" }],
+  });
+  assert.equal(honest[0].status, "available");
+  assert.equal(honest[0].progress, 100);
+});
+
+test("GET /api/request plugins honestify Seerr rows against library and *arr", () => {
+  const progress = readFileSync(join(root, "scripts/reelos-request-progress-plugin.mjs"), "utf8");
+  const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  const seerr = readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8");
+  assert.match(progress, /honestifyRequests/);
+  assert.match(progress, /loadPresenceFacts/);
+  assert.match(lookup, /honestifyRequests/);
+  assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
+  assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {
