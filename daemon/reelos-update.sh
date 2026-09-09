@@ -245,7 +245,14 @@ need() {
     log "canary missing $f"
     exit 1
   fi
-  grep -q "$pat" "$WORK/src/$f" || log "canary warn $f ~ $pat (copy drift, not fatal)"
+  if grep -q "$pat" "$WORK/src/$f"; then
+    return 0
+  fi
+  local parts="$WORK/src/$(dirname "$f")/wire-engines.parts"
+  if [ -d "$parts" ] && grep -q "$pat" "$parts"/*.part 2>/dev/null; then
+    return 0
+  fi
+  log "canary warn $f ~ $pat (copy drift, not fatal)"
 }
 need src/components/home-view.tsx '/api/lookup'
 need src/components/title-view.tsx '/api/request'
@@ -798,7 +805,10 @@ hop_stack() {
     HOP_FAIL=1
   fi
   step "Search"
-  python3 - <<'PY' && log "hop search green" || { log "hop search red"; HOP_FAIL=1; }
+  local s i
+  s=0
+  for i in $(seq 1 4); do
+    if python3 - <<'PY'
 import json, sys, urllib.request
 try:
     with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=Batman", timeout=45) as r:
@@ -813,6 +823,18 @@ if titles:
 print(d.get("error") or "no titles", file=sys.stderr)
 sys.exit(1)
 PY
+    then
+      s=1
+      log "hop search green"
+      break
+    fi
+    log "hop search retry $i/4 — Seerr/Vite still coming up"
+    sleep 5
+  done
+  if [ "$s" != "1" ]; then
+    log "hop search red"
+    HOP_FAIL=1
+  fi
 }
 
 if [ -f /var/lib/reelos/provisioned ]; then
