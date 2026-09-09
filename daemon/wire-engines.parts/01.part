@@ -29,68 +29,85 @@ def wait_http(url: str, seconds: int = 40) -> bool:
     return False
 
 
+def _load_relink_dumps():
+    import importlib.util
+    from pathlib import Path as _Path
+
+    mod_path = _Path(__file__).with_name("relink_dumps.py")
+    if not mod_path.is_file():
+        mod_path = _Path("/opt/reelos/daemon/relink_dumps.py")
+    if not mod_path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location("reelos_relink_dumps", mod_path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _relink_stem(name: str) -> str:
     """Title stem only — do not match Museum into a Walking Dead dump via 20-char prefix."""
+    mod = _load_relink_dumps()
+    if mod:
+        return mod.relink_stem(name)
     s = re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
     s = re.split(r"(?:19|20)\d{2}|2160p|1080p|720p|webdl|webrip|bluray", s, maxsplit=1)[0]
     return s
 
 
-def relink_from_debrid() -> int:
-    """Empty *arr dump dirs → symlink files from FUSE /mnt/debrid/__all__.
+def _queue_records(payload) -> list:
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and isinstance(payload.get("records"), list):
+        return payload["records"]
+    return []
 
-    Only walk category folders. Scanning /mnt/symlinks mixed Museum into Sonarr.
-    """
-    all_root = Path("/mnt/debrid/__all__")
-    if not all_root.is_dir():
-        log_wire("relink skip — no __all__")
-        return 0
-    catalog: dict[str, Path] = {}
-    try:
-        for p in all_root.iterdir():
-            catalog[p.name.lower()] = p
-    except OSError as e:
-        log_wire(f"relink catalog {e}")
-        return 0
-    n = 0
-    for dump_root in (Path("/mnt/symlinks/sonarr"), Path("/mnt/symlinks/radarr")):
-        if not dump_root.is_dir():
-            continue
+
+def wanted_relink_stems(rk: str | None, sk: str | None) -> dict:
+    """*arr series/movies/queue titles → stems. Empty if *arr is down (still fill existing dumps)."""
+    mod = _load_relink_dumps()
+    series, movies, sq, rq = [], [], [], []
+    if sk:
         try:
-            kids = list(dump_root.iterdir())
-        except OSError:
-            continue
-        for dump in kids:
-            if not dump.is_dir() or dump.name in ("radarr", "sonarr", "anime", "music", "debrid"):
-                continue
-            try:
-                has = any(x.is_file() or x.is_symlink() for x in dump.rglob("*"))
-            except OSError:
-                continue
-            if has:
-                continue
-            key = dump.name.lower()
-            hit = catalog.get(key)
-            if not hit:
-                want = _relink_stem(key)
-                if len(want) >= 8:
-                    hits = [p for name, p in catalog.items() if _relink_stem(name) == want]
-                    hit = hits[0] if len(hits) == 1 else None
-            if not hit:
-                continue
-            try:
-                for src in hit.iterdir():
-                    dest = dump / src.name
-                    if dest.exists():
-                        continue
-                    os.symlink(src, dest)
-                    n += 1
-            except OSError as e:
-                log_wire(f"relink {dump.name} {e}")
-            else:
-                log_wire(f"relink {dump.name} <- {hit.name}")
-    log_wire(f"relink {n} links")
-    return n
+            series = call("http://127.0.0.1:8989/api/v3/series", sk) or []
+        except Exception as e:
+            log_wire(f"relink series {type(e).__name__} {e}")
+        try:
+            sq = _queue_records(call("http://127.0.0.1:8989/api/v3/queue?pageSize=200", sk))
+        except Exception as e:
+            log_wire(f"relink sonarr queue {type(e).__name__} {e}")
+    if rk:
+        try:
+            movies = call("http://127.0.0.1:7878/api/v3/movie", rk) or []
+        except Exception as e:
+            log_wire(f"relink movies {type(e).__name__} {e}")
+        try:
+            rq = _queue_records(call("http://127.0.0.1:7878/api/v3/queue?pageSize=200", rk))
+        except Exception as e:
+            log_wire(f"relink radarr queue {type(e).__name__} {e}")
+    if not mod:
+        return {"sonarr": [], "radarr": []}
+    return mod.wanted_from_arr_rows(series=series, movies=movies, sonarr_queue=sq, radarr_queue=rq)
+
+
+def relink_from_debrid(rk: str | None = None, sk: str | None = None) -> int:
+    """Empty *arr dump dirs, or missing dumps after Apply/wipe, from FUSE /mnt/debrid/__all__.
+
+    Only write category folders. Scanning /mnt/symlinks mixed Museum into Sonarr.
+    Create missing dumps when FUSE has the pack and *arr knows the title.
+    """
+    mod = _load_relink_dumps()
+    if mod is None:
+        log_wire("relink skip — relink_dumps module missing")
+        return 0
+    wanted = wanted_relink_stems(rk, sk)
+    return mod.relink_dumps(
+        all_root=Path("/mnt/debrid/__all__"),
+        symlink_root=Path("/mnt/symlinks"),
+        wanted=wanted,
+        log=log_wire,
+    )
 
 
 def sonarr_manual_import(sk: str) -> None:
@@ -132,13 +149,13 @@ def kick_imports() -> None:
         log_wire("import — FUSE ready")
     else:
         log_wire("import — FUSE not ready, scan anyway")
-    relink_from_debrid()
     wait_http("http://127.0.0.1:7878/ping", 90)
     wait_http("http://127.0.0.1:8989/ping", 90)
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
     rk = api_key(radarr_xml)
     sk = api_key(sonarr_xml)
+    relink_from_debrid(rk=rk, sk=sk)
     if rk:
         for attempt in range(5):
             try:

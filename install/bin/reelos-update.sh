@@ -318,6 +318,8 @@ need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
 need daemon/wire-engines.py 'sonarr_manual_import'
+need daemon/relink_dumps.py 'relink created'
+need daemon/wire-engines.py 'relink_dumps'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'

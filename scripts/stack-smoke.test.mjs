@@ -109,6 +109,9 @@ test("stack: TV season import stays on sonarr dumps and twins", () => {
   assert.match(stuck, /category_folders/);
   const part = read("install/bin/wire-engines.parts/01.part");
   assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\)/);
+  assert.match(part, /relink_dumps/);
+  assert.equal(read("install/bin/relink_dumps.py"), read("daemon/relink_dumps.py"));
+  assert.match(read("install/bin/relink_dumps.py"), /relink created/);
 });
 
 test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () => {
