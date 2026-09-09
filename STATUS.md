@@ -1,50 +1,72 @@
 # STATUS.md
 
-**Reelist (Requests honesty).** 2026-09-09. Titles already in Jellyfin still painted as grabbing/importing/0% because `GET /api/request` trusted stale Seerr `processing`. On top of shipped **1.2.50.1** (#53 TV season import). Separate from Tron #52 (1.2.51 reserved). Stamp **1.2.50.2**.
+**Reelist (regression audit + empty-dump recovery).** 2026-09-09. Cloud audit of main **1.2.50.2** plus house QA (2026-09-08 ~23:14 CT). Separate from Tron #52. Stamp **1.2.50.3**.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.2`
-- **Base:** latest `main` `f4298d3` (1.2.50.1 from merged #53)
+- **VERSION / channel:** `1.2.50.3`
+- **Base:** latest `main` `cf758bc` (1.2.50.2 from merged #54)
 - Did **not** take Tron chrome from #52
-- **What it is:** `honestifyRequests` overlays library / Seerr season AVAILABLE / *arr `hasFile`. Duplicate same `titleId+season` collapses; a done sibling wins. #53 reuse of duplicate season POSTs stays.
+- **What it is:** Stage 3 `cp -a node_modules` heartbeats. Relink recreates empty `sonarr`/`radarr` dumps from FUSE when *arr still knows the title. Title-page GET `/api/request` is season-scoped. `requestTitle` no longer invents 42%.
 
-## What was lying
+## House QA (1.2.50.2) — folded in
 
-Phone Requests showed Night at the Museum as **Cache hit · importing** with Cancel. `GET /api/library` already listed it. `GET /api/request` still returned `status: downloading`, `progress: 0`, `engine: grabbing` (seerr-2). Duplicate Walking Dead S01 rows stayed active.
+- Stamp 1.2.50.2 OK. Lookup OK.
+- Requests honesty PASS (`/api/request count=0`, no stale Museum grabbing).
+- Library: Museum only.
+- **Import path FAIL-to-prove:** Sonarr symlink dumps empty after wipe → ManualImport 0/0. TWD files never landed. Apply/wipe may have cleared dumps without recovery.
+- Mid-Apply of 1.2.50.1 sat a long time in Stage 3/8 (`node_modules`) before the 1.2.50.2 Apply.
+- In flight on the box: Reelist POSTing TWD S01 to create a real dump for re-proof.
 
-Cause: Seerr media status 3/4 mapped to grabbing and never consulted Jellyfin or *arr `hasFile`. Series-level processing also hid a season that Seerr already marked AVAILABLE. Two Seerr ids for the same title+season both rendered.
+OTA Apply does **not** `rm -rf /mnt/symlinks`. Soft-reset does not either. After hops, mailman already runs `wire-engines.py import` (scan + Sonarr ManualImport). The hole: **relink only filled dump folders that already existed.** Empty `/mnt/symlinks/sonarr` + FUSE still holding the pack → 0 links → ManualImport 0/0.
 
-## How status is derived now (no fake %)
+## Code changes (this stamp)
 
-`GET /api/request` (list and by id) runs `honestifyRequests`:
+1. **OTA Stage 3 heartbeat.** `copy_node_modules_with_heartbeat` still runs `cp -a`. Every 15s: `still copying node_modules (Ns, staging N bytes)`.
+2. **Relink creates missing category dumps.** If FUSE `/mnt/debrid/__all__` has the pack and Sonarr/Radarr (series, movie, or queue) still has that title stem, mkdir `/mnt/symlinks/{sonarr|radarr}/<pack>/` and symlink files, then the existing ManualImport harden runs. Never parent `/mnt/symlinks`. Never guess a pack into Sonarr from `SxxExx` alone (Museum bleed).
+3. **#54 leftover — title poll painted every season.** `pickSeerrRequestForTitle` + `season=` + `applyTitleRequestPoll`.
+4. **#54 leftover — title page invented 42%.** Store `requestTitle` is `waiting` / `0`.
 
-1. Seerr request declined/failed → **failed**
-2. Seerr media **or requested season** AVAILABLE (5) → **available** (progress 100)
-3. Jellyfin library hit for that **movie** TMDB → **available**
-4. Radarr `hasFile` / Sonarr season `episodeFileCount > 0` → **available**
-5. Else processing/partial → **downloading** at progress **0** (not an invented percent)
-6. Else pending/approved → **waiting**
+## Audit — verified OK on 1.2.50.2 (unchanged)
 
-TV stays season-by-season: a series sitting on the JF shelf does **not** close S02. Duplicate Seerr rows for the same `titleId+season` collapse to one; if any sibling is available, the row is available.
+| Area | Verdict |
+|------|---------|
+| Search hop | Advisory, 4×20s, does not block stamp |
+| Stamp honesty | VERSION + `applied-sha` written **last**, after `ensure_door` |
+| SKIP_NPM / npm ci fail | Lockfile-gated; fail deletes `.next` only |
+| OTA import after hops | Still runs on every provisioned Apply (compose unchanged included) |
+| #50 FUSE heal | docker exec readers; missing container ≠ stale; rshared before restarts |
+| #50/#53 importPending | `retry_import` → Sonarr ManualImport, not scan-only / ignore / blocklist |
+| #53 path isolation | Scans `/mnt/symlinks/sonarr` and `/mnt/symlinks/radarr` only |
+| #54 GET list | honestify + TV isolation + duplicate collapse + #53 POST reuse |
+| JF12 / #47 / #49 | Auth headers correct. Finish does not `spawnSync` pull |
 
-Phone merge (`overlayLibraryPresence`) is a belt: movies already on the Home/Library shelf cannot stay downloading.
+## Residual (no code change)
+
+- `TimeoutStartSec=infinity` + hung `cp`/`npm ci`/`compose up` can leave `running: true` forever. Heartbeat makes a *slow* copy honest; it does not kill a *stuck* one.
+- `HEAD_SHA` captured at start, not from the tarball.
+- FUSE heal/backoff can skip that tick’s queue loop; lock-clients 90s vs `kick_import` 120s.
+- Unbounded `retry_import` with no terminal fail.
+- Relink still cannot classify a FUSE pack if *arr has no series/movie/queue row for it (need the TWD S01 POST, or a leftover Sonarr series).
 
 ## Proof
 
 ```
-node --test scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs
-node --experimental-strip-types --test src/lib/sync-requests.test.ts
 python3 scripts/check-ota.py .
+python3 install/bin/relink_dumps.py --self-test
+python3 install/bin/stuck-downloads.py --self-test
+python3 install/bin/sonarr_manual_import.py --self-test
+node --test scripts/reelos-update.test.mjs scripts/relink-dumps.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stuck-downloads.test.mjs scripts/sonarr-manual-import.test.mjs scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs
+node --experimental-strip-types --test src/lib/sync-requests.test.ts
 ```
-
-House after Apply: Night at the Museum on Requests is **Available** (Play), not importing/Cancel. Duplicate Walking Dead S01 is one honest row. TWD import path from 1.2.50.1 is unchanged.
 
 ## Owner / house Apply
 
-1. Merge to **main**. Phone Check→Apply (or `/opt/reelos/bin/reelos-update.sh apply`). Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.2`.
-3. Museum on Requests is Available. One TWD S01 row.
+1. Merge to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
+2. `cat /opt/reelos/VERSION` → `1.2.50.3`. Expect `ReelOS 1.2.50.3 applied.`
+3. If Apply sits on Stage, `ota.log` must keep printing `still copying node_modules`.
+4. After Apply (and after the in-flight TWD S01 POST if Sonarr has the series): `wire.log` should show `relink created sonarr/… from FUSE` when dumps were empty, then `sonarr manualimport matched=` > 0.
+5. Title: TWD S01 Play does not hide Request S02. No 42%.
 
 ## Do not
 
@@ -52,3 +74,4 @@ House after Apply: Night at the Museum on Requests is **Available** (Play), not 
 - Invent a progress % on Requests.
 - Change season-by-season TV UX.
 - SSH from the agent. Scope into Tron / books / TorBox wipe.
+- Scan parent `/mnt/symlinks`.

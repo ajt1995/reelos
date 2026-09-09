@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
+import { applyTitleRequestPoll } from "@/lib/sync-requests";
 import { useReelStore } from "@/lib/store";
 
-/** Poll GET /api/request; sync status + progress into the matching store row. */
-export function useEngineRequest(id: string) {
+/** Poll GET /api/request; sync status + progress into the matching title+season row. */
+export function useEngineRequest(id: string, season?: number) {
   const [inJellyfin, setInJellyfin] = useState(false);
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
 
@@ -28,7 +29,8 @@ export function useEngineRequest(id: string) {
         }));
       })
       .catch(() => {});
-    const q = `id=${encodeURIComponent(id)}`;
+    const q = new URLSearchParams({ id });
+    if (season != null) q.set("season", String(season));
     let stop = false;
     const poll = () => {
       void fetch(`/api/request?${q}`, { cache: "no-store" })
@@ -36,38 +38,25 @@ export function useEngineRequest(id: string) {
         .then((j) => {
           if (stop) return;
           setEngineStatus(j.status || null);
-          const mapped =
-            j.status === "downloaded"
-              ? "available"
-              : j.status === "grabbing"
-                ? "downloading"
-                : j.status === "failed"
-                  ? "failed"
-                  : j.status === "queued"
-                    ? "waiting"
-                    : null;
           const apiProg =
             typeof j.progress === "number"
               ? j.progress
               : typeof j.percent === "number"
                 ? j.percent
                 : undefined;
-          if (!mapped && apiProg == null) return;
           useReelStore.setState((s) => ({
-            requests: s.requests.map((x) => {
-              if (x.titleId !== id || x.status === "failed") return x;
-              const status = (mapped as typeof x.status) || x.status;
-              if (x.status === "available" && status !== "available") return x;
-              const progress =
-                status === "available"
-                  ? 100
-                  : typeof apiProg === "number"
-                    ? Math.max(0, Math.min(100, Math.round(apiProg)))
-                    : x.progress;
-              return { ...x, status, progress, updatedAt: Date.now() };
+            requests: applyTitleRequestPoll(s.requests, {
+              titleId: id,
+              season,
+              status: j.status,
+              progress: apiProg,
             }),
             library:
-              mapped === "available" && !s.library.includes(id) ? [...s.library, id] : s.library,
+              (j.status === "downloaded" || j.status === "available") &&
+              !id.startsWith("tmdb-tv-") &&
+              !s.library.includes(id)
+                ? [...s.library, id]
+                : s.library,
           }));
         })
         .catch(() => {});
@@ -78,7 +67,7 @@ export function useEngineRequest(id: string) {
       stop = true;
       window.clearInterval(timer);
     };
-  }, [id]);
+  }, [id, season]);
 
   return { inJellyfin, engineStatus };
 }

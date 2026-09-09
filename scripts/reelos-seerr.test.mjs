@@ -8,6 +8,7 @@ import {
   buildArrIndex,
   collapseDuplicateRequests,
   findExistingSeasonRequest,
+  pickSeerrRequestForTitle,
   honestifyRequests,
   mapSeerrStatus,
   parseTitleId,
@@ -327,6 +328,27 @@ test("library presence beats a stuck-failed movie", () => {
   });
   assert.equal(honest[0].status, "available");
   assert.equal(honest[0].progress, 100);
+});
+
+test("by-id request pick is season-scoped, not reqs[0]", () => {
+  const media = { tmdbId: 1402, status: 3, mediaType: "tv" };
+  const reqs = [
+    { id: 3, type: "tv", status: 2, seasons: [{ seasonNumber: 1 }], media: { status: 5 } },
+    { id: 4, type: "tv", status: 2, seasons: [{ seasonNumber: 2 }], media: { status: 3 } },
+  ];
+  const s2 = pickSeerrRequestForTitle(reqs, { media, mediaType: "tv", season: 2 });
+  assert.equal(s2.id, 4);
+  assert.deepEqual(realSeasonNumbers(s2.seasons), [2]);
+  const s1 = pickSeerrRequestForTitle(reqs, { media, mediaType: "tv", season: 1 });
+  assert.equal(s1.id, 3);
+  const missing = pickSeerrRequestForTitle(reqs, { media, mediaType: "tv", season: 9 });
+  assert.equal(missing.id, undefined);
+  assert.deepEqual(realSeasonNumbers(missing.seasons), [9]);
+  const progress = readFileSync(join(root, "scripts/reelos-request-progress-plugin.mjs"), "utf8");
+  const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  assert.match(progress, /pickSeerrRequestForTitle/);
+  assert.match(lookup, /pickSeerrRequestForTitle/);
+  assert.match(progress, /searchParams.get\("season"\)/);
 });
 
 test("GET /api/request plugins honestify Seerr rows against library and *arr", () => {

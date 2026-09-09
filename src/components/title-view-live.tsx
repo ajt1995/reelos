@@ -43,7 +43,7 @@ export function TitleView({ id }: { id: string }) {
   const source = useReelStore((s) => s.answers.source);
   const requestTitle = useReelStore((s) => s.requestTitle);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
-  const { inJellyfin, engineStatus } = useEngineRequest(id);
+  const { inJellyfin, engineStatus } = useEngineRequest(id, season);
 
   useEffect(() => {
     let stop = false;
@@ -105,11 +105,11 @@ export function TitleView({ id }: { id: string }) {
   }
 
   const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
-  const available =
-    inJellyfin ||
-    inLibrary ||
-    request?.status === "available" ||
-    engineStatus === "downloaded";
+  const series = resolved.kind === "tv" || resolved.kind === "anime";
+  const seasonReady = request?.status === "available" || engineStatus === "downloaded";
+  const available = series
+    ? seasonReady
+    : inJellyfin || inLibrary || seasonReady;
   const blocked =
     (resolved.kind === "music" && !intent.music) ||
     (resolved.kind === "anime" && !intent.anime) ||
