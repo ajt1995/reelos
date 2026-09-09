@@ -394,6 +394,7 @@ test("ghost Seerr AVAILABLE + Sonarr season files=0 stays downloading", () => {
   const honest = honestifyRequests([row], { arrIndex, arrReady: true });
   assert.equal(honest[0].status, "downloading");
   assert.equal(honest[0].progress, 0);
+  assert.equal(honest[0].reason, "Seerr says available — no file on disk");
 });
 
 test("movie Available still wins when the JF shelf has the title", () => {
@@ -654,6 +655,23 @@ test("0-file Radarr movie with no Decypharr client surfaces the missing hop", ()
     movieRequestReason(row, { movies: [{ tmdbId: 157336, hasFile: true }], arrMoviesReady: false }),
     undefined,
   );
+  assert.equal(
+    movieRequestReason(row, {
+      movies: [{ tmdbId: 2059, hasFile: false, statistics: { movieFileCount: 0 } }],
+      arrMoviesReady: true,
+      radarrClients: [
+        {
+          enable: false,
+          implementation: "QBittorrent",
+          fields: [
+            { name: "host", value: "decypharr" },
+            { name: "port", value: 8282 },
+          ],
+        },
+      ],
+    }),
+    "No grab client — search cannot land",
+  );
 });
 
 test("Seerr media ghost (request list empty, media still processing) becomes a row", () => {
@@ -706,6 +724,38 @@ test("assembleRequestPayload exposes pipeline counts for HTTP house hops", () =>
   assert.equal(assembled.pipeline.decypharr, 1);
 });
 
+test("Seerr National Treasure does not invent grabbing rows for the Radarr backlog", () => {
+  const row = seerrRequestRow(
+    {
+      id: 9,
+      type: "movie",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      media: { tmdbId: 2059, status: 3 },
+    },
+    {},
+  );
+  const extras = missingArrRequests(
+    [],
+    [
+      { id: 12, tmdbId: 2059, hasFile: false, monitored: true, statistics: { movieFileCount: 0 } },
+      { id: 1, tmdbId: 157336, hasFile: false, monitored: true, statistics: { movieFileCount: 0 } },
+      { id: 2, tmdbId: 245891, hasFile: false, monitored: true },
+    ],
+  );
+  const merged = mergeUnfinishedRows([row], extras, {
+    movies: extras,
+    arrMoviesReady: true,
+    arrReady: true,
+    arrIndex: buildArrIndex({ movies: extras }),
+  });
+  assert.deepEqual(
+    merged.map((r) => r.titleId),
+    ["tmdb-2059"],
+  );
+});
+
 test("by-id request pick is season-scoped, not reqs[0]", () => {
   const media = { tmdbId: 1402, status: 3, mediaType: "tv" };
   const reqs = [
@@ -735,6 +785,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /loadPresenceFacts/);
   assert.match(progress, /recover/);
   assert.match(progress, /listRecoverTargets/);
+  assert.match(progress, /reason: honest.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);

@@ -34,7 +34,7 @@ export function useEngineRequest(id: string, season?: number) {
     let stop = false;
     const poll = () => {
       void fetch(`/api/request?${q}`, { cache: "no-store" })
-        .then((r) => r.json() as Promise<{ status?: string; progress?: number; percent?: number }>)
+        .then((r) => r.json() as Promise<{ status?: string; progress?: number; percent?: number; reason?: string }>)
         .then((j) => {
           if (stop) return;
           setEngineStatus(j.status || null);
@@ -50,6 +50,7 @@ export function useEngineRequest(id: string, season?: number) {
               season,
               status: j.status,
               progress: apiProg,
+              reason: j.reason,
             }),
             library:
               (j.status === "downloaded" || j.status === "available") &&

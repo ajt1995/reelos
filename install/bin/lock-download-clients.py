@@ -108,8 +108,15 @@ def field(fields: list, name: str):
     return None
 
 
+def client_enabled(client: dict) -> bool:
+    """A disabled Decypharr row is not a lock. MoviesSearch/SeasonSearch will not grab."""
+    return client.get("enable") is not False
+
+
 def client_needs_update(client: dict, app: dict) -> bool:
     """Keep Decypharr dumps until *arr hasFile. True wipe of sonarr/ dumps after complete."""
+    if not client_enabled(client):
+        return True
     if client.get("removeCompletedDownloads") is True:
         return True
     fields = client.get("fields") or []
@@ -201,6 +208,7 @@ def lock_app(app: dict) -> None:
             kept = True
             if cid is not None and client_needs_update(client, app):
                 body = dict(client)
+                body["enable"] = True
                 body["removeCompletedDownloads"] = False
                 body["fields"] = upsert_field(body.get("fields") or [], app["category_field"], app["category"])
                 try:
@@ -300,6 +308,73 @@ def _sandbox_lock_sonarr_missing_client():
         httpd.server_close()
 
 
+def _sandbox_lock_disabled_client():
+    """HTTP mock: Decypharr exists but enable=False → lock PUTs enable True."""
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from tempfile import TemporaryDirectory
+    from threading import Thread
+
+    store = {
+        "clients": [
+            {
+                "id": 3,
+                "name": "ReelOS-Decypharr",
+                "enable": False,
+                "implementation": "QBittorrent",
+                "removeCompletedDownloads": False,
+                "fields": [
+                    {"name": "host", "value": "decypharr"},
+                    {"name": "port", "value": 8282},
+                    {"name": "tvCategory", "value": "sonarr"},
+                ],
+            }
+        ],
+        "puts": [],
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            return
+
+        def _json(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path.split("?")[0].endswith("/downloadclient"):
+                self._json(200, store["clients"])
+                return
+            self._json(404, {})
+
+        def do_PUT(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            store["puts"].append(body)
+            self._json(200, body)
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        with TemporaryDirectory() as td:
+            xml = Path(td) / "config.xml"
+            xml.write_text("<Config><ApiKey>testkey</ApiKey></Config>\n")
+            app = dict(APPS[1])
+            app["xml"] = xml
+            app["base"] = f"http://127.0.0.1:{port}/api/v3"
+            lock_app(app)
+            return store["puts"], [p.get("name") for p in store["puts"]]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def _self_test() -> int:
     import unittest
 
@@ -317,10 +392,23 @@ def _self_test() -> int:
             }
             self.assertTrue(client_needs_update(stale, sonarr))
             good = {
+                "enable": True,
                 "removeCompletedDownloads": False,
                 "fields": [{"name": "tvCategory", "value": "sonarr"}],
             }
             self.assertFalse(client_needs_update(good, sonarr))
+            disabled = {
+                "enable": False,
+                "removeCompletedDownloads": False,
+                "fields": [{"name": "tvCategory", "value": "sonarr"}],
+            }
+            self.assertTrue(client_needs_update(disabled, sonarr))
+            self.assertFalse(client_enabled(disabled))
+
+        def test_sandbox_reenables_disabled_decypharr_client(self):
+            puts, names = _sandbox_lock_disabled_client()
+            self.assertEqual(names, ["ReelOS-Decypharr"])
+            self.assertTrue(puts[0]["enable"])
 
         def test_upsert_category_field(self):
             fields = upsert_field([{"name": "host", "value": "decypharr"}], "tvCategory", "sonarr")

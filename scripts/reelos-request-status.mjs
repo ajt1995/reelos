@@ -86,11 +86,30 @@ export async function waitForArrRow({
   return null;
 }
 
-export function listMissingRecoverTargets({ series = [], movies = [] } = {}) {
+/** When Seerr rows are supplied, recover only those titles — not the whole *arr backlog. */
+export function seerrRecoverScope(seerrRows) {
+  if (seerrRows == null) return null;
+  const movies = new Set();
+  const tv = new Set();
+  for (const row of seerrRows || []) {
+    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    const mediaType =
+      row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row?.tmdb ?? row?.tmdbId;
+    if (tmdb == null) continue;
+    if (mediaType === "movie") movies.add(String(tmdb));
+    else tv.add(String(tmdb));
+  }
+  return { movies, tv };
+}
+
+export function listMissingRecoverTargets({ series = [], movies = [], seerrRows } = {}) {
+  const scope = seerrRecoverScope(seerrRows);
   const out = [];
   for (const s of series || []) {
     const tmdb = s?.tmdbId;
     if (tmdb == null) continue;
+    if (scope && !scope.tv.has(String(tmdb))) continue;
     for (const season of s.seasons || []) {
       const n = Number(season?.seasonNumber);
       const files = Number(season?.statistics?.episodeFileCount || 0);
@@ -102,6 +121,7 @@ export function listMissingRecoverTargets({ series = [], movies = [] } = {}) {
   }
   for (const m of movies || []) {
     if (!m || m.tmdbId == null || m.monitored === false) continue;
+    if (scope && !scope.movies.has(String(m.tmdbId))) continue;
     const files = Number(m.statistics?.movieFileCount || 0);
     if (m.hasFile === true || files > 0) continue;
     out.push({ mediaType: "movie", tmdb: m.tmdbId });
@@ -156,7 +176,7 @@ export function listUnmonitoredMovieRecoverTargets({ seerrRows = [], movies = []
 }
 
 export function listRecoverTargets({ series = [], movies = [], seerrRows = [] } = {}) {
-  const missing = listMissingRecoverTargets({ series, movies });
+  const missing = listMissingRecoverTargets({ series, movies, seerrRows });
   const orphans = listSeerrOrphanMovieTargets({ seerrRows, movies });
   const unmonitored = listUnmonitoredMovieRecoverTargets({ seerrRows, movies });
   const seen = new Set(missing.map((t) => `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`));
@@ -211,6 +231,7 @@ export function decypharrClientMissing(clients) {
   const rows = Array.isArray(clients) ? clients : [];
   return !rows.some((c) => {
     if (!c || c.implementation !== "QBittorrent") return false;
+    if (c.enable === false) return false;
     const host = String(fieldValue(c.fields, "host") || "");
     const port = Number(fieldValue(c.fields, "port"));
     return host === "decypharr" && port === 8282;

@@ -380,20 +380,22 @@ export function seerrAvailableIsGhost(row, { arrIndex = null, arrReady = false, 
   return false;
 }
 
-function demoteGhost(row) {
-  return {
+function demoteGhost(row, facts = {}) {
+  const demoted = {
     ...row,
     status: "downloading",
     engine: "grabbing",
     progress: 0,
-    reason: undefined,
   };
+  const reason = movieRequestReason(demoted, facts) || "Seerr says available — no file on disk";
+  return { ...demoted, reason };
 }
 
 export function radarrDecypharrMissing(clients) {
   if (!Array.isArray(clients)) return false;
   return !clients.some((c) => {
     if (!c || c.implementation !== "QBittorrent") return false;
+    if (c.enable === false) return false;
     const host = String((c.fields || []).find((f) => f && f.name === "host")?.value || "");
     const port = Number((c.fields || []).find((f) => f && f.name === "port")?.value);
     return host === "decypharr" && port === 8282;
@@ -479,7 +481,7 @@ export function overlayPresence(
   return (rows || []).map((row) => {
     if (!row) return row;
     if (row.status === "available" || row.engine === "downloaded") {
-      if (seerrAvailableIsGhost(row, presence)) return demoteGhost(row);
+      if (seerrAvailableIsGhost(row, presence)) return demoteGhost(row, facts);
       return markAvailable(row);
     }
     const media = mediaOf(row);
@@ -487,7 +489,7 @@ export function overlayPresence(
       const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
       if (engine === "downloaded") {
         const promoted = markAvailable(row);
-        if (seerrAvailableIsGhost(promoted, presence)) return demoteGhost(row);
+        if (seerrAvailableIsGhost(promoted, presence)) return demoteGhost(row, facts);
         return promoted;
       }
     }
@@ -727,11 +729,15 @@ export function buildPipeline({
 
 export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
   const seerrKeys = new Set((seerrRows || []).map((r) => requestMatchKey(r)).filter(Boolean));
+  const seerrPresent = seerrKeys.size > 0;
   const honest = honestifyRequests([...(seerrRows || []), ...(extras || [])], facts);
   // Do not invent a Requests row for a title that is already on the shelf when Seerr dropped it.
-  return honest.filter(
-    (r) => seerrKeys.has(requestMatchKey(r)) || (r.status !== "available" && r.engine !== "downloaded"),
-  );
+  // When Seerr has rows, do not invent a grabbing row for every 0-file *arr title.
+  return honest.filter((r) => {
+    if (seerrKeys.has(requestMatchKey(r))) return true;
+    if (seerrPresent && (r.source === "radarr-missing" || r.source === "sonarr-missing")) return false;
+    return r.status !== "available" && r.engine !== "downloaded";
+  });
 }
 
 export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {

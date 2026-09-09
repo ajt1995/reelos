@@ -57,10 +57,7 @@ async function maybeRecover(u, facts) {
   for (const m of missing) {
     kicks.push(await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season }));
   }
-  if (!kicks.length) {
-    kicks.push(await kickArrRecover({}));
-  }
-  return { recover: true, kicks };
+  return { recover: true, targets: missing.length, kicks };
 }
 
 async function handleList(res, recoverNote = null) {
@@ -170,6 +167,8 @@ async function handleGet(req, res) {
       seasons: title?.seasons,
       seasonList: title?.seasonList,
       progress: honest.status === "available" ? 100 : honest.progress,
+      reason: honest.reason,
+      requestStatus: honest.status,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });

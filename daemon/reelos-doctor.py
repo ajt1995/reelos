@@ -134,6 +134,8 @@ def _decypharr_client_ok(rows) -> bool:
     for c in clients:
         if not isinstance(c, dict) or c.get("implementation") != "QBittorrent":
             continue
+        if c.get("enable") is False:
+            continue
         host = ""
         port = None
         for f in c.get("fields") or []:
@@ -197,7 +199,7 @@ def download_lock_hop() -> dict:
         return ok("Download lock", detail, True)
     if failed:
         return ok("Download lock", "reelos-lock-clients.service FAILED", False)
-    return ok("Download lock", "Decypharr is the only client path", True)
+    return ok("Download lock", "Could not probe Radarr/Sonarr download clients", False)
 
 
 def tailscale_hop() -> dict:
@@ -365,6 +367,22 @@ def _self_test() -> int:
             self.assertIn("SeasonSearch cannot grab", hop)
             self.assertIn("7878", hop)
             self.assertIn("MoviesSearch cannot grab", hop)
+            self.assertIn("Could not probe Radarr/Sonarr download clients", hop)
+            self.assertIn("enable", hop[: hop.find("def download_lock_hop")])
+
+        def test_disabled_decypharr_client_is_not_a_lock(self):
+            row = {
+                "implementation": "QBittorrent",
+                "enable": False,
+                "fields": [
+                    {"name": "host", "value": "decypharr"},
+                    {"name": "port", "value": 8282},
+                ],
+            }
+            self.assertFalse(_decypharr_client_ok([row]))
+            row["enable"] = True
+            self.assertTrue(_decypharr_client_ok([row]))
+            self.assertFalse(_decypharr_client_ok([]))
 
         def test_tpb_only_house_is_a_failed_releases_hop(self):
             mod = _load_public_indexers()

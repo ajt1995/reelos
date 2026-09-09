@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.9";
-export const SHIPPED_VERSION = "1.2.50.9";
+export const LATEST_VERSION = "1.2.50.10";
+export const SHIPPED_VERSION = "1.2.50.10";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.10: Disabled Decypharr client is not a lock. Doctor fails closed when it cannot probe download clients. recover=1 only kicks Seerr-requested titles, not the whole *arr backlog. Ghost AVAILABLE and GET-by-id carry a reason. Retry re-POSTs /api/request. Complements #62. Not 1.2.51 (Tron #52).",
   "1.2.50.9: Home merges a jf-only season-folder row (TWD - Season 1 / 2011) onto the tvdb series even when PremiereDate ≠ series year. Remakes and anime split seasons with real ids stay separate. Apply heals leftover JF Series items (delete/rename) — season-named dump dirs only, never a /media local-disk row. Requests never sit on silent 0% — say searching / unmonitored / quality / queue; recover monitors and MoviesSearchs. Not 1.2.51 (Tron #52).",
   "1.2.50.8: Home collapses JF season-folder aliases (B99 S01 / TWD - Season 1) without hiding remakes. Apply heals leftover JF libraries/paths and season-named dumps; keeps /media on local/both. Movie POST/recover locks Decypharr, widens quality, adds to Radarr if Seerr never pushed, then MoviesSearch. Honest reason when Radarr has no movie or no grab client. Not 1.2.51 (Tron #52).",
   "1.2.50.7: OTA POSTs EZTV/ShowRSS via TorrentRss when Cardigann schema is missing. Doctor lists every indexer. recover=1 locks Decypharr + falls Ultra-HD back to Any so SeasonSearch can grab 720p. Jellyfin Movies/Shows keep one dump path (no Interstellar×3). Not 1.2.51 (Tron #52).",
@@ -460,6 +461,7 @@ export const useReelStore = create<ReelState>()(
       cancelRequest: (id) => set({ requests: get().requests.filter((r) => r.id !== id) }),
       retryRequest: (id) => {
         const s = get();
+        const row = s.requests.find((r) => r.id === id);
         set({
           requests: s.requests.map((r) =>
             r.id === id
@@ -467,6 +469,21 @@ export const useReelStore = create<ReelState>()(
               : r,
           ),
         });
+        const titleId = String(row?.titleId || "");
+        if (!titleId.startsWith("tmdb-")) return;
+        const tv = titleId.startsWith("tmdb-tv-");
+        const tmdb = Number(tv ? titleId.slice(8) : titleId.slice(5));
+        if (!Number.isFinite(tmdb) || tmdb <= 0) return;
+        void fetch("/api/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titleId,
+            mediaType: tv ? "tv" : "movie",
+            tmdb,
+            season: row?.season,
+          }),
+        }).catch(() => {});
       },
       setWatchProgress: (titleId, v) =>
         set({ watchProgress: { ...get().watchProgress, [titleId]: v } }),
