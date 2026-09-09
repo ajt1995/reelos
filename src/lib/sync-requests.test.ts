@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   isInFlightRequest,
   mergeServerRequests,
+  requestStatusWord,
   showRequestQueueControls,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
@@ -52,6 +53,13 @@ test("transferring chip never counts available", () => {
   assert.equal(isInFlightRequest({ status: "waiting" }), true);
   assert.equal(isInFlightRequest({ status: "available" }), false);
   assert.equal(isInFlightRequest({ status: "failed" }), false);
+});
+
+test("request status words are Grabbing / Waiting / Ready — never a percent", () => {
+  assert.equal(requestStatusWord("downloading"), "Grabbing");
+  assert.equal(requestStatusWord("waiting"), "Waiting");
+  assert.equal(requestStatusWord("available"), "Ready");
+  assert.equal(requestStatusWord("failed"), "Failed");
 });
 
 test("server available upgrades a stale local downloading row for the same titleId", () => {

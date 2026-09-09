@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Poster } from "@/components/poster";
 import { titleInCache } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
+import { requestStatusWord } from "@/lib/sync-requests";
 import type { MediaRequest } from "@/lib/types";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,11 +37,6 @@ export function TitleCard({
             Cached
           </span>
         ) : null}
-        {status === "downloading" ? (
-          <div className="absolute inset-x-0 bottom-0 h-1 bg-background/40">
-            <div className="h-full bg-cyan" style={{ width: `${request?.progress ?? 0}%` }} />
-          </div>
-        ) : null}
         {typeof progress === "number" && progress > 0 && progress < 0.97 ? (
           <div className="absolute inset-x-0 bottom-0 h-0.5 bg-background/40">
             <div className="h-full bg-live" style={{ width: `${progress * 100}%` }} />
@@ -50,14 +46,7 @@ export function TitleCard({
       <p className="mt-2 truncate text-sm font-medium">{title.title}</p>
       <p className="text-xs text-muted">
         {title.year}
-        {status === "available" ? (request?.via === "cache" ? " · Cached" : " · Available now") : null}
-        {status === "downloading"
-          ? request?.via === "cache"
-            ? " · Cached"
-            : ` · ${Math.round(request?.progress ?? 0)}%`
-          : null}
-        {status === "waiting" ? " · Waiting" : null}
-        {status === "failed" ? " · Failed" : null}
+        {status ? ` · ${requestStatusWord(status)}` : null}
       </p>
     </Link>
   );

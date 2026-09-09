@@ -6,6 +6,14 @@ export function isInFlightRequest(r: { status: string }): boolean {
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
+/** Honest queue words. Never a percent — Seerr/*arr do not give a real grab %. */
+export function requestStatusWord(status: string): "Grabbing" | "Waiting" | "Ready" | "Failed" {
+  if (status === "downloading") return "Grabbing";
+  if (status === "waiting") return "Waiting";
+  if (status === "available") return "Ready";
+  return "Failed";
+}
+
 /** Movies: hide Request/Grabbing/Waiting once the title is available. TV/anime: hide only when this season is available. */
 export function showRequestQueueControls(opts: {
   kind: Kind;

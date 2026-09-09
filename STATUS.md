@@ -32,7 +32,7 @@ Folded the useful bits of #40 (Kavita compose, wizard chip, Connect card) and #4
 
 Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on `#03060c`). Page enter, card hover glow, live chips. `prefers-reduced-motion` kills motion. Contrast kept readable (cool white + `#8aa3b8` muted).
 
-Design dialect after polish: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Row labels: magenta **In progress** (Requests only), gold **Continue** (Home), cyan otherwise. Discover idle has no active-request chrome. Home after provision says “On the shelf”, not the install slogan. `.tron-grid` breathes via `grid-breathe` (reduced-motion off). Phone header Settings gear has title + cyan glow.
+Design dialect after polish: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Row labels: magenta **In progress** (Requests only — Grabbing / Waiting / Ready words, no invented %), gold **Continue** (Home), cyan otherwise. Discover idle has no active-request chrome. Ready = Watch / open, never Send to Arr. Home after provision says “On the shelf”, not the install slogan. `.tron-grid` breathes via `grid-breathe` (reduced-motion off). Phone header Settings gear has title + cyan glow.
 
 ## Stack kept from 1.2.50
 
