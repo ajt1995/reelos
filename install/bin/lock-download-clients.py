@@ -101,6 +101,24 @@ def field(fields: list, name: str):
     return None
 
 
+def client_needs_update(client: dict, app: dict) -> bool:
+    """Keep Decypharr dumps until *arr hasFile. True wipe of sonarr/ dumps after complete."""
+    if client.get("removeCompletedDownloads") is True:
+        return True
+    fields = client.get("fields") or []
+    return field(fields, app["category_field"]) != app["category"]
+
+
+def upsert_field(fields: list, name: str, value) -> list:
+    out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
+    for f in out:
+        if f.get("name") == name:
+            f["value"] = value
+            return out
+    out.append({"name": name, "value": value})
+    return out
+
+
 def is_allowed(client: dict) -> bool:
     if client.get("implementation") != ALLOWED_IMPL:
         return False
@@ -119,7 +137,7 @@ def payload(app: dict) -> dict:
         "enable": True,
         "protocol": "torrent",
         "priority": 1,
-        "removeCompletedDownloads": True,
+        "removeCompletedDownloads": False,
         "removeFailedDownloads": True,
         "name": "ReelOS-Decypharr",
         "implementation": ALLOWED_IMPL,
@@ -152,6 +170,14 @@ def lock_app(app: dict) -> None:
         cid = client.get("id")
         if is_allowed(client):
             kept = True
+            if cid is not None and client_needs_update(client, app):
+                body = dict(client)
+                body["removeCompletedDownloads"] = False
+                body["fields"] = upsert_field(body.get("fields") or [], app["category_field"], app["category"])
+                try:
+                    call(f"{app['base']}/downloadclient/{cid}", key, method="PUT", body=body)
+                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                    pass
             continue
         if cid is None:
             continue
@@ -187,5 +213,39 @@ def main() -> int:
     return 0
 
 
+def _self_test() -> int:
+    import unittest
+
+    class Lock(unittest.TestCase):
+        def test_new_client_keeps_completed_dumps(self):
+            body = payload(APPS[1])
+            self.assertFalse(body["removeCompletedDownloads"])
+            self.assertEqual(field(body["fields"], "tvCategory"), "sonarr")
+
+        def test_existing_client_needs_update_when_it_wipes_dumps(self):
+            sonarr = APPS[1]
+            stale = {
+                "removeCompletedDownloads": True,
+                "fields": [{"name": "tvCategory", "value": "tv-sonarr"}],
+            }
+            self.assertTrue(client_needs_update(stale, sonarr))
+            good = {
+                "removeCompletedDownloads": False,
+                "fields": [{"name": "tvCategory", "value": "sonarr"}],
+            }
+            self.assertFalse(client_needs_update(good, sonarr))
+
+        def test_upsert_category_field(self):
+            fields = upsert_field([{"name": "host", "value": "decypharr"}], "tvCategory", "sonarr")
+            self.assertEqual(field(fields, "tvCategory"), "sonarr")
+            self.assertEqual(field(fields, "host"), "decypharr")
+
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(Lock)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    return 0 if result.wasSuccessful() else 1
+
+
 if __name__ == "__main__":
+    if "--self-test" in sys.argv:
+        raise SystemExit(_self_test())
     raise SystemExit(main())

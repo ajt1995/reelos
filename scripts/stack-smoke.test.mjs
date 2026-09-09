@@ -19,18 +19,18 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: VERSION / channel / stamps agree (1.2.50.3)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.4)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.3");
-  assert.equal(chan.version, "1.2.50.3");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.3"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.3"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.3"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.3"/);
-  assert.match(read("HAL.md"), /1\.2\.50\.3/);
+  assert.equal(ver, "1.2.50.4");
+  assert.equal(chan.version, "1.2.50.4");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.4"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.4"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.4"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.4"/);
+  assert.match(read("HAL.md"), /1\.2\.50\.4/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -107,6 +107,7 @@ test("stack: TV season import stays on sonarr dumps and twins", () => {
   const stuck = read("install/bin/stuck-downloads.py");
   assert.match(stuck, /_sonarr_manual_import/);
   assert.match(stuck, /category_folders/);
+  assert.match(stuck, /recover_missing_series/);
   const part = read("install/bin/wire-engines.parts/01.part");
   assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\)/);
   assert.match(part, /relink_dumps/);

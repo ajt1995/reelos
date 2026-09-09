@@ -66,6 +66,9 @@ mkdir -p "$ROOT/bin/wire-engines.parts"
 for i in 00 01 02 03 04 05 06 07 08 09; do
   pull "$RAW/daemon/wire-engines.parts/$i.part" "$ROOT/bin/wire-engines.parts/$i.part" || true
 done
+pull "$RAW/daemon/relink_dumps.py" "$ROOT/bin/relink_dumps.py" || true
+pull "$RAW/daemon/sonarr_manual_import.py" "$ROOT/bin/sonarr_manual_import.py" || true
+pull "$RAW/daemon/stuck-downloads.py" "$ROOT/bin/stuck-downloads.py" || true
 
 if [ -f "$COMPOSE/.env" ]; then
   set -a
