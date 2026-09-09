@@ -1,6 +1,8 @@
 # ReelOS Apply / OTA audit
 
-**2026-09-09.** Code-verified against `daemon/reelos-update.sh`, `scripts/reelos-lookup-plugin.mjs` (`/api/update/*`), `scripts/check-ota.py`, `install/systemd/reelos.service`. Rebased onto main after **#46** (lean cached `/api/library`) and **#47** (JF12 auth, Finish no longer `spawnSync` pull inside Vite; search hop 4× retry). Did not edit `HAL.md`. Did not bump `VERSION` (still 1.2.48).
+**House stamp is 1.2.49** (already on `main` via #49 Jellyfin seed). This tree adds PR #50 FUSE/*arr `importPending` retry — Check is SHA drift if 1.2.49 is already local. Mailman notes below still apply. Expect `ReelOS 1.2.49 applied.`
+
+**2026-09-09.** Code-verified against `daemon/reelos-update.sh`, `scripts/reelos-lookup-plugin.mjs` (`/api/update/*`), `scripts/check-ota.py`, `install/systemd/reelos.service`. Rebased onto main after **#46** (lean cached `/api/library`) and **#47** (JF12 auth, Finish no longer `spawnSync` pull inside Vite; search hop 4× retry). Mailman repair shipped as #48 without a VERSION bump.
 
 Verdict: **Apply is not trustworthy on current main without this PR.** Staging + swap can land a new tree on disk, then fail-closed hops / a short home probe / lockfile `npm ci` refuse to stamp `applied-sha`. Phone Check then keeps offering the same update. A hung oneshot (`TimeoutStartSec=infinity`) can leave `:8080` 502 until someone SIGKILLs `reelos-ota`.
 
@@ -67,7 +69,7 @@ Daily timer (`reelos-autoupdate.service`) runs `/opt/reelos/bin/reelos-update.sh
 5. **Home probe 90s**, `start_shell` every 5s (plus first tick). Search hop timeout 20s (was 45) so a red search cannot sit on the oneshot as long.
 6. **`docker compose pull` after `applied.`**, `timeout 600`. Does not un-stamp. Still not inside Vite.
 
-Not changed: VERSION/channel 1.2.48, TorBox, HAL.md, Caddy unit design, flock, channel fetch. Finish provision pull-in-Vite is **#47 on main** (kept).
+Not changed in the mailman PR: TorBox, Caddy unit design, flock, channel fetch URL. Finish provision pull-in-Vite is **#47 on main** (kept). Stamp **1.2.49** is PR #50.
 
 ## Trustworthiness after this PR
 
@@ -89,14 +91,14 @@ Do this on the HP. Do not stamp VERSION by hand.
 
 1. Merge this tip to **main**. Phone Apply fetches mailman from `main` first — this PR must be on `main` before the house run.
 2. If `reelos-ota` is `activating` from an older Apply: wait it out or `systemctl reset-failed reelos-ota` after you confirm no `update-apply.sh` process. Do not start a second Apply on a dead Caddy.
-3. Settings → Updates → **Check**. Expect available (SHA drift) even though VERSION is still 1.2.48.
+3. Settings → Updates → **Check**. Expect available: channel **1.2.49** > local, or SHA drift.
 4. **Apply.** Watch `/var/lib/reelos/ota.log` (or the phone step log).
    - `package.json or package-lock.json changed — running npm ci` **or** `package.json unchanged — reused node_modules`.
    - `npm ci failed` must **not** appear. If it does, live `/opt/reelos/app/package.json` must still exist.
    - `home 200` then hops. `hop search red — not blocking UI-only stamp` is OK.
-   - Must print `ReelOS 1.2.48 applied.`
+   - Must print `ReelOS 1.2.49 applied.`
 5. Proof files:
-   - `cat /opt/reelos/VERSION` → `1.2.48`
+   - `cat /opt/reelos/VERSION` → `1.2.49`
    - `cat /var/lib/reelos/applied-sha` → this merge commit (or current `main`)
    - `test -f /opt/reelos/app/package.json && test -d /opt/reelos/app/node_modules`
 6. Phone **Check** again → **up to date** (not another Apply).
@@ -104,4 +106,4 @@ Do this on the HP. Do not stamp VERSION by hand.
 8. If “Also pull Jellyfin / engine images” is on: pull happens **after** `applied.` and the oneshot may stay `activating` up to 10 minutes. Home must stay up during that pull.
 9. Negative (optional): `systemctl is-active reelos-ota` is `inactive` after Apply, not stuck `activating`.
 
-Do not: edit HAL.md, bump VERSION for this mailman, Apply a feature-branch tarball, or run Finish/provision during Apply.
+Do not: Apply a feature-branch tarball, or run Finish/provision during Apply. Stamp is **1.2.49** (HAL.md).

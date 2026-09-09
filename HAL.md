@@ -1,15 +1,17 @@
 # HAL.md
 
-Hal. **2026-09-09.** Named stamp **1.2.49**.
+Hal. **2026-09-09.** Named stamp **1.2.49** (already on `main` via #49 Jellyfin seed).
 
-Read enlisted STATUS on `cursor/jellyfin-durable-seed-6361` (PR #49).
+PR **#50** is the rest of this stamp: Decypharr→FUSE→*arr `importPending` retry. Do **not** cut 1.2.50.
 
 ## xorriso — do this
 
-1. Merge `#49` → `main`.
-2. On `main`, **`channel.json` tarball = `main.tar.gz`**. Do not leave the feature-branch archive as the house channel.
-3. VERSION **1.2.49**. Do not cut 1.2.50 in the same hour.
-4. Books / Kavita / `ReelOS-libgen` stay **off** this stamp (`feature/3-books` stays a branch).
-5. Owner phone: Settings → Check → Apply. Proof is `/api/box` Jellyfin **green**, Watch `http://<lan>:8096` (not docker `172.18.x`), then play. Soft-reset then Finish must not open the JF wizard.
+1. Merge `#50` (`cursor/fuse-arr-import-0b46`) → **main**. Keep `#49` Jellyfin seed.
+2. On `main`, **`channel.json` tarball = `main.tar.gz`**. VERSION stays **1.2.49**.
+3. Books / Kavita / `ReelOS-libgen` stay **off** (`feature/3-books` stays a branch).
+4. Owner phone: Settings → Check → Apply (SHA drift if 1.2.49 is already local). Search hop red is OK (#48).
+5. Proof:
+   - `/api/box` Jellyfin **green**; Watch `http://<lan>:8096` (not docker `172.18.x`); no JF wizard after soft-reset (#49).
+   - Next cached TorBox grab leaves Radarr/Sonarr `hasFile=true` without a manual import. Host FUSE listing is not enough — *arr containers must also `ls /mnt/debrid`. Logs: `retry import … FUSE readable` or `rshared /mnt then remount/restart readers` (#50).
 
-Do not Apply the feature tarball as if it were main. Do not use the owner as a debugger.
+Do not Apply a feature-branch tarball. Do not wipe TorBox. Mailman from #48 stays fail-open on search.

@@ -6,14 +6,14 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 """
-    path = Path("/etc/systemd/system/reelos-mnt-shared.service")
+    path = Path("/etc/systemd/system/reelos-mnt-rshared.service")
     try:
         if path.exists() and path.read_text() == unit:
             return
         path.write_text(unit)
         subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
-        subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-shared"], check=False, capture_output=True)
-        log_wire("mnt-shared unit enabled")
+        subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-rshared"], check=False, capture_output=True)
+        log_wire("mnt-rshared unit enabled")
     except OSError as e:
         log_wire(f"mnt-shared unit {e}")
 
@@ -102,7 +102,27 @@ def sonarr_manual_import(sk: str) -> None:
     mod.sonarr_manual_import(sk)
 
 
+def wait_fuse_ready(seconds: int = 40) -> bool:
+    """Do not scan *arr dumps until FUSE listdir works (import race)."""
+    if source() == "local-vpn":
+        return True
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if fuse_on_host():
+            try:
+                os.listdir("/mnt/debrid")
+                return True
+            except OSError:
+                pass
+        time.sleep(2)
+    return False
+
+
 def kick_imports() -> None:
+    if wait_fuse_ready(40):
+        log_wire("import — FUSE ready")
+    else:
+        log_wire("import — FUSE not ready, scan anyway")
     relink_from_debrid()
     wait_http("http://127.0.0.1:7878/ping", 90)
     wait_http("http://127.0.0.1:8989/ping", 90)

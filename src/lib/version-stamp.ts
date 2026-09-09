@@ -1,5 +1,5 @@
 export const LATEST_VERSION = "1.2.49";
 export const SHIPPED_VERSION = "1.2.49";
 export const UPDATE_NOTES = [
-  "1.2.49: Durable Jellyfin seed. Visible admin matching wizard PIN, Movies/Shows paths, published URI by request. Survives provision/wipe/restart without PIN or Server Unavailable flap. Check then Apply.",
+  "1.2.49: Durable Jellyfin seed (visible admin, Movies/Shows, published URI). Cached TorBox grabs import when FUSE is ready (importPending retry). Check then Apply.",
 ];
