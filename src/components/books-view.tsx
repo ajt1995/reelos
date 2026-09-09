@@ -43,7 +43,7 @@ export function BookCover({ title }: { title: string }) {
 export function BookDownloadLink({ book, className }: { book: BookResult; className?: string }) {
   return (
     <Button asChild variant="gold" size="sm" className={className ?? "w-full"}>
-      <a href={bookFetchHref(book)}>
+      <a href={bookFetchHref(book)} download>
         <Download className="size-4" /> Download
       </a>
     </Button>
