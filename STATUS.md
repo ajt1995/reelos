@@ -35,12 +35,25 @@ Design dialect: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. B
 
 Settings → **How to watch / read**: Jellyfin on the phone (LAN or Tailscale/MagicDNS) for movies/TV; Kavita `:5000` / `/kavita` for books in `/srv/media/books`. Not TorBox. Connect still holds the QR clutter.
 
-## Tests
+## Cloud proof (this VM, 2026-09-09)
 
-```
-node --test scripts/books-catalog.test.mjs scripts/reelos-seerr.test.mjs
-npx tsc --noEmit
-```
+No TorBox / Seerr / house secrets. **TV/movies Request/grab broken without keys — by design for this run.**
+
+| Check | Result |
+| --- | --- |
+| Rebase onto `main` 1.2.50.6 (`61a4922`) | Done. 11 #52 commits replayed. Conflicts in stamps, Seerr, lookup, Discover, stack-smoke, HAL/STATUS, sync-requests tests. Reliability from #53–#58 kept. |
+| `npm ci` | Green (429 packages) |
+| `npx tsc --noEmit` | Green |
+| `npm run build` | Green (client + SSR + Nitro). `books-*.js` emitted. |
+| `scripts/books-catalog.test.mjs` | **14/14** including Anna’s Archive / Libgen refuse |
+| Live `searchLegalBooks` | Standard Ebooks + Internet Archive return real rows (`dracula` / `frankenstein` / `pride and prejudice`). Gutendex (`gutendex.com`) is Cloudflare **403** from this VM — `unavailable: ["Project Gutenberg"]` is honest, not a silent empty shelf. |
+| Live download → books dir | Standard Ebooks *Dracula* 633860 B; Gutenberg.org *Frankenstein* 473485 B (direct `www.gutenberg.org`, not Gutendex); IA *Frankenstein* 3560858 B. All under a temp books dir (`Author/Title.epub`). Anna’s Archive refused. |
+| Kavita compose / Caddy | Static sanity **OK**: profile `books`, `:5000`, `/srv/media:/media`, `handle /kavita*`, no `handle /books*`. **No Docker** in this VM — did not `compose up` Kavita. |
+| `reelos-seerr.test.mjs` + stack-smoke + `sync-requests.test.ts` | Green (Kavita Caddy, Discover no In progress, Grabbing/Waiting/Ready, 1.2.51 stamp + 1.2.50.6 in HAL) |
+| `npm test` whole tree | 296/313. **17 failures** are grok-template / `.grok/skills` / app-env fixtures this VM does not ship. Same class of tests exist on `main`. Not a Books/Tron regression. |
+| Phone previews | Recaptured at 390×844 with mocked box APIs: `docs/tron-previews/{home,discover,discover-typeahead,books,requests,settings}.png` |
+
+Settings → How to watch / read paints: Jellyfin for movies/TV; Kavita `:5000` / `/kavita`; files in `/srv/media/books`; **Not TorBox**.
 
 ## Do not
 

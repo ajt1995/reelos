@@ -13,8 +13,8 @@ Hal. **2026-09-09.** Named stamp **1.2.51 candidate** (Tron-night UI + legal Boo
 ## Proof on this test-build (no house keys)
 
 1. Tree stamp `VERSION` → `1.2.51` (candidate). `main` remains `1.2.50.6`.
-2. Books: catalog search/list against Gutenberg / Standard Ebooks / Internet Archive. Download writes under the books dir allowlist. Kavita compose profile + Caddy `/kavita*` (not `/books`).
-3. Phone chrome is Tron-night (cyan/magenta/neon-gold on black) if the UI build is previewed.
-4. Discover/Request/Seerr paths keep 1.2.50.1–1.2.50.6 honesty (one-season TV POST, no invented %, SeasonSearch, public TV indexers). They need house keys to grab — not this run.
+2. Books: catalog search/list against Gutenberg / Standard Ebooks / Internet Archive. Download writes under the books dir allowlist. Kavita compose profile + Caddy `/kavita*` (not `/books`). **This VM:** SE + IA search live; Gutendex 403 (honest unavailable); Gutenberg.org + SE + IA downloads wrote `Author/Title.epub`. Pirate hosts refused.
+3. Phone chrome is Tron-night (cyan/magenta/neon-gold on black). Previews in `docs/tron-previews/`.
+4. Discover/Request/Seerr paths keep 1.2.50.1–1.2.50.6 honesty (one-season TV POST, no invented %, SeasonSearch, public TV indexers). They need house keys to grab — **TV/movies broken without keys — by design for this run.**
 
 Do not Apply this feature-branch tarball as if it were main.
