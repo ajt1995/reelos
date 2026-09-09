@@ -256,7 +256,16 @@ def _indexer_is_rss_only(ix: dict) -> bool:
 
 def _indexer_can_search(ix: dict) -> bool:
     """Fail-closed on RSS-only. Search flags on EZTV/ShowRSS are not MoviesSearch."""
-    if not isinstance(ix, dict) or not ix.get("enable"):
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "indexer_is_enabled", None):
+        if not mod.indexer_is_enabled(ix):
+            return False
+    elif not isinstance(ix, dict) or not (
+        ix.get("enable") is True
+        or ix.get("enableAutomaticSearch") is True
+        or ix.get("enableInteractiveSearch") is True
+        or ix.get("enableRss") is True
+    ):
         return False
     if _indexer_is_rss_only(ix):
         return False
@@ -334,7 +343,7 @@ def sonarr_indexers_hop() -> dict:
     return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
 
 
-JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.15"'
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.16"'
 
 
 def jellyfin_api_token() -> str:

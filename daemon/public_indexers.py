@@ -421,10 +421,32 @@ def _sandbox_house_prowlarr():
         httpd.server_close()
 
 
+def indexer_is_enabled(ix) -> bool:
+    """*arr v4 may omit `enable` (JSON null) and only set RSS/search flags.
+
+    Live linuxserver Radarr/Sonarr: enable=None, enableAutomaticSearch=True.
+    `ix.get("enable")` is then falsy and heal_red's a working YTS Torznab.
+    """
+    if not isinstance(ix, dict):
+        return False
+    if ix.get("enable") is False:
+        return False
+    if ix.get("enable") is True:
+        return True
+    flags = (
+        ix.get("enableRss"),
+        ix.get("enableAutomaticSearch"),
+        ix.get("enableInteractiveSearch"),
+    )
+    if any(f is True for f in flags):
+        return True
+    return False
+
+
 def enabled_indexer_names(rows) -> list[str]:
     names = []
     for ix in rows if isinstance(rows, list) else []:
-        if not isinstance(ix, dict) or not ix.get("enable"):
+        if not indexer_is_enabled(ix):
             continue
         n = str(ix.get("name") or "").strip()
         if n:
@@ -443,7 +465,7 @@ def indexer_is_rss_only(ix: dict) -> bool:
 
 def sonarr_indexer_kind(ix: dict) -> str:
     """search | rss | none — TorrentRss EZTV is not SeasonSearch."""
-    if not isinstance(ix, dict) or not ix.get("enable"):
+    if not indexer_is_enabled(ix):
         return "none"
     name = str(ix.get("name") or "").lower()
     impl = str(ix.get("implementation") or "").lower()
@@ -482,7 +504,7 @@ def sonarr_indexer_kind(ix: dict) -> str:
 
 def doctor_sonarr_indexers_detail(rows) -> tuple[str, bool]:
     """Prowlarr-green is not enough. Sonarr must have a search-capable indexer."""
-    enabled = [ix for ix in (rows or []) if isinstance(ix, dict) and ix.get("enable")]
+    enabled = [ix for ix in (rows or []) if indexer_is_enabled(ix)]
     names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
     kinds = [sonarr_indexer_kind(ix) for ix in enabled]
     if not enabled:
@@ -510,7 +532,7 @@ def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
 
 def radarr_indexer_kind(ix: dict) -> str:
     """search | rss | none — TorrentRss EZTV is not MoviesSearch, even with search flags on."""
-    if not isinstance(ix, dict) or not ix.get("enable"):
+    if not indexer_is_enabled(ix):
         return "none"
     name = str(ix.get("name") or "").lower()
     impl = str(ix.get("implementation") or "").lower()
@@ -555,7 +577,7 @@ def indexer_can_search(ix: dict) -> bool:
 
 def doctor_radarr_indexers_detail(rows) -> tuple[str, bool]:
     """Prowlarr-green is not a request hop. Radarr must have a search indexer."""
-    enabled = [ix for ix in (rows or []) if isinstance(ix, dict) and ix.get("enable")]
+    enabled = [ix for ix in (rows or []) if indexer_is_enabled(ix)]
     names = [str(ix.get("name") or "") for ix in enabled if ix.get("name")]
     kinds = [radarr_indexer_kind(ix) for ix in enabled]
     if not enabled:
@@ -568,7 +590,7 @@ def doctor_radarr_indexers_detail(rows) -> tuple[str, bool]:
 
 def indexer_is_search_source(ix: dict) -> bool:
     """Prowlarr indexer *arr can MoviesSearch/SeasonSearch through — not TorrentRss EZTV."""
-    if not isinstance(ix, dict) or not ix.get("enable"):
+    if not indexer_is_enabled(ix):
         return False
     if indexer_is_rss_only(ix):
         return False
@@ -1257,6 +1279,27 @@ def _self_test() -> int:
                 [{"enable": True, "name": "Mystery", "implementation": "Unknown", "fields": []}]
             )
             self.assertFalse(unknown_ok)
+
+        def test_arr_enable_null_with_search_flags_is_attached(self):
+            """linuxserver *arr v4 omits enable (JSON null) on a live Torznab YTS."""
+            yts = {
+                "enable": None,
+                "name": "ReelOS-yts (Prowlarr)",
+                "implementation": "Torznab",
+                "enableRss": True,
+                "enableAutomaticSearch": True,
+                "enableInteractiveSearch": True,
+                "fields": [{"name": "categories", "value": [2000]}],
+            }
+            self.assertTrue(indexer_is_enabled(yts))
+            detail, good = doctor_radarr_indexers_detail([yts])
+            self.assertTrue(good)
+            self.assertIn("ReelOS-yts", detail)
+            self.assertTrue(arr_indexer_write_landed(201, [yts], "movie"))
+            off = dict(yts)
+            off["enable"] = False
+            self.assertFalse(indexer_is_enabled(off))
+            self.assertFalse(arr_indexer_write_landed(201, [off], "movie"))
 
         def test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync(self):
             prow = [

@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.15";
-export const SHIPPED_VERSION = "1.2.50.15";
+export const LATEST_VERSION = "1.2.50.16";
+export const SHIPPED_VERSION = "1.2.50.16";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.16: Live *arr v4 lists Torznab YTS with enable=null (search flags on). Heal treated that as no indexer — MoviesSearch worked, Apply stayed heal_red. Count RSS/search flags. Complements #69 DNS + mailman. Not 1.2.51 (Tron #52).",
   "1.2.50.15: House Apply of 1.2.50.13 left containers 14h old because mailman compared tarball compose yml to the already-swapped live file (always unchanged). Compare against the pre-swap yml so dropping dns: 1.1.1.1 actually recreates *arr. Refuse a second Apply instead of deleting ota.lock. Remount FUSE after compose up before hops. Complements #69 DNS. Not 1.2.51 (Tron #52).",
   "1.2.50.14: House Apply of 1.2.50.13 heal_red'd again (still 1.2.50.11). compose dns: 1.1.1.1 hid Docker names (radarr/prowlarr/decypharr); docker compose ps ETIMEDOUT so Torznab fell back to hostname prowlarr which Radarr cannot resolve. Drop per-container dns so embedded DNS works. Keep forceSave. Complements #68. Not 1.2.51 (Tron #52).",
   "1.2.50.13: House Apply of 1.2.50.12 stayed honest (heal red, no stamp) because *arr rejected the Torznab POST (test-on-add, hand-rolled body) and Prowlarr fullSync never landed. Attach now clones /indexer/schema, POSTs ?forceSave=true, waits for ApplicationIndexerSync, and talks to Prowlarr/*arr/Seerr by container IP so compose dns: 1.1.1.1 cannot hide service names. Complements #67. Not 1.2.51 (Tron #52).",
