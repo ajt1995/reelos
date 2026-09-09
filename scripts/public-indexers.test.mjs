@@ -122,6 +122,7 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   assert.match(out, /test_sandbox_house_tpb_only_http_posts_eztv_showrss/);
   assert.match(out, /test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync/);
   assert.match(out, /test_house_prowlarr_green_arr_empty_after_false_attach/);
+  assert.match(out, /test_adversarial_wire_attach_honesty/);
   assert.match(out, /test_radarr_rss_only_is_not_a_search_path/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);

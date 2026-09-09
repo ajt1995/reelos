@@ -816,6 +816,21 @@ def arr_search_indexers_ok(arr_rows, role: str) -> tuple[str, bool]:
     return doctor_sonarr_indexers_detail(arr_rows)
 
 
+def arr_indexer_write_landed(status, rows, role: str) -> bool:
+    """forceSave 2xx is not attached until re-read shows a search indexer.
+
+    HTTP 400 (name in the body or not) is never attached — house #67 greened that.
+    """
+    try:
+        code = int(status or 0)
+    except (TypeError, ValueError):
+        return False
+    if not (200 <= code < 300):
+        return False
+    _detail, good = arr_search_indexers_ok(rows, role)
+    return good
+
+
 def hybrid_quality_should_allow(name: str) -> bool:
     """Wizard hybrid = 1080p / 4K when available. EZTV is typically 720p WEB-DL."""
     n = str(name or "").lower().replace(" ", "").replace("-", "").replace("_", "")
@@ -925,11 +940,13 @@ HOUSE_PROWLARR_SEARCHABLE = (
 )
 
 
-def _sandbox_house_arr(role: str = "movie"):
+def _sandbox_house_arr(role: str = "movie", *, lie_2xx: bool = False, persist_search_off: bool = False):
     """HTTP mock of house *arr: Prowlarr is green; indexer POST test-on-add 400s.
 
     #67 treated `400` + indexer name as attached. The row never persisted.
     Real Radarr only saves when forceSave=true and the Torznab schema is filled.
+    lie_2xx: 201 without a row (stale-read / forceSave hide).
+    persist_search_off: save RSS-mute flags so doctor must stay red.
     """
     import json
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -989,9 +1006,15 @@ def _sandbox_house_arr(role: str = "movie"):
             if not complete:
                 self._json(400, {"message": "'Categories' must be provided"})
                 return
+            if lie_2xx:
+                self._json(201, {"name": name, "id": 0})
+                return
             row = dict(body)
             row["id"] = len(store["indexers"]) + 20
             row.setdefault("enable", True)
+            if persist_search_off:
+                row["enableAutomaticSearch"] = False
+                row["enableInteractiveSearch"] = False
             store["indexers"].append(row)
             self._json(201, row)
 
@@ -1371,6 +1394,158 @@ def _self_test() -> int:
                     sonarr["stop"]()
             finally:
                 box["stop"]()
+
+        def test_adversarial_wire_attach_honesty(self):
+            """Reproduce the 09.part post()+re-read loop. Do not skim."""
+            prow = list(HOUSE_PROWLARR_SEARCHABLE)
+
+            def read_rows(box):
+                return box["fetch"]("/indexer")
+
+            def wire_post(box, role):
+                def post(_name, body):
+                    status, _payload = box["post_url"](arr_indexer_write_url(box["origin"]), body)
+                    return arr_indexer_write_landed(status, read_rows(box), role)
+
+                return post
+
+            def wire_ok(box, role, schema=None, prow_host="prowlarr", attempts=5):
+                arr_rows = []
+                for _attempt in range(attempts):
+                    arr_rows = read_rows(box)
+                    _d, good = arr_search_indexers_ok(arr_rows, role)
+                    if good:
+                        return True
+                    landed = apply_arr_search_indexers(
+                        prow,
+                        arr_rows,
+                        role,
+                        "prow-key",
+                        wire_post(box, role),
+                        lambda *_a: False,
+                        schema=schema,
+                        prow_host=prow_host,
+                    )
+                    if landed:
+                        arr_rows = read_rows(box)
+                        _d, good = arr_search_indexers_ok(arr_rows, role)
+                        if good:
+                            return True
+                _d, good = arr_search_indexers_ok(read_rows(box), role)
+                return good
+
+            # 3+8: 400 + name is not attached. forceSave + incomplete body stays red.
+            empty = _sandbox_house_arr("movie")
+            try:
+                legacy = legacy_torznab_indexer_body(
+                    "ReelOS-tpb", prowlarr_torznab_base(1), "prow-key", role_categories("movie")
+                )
+                code, err = empty["post_url"](f"{empty['origin']}/indexer", legacy)
+                self.assertEqual(code, 400)
+                self.assertTrue(legacy_arr_post_treats_400_as_attached(code, "ReelOS-tpb", str(err)))
+                self.assertFalse(arr_indexer_write_landed(code, read_rows(empty), "movie"))
+                self.assertFalse(
+                    arr_indexer_write_landed(400, [], "movie"),
+                    "400-name must not inherit a ghost attach",
+                )
+                broken = torznab_indexer_body(
+                    "ReelOS-tpb",
+                    prowlarr_torznab_base(1),
+                    "prow-key",
+                    [],
+                    schema=HOUSE_ARR_TORZNAB_SCHEMA,
+                )
+                for f in broken["fields"]:
+                    if _field_key(f.get("name")) == "categories":
+                        f["value"] = []
+                    if _field_key(f.get("name")) == "minimumseeders":
+                        f["value"] = None
+                broken["supportsSearch"] = False
+                bcode, _berr = empty["post_url"](arr_indexer_write_url(empty["origin"]), broken)
+                self.assertEqual(bcode, 400)
+                self.assertFalse(arr_indexer_write_landed(bcode, read_rows(empty), "movie"))
+                self.assertEqual(empty["store"]["indexers"], [])
+            finally:
+                empty["stop"]()
+
+            # 3: RSS-only EZTV is not MoviesSearch / not attached as search.
+            rss_detail, rss_ok = doctor_radarr_indexers_detail(
+                [
+                    {
+                        "enable": True,
+                        "name": "ReelOS-eztv",
+                        "implementation": "TorrentRssIndexer",
+                        "enableAutomaticSearch": True,
+                        "enableInteractiveSearch": True,
+                    }
+                ]
+            )
+            self.assertFalse(rss_ok)
+            self.assertIn("RSS-only", rss_detail)
+            empty_probe, empty_ok = doctor_radarr_indexers_detail([])
+            self.assertFalse(empty_ok)
+            self.assertIn("no search indexer", empty_probe)
+            none_probe, none_ok = doctor_radarr_indexers_detail(None)
+            self.assertFalse(none_ok)
+
+            # 4+8: 201 without a row (stale / forceSave hide) stays heal red.
+            lie = _sandbox_house_arr("movie", lie_2xx=True)
+            try:
+                schema = pick_torznab_schema(lie["fetch"]("/indexer/schema"))
+                self.assertFalse(wire_ok(lie, "movie", schema=schema, prow_host="172.18.0.10"))
+                self.assertEqual(lie["store"]["indexers"], [])
+                self.assertFalse(arr_indexer_write_landed(201, [], "movie"))
+            finally:
+                lie["stop"]()
+
+            # 8: forceSave may persist a mute row — doctor still needs a search indexer.
+            muted = _sandbox_house_arr("movie", persist_search_off=True)
+            try:
+                schema = pick_torznab_schema(muted["fetch"]("/indexer/schema"))
+                self.assertFalse(wire_ok(muted, "movie", schema=schema))
+                rows = read_rows(muted)
+                self.assertTrue(rows)
+                _d, good = arr_search_indexers_ok(rows, "movie")
+                self.assertFalse(good)
+            finally:
+                muted["stop"]()
+
+            # 1+9: searchable attach uses container IP; public RSS feeds stay on the internet.
+            box = _sandbox_house_arr("movie")
+            try:
+                schema = pick_torznab_schema(box["fetch"]("/indexer/schema"))
+                self.assertTrue(wire_ok(box, "movie", schema=schema, prow_host="172.18.0.10"))
+                rows = read_rows(box)
+                names = [r.get("name") for r in rows]
+                self.assertIn("ReelOS-tpb", names)
+                self.assertIn("ReelOS-yts", names)
+                self.assertNotIn("ReelOS-eztv", names)
+                tpb = next(r for r in rows if r.get("name") == "ReelOS-tpb")
+                base = next(f.get("value") for f in tpb["fields"] if _field_key(f.get("name")) == "baseurl")
+                self.assertEqual(base, "http://172.18.0.10:9696/1/")
+                self.assertNotIn("prowlarr", str(base))
+            finally:
+                box["stop"]()
+
+            sonarr = _sandbox_house_arr("tv")
+            try:
+                schema = pick_torznab_schema(sonarr["fetch"]("/indexer/schema"))
+                self.assertTrue(wire_ok(sonarr, "tv", schema=schema, prow_host="172.18.0.10"))
+                names = [r.get("name") for r in read_rows(sonarr)]
+                self.assertIn("ReelOS-tpb", names)
+                self.assertNotIn("ReelOS-yts", names)
+                self.assertNotIn("ReelOS-eztv", names)
+            finally:
+                sonarr["stop"]()
+
+            rss_plan = pick_add_plan("ReelOS-eztv", ("eztv",), [])
+            self.assertTrue(str(rss_plan["feed_url"]).startswith("https://"))
+            self.assertNotIn("172.18.", str(rss_plan["feed_url"]))
+            self.assertNotIn("prowlarr", str(rss_plan["feed_url"]))
+            for _name, feeds in TV_RSS_FEEDS.items():
+                for url in feeds:
+                    self.assertTrue(url.startswith("https://"), url)
+                    self.assertNotIn("127.0.0.11", url)
 
         def test_doctor_lists_all_and_fails_when_tv_publics_missing(self):
             detail, ok = doctor_releases_detail(["ReelOS-tpb"])

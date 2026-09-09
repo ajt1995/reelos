@@ -217,17 +217,20 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         try:
             call(write_url, arr_key, method="POST", body=body)
             log_wire(f"{name} torznab {ix_name}")
-            return True
+            status = 200
         except urllib.error.HTTPError as e:
             err = e.read().decode()[:240] if e.fp else str(e)
             log_wire(f"{name} torznab {ix_name} {e.code}: {err}")
             # 400 + name is not attached. House #67 treated it as success and left *arr empty.
-            rows = read_arr_rows()
-            _, good = mod.arr_search_indexers_ok(rows, role)
-            return good
+            status = int(getattr(e, "code", 0) or 0)
         except NET_ERR as e:
             log_wire(f"{name} torznab {ix_name} {e}")
             return False
+        rows = read_arr_rows()
+        if getattr(mod, "arr_indexer_write_landed", None):
+            return mod.arr_indexer_write_landed(status, rows, role)
+        _, good = mod.arr_search_indexers_ok(rows, role)
+        return 200 <= status < 300 and good
 
     def put(iid, body):
         put_url = (

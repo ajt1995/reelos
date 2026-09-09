@@ -19,6 +19,25 @@ function joinParts(dir) {
     .join("");
 }
 
+test("stack: compose dns stays public (no 127.0.0.11) and OTA does not stamp heal red", () => {
+  const compose = read("compose/docker-compose.yml");
+  const dnsHosts = read("daemon/wire-engines.parts/03.part");
+  assert.match(compose, /dns:\n\s+- 1\.1\.1\.1/);
+  assert.doesNotMatch(compose, /127\.0\.0\.11/);
+  assert.match(dnsHosts, /DNS_HOSTS = """    dns:\n      - 1.1.1.1/);
+  assert.doesNotMatch(dnsHosts, /127\.0\.0\.11/);
+  const updater = read("daemon/reelos-update.sh");
+  const heal = updater.indexOf('if [ "${HEAL_FAIL:-0}" = "1" ]; then');
+  const stamp = updater.indexOf('echo "$REMOTE" >"$ROOT/VERSION"');
+  const applied = updater.indexOf('log "ReelOS $REMOTE applied."');
+  assert.ok(heal > 0 && stamp > heal && applied > stamp);
+  assert.match(updater, /not printing applied — jellyfin\/indexer heal red/);
+  assert.equal(read("install/bin/reelos-update.sh"), updater);
+  assert.equal(read("install/bin/public_indexers.py"), read("daemon/public_indexers.py"));
+  assert.equal(read("install/bin/wire-engines.parts/09.part"), read("daemon/wire-engines.parts/09.part"));
+  assert.equal(read("install/bin/wire-engines.parts/02.part"), read("daemon/wire-engines.parts/02.part"));
+});
+
 test("stack: VERSION / channel / stamps agree (1.2.50.13)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
