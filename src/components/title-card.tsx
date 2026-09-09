@@ -65,14 +65,25 @@ export function TitleCard({
 
 export function Row({
   label,
+  tone = "cyan",
   children,
 }: {
   label: string;
+  tone?: "cyan" | "magenta" | "gold";
   children: React.ReactNode;
 }) {
   return (
     <section className="mt-8">
-      <h2 className="mb-4 font-display text-lg font-medium tracking-tight text-cyan/90">{label}</h2>
+      <h2
+        className={cn(
+          "mb-4 font-display text-lg font-medium tracking-tight",
+          tone === "magenta" && "text-magenta",
+          tone === "gold" && "text-gold",
+          tone === "cyan" && "text-cyan/90",
+        )}
+      >
+        {label}
+      </h2>
       <div className="no-scrollbar flex gap-4 overflow-x-auto pb-2">{children}</div>
     </section>
   );

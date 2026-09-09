@@ -17,7 +17,7 @@ export function Chip({
         "inline-flex h-8 items-center gap-2 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",
         live && "text-live shadow-[var(--shadow-cyan)]",
         gold && "text-gold shadow-[var(--shadow-gold)]",
-        magenta && "text-magenta",
+        magenta && "text-magenta shadow-[var(--shadow-magenta)]",
       )}
     >
       {live ? <span className="live-dot" aria-hidden /> : null}
@@ -42,7 +42,7 @@ export function FilterChip({
       className={cn(
         "h-9 rounded-full px-4 text-sm transition-[background-color,box-shadow,color,transform] duration-150",
         active
-          ? "bg-gold text-gold-fg shadow-[var(--shadow-gold)]"
+          ? "bg-cyan/10 text-cyan shadow-[var(--shadow-cyan)]"
           : "bg-card text-muted shadow-[var(--shadow-border)] hover:text-foreground hover:shadow-[var(--shadow-border-hover)]",
       )}
     >

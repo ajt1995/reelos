@@ -114,7 +114,7 @@ export function HomeView() {
         </a>
       ) : null}
       <p className="mb-3 font-display text-[11px] tracking-[0.28em] text-cyan uppercase">
-        Install. Point. Stream.
+        On the shelf
       </p>
       <form
         className="relative mx-auto block w-full max-w-2xl"
@@ -163,7 +163,7 @@ export function HomeView() {
       </div>
 
       {continueWatch.length > 0 ? (
-        <Row label="Continue">
+        <Row label="Continue" tone="gold">
           {continueWatch.map(({ t, v }) => (t ? <TitleCard key={t.id} title={t} progress={v} /> : null))}
         </Row>
       ) : null}

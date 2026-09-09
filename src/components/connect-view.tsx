@@ -180,7 +180,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
       </Card>
 
       {intent.books !== false ? (
-        <Card>
+        <Card accent="magenta">
           <div className="w-full">
             <p className="font-display font-medium">Books (Kavita)</p>
             <p className="mt-1 text-sm text-muted">
@@ -188,7 +188,7 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
             </p>
             {box.ipv4 ? (
               <>
-                <p className="mt-4 break-all font-mono text-xl text-cyan">{`http://${box.ipv4}:5000`}</p>
+                <p className="mt-4 break-all font-mono text-xl text-magenta">{`http://${box.ipv4}:5000`}</p>
                 <a href={`http://${box.ipv4}:5000`} target="_blank" rel="noreferrer">
                   <Button className="mt-3" size="lg">
                     Open Kavita
@@ -322,11 +322,20 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
   );
 }
 
-function Card({ children, locked }: { children: React.ReactNode; locked?: boolean }) {
+function Card({
+  children,
+  locked,
+  accent,
+}: {
+  children: React.ReactNode;
+  locked?: boolean;
+  accent?: "magenta";
+}) {
   return (
     <div
       className={cn(
-        "card-glow mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]",
+        "card-glow mt-4 flex items-start gap-3 rounded-2xl bg-card px-5 py-4",
+        accent === "magenta" ? "shadow-[var(--shadow-magenta)]" : "shadow-[var(--shadow-border)]",
         locked && "opacity-50",
       )}
     >

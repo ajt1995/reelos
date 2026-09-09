@@ -108,10 +108,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             to="/settings"
-            className="flex size-11 items-center justify-center rounded-xl text-muted"
+            title="Settings"
             aria-label="Settings"
+            className="flex size-11 items-center justify-center rounded-xl text-cyan shadow-[var(--shadow-cyan)]"
           >
-            <Settings className="size-5" />
+            <Settings className="size-5 drop-shadow-[0_0_8px_rgb(0_229_255_/_0.7)]" />
           </Link>
         </header>
         <main className="min-w-0 flex-1">{children}</main>

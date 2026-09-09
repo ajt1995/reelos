@@ -446,7 +446,9 @@ function StepIntent() {
               className={cn(
                 "h-11 rounded-full px-5 text-sm font-medium transition-colors duration-150",
                 on
-                  ? "bg-gold text-gold-fg shadow-[var(--shadow-gold)]"
+                  ? c.key === "books"
+                    ? "bg-magenta/10 text-magenta shadow-[var(--shadow-magenta)]"
+                    : "bg-gold text-gold-fg shadow-[var(--shadow-gold)]"
                   : "bg-card text-muted shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
               )}
             >
