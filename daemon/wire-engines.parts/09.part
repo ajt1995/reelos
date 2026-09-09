@@ -34,7 +34,92 @@ def ensure_indexers_and_sync() -> int:
         sync_prowlarr_apps(prow_key)
     except Exception as e:
         log_wire(f"prowlarr sync {type(e).__name__} {e}")
+    try:
+        widen_sonarr_hybrid()
+    except Exception as e:
+        log_wire(f"sonarr hybrid {type(e).__name__} {e}")
+    try:
+        jf_token = jellyfin_token()
+        if jf_token:
+            want = jellyfin_want_libraries()
+            if ensure_jellyfin_libraries(jf_token, want):
+                log_wire("jellyfin libraries one dump path each")
+    except Exception as e:
+        log_wire(f"jellyfin libraries {type(e).__name__} {e}")
+    try:
+        research_missing_after_indexers()
+    except Exception as e:
+        log_wire(f"research-missing {type(e).__name__} {e}")
     return 0
+
+
+def widen_sonarr_hybrid() -> None:
+    """Hybrid is '1080p / 4K when available'. Stock Ultra-HD is 2160p-only and
+    rejects EZTV 720p WEB-DL. Widen in place so existing B99/TWD series keep
+    the same profile id."""
+    want_q = answers().get("quality") or "hybrid"
+    if want_q != "hybrid":
+        return
+    xml = COMPOSE / "configs" / "sonarr" / "config.xml"
+    key = wait_key(xml, 20)
+    if not key:
+        return
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "widen_hybrid_profile_items", None):
+        return
+    name = QUALITY.get(want_q, "Ultra-HD")
+    try:
+        profiles = call("http://127.0.0.1:8989/api/v3/qualityprofile", key) or []
+    except NET_ERR:
+        return
+    for p in profiles if isinstance(profiles, list) else []:
+        if p.get("name") != name:
+            continue
+        items = p.get("items") or []
+        if not mod.widen_hybrid_profile_items(items):
+            log_wire(f"sonarr {name} already allows HD+UHD")
+            return
+        body = dict(p)
+        body["items"] = items
+        body["upgradeAllowed"] = True
+        try:
+            call(
+                f"http://127.0.0.1:8989/api/v3/qualityprofile/{p.get('id')}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"sonarr {name} allows 720p/1080p/2160p (hybrid)")
+        except NET_ERR as e:
+            log_wire(f"sonarr hybrid profile {e}")
+        return
+
+
+def research_missing_after_indexers() -> None:
+    """Lock Decypharr client, then SeasonSearch 0-file seasons against new EZTV/ShowRSS."""
+    lock = ROOT / "bin" / "lock-download-clients.py"
+    if not lock.is_file():
+        lock = Path("/opt/reelos/bin/lock-download-clients.py")
+    if lock.is_file():
+        try:
+            subprocess.run([sys.executable, str(lock), "--quick"], check=False, timeout=20)
+            log_wire("download client locked before SeasonSearch")
+        except Exception as e:
+            log_wire(f"lock-clients {type(e).__name__} {e}")
+    sweep = ROOT / "bin" / "stuck-downloads.py"
+    if not sweep.is_file():
+        sweep = Path("/opt/reelos/bin/stuck-downloads.py")
+    if not sweep.is_file():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(sweep), "--research-missing"],
+            check=False,
+            timeout=90,
+        )
+        log_wire("SeasonSearch re-fired after indexer sync")
+    except Exception as e:
+        log_wire(f"research-missing {type(e).__name__} {e}")
 
 
 def extra_access() -> None:
@@ -355,6 +440,7 @@ def main() -> int:
                 ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
         if prow_key:
             sync_prowlarr_apps(prow_key)
+        widen_sonarr_hybrid()
     except Exception as e:
         log_wire(f"arr wire {type(e).__name__} {e}")
 

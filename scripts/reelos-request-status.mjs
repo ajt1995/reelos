@@ -125,6 +125,164 @@ export function spawnWireImport() {
   }
 }
 
+export function spawnLockClients() {
+  const script = [
+    "/opt/reelos/bin/lock-download-clients.py",
+    "/workspace/daemon/lock-download-clients.py",
+    "/workspace/install/bin/lock-download-clients.py",
+  ].find((p) => existsSync(p));
+  if (!script) return false;
+  try {
+    const child = spawn("python3", [script, "--quick"], { detached: true, stdio: "ignore" });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function fieldValue(fields, name) {
+  const hit = (fields || []).find((f) => f && f.name === name);
+  return hit?.value;
+}
+
+export function decypharrClientMissing(clients) {
+  const rows = Array.isArray(clients) ? clients : [];
+  return !rows.some((c) => {
+    if (!c || c.implementation !== "QBittorrent") return false;
+    const host = String(fieldValue(c.fields, "host") || "");
+    const port = Number(fieldValue(c.fields, "port"));
+    return host === "decypharr" && port === 8282;
+  });
+}
+
+export function sonarrDecypharrPayload() {
+  return {
+    enable: true,
+    protocol: "torrent",
+    priority: 1,
+    removeCompletedDownloads: false,
+    removeFailedDownloads: true,
+    name: "ReelOS-Decypharr",
+    implementation: "QBittorrent",
+    implementationName: "qBittorrent",
+    configContract: "QBittorrentSettings",
+    fields: [
+      { name: "host", value: "decypharr" },
+      { name: "port", value: 8282 },
+      { name: "useSsl", value: false },
+      { name: "urlBase", value: "" },
+      { name: "username", value: "" },
+      { name: "password", value: "" },
+      { name: "tvCategory", value: "sonarr" },
+    ],
+  };
+}
+
+export function hybridQualityShouldAllow(name) {
+  const n = String(name || "")
+    .toLowerCase()
+    .replace(/[\s_-]/g, "");
+  return ["720p", "1080p", "2160p", "4k"].some((tag) => n.includes(tag));
+}
+
+export function profileAllowsHd(profile) {
+  const walk = (items) => {
+    if (!Array.isArray(items)) return false;
+    for (const item of items) {
+      if (item?.items && walk(item.items)) return true;
+      const qname = String(item?.quality?.name || item?.name || "")
+        .toLowerCase()
+        .replace(/[\s_-]/g, "");
+      if (item?.allowed === true && (qname.includes("720p") || qname.includes("1080p"))) return true;
+    }
+    return false;
+  };
+  return walk(profile?.items);
+}
+
+export function pickFallbackProfile(profiles, currentId) {
+  const rows = Array.isArray(profiles) ? profiles : [];
+  const current = rows.find((p) => p?.id === currentId);
+  if (profileAllowsHd(current)) return { id: currentId, reason: "ok", name: current?.name };
+  for (const name of ["Any", "HD-1080p", "HD-720p"]) {
+    const hit = rows.find((p) => p?.name === name && p?.id != null);
+    if (hit) return { id: hit.id, reason: name.toLowerCase().replace(/-/g, ""), name };
+  }
+  const hd = rows.find((p) => profileAllowsHd(p) && p?.id != null);
+  if (hd) return { id: hd.id, reason: "hd-profile", name: hd.name };
+  return { id: currentId, reason: "none", name: current?.name };
+}
+
+export function widenHybridProfileItems(items) {
+  if (!Array.isArray(items)) return false;
+  let changed = false;
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    if (Array.isArray(item.items) && item.items.length) {
+      if (widenHybridProfileItems(item.items)) {
+        if (item.allowed !== true) {
+          item.allowed = true;
+          changed = true;
+        }
+      }
+      continue;
+    }
+    const qname = item.quality?.name || item.name || "";
+    if (hybridQualityShouldAllow(qname) && item.allowed !== true) {
+      item.allowed = true;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** SeasonSearch success + 0 files: no Decypharr client and/or Ultra-HD rejecting EZTV 720p. */
+export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series } = {}) {
+  const out = { clientAdded: false, profileFallback: "ok", profileWidened: false };
+  if (!sonarrKey || !series?.id) return out;
+  spawnLockClients();
+  const clients = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey);
+  if (decypharrClientMissing(clients)) {
+    const added = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey, 12000, {
+      method: "POST",
+      body: sonarrDecypharrPayload(),
+    });
+    out.clientAdded = Boolean(added);
+  }
+  const profiles = await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey);
+  const rows = Array.isArray(profiles) ? profiles : [];
+  const ultra = rows.find((p) => p?.name === "Ultra-HD");
+  if (ultra && !profileAllowsHd(ultra)) {
+    const items = structuredClone(ultra.items || []);
+    if (widenHybridProfileItems(items)) {
+      const widened = await fetchArr(
+        `http://127.0.0.1:8989/api/v3/qualityprofile/${ultra.id}`,
+        sonarrKey,
+        12000,
+        {
+          method: "PUT",
+          body: { ...ultra, items, upgradeAllowed: true },
+        },
+      );
+      out.profileWidened = Boolean(widened);
+    }
+  }
+  const refreshed = out.profileWidened
+    ? await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey)
+    : rows;
+  const fb = pickFallbackProfile(Array.isArray(refreshed) ? refreshed : rows, series.qualityProfileId);
+  out.profileFallback = fb.reason;
+  if (fb.reason !== "ok" && fb.id != null && fb.id !== series.qualityProfileId) {
+    const changed = await fetchArr(`http://127.0.0.1:8989/api/v3/series/${series.id}`, sonarrKey, 12000, {
+      method: "PUT",
+      body: { ...series, qualityProfileId: fb.id },
+    });
+    if (!changed) out.profileFallback = "failed";
+  }
+  return out;
+}
+
 export async function kickArrRecover({
   mediaType,
   tmdb,
@@ -141,6 +299,7 @@ export async function kickArrRecover({
   let movieId = null;
   let searched = false;
   let command = null;
+  let grabPath = null;
   if (type === "tv" && sonarrKey && tmdb) {
     const n = Number(season);
     const wantSeason = Number.isFinite(n) && n > 0 ? n : null;
@@ -164,12 +323,13 @@ export async function kickArrRecover({
         arrHasFile: hasFile,
       });
       if (plan.search) {
-        await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
+        grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
+        const posted = await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
           method: "POST",
           body: { name: "SeasonSearch", seriesId: hit.id, seasonNumber: wantSeason },
         });
-        searched = true;
-        command = "SeasonSearch";
+        searched = Boolean(posted);
+        command = searched ? "SeasonSearch" : null;
       }
     }
   } else if (type === "movie" && radarrKey && tmdb) {
@@ -186,17 +346,17 @@ export async function kickArrRecover({
       const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
       const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
       if (plan.search) {
-        await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
+        const posted = await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
           method: "POST",
           body: { name: "MoviesSearch", movieIds: [hit.id] },
         });
-        searched = true;
-        command = "MoviesSearch";
+        searched = Boolean(posted);
+        command = searched ? "MoviesSearch" : null;
       }
     }
   }
   const importSpawned = spawnImport();
-  return { ok: true, seriesId, movieId, searched, command, importSpawned };
+  return { ok: true, seriesId, movieId, searched, command, importSpawned, grabPath };
 }
 
 export async function kickTvSeasonRecover(opts = {}) {

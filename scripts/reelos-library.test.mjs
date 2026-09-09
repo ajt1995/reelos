@@ -10,11 +10,14 @@ import {
   canServeStale,
   createLibraryCache,
   createTokenCache,
+  dedupeLibraryTitles,
   libraryItemsUrl,
   mapJellyfinItem,
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
+  shelfTitleKey,
+  titleYear,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -58,6 +61,117 @@ test("mapJellyfinItem drops Overview and keeps real ids", () => {
   assert.equal(t.overview, "");
   assert.equal(t.jellyfinId, "jf-1");
   assert.equal(t.poster, "http://10.0.0.5:8096/Items/jf-1/Images/Primary");
+});
+
+test("Home shelf collapses duplicate Interstellar / Expanse / Museum rows", () => {
+  const interstellar = (id, poster) =>
+    titleFrom({
+      Id: id,
+      Name: "Interstellar",
+      Type: "Movie",
+      ProductionYear: 2014,
+      ProviderIds: { Tmdb: "157336" },
+    }, "10.0.0.5");
+  const museumBare = titleFrom({
+    Id: "jf-museum-empty",
+    Name: "Night at the Museum",
+    Type: "Movie",
+    ProductionYear: 2006,
+    ProviderIds: {},
+  });
+  museumBare.poster = "";
+  const museumArt = titleFrom({
+    Id: "jf-museum-art",
+    Name: "Night at the Museum",
+    Type: "Movie",
+    ProductionYear: 2006,
+    ProviderIds: { Tmdb: "1593" },
+  });
+  const expanseArt = titleFrom({
+    Id: "jf-expanse",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: { Tvdb: "280619", Tmdb: "63639" },
+  });
+  const expanseBare = titleFrom({
+    Id: "jf-expanse-ph",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: {},
+  });
+  expanseBare.poster = "";
+  const out = dedupeLibraryTitles([
+    interstellar("jf-a"),
+    interstellar("jf-b"),
+    interstellar("jf-c"),
+    museumBare,
+    museumArt,
+    museumBare,
+    expanseBare,
+    expanseArt,
+  ]);
+  const titles = out.map((t) => t.title);
+  assert.equal(titles.filter((n) => n === "Interstellar").length, 1);
+  assert.equal(titles.filter((n) => n === "Night at the Museum").length, 1);
+  assert.equal(titles.filter((n) => n === "The Expanse").length, 1);
+  assert.equal(out.find((t) => t.title === "Night at the Museum").jellyfinId, "jf-museum-art");
+  assert.equal(out.find((t) => t.title === "The Expanse").jellyfinId, "jf-expanse");
+  assert.equal(shelfTitleKey(interstellar("jf-a")), "movie:interstellar");
+});
+
+test("Home shelf keeps remakes: Dune 1984 is not a duplicate of Dune 2021", () => {
+  const dune = (id, year, tmdb) =>
+    titleFrom({
+      Id: id,
+      Name: "Dune",
+      Type: "Movie",
+      ProductionYear: year,
+      ProviderIds: { Tmdb: tmdb },
+    });
+  const out = dedupeLibraryTitles([dune("jf-dune-84", 1984, "841"), dune("jf-dune-21", 2021, "438631")]);
+  assert.equal(out.length, 2);
+  assert.deepEqual(
+    out.map((t) => t.year).sort(),
+    [1984, 2021],
+  );
+});
+
+test("an unmatched copy with no year still collapses into the matched row", () => {
+  const matched = titleFrom({
+    Id: "jf-wick",
+    Name: "John Wick",
+    Type: "Movie",
+    ProductionYear: 2014,
+    ProviderIds: { Tmdb: "245891" },
+  });
+  const bare = titleFrom({ Id: "jf-wick-2", Name: "John Wick", Type: "Movie", ProviderIds: {} });
+  bare.poster = "";
+  assert.equal(titleYear(bare), 0);
+  for (const order of [
+    [matched, bare, bare],
+    [bare, matched, bare],
+  ]) {
+    const out = dedupeLibraryTitles(order);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].jellyfinId, "jf-wick");
+    assert.equal(out[0].year, 2014);
+  }
+  // A no-year copy must not bridge two real remakes into one row.
+  const later = titleFrom({
+    Id: "jf-wick-4",
+    Name: "John Wick",
+    Type: "Movie",
+    ProductionYear: 2023,
+    ProviderIds: { Tmdb: "603692" },
+  });
+  const bridged = dedupeLibraryTitles([matched, bare, later]);
+  assert.equal(bridged.length, 2);
+  assert.deepEqual(
+    bridged.map((t) => t.year).sort(),
+    [2014, 2023],
+  );
 });
 
 test("token cache hits by user/PIN and expires", () => {

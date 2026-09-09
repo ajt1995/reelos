@@ -110,10 +110,33 @@ def prowlarr_app_sync_level() -> str:
     return "fullSync"
 
 
+SONARR_SYNC_CATEGORIES = (5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 8000)
+
+
+def prowlarr_app_fields(name: str, fields) -> list[dict]:
+    """TorrentRss reports only 8000/Other; Sonarr must opt into it to receive RSS feeds."""
+    out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
+    if name != "Sonarr":
+        return out
+    hit = next((f for f in out if f.get("name") == "syncCategories"), None)
+    if hit is None:
+        out.append({"name": "syncCategories", "value": list(SONARR_SYNC_CATEGORIES)})
+        return out
+    values = hit.get("value") if isinstance(hit.get("value"), list) else []
+    hit["value"] = list(dict.fromkeys([*values, 8000]))
+    return out
+
+
 def prowlarr_app_needs_update(app: dict | None) -> bool:
     if not app:
         return False
-    return str(app.get("syncLevel") or "") != prowlarr_app_sync_level()
+    if str(app.get("syncLevel") or "") != prowlarr_app_sync_level():
+        return True
+    if app.get("name") != "Sonarr":
+        return False
+    fields = app.get("fields") or []
+    sync = next((f for f in fields if isinstance(f, dict) and f.get("name") == "syncCategories"), None)
+    return not sync or 8000 not in (sync.get("value") or [])
 
 
 def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:
@@ -129,9 +152,11 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
         if app.get("id") is not None and prowlarr_app_needs_update(app):
             body = dict(app)
             body["syncLevel"] = prowlarr_app_sync_level()
+            body["fields"] = prowlarr_app_fields(name, body.get("fields"))
             try:
                 call(f"{url}/{app['id']}", prow_key, method="PUT", body=body)
-                log_wire(f"prowlarr app {name} fullSync")
+                suffix = " + 8000/Other" if name == "Sonarr" else ""
+                log_wire(f"prowlarr app {name} fullSync{suffix}")
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
                 pass
         return
@@ -141,11 +166,14 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
         "implementation": implementation,
         "implementationName": implementation,
         "configContract": f"{implementation}Settings",
-        "fields": [
-            {"name": "prowlarrUrl", "value": "http://prowlarr:9696"},
-            {"name": "baseUrl", "value": base_url},
-            {"name": "apiKey", "value": arr_key},
-        ],
+        "fields": prowlarr_app_fields(
+            name,
+            [
+                {"name": "prowlarrUrl", "value": "http://prowlarr:9696"},
+                {"name": "baseUrl", "value": base_url},
+                {"name": "apiKey", "value": arr_key},
+            ],
+        ),
     }
     try:
         call(url, prow_key, method="POST", body=body)

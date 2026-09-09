@@ -326,8 +326,28 @@ need scripts/reelos-lookup-plugin.mjs 'kickArrRecover'
 need daemon/wire-engines.parts/09.part 'seerr_needs_search_enable'
 need daemon/public_indexers.py 'ReelOS-eztv'
 need daemon/public_indexers.py 'ReelOS-showrss'
-need daemon/wire-engines.parts/04.part 'OTA: added missing public indexers'
+need daemon/public_indexers.py 'TorrentRssIndexer'
+need daemon/public_indexers.py 'doctor_releases_detail'
+need daemon/public_indexers.py 'apply_public_indexers'
+need daemon/wire-engines.parts/04.part 'OTA: public indexer add pass complete'
+need daemon/wire-engines.parts/04.part 'rss fallback'
+need daemon/wire-engines.parts/04.part 'apply_public_indexers'
+need daemon/wire-engines.parts/04.part 'schema {e} — RSS fallback'
 need daemon/wire-engines.parts/02.part 'fullSync'
+need daemon/wire-engines.parts/09.part 'widen_sonarr_hybrid'
+need daemon/wire-engines.parts/09.part 'research-missing'
+need daemon/wire-engines.parts/07.part 'extra_jellyfin_paths'
+need daemon/wire-engines.parts/07.part 'jellyfin_keep_paths'
+need daemon/wire-engines.parts/08.part 'remove_jellyfin_path'
+need scripts/reelos-library.mjs 'dedupeLibraryTitles'
+need scripts/reelos-library.mjs 'titleYear'
+need daemon/wire-engines.parts/09.part 'jellyfin libraries one dump path each'
+need daemon/reelos-doctor.py 'doctor_releases_detail'
+need daemon/lock-download-clients.py '--quick'
+need daemon/lock-download-clients.py 'wanted_apps'
+need install/systemd/reelos-lock-clients.service 'TimeoutStartSec=180'
+need scripts/reelos-request-status.mjs 'ensureTvGrabPath'
+need daemon/reelos-doctor.py 'Sonarr has no Decypharr client'
 need daemon/reelos-update.sh 'wire-engines.py" indexers'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
@@ -615,6 +635,14 @@ if [ -f "$ROOT/systemd/reelos-mnt-rshared.service" ]; then
   cp "$ROOT/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
   systemctl enable --now reelos-mnt-rshared >/dev/null 2>&1 || true
 fi
+if [ -f "$ROOT/systemd/reelos-lock-clients.service" ]; then
+  cp "$ROOT/systemd/reelos-lock-clients.service" /etc/systemd/system/reelos-lock-clients.service
+fi
+if [ -f "$ROOT/systemd/reelos-lock-clients.timer" ]; then
+  cp "$ROOT/systemd/reelos-lock-clients.timer" /etc/systemd/system/reelos-lock-clients.timer
+  systemctl enable --now reelos-lock-clients.timer >/dev/null 2>&1 || true
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell
 
 probe_home() {
@@ -925,7 +953,7 @@ PY
 if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
   if [ -x "$ROOT/bin/wire-engines.py" ]; then
-    log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS; YTS is movies-only)"
+    log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
     python3 "$ROOT/bin/wire-engines.py" indexers || log "indexers non-fatal"
     log "import after hops (TV/movies into the library)"
     python3 "$ROOT/bin/wire-engines.py" import || log "import non-fatal"

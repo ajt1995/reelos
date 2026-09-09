@@ -87,11 +87,46 @@ def library_symlink_path(name: str) -> str:
 
 def folder_has_symlinks(folder: dict, path: str | None = None) -> bool:
     want = (path or "/symlinks").rstrip("/")
-    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or [])]
+    return want in jellyfin_folder_paths(folder)
+
+
+def jellyfin_folder_paths(folder: dict) -> list[str]:
+    """Every media path Jellyfin is scanning for this virtual folder."""
+    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or []) if x]
     opts = folder.get("LibraryOptions") or {}
-    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or [])]
-    have = locs + paths
-    return want in have
+    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or []) if isinstance(p, dict)]
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in locs + paths:
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def library_local_path(name: str) -> str:
+    return {"Movies": "/media/movies", "Shows": "/media/tv", "Music": "/media/music"}.get(name, "")
+
+
+def jellyfin_keep_paths(name: str, a: dict | None = None) -> list[str]:
+    """The dump path, plus /media when the wizard asked to keep files on disk.
+
+    A `local`/`both` house has /media/movies as a real *arr root, so dropping it
+    would empty the library. Debrid-only houses never write there.
+    """
+    keep = [library_symlink_path(name)]
+    mode = (a or answers()).get("storageMode") or "both"
+    local = library_local_path(name)
+    if local and mode in ("local", "both"):
+        keep.append(local)
+    return keep
+
+
+def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
+    """House dupes: the /symlinks parent and the /mnt/symlinks bind of the same dumps."""
+    wanted = [keep] if isinstance(keep, str) else list(keep or [])
+    keep_n = {str(k).rstrip("/") for k in wanted if k}
+    return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
 
 
 JF_NETWORK_XML = (

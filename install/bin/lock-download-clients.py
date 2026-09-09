@@ -23,6 +23,13 @@ ALLOWED_HOST = "decypharr"
 ALLOWED_PORT = 8282
 ALLOWED_IMPL = "QBittorrent"
 
+# 1.2.50.6 oneshot had no TimeoutStartSec (systemd default 90s) and waited 90s
+# for every app including Lidarr, then sweep timeout=90. House movies+TV has no
+# Lidarr key → wait never breaks → unit FAILED before stuck-downloads SeasonSearch.
+WAIT_SEC = 12
+SWEEP_SEC = 45
+ONESHOT_DEFAULT_SEC = 90
+
 APPS = [
     {
         "name": "radarr",
@@ -155,6 +162,28 @@ def payload(app: dict) -> dict:
     }
 
 
+def wanted_apps(quick: bool = False, xml_exists=None) -> list:
+    """Do not wait on Lidarr when the house never enabled music."""
+    exists = xml_exists or (lambda p: Path(p).exists())
+    names = ("sonarr", "radarr") if quick else None
+    out = []
+    for app in APPS:
+        if names and app["name"] not in names:
+            continue
+        if exists(app["xml"]):
+            out.append(app)
+    if out:
+        return out
+    return [a for a in APPS if a["name"] in ("sonarr", "radarr")]
+
+
+def keys_ready(apps) -> bool:
+    present = [a for a in apps if Path(a["xml"]).exists()]
+    if not present:
+        return False
+    return all(api_key(a["xml"]) for a in present)
+
+
 def lock_app(app: dict) -> None:
     key = api_key(app["xml"])
     if not key:
@@ -195,22 +224,80 @@ def lock_app(app: dict) -> None:
 def main() -> int:
     if source() == "local-vpn":
         return 0
-    deadline = time.time() + 90
+    quick = "--quick" in sys.argv
+    apps = wanted_apps(quick)
+    deadline = time.time() + (8 if quick else WAIT_SEC)
     while time.time() < deadline:
-        for app in APPS:
+        for app in apps:
             lock_app(app)
-        if all(api_key(app["xml"]) for app in APPS):
+        if keys_ready(apps):
             break
-        time.sleep(3)
-    for app in APPS:
+        time.sleep(1 if quick else 2)
+    for app in apps:
         lock_app(app)
+    if quick:
+        return 0
     sweep = Path(__file__).resolve().with_name("stuck-downloads.py")
     if sweep.is_file():
         try:
-            subprocess.run([sys.executable, str(sweep)], check=False, timeout=90)
+            subprocess.run([sys.executable, str(sweep)], check=False, timeout=SWEEP_SEC)
         except Exception:
             pass
     return 0
+
+
+def _sandbox_lock_sonarr_missing_client():
+    """HTTP mock: Sonarr has no Decypharr client → lock POSTs ReelOS-Decypharr."""
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from tempfile import TemporaryDirectory
+    from threading import Thread
+
+    store = {"clients": [], "posts": []}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            return
+
+        def _json(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            if self.path.split("?")[0].endswith("/downloadclient"):
+                self._json(200, store["clients"])
+                return
+            self._json(404, {})
+
+        def do_POST(self):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(n) or b"{}")
+            store["posts"].append(body)
+            row = dict(body)
+            row["id"] = 7
+            store["clients"].append(row)
+            self._json(201, row)
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = httpd.server_address[1]
+        with TemporaryDirectory() as td:
+            xml = Path(td) / "config.xml"
+            xml.write_text("<Config><ApiKey>testkey</ApiKey></Config>\n")
+            app = dict(APPS[1])
+            app["xml"] = xml
+            app["base"] = f"http://127.0.0.1:{port}/api/v3"
+            lock_app(app)
+            return store["posts"], [p.get("name") for p in store["posts"]]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
 
 
 def _self_test() -> int:
@@ -239,6 +326,29 @@ def _self_test() -> int:
             fields = upsert_field([{"name": "host", "value": "decypharr"}], "tvCategory", "sonarr")
             self.assertEqual(field(fields, "tvCategory"), "sonarr")
             self.assertEqual(field(fields, "host"), "decypharr")
+
+        def test_quick_lock_skips_stuck_sweep(self):
+            src = Path(__file__).read_text()
+            self.assertIn('quick = "--quick" in sys.argv', src)
+            self.assertIn("if quick:", src)
+
+        def test_house_without_lidarr_does_not_block_the_unit(self):
+            apps = wanted_apps(False, xml_exists=lambda p: "lidarr" not in str(p))
+            self.assertEqual([a["name"] for a in apps], ["radarr", "sonarr"])
+            self.assertLess(WAIT_SEC + SWEEP_SEC, ONESHOT_DEFAULT_SEC)
+
+        def test_v12506_wait_all_apps_exceeded_oneshot_default(self):
+            """1.2.50.6: wait 90s for lidarr + sweep 90s vs default TimeoutStartSec=90."""
+            old_wait, old_sweep = 90, 90
+            self.assertGreater(old_wait + old_sweep, ONESHOT_DEFAULT_SEC)
+            self.assertGreater(old_wait, ONESHOT_DEFAULT_SEC - 1)
+
+        def test_sandbox_sonarr_posts_decypharr_when_missing(self):
+            posted, names = _sandbox_lock_sonarr_missing_client()
+            self.assertIn("ReelOS-Decypharr", names)
+            self.assertEqual(posted[0]["implementation"], "QBittorrent")
+            self.assertEqual(field(posted[0]["fields"], "host"), "decypharr")
+            self.assertEqual(int(field(posted[0]["fields"], "port")), 8282)
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Lock)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

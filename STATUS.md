@@ -1,51 +1,44 @@
 # STATUS.md
 
-**Reelist (public TV indexers on OTA).** 2026-09-09. House 1.2.50.5: Interstellar / John Wick / Expanse S01 **Available@100 via Decypharr**. B99 S01 + TWD S01 still `sonarr-missing@0`. Austin: thin indexers, not another symlink bug. Separate from Tron #52. Stamp **1.2.50.6**.
+**Reelist (EZTV/ShowRSS actually land).** 2026-09-09. House 1.2.50.6 doctor: releases **ReelOS-tpb only**. B99 S01 + TWD S01 still `sonarr-missing@0` after SeasonSearch. `#58` claimed OTA adds EZTV/ShowRSS; Cardigann schema miss + doctor first-pass-test hid it. Stamp **1.2.50.7**.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.6`
-- **Base:** latest `main` (merged #57 = 1.2.50.5)
+- **VERSION / channel:** `1.2.50.7`
+- **Base:** latest `main` (merged #58 = 1.2.50.6)
 - Did **not** take Tron chrome from #52
-- **What it is:** OTA Apply adds missing **public** Prowlarr defs (EZTV, ShowRSS, 1337x, TPB; YTS stays movies-only) and **fullSyncs** them to Sonarr. No private tracker credentials.
+- **What it is:** OTA POSTs EZTV/ShowRSS via TorrentRss, doctor lists every indexer, recover=1 upserts Sonarr→Decypharr and falls Ultra-HD back to Any so SeasonSearch can grab 720p, then re-searches 0-file seasons.
 
-## Verdict (indexer gap vs code vs slow)
+## QA five checks (house 1.2.50.6)
 
-| Title | House now | Why |
+| # | Ask | Root cause |
 | --- | --- | --- |
-| Interstellar, John Wick | Available@100 | YTS + TorBox + grab path work. Not a symlink bug. |
-| Expanse S01 | Available@100 | SeasonSearch **does fire**. Some TV indexer (TorBox/TPB/1337x) had a pack. |
-| B99 S01, TWD S01 | sonarr-missing@0 | Search likely ran and found nothing useful. YTS has **no TV**. EZTV was in git but **OTA skipped adding it**. Prowlarr→Sonarr was `addOnly`. |
+| 1 | Why lock-clients FAILED | Oneshot default **90s**. Script waited 90s for Lidarr (no key on movies+TV) then sweep 90s. Unit killed; OTA never copied the unit file. |
+| 2 | EZTV/ShowRSS POSTed + fullSync | **No.** Cardigann hint skip. Prowlarr TPB-only. |
+| 3 | SeasonSearch post-reboot | **Not from the unit** (died in Lidarr wait). `?recover=1` did fire; grabbed nothing (TPB + Ultra-HD). |
+| 4 | Quality cutoff | Hybrid → Ultra-HD 2160p-only. Sitcom 720p rejected. Expanse 4K matched. |
+| 5 | Wiring | Schema miss + doctor first-pass + wait-all-apps + recover search-only. |
 
-Not “just slow.” Movies and Expanse already finished. Residual after this stamp: publics still thin for some sitcom **Ultra-HD** season packs — then it stays missing (catalog), not a FUSE dump bug.
-
-## What ReelOS provisions
-
-1. **TorBox** official yml / `search-api.torbox.app` torznab (`ReelOS-torbox`).
-2. **Public first-party Prowlarr defs (no keys):** 1337x, TPB, YTS (movies), EZTV (TV), ShowRSS (TV).
-3. **Not shipped:** private trackers, passkeys, user-added Torznab from Settings (Connect paste still valid).
-
-1.2.24 added TPB/YTS so Request could grab while TorBox DNS was dead. Later commits listed EZTV in `PUBLIC_INDEXERS`, but `ensure_public_indexers` **returned immediately on `REELOS_OTA=1`**, and UI-only Apply never ran that hop. House that first-booted on YTS/TPB never got EZTV on Sonarr.
+Not a duplicate sandbox Sonarr. Not “just catalog.” Movies + Expanse already Available via Decypharr.
 
 ## Code changes
 
-1. **`public_indexers.py`** — roster + roles. Unit: YTS ⊄ TV; house-with-only-YTS still needs EZTV/ShowRSS.
-2. **`ensure_public_indexers`** — OTA **adds** missing defs; only live `indexer/test` is skipped.
-3. **`ensure_prowlarr_app`** — `fullSync`; PUT existing `addOnly` apps. `ApplicationIndexerSync`.
-4. **`wire-engines.py indexers`** — mailman runs this on **every** provisioned Apply (not only compose-changed).
-5. Kept from the first audit: MoviesSearch on movie POST, `?recover=1` includes movies, Seerr `preventSearch=false` PUT. Complementary; not why Expanse already landed.
+1. **`public_indexers.py`** — `apply_public_indexers` + HTTP sandbox: TPB-only Prowlarr, no Cardigann eztv, still POSTs ReelOS-eztv + ReelOS-showrss TorrentRss bodies. `doctor_releases_detail` fails closed if those names are missing.
+2. **`ensure_public_indexers`** — list indexers even if schema GET fails; Cardigann POST then **rss fallback**; `wire-engines.py indexers` skips live tests. Inline RSS if `public_indexers.py` is missing from bin/.
+3. **Doctor** — list every enabled indexer. No `indexer/test` first-pass. TPB-only → `ok: false`.
+4. **`widen_sonarr_hybrid`** — PUT Ultra-HD in place (same profile id on B99/TWD).
+5. **`--research-missing`** — lock Decypharr (`--quick`) then clear cooldown and SeasonSearch.
+6. **`kickArrRecover` / `?recover=1`** — POST ReelOS-Decypharr if missing; PUT series to Any when Ultra-HD disallows 720p; then SeasonSearch.
+8. **Jellyfin dupes** — Movies/Shows keep only `/symlinks/radarr|sonarr`. Drop `/media/movies`, parent `/symlinks`, `/mnt/symlinks/*`. Home shelf unique by title.
 
-## Residual (no code change)
-
-- Ultra-HD (`hybrid`) can reject EZTV’s typical 720p WEB-DL. Expanse 4K packs pass; B99 4K remuxes are rare on publics.
-- If Prowlarr has no EZTV/ShowRSS **schema**, we log `no schema` and skip — first-party Cardigann only.
-- TorBox rate limit / empty cache is house. Doctor hop / `releases-error.txt`.
+`/api/performance {low:true}` is Jellyfin trickplay. Not the grab path.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
 python3 daemon/public_indexers.py --self-test
+python3 daemon/reelos-doctor.py --self-test
 python3 daemon/stuck-downloads.py --self-test
 node --test scripts/public-indexers.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs scripts/wire-provision.test.mjs scripts/stuck-downloads.test.mjs
 ```
@@ -53,9 +46,9 @@ node --test scripts/public-indexers.test.mjs scripts/reelos-request-status.test.
 ## Owner / house Apply
 
 1. Merge to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.6`. Expect `ReelOS 1.2.50.6 applied.`
-3. Prowlarr: ReelOS-eztv / ReelOS-showrss present if schema exists. Sonarr indexers include them.
-4. B99 S01 / TWD S01: next lock-clients tick SeasonSearchs. Available if a public/TorBox pack matches the profile. Still 0% + `sonarr-missing` means the publics have no matching release — add your own indexer in Settings if you have one. Do not expect us to invent a private key.
+2. `cat /opt/reelos/VERSION` → `1.2.50.7`. Expect `ReelOS 1.2.50.7 applied.`
+3. Doctor releases: must include `ReelOS-eztv` and `ReelOS-showrss`. If you still see only `ReelOS-tpb (missing …)` the hop failed — Rewire engines, do not shrug catalog.
+4. B99 S01 / TWD S01: Apply + optional `GET /api/request?recover=1`. Doctor Download lock = `Sonarr → Decypharr`. Available if EZTV/ShowRSS have a 720p+ pack. Interstellar / John Wick / Expanse stay Available.
 
 ## Do not
 

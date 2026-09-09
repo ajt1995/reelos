@@ -5,4 +5,7 @@ ConditionPathExists=/opt/reelos/bin/lock-download-clients.py
 
 [Service]
 Type=oneshot
+# 1.2.50.6 omitted this (systemd default 90s). Script waited 90s for Lidarr
+# then sweep 90s → unit FAILED; SeasonSearch in stuck-downloads never ran.
+TimeoutStartSec=180
 ExecStart=/usr/bin/python3 /opt/reelos/bin/lock-download-clients.py

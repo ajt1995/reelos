@@ -160,38 +160,108 @@ def _public_roster() -> list:
     return [(n, hints) for n, hints in PUBLIC_INDEXERS]
 
 
+def _post_public_indexer(prow_key: str, name: str, body: dict, via: str) -> bool:
+    try:
+        call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+        log_wire(f"public indexer added {name} via {via}")
+        return True
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:300] if e.fp else str(e)
+        log_wire(f"public indexer {name} {e.code}: {err}")
+        if e.code == 400 and name.lower() in err.lower():
+            return indexer_enabled(prow_key, name)
+        return False
+    except NET_ERR as e:
+        log_wire(f"public indexer {name} {e}")
+        return False
+
+
+def _hard_tv_rss_body(name: str, url: str) -> dict:
+    """Inline TorrentRss when public_indexers.py is missing from bin/."""
+    return {
+        "enable": True,
+        "appProfileId": 1,
+        "priority": 25,
+        "name": name,
+        "protocol": "torrent",
+        "implementation": "TorrentRssIndexer",
+        "implementationName": "Torrent RSS Feed",
+        "configContract": "TorrentRssIndexerSettings",
+        "fields": [
+            {"name": "baseUrl", "value": url},
+            {"name": "allowZeroSize", "value": True},
+        ],
+    }
+
+
 def ensure_public_indexers(prow_key: str) -> None:
-    """Add missing public defs even on OTA. House 1.2.24 shipped YTS; EZTV never landed."""
-    ota = bool(os.environ.get("REELOS_OTA"))
+    """Add missing publics even on OTA. Cardigann miss → TorrentRss RSS fallback.
+
+    Schema GET must not abort the hop: house Prowlarr often has native TPB +
+    TorrentRss and no Cardigann `eztv`/`showrss`. `wire-engines.py indexers`
+    runs even when compose.yml is unchanged (UI/bin OTA). lock-clients does
+    not gate this hop.
+    """
+    ota = bool(os.environ.get("REELOS_OTA")) or "indexers" in sys.argv
     wait_prowlarr_api(prow_key, 60)
     try:
-        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
         have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
     except NET_ERR as e:
         log_wire(f"public indexers list {e}")
         return
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"public indexer schema {e} — RSS fallback")
+        schemas = []
     if not isinstance(schemas, list):
         schemas = []
     rows = have if isinstance(have, list) else []
-    names = {ix.get("name") for ix in rows}
-    for name, hints in _public_roster():
-        if name in names:
-            log_wire(f"public indexer exists {name}")
-            continue
-        hit = next((s for s in schemas if any(h in _schema_blob(s) for h in hints)), None)
-        if not hit:
-            log_wire(f"public indexer no schema {name}")
-            continue
-        try:
-            _add_from_schema(prow_key, name, "", hit)
-            log_wire(f"public indexer added {name}")
-        except urllib.error.HTTPError as e:
-            err = e.read().decode()[:300] if e.fp else str(e)
-            log_wire(f"public indexer {name} {e.code}: {err}")
-        except NET_ERR as e:
-            log_wire(f"public indexer {name} {e}")
+    mod = _load_public_indexers()
+
+    def _post(name, body, via):
+        return _post_public_indexer(prow_key, name, body, via)
+
+    if mod and getattr(mod, "apply_public_indexers", None):
+        mod.apply_public_indexers(rows, schemas, post=_post, log=log_wire)
+    else:
+        names = {ix.get("name") for ix in rows if isinstance(ix, dict)}
+        for name, url in (
+            ("ReelOS-eztv", "https://eztvx.to/ezrss.xml"),
+            ("ReelOS-showrss", "https://showrss.info/other/all.rss"),
+        ):
+            if name in names:
+                continue
+            _post_public_indexer(prow_key, name, _hard_tv_rss_body(name, url), "rss fallback")
+    try:
+        have2v = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        have2v = []
+    if mod and getattr(mod, "doctor_releases_detail", None):
+        detail, ready = mod.doctor_releases_detail(mod.enabled_indexer_names(have2v))
+        log_wire(f"public TV indexers {detail}")
+        if not ready:
+            for req in mod.required_tv_public_names():
+                have_names = [ix.get("name") for ix in have2v if isinstance(ix, dict)]
+                if req in have_names:
+                    continue
+                feeds = mod.rss_feeds_for(req)
+                if not feeds:
+                    continue
+                body = mod.torrent_rss_body(
+                    req,
+                    feeds[0],
+                    mod.match_schema(schemas, mod.RSS_SCHEMA_HINTS),
+                )
+                _post_public_indexer(prow_key, req, body, "rss fallback")
+            try:
+                have2v = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            except NET_ERR:
+                have2v = []
+            detail, _ready = mod.doctor_releases_detail(mod.enabled_indexer_names(have2v))
+            log_wire(f"public TV indexers {detail}")
     if ota:
-        log_wire("OTA: added missing public indexers, skip live tests")
+        log_wire("OTA: public indexer add pass complete, skip live tests")
         return
     tested = []
     try:
