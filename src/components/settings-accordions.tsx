@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HOSTNAME } from "@/lib/catalog";
 import {
@@ -155,6 +155,86 @@ export function AccessPanel({ lan }: { lan: string }) {
       </p>
       <p className="mt-2 text-sm text-muted">Watching: {frontendLabel[answers.frontend]}</p>
     </>
+  );
+}
+
+export function WatchReadPanel() {
+  const [box, setBox] = useState<{
+    ipv4?: string;
+    watch?: string;
+    tailscaleIp?: string | null;
+    tailscaleDns?: string | null;
+    tailscaleUp?: boolean;
+  }>({});
+  useEffect(() => {
+    void fetch("/api/box", { cache: "no-store" })
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            ipv4?: string;
+            watch?: string;
+            tailscaleIp?: string | null;
+            tailscaleDns?: string | null;
+            tailscaleUp?: boolean;
+          }>,
+      )
+      .then((b) => setBox(b))
+      .catch(() => {});
+  }, []);
+
+  const lan = box.ipv4 || HOSTNAME;
+  const jellyfin = box.watch || `http://${lan}:8096`;
+  const kavita = `http://${lan}:5000`;
+  const away = box.tailscaleDns || box.tailscaleIp || null;
+  const awayJellyfin = away ? `http://${away}:8096` : null;
+  const awayKavita = away ? `http://${away}:5000` : null;
+
+  return (
+    <div className="space-y-4 text-sm text-muted">
+      <div>
+        <p className="font-display text-foreground">Movies and TV</p>
+        <p className="mt-1">
+          Request here. Watch in Jellyfin — phone browser or the Jellyfin app, same House user.
+          LAN:{" "}
+          <a href={jellyfin} target="_blank" rel="noreferrer" className="font-mono text-xs text-cyan">
+            {jellyfin}
+          </a>
+          {awayJellyfin ? (
+            <>
+              . Away (Tailscale / MagicDNS):{" "}
+              <a href={awayJellyfin} target="_blank" rel="noreferrer" className="font-mono text-xs text-gold">
+                {awayJellyfin}
+              </a>
+            </>
+          ) : (
+            <>
+              . Away: enable Tailscale in Connect, then open Jellyfin on that host.
+            </>
+          )}
+        </p>
+      </div>
+      <div>
+        <p className="font-display text-foreground">Books</p>
+        <p className="mt-1">
+          Not TorBox. Files land in{" "}
+          <span className="font-mono text-xs text-magenta">/srv/media/books</span>. Read in Kavita
+          on{" "}
+          <a href={kavita} target="_blank" rel="noreferrer" className="font-mono text-xs text-magenta">
+            {kavita}
+          </a>{" "}
+          or <span className="font-mono text-xs">/kavita</span>
+          {awayKavita ? (
+            <>
+              . Away:{" "}
+              <a href={awayKavita} target="_blank" rel="noreferrer" className="font-mono text-xs text-gold">
+                {awayKavita}
+              </a>
+            </>
+          ) : null}
+          .
+        </p>
+      </div>
+    </div>
   );
 }
 

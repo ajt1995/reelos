@@ -38,6 +38,8 @@ Design dialect after polish: chrome select (FilterChip) = cyan glow; commit CTAs
 
 `#45`–`#51` already on the rebase base. Mailman overlays house `compose/configs/.` so `#49` seed cannot nest. `#50` importPending + container ENOTCONN / `reelos-mnt-rshared.service`. Stack smoke and mailman canaries stay. Search hop red is still OK.
 
+Settings → **How to watch / read**: Jellyfin on the phone (LAN or Tailscale/MagicDNS) for movies/TV; Kavita `:5000` / `/kavita` for books in `/srv/media/books`. Not TorBox. Connect still holds the QR clutter.
+
 ## Owner / house Apply
 
 1. Merge to **main**. Channel tarball stays `main.tar.gz`. VERSION **1.2.51**.
