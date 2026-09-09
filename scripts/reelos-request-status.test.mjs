@@ -226,6 +226,51 @@ test("kickArrRecover POSTs Decypharr client and Any profile before SeasonSearch"
   assert.ok(widened || seriesPut?.body?.qualityProfileId === 1);
 });
 
+test("recover does not claim failed Sonarr writes succeeded", async () => {
+  const result = await kickTvSeasonRecover({
+    tmdb: 48891,
+    season: 1,
+    sonarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => false,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      if (String(url).includes("/series") && method === "GET") {
+        return [
+          {
+            id: 3,
+            tmdbId: 48891,
+            qualityProfileId: 6,
+            seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 0 } }],
+          },
+        ];
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") return [];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [
+          {
+            id: 6,
+            name: "Ultra-HD",
+            items: [
+              { quality: { name: "WEBDL-720p" }, allowed: false },
+              { quality: { name: "WEBDL-2160p" }, allowed: true },
+            ],
+          },
+          { id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] },
+        ];
+      }
+      return null;
+    },
+  });
+  assert.equal(result.searched, false);
+  assert.equal(result.command, null);
+  assert.equal(result.importSpawned, false);
+  assert.equal(result.grabPath?.clientAdded, false);
+  assert.equal(result.grabPath?.profileWidened, false);
+  assert.equal(result.grabPath?.profileFallback, "failed");
+});
+
 test("kickTvSeasonRecover does not search a season that already has files", async () => {
   const posts = [];
   const result = await kickTvSeasonRecover({

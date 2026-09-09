@@ -244,11 +244,11 @@ export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series }
   spawnLockClients();
   const clients = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey);
   if (decypharrClientMissing(clients)) {
-    await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey, 12000, {
+    const added = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey, 12000, {
       method: "POST",
       body: sonarrDecypharrPayload(),
     });
-    out.clientAdded = true;
+    out.clientAdded = Boolean(added);
   }
   const profiles = await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey);
   const rows = Array.isArray(profiles) ? profiles : [];
@@ -256,11 +256,16 @@ export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series }
   if (ultra && !profileAllowsHd(ultra)) {
     const items = ultra.items || [];
     if (widenHybridProfileItems(items)) {
-      await fetchArr(`http://127.0.0.1:8989/api/v3/qualityprofile/${ultra.id}`, sonarrKey, 12000, {
-        method: "PUT",
-        body: { ...ultra, items, upgradeAllowed: true },
-      });
-      out.profileWidened = true;
+      const widened = await fetchArr(
+        `http://127.0.0.1:8989/api/v3/qualityprofile/${ultra.id}`,
+        sonarrKey,
+        12000,
+        {
+          method: "PUT",
+          body: { ...ultra, items, upgradeAllowed: true },
+        },
+      );
+      out.profileWidened = Boolean(widened);
     }
   }
   const refreshed = out.profileWidened
@@ -269,10 +274,11 @@ export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series }
   const fb = pickFallbackProfile(Array.isArray(refreshed) ? refreshed : rows, series.qualityProfileId);
   out.profileFallback = fb.reason;
   if (fb.reason !== "ok" && fb.id != null && fb.id !== series.qualityProfileId) {
-    await fetchArr(`http://127.0.0.1:8989/api/v3/series/${series.id}`, sonarrKey, 12000, {
+    const changed = await fetchArr(`http://127.0.0.1:8989/api/v3/series/${series.id}`, sonarrKey, 12000, {
       method: "PUT",
       body: { ...series, qualityProfileId: fb.id },
     });
+    if (!changed) out.profileFallback = "failed";
   }
   return out;
 }
@@ -318,12 +324,12 @@ export async function kickArrRecover({
       });
       if (plan.search) {
         grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
-        await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
+        const posted = await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
           method: "POST",
           body: { name: "SeasonSearch", seriesId: hit.id, seasonNumber: wantSeason },
         });
-        searched = true;
-        command = "SeasonSearch";
+        searched = Boolean(posted);
+        command = searched ? "SeasonSearch" : null;
       }
     }
   } else if (type === "movie" && radarrKey && tmdb) {
@@ -340,12 +346,12 @@ export async function kickArrRecover({
       const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
       const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
       if (plan.search) {
-        await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
+        const posted = await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
           method: "POST",
           body: { name: "MoviesSearch", movieIds: [hit.id] },
         });
-        searched = true;
-        command = "MoviesSearch";
+        searched = Boolean(posted);
+        command = searched ? "MoviesSearch" : null;
       }
     }
   }
