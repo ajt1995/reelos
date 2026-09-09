@@ -9,15 +9,15 @@
 - Did **not** take Tron chrome from #52
 - **What it is:** OTA POSTs EZTV/ShowRSS via TorrentRss, doctor lists every indexer, recover=1 upserts Sonarr→Decypharr and falls Ultra-HD back to Any so SeasonSearch can grab 720p, then re-searches 0-file seasons.
 
-## Why TV defs never appear (5 hypotheses)
+## QA five checks (house 1.2.50.6)
 
-| # | Hypothesis | 1.2.50.6 |
+| # | Ask | Root cause |
 | --- | --- | --- |
-| 1 | OTA hop not run / early-exit | Hop runs (`wire-engines.py indexers` after hops, compose-unchanged included). Early-exit only if no Prowlarr key, or schema+list in one try (schema fail aborted adds — fixed). |
-| 2 | Schema miss eztv/showrss | **Why they never POSTed.** Cardigann hints only. Native TorrentRss does not contain `eztv`. |
-| 3 | fullSync never pushes to Sonarr | Nothing on Prowlarr to push. Sync is still `fullSync`. |
-| 4 | Doctor lists a subset | First `indexer/test` pass → **ReelOS-tpb**. 1.2.50.7 lists all; TPB-only is red. |
-| 5 | lock-clients blocks indexer hop | **No.** Unit FAILED on boot. Indexer hop does not wait on it. |
+| 1 | Why lock-clients FAILED | Oneshot default **90s**. Script waited 90s for Lidarr (no key on movies+TV) then sweep 90s. Unit killed; OTA never copied the unit file. |
+| 2 | EZTV/ShowRSS POSTed + fullSync | **No.** Cardigann hint skip. Prowlarr TPB-only. |
+| 3 | SeasonSearch post-reboot | **Not from the unit** (died in Lidarr wait). `?recover=1` did fire; grabbed nothing (TPB + Ultra-HD). |
+| 4 | Quality cutoff | Hybrid → Ultra-HD 2160p-only. Sitcom 720p rejected. Expanse 4K matched. |
+| 5 | Wiring | Schema miss + doctor first-pass + wait-all-apps + recover search-only. |
 
 Not a duplicate sandbox Sonarr. Not “just catalog.” Movies + Expanse already Available via Decypharr.
 
@@ -29,7 +29,7 @@ Not a duplicate sandbox Sonarr. Not “just catalog.” Movies + Expanse already
 4. **`widen_sonarr_hybrid`** — PUT Ultra-HD in place (same profile id on B99/TWD).
 5. **`--research-missing`** — lock Decypharr (`--quick`) then clear cooldown and SeasonSearch.
 6. **`kickArrRecover` / `?recover=1`** — POST ReelOS-Decypharr if missing; PUT series to Any when Ultra-HD disallows 720p; then SeasonSearch.
-7. **lock-clients.service** — `TimeoutStartSec=180`; OTA copies the unit to systemd.
+7. **lock-clients.service** — `TimeoutStartSec=180`; OTA copies the unit; `wanted_apps` skips missing Lidarr; wait+sweep stay under the 90s oneshot default so SeasonSearch actually runs after boot.
 
 `/api/performance {low:true}` is Jellyfin trickplay. Not the grab path.
 

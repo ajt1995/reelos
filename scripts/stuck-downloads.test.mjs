@@ -21,6 +21,8 @@ test("lock-clients timer invokes the stuck-download sweep after the client lock"
   assert.match(daemon, /stuck-downloads\.py/);
   assert.match(lock, /removeCompletedDownloads": False/);
   assert.match(daemon, /--quick/);
+  assert.match(daemon, /wanted_apps/);
+  assert.match(daemon, /WAIT_SEC/);
   const unit = readFileSync(join(root, "install/systemd/reelos-lock-clients.service"), "utf8");
   const first = readFileSync(join(root, "firstboot/reelos-lock-clients.service"), "utf8");
   assert.equal(unit, first);

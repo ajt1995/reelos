@@ -14,9 +14,15 @@ House doctor releases = **ReelOS-tpb only**. Not lock-clients. Not catalog.
 | 4 | Doctor only listing a subset | Also true on 1.2.50.6 (first live-test pass). 1.2.50.7 lists every enabled name and fails closed if EZTV/ShowRSS missing. |
 | 5 | lock-clients failure blocking the indexer hop | **False.** Boot unit FAILED does not skip `indexers`. Lock runs after adds (`--quick` before SeasonSearch only). |
 
-1.2.50.7 POSTs TorrentRss RSS when Cardigann YAML is missing. Schema GET failure no longer aborts the hop. HTTP sandbox: TPB-only Prowlarr + no eztv schema → POST `ReelOS-eztv` + `ReelOS-showrss`.
+## QA five checks (house 1.2.50.6)
 
-recover=1 still locks Decypharr + falls Ultra-HD back to Any so a 720p pack can grab.
+1. **Why lock-clients FAILED.** Unit had **no** `TimeoutStartSec` (systemd oneshot default **90s**). Script waited **90s for every app including Lidarr**, then `stuck-downloads` timeout **90s**. Movies+TV house has no Lidarr key → wait never breaks → systemd kills the unit. Sweep (SeasonSearch) never runs. OTA 1.2.50.6 did **not** copy the unit file.
+2. **EZTV/ShowRSS POSTed + fullSync.** No. `#58` skipped adds unless Cardigann schema contained `eztv`/`showrss`. Native TorrentRss does not. Prowlarr stayed TPB-only; Sonarr had nothing to sync.
+3. **SeasonSearch post-reboot.** Not from lock-clients (unit died in the Lidarr wait). `?recover=1` **did** fire SeasonSearch (`searched=true`) against TPB-only + Ultra-HD → 0 files.
+4. **Quality cutoff.** Wizard hybrid → Sonarr Ultra-HD (2160p-only). EZTV 720p WEB-DL rejected. Expanse 4K packs pass.
+5. **Wiring.** Schema miss; doctor first-pass hid missing EZTV; lock wait-all-apps; recover did not upsert Decypharr or fall back quality.
+
+1.2.50.7: skip missing Lidarr; wait+sweep **< 90s**; `TimeoutStartSec=180`; OTA copies the unit; HTTP sandbox POSTs `ReelOS-Decypharr` when missing; TorrentRss EZTV/ShowRSS; Ultra-HD → 720p or Any.
 
 ## xorriso — do this
 
