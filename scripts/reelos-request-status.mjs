@@ -50,10 +50,63 @@ async function arrJson(url, key, ms = 10000, { method = "GET", body } = {}) {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /** After a TV POST: search if the season has no files. Always relink+ManualImport (dump may appear). */
 export function planTvPostRecover({ mediaType, season, arrHasSeasonFile = false } = {}) {
   if (mediaType !== "tv") return { search: false, import: false };
   return { search: !arrHasSeasonFile && season != null, import: true };
+}
+
+/** Movie POST/reuse must MoviesSearch. TV stays SeasonSearch. Seerr add is async. */
+export function planArrPostRecover({ mediaType, season, arrHasFile = false } = {}) {
+  if (mediaType === "movie") return { search: !arrHasFile, import: true };
+  return planTvPostRecover({ mediaType, season, arrHasSeasonFile: arrHasFile });
+}
+
+/** House: Seerr 200 then *arr still empty for a few seconds. Poll, do not skip search. */
+export async function waitForArrRow({
+  fetchArr = arrJson,
+  url,
+  key,
+  match,
+  tries = 6,
+  delayMs = 400,
+} = {}) {
+  if (!url || !key || typeof match !== "function") return null;
+  for (let i = 0; i < tries; i++) {
+    const rows = await fetchArr(url, key);
+    const list = Array.isArray(rows) ? rows : [];
+    const hit = list.find(match);
+    if (hit) return hit;
+    if (i < tries - 1 && delayMs > 0) await sleep(delayMs);
+  }
+  return null;
+}
+
+export function listMissingRecoverTargets({ series = [], movies = [] } = {}) {
+  const out = [];
+  for (const s of series || []) {
+    const tmdb = s?.tmdbId;
+    if (tmdb == null) continue;
+    for (const season of s.seasons || []) {
+      const n = Number(season?.seasonNumber);
+      const files = Number(season?.statistics?.episodeFileCount || 0);
+      if (!Number.isFinite(n) || n <= 0 || files > 0) continue;
+      if (season?.monitored === false || s.monitored === false) continue;
+      out.push({ mediaType: "tv", tmdb, season: n });
+      break;
+    }
+  }
+  for (const m of movies || []) {
+    if (!m || m.tmdbId == null || m.monitored === false) continue;
+    const files = Number(m.statistics?.movieFileCount || 0);
+    if (m.hasFile === true || files > 0) continue;
+    out.push({ mediaType: "movie", tmdb: m.tmdbId });
+  }
+  return out;
 }
 
 export function spawnWireImport() {
@@ -72,45 +125,82 @@ export function spawnWireImport() {
   }
 }
 
-export async function kickTvSeasonRecover({
+export async function kickArrRecover({
+  mediaType,
   tmdb,
   season,
   fetchArr = arrJson,
   spawnImport = spawnWireImport,
   sonarrKey = arrApiKey("sonarr"),
+  radarrKey = arrApiKey("radarr"),
+  waitTries = 6,
+  waitMs = 400,
 } = {}) {
-  const key = sonarrKey;
-  const n = Number(season);
-  const wantSeason = Number.isFinite(n) && n > 0 ? n : null;
+  const type = mediaType === "tv" ? "tv" : mediaType === "movie" ? "movie" : null;
   let seriesId = null;
+  let movieId = null;
   let searched = false;
-  if (key && tmdb) {
-    const series = await fetchArr("http://127.0.0.1:8989/api/v3/series", key);
-    const rows = Array.isArray(series) ? series : [];
-    const hit = rows.find((s) => String(s?.tmdbId) === String(tmdb));
+  let command = null;
+  if (type === "tv" && sonarrKey && tmdb) {
+    const n = Number(season);
+    const wantSeason = Number.isFinite(n) && n > 0 ? n : null;
+    const hit = await waitForArrRow({
+      fetchArr,
+      url: "http://127.0.0.1:8989/api/v3/series",
+      key: sonarrKey,
+      match: (s) => String(s?.tmdbId) === String(tmdb),
+      tries: waitTries,
+      delayMs: waitMs,
+    });
     if (hit?.id) {
       seriesId = hit.id;
-      const titleId = `tmdb-tv-${tmdb}`;
       const hasFile = arrHasFile(
-        { titleId, season: wantSeason },
-        buildArrIndex({ series: rows }),
+        { titleId: `tmdb-tv-${tmdb}`, season: wantSeason },
+        buildArrIndex({ series: [hit] }),
       );
-      const plan = planTvPostRecover({
+      const plan = planArrPostRecover({
         mediaType: "tv",
         season: wantSeason,
-        arrHasSeasonFile: hasFile,
+        arrHasFile: hasFile,
       });
       if (plan.search) {
-        await fetchArr("http://127.0.0.1:8989/api/v3/command", key, 12000, {
+        await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
           method: "POST",
           body: { name: "SeasonSearch", seriesId: hit.id, seasonNumber: wantSeason },
         });
         searched = true;
+        command = "SeasonSearch";
+      }
+    }
+  } else if (type === "movie" && radarrKey && tmdb) {
+    const hit = await waitForArrRow({
+      fetchArr,
+      url: "http://127.0.0.1:7878/api/v3/movie",
+      key: radarrKey,
+      match: (m) => String(m?.tmdbId) === String(tmdb),
+      tries: waitTries,
+      delayMs: waitMs,
+    });
+    if (hit?.id) {
+      movieId = hit.id;
+      const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
+      const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
+      if (plan.search) {
+        await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
+          method: "POST",
+          body: { name: "MoviesSearch", movieIds: [hit.id] },
+        });
+        searched = true;
+        command = "MoviesSearch";
       }
     }
   }
   const importSpawned = spawnImport();
-  return { ok: true, seriesId, searched, importSpawned };
+  return { ok: true, seriesId, movieId, searched, command, importSpawned };
+}
+
+export async function kickTvSeasonRecover(opts = {}) {
+  return kickArrRecover({ ...opts, mediaType: "tv" });
 }
 
 let cache = { at: 0, facts: null };

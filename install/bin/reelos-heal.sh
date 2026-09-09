@@ -69,6 +69,7 @@ done
 pull "$RAW/daemon/relink_dumps.py" "$ROOT/bin/relink_dumps.py" || true
 pull "$RAW/daemon/sonarr_manual_import.py" "$ROOT/bin/sonarr_manual_import.py" || true
 pull "$RAW/daemon/stuck-downloads.py" "$ROOT/bin/stuck-downloads.py" || true
+pull "$RAW/daemon/public_indexers.py" "$ROOT/bin/public_indexers.py" || true
 
 if [ -f "$COMPOSE/.env" ]; then
   set -a

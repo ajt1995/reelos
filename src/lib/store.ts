@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.5";
-export const SHIPPED_VERSION = "1.2.50.5";
+export const LATEST_VERSION = "1.2.50.6";
+export const SHIPPED_VERSION = "1.2.50.6";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.6: OTA adds EZTV/ShowRSS (YTS is movies-only) and fullSyncs Prowlarr→Sonarr. SeasonSearch still fires for 0-file TV. MoviesSearch on movie POST. Not 1.2.51 (Tron #52).",
   "1.2.50.5: Discover search surfaces Seerr timeout/empty honestly. TV POST is one season (never all). No Cached glow on live TMDB ids. QA gate: 2 movies + 2 TV seasons 2012–2016 search→request→honest 0%. Not 1.2.51 (Tron #52).",
   "1.2.50.4: SeasonSearch on empty TV season POST/reuse. GET /api/request?recover=1. stuck-downloads searches 0-file monitored seasons. Keep Decypharr dumps. Honest unfinished TV when Seerr is empty. Not 1.2.51 (Tron #52).",
   "1.2.50.3: Apply Stage 3 heartbeat. Relink recreates empty sonarr/radarr dumps from FUSE. Title page season-honest, no 42%. Not 1.2.51 (Tron #52).",

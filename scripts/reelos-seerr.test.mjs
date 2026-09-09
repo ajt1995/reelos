@@ -603,7 +603,8 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /loadPresenceFacts/);
   assert.match(progress, /recover/);
   assert.match(lookup, /assembleRequestPayload/);
-  assert.match(lookup, /kickTvSeasonRecover/);
+  assert.match(lookup, /kickArrRecover/);
+  assert.match(lookup, /mediaType: parsed.mediaType/);
   assert.match(lookup, /seerr reuse/);
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);

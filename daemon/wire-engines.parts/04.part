@@ -123,20 +123,46 @@ def indexer_enabled(prow_key: str, name: str) -> bool:
     return False
 
 
-# Prowlarr first-party public defs. Owner ordered EvoSeedbox-style fallback
-# after search-api.torbox.app has no DNS.
+# Fallback if public_indexers.py is missing on an old bin/. YTS is movies-only.
 PUBLIC_INDEXERS = (
     ("ReelOS-1337x", ("1337x",)),
     ("ReelOS-tpb", ("thepiratebay", "the pirate bay")),
     ("ReelOS-yts", ("yts", "yify")),
     ("ReelOS-eztv", ("eztv",)),
+    ("ReelOS-showrss", ("showrss", "show rss")),
 )
 
 
+def _load_public_indexers():
+    import importlib.util
+
+    for raw in (
+        Path(__file__).resolve().with_name("public_indexers.py"),
+        Path("/opt/reelos/bin/public_indexers.py"),
+        Path("/opt/reelos/daemon/public_indexers.py"),
+    ):
+        if not raw.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_public_indexers", raw)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+def _public_roster() -> list:
+    """(name, hints). Module adds ShowRSS + roles; fallback is the in-file tuple."""
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "PUBLIC_INDEXERS", None):
+        return [(n, hints) for n, hints, _role in mod.PUBLIC_INDEXERS]
+    return [(n, hints) for n, hints in PUBLIC_INDEXERS]
+
+
 def ensure_public_indexers(prow_key: str) -> None:
-    if os.environ.get("REELOS_OTA"):
-        log_wire("OTA: skip public indexer tests")
-        return
+    """Add missing public defs even on OTA. House 1.2.24 shipped YTS; EZTV never landed."""
+    ota = bool(os.environ.get("REELOS_OTA"))
     wait_prowlarr_api(prow_key, 60)
     try:
         schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
@@ -148,7 +174,7 @@ def ensure_public_indexers(prow_key: str) -> None:
         schemas = []
     rows = have if isinstance(have, list) else []
     names = {ix.get("name") for ix in rows}
-    for name, hints in PUBLIC_INDEXERS:
+    for name, hints in _public_roster():
         if name in names:
             log_wire(f"public indexer exists {name}")
             continue
@@ -158,11 +184,15 @@ def ensure_public_indexers(prow_key: str) -> None:
             continue
         try:
             _add_from_schema(prow_key, name, "", hit)
+            log_wire(f"public indexer added {name}")
         except urllib.error.HTTPError as e:
             err = e.read().decode()[:300] if e.fp else str(e)
             log_wire(f"public indexer {name} {e.code}: {err}")
         except NET_ERR as e:
             log_wire(f"public indexer {name} {e}")
+    if ota:
+        log_wire("OTA: added missing public indexers, skip live tests")
+        return
     tested = []
     try:
         have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []

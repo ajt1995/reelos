@@ -72,10 +72,20 @@ def dump_has_media(dump: Path) -> bool:
 
 
 def fill_dump_from_pack(dump: Path, pack: Path) -> int:
-    """Symlink pack children into an existing category dump folder."""
+    """Symlink pack children into an existing category dump folder.
+
+    Decypharr FUSE sometimes exposes a single file at __all__/Name.mkv
+    instead of a directory. Still create the category dump.
+    """
     n = 0
     try:
         dump.mkdir(parents=True, exist_ok=True)
+        if pack.is_file():
+            dest = dump / pack.name
+            if dest.exists():
+                return 0
+            os.symlink(pack, dest)
+            return 1
         kids = list(pack.iterdir())
     except OSError:
         return 0
@@ -344,6 +354,17 @@ def _self_test() -> int:
             )
             self.assertIn("thewalkingdead", wanted["sonarr"])
             self.assertEqual(classify_pack("The.Walking.Dead.2010.2160p", wanted), "sonarr")
+
+        def test_file_pack_still_fills_dump(self):
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                pack = root / "all" / "Interstellar.2014.2160p.mkv"
+                pack.parent.mkdir(parents=True)
+                pack.write_bytes(b"x")
+                dump = root / "symlinks" / "radarr" / "Interstellar"
+                n = fill_dump_from_pack(dump, pack)
+                self.assertEqual(n, 1)
+                self.assertTrue((dump / pack.name).is_symlink())
 
         def test_decide_missing_empty_symlink_relinks_then_searches(self):
             self.assertEqual(

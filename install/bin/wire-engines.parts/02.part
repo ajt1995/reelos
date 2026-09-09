@@ -106,18 +106,38 @@ def quality_id(base: str, key: str, want: str | None = None) -> int | None:
     return profiles[0].get("id") if profiles else None
 
 
+def prowlarr_app_sync_level() -> str:
+    return "fullSync"
+
+
+def prowlarr_app_needs_update(app: dict | None) -> bool:
+    if not app:
+        return False
+    return str(app.get("syncLevel") or "") != prowlarr_app_sync_level()
+
+
 def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:
+    """Keep Prowlarr→*arr at fullSync so EZTV/ShowRSS land in Sonarr, not only Radarr/YTS."""
     url = "http://127.0.0.1:9696/api/v1/applications"
     try:
         apps = call(url, prow_key) or []
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
         return
     for app in apps if isinstance(apps, list) else []:
-        if app.get("name") == name:
-            return
+        if app.get("name") != name:
+            continue
+        if app.get("id") is not None and prowlarr_app_needs_update(app):
+            body = dict(app)
+            body["syncLevel"] = prowlarr_app_sync_level()
+            try:
+                call(f"{url}/{app['id']}", prow_key, method="PUT", body=body)
+                log_wire(f"prowlarr app {name} fullSync")
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+                pass
+        return
     body = {
         "name": name,
-        "syncLevel": "addOnly",
+        "syncLevel": prowlarr_app_sync_level(),
         "implementation": implementation,
         "implementationName": implementation,
         "configContract": f"{implementation}Settings",
@@ -129,8 +149,26 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
     }
     try:
         call(url, prow_key, method="POST", body=body)
+        log_wire(f"prowlarr app {name} added fullSync")
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
         pass
+
+
+def sync_prowlarr_apps(prow_key: str) -> None:
+    """Push current Prowlarr indexers into *arr. addOnly houses never got EZTV on Sonarr."""
+    for name in ("ApplicationIndexerSync", "IndexerSync"):
+        try:
+            call(
+                "http://127.0.0.1:9696/api/v1/command",
+                prow_key,
+                method="POST",
+                body={"name": name},
+            )
+            log_wire(f"prowlarr {name}")
+            return
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            continue
+    log_wire("prowlarr sync command skipped")
 
 
 PROVIDER_HINTS = {

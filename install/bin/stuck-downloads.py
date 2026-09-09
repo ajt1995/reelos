@@ -785,12 +785,43 @@ def _dump_has_media(mod, category: str, title: str) -> bool:
     return False
 
 
-def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
-    """Empty sonarr dumps + 0 files: relink from FUSE or SeasonSearch. No TorBox re-add spam."""
-    if app["name"] != "sonarr":
+def _torrent_for_title(title: str, torrents: list, hit) -> tuple[bool, bool]:
+    has_torrent = False
+    torrent_complete = False
+    for t in torrents or []:
+        if not isinstance(t, dict):
+            continue
+        tname = str(t.get("name") or t.get("title") or "")
+        if hit and hit.name.lower() in tname.lower():
+            return True, debrid_complete(t)
+        if title and title.lower() in tname.lower():
+            has_torrent = True
+            torrent_complete = debrid_complete(t)
+            break
+    return has_torrent, torrent_complete
+
+
+def _try_fill_dump(mod, category: str, title: str, hit) -> bool:
+    if not mod or hit is None:
         return False
-    mod = _load_relink_mod()
-    if mod is None:
+    dest = Path(f"/mnt/symlinks/{category}") / hit.name
+    try:
+        added = int(mod.fill_dump_from_pack(dest, hit) or 0)
+    except (OSError, TypeError, ValueError):
+        return False
+    return added > 0 or _dump_has_media(mod, category, title)
+
+
+def _should_search_missing(searched: dict, sk: str, now: float) -> bool:
+    last = float(searched.get(sk) or 0)
+    if last <= 0:
+        return True
+    return now - last >= SEARCH_INTERVAL_SEC
+
+
+def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
+    """0-file monitored seasons: relink from FUSE or SeasonSearch. Relink mod optional."""
+    if app["name"] != "sonarr":
         return False
     try:
         series = call(f"{app['base']}/series", key) or []
@@ -798,7 +829,8 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
         return False
     if not isinstance(series, list):
         return False
-    catalog = _catalog_paths()
+    mod = _load_relink_mod()
+    catalog = _catalog_paths() if mod else {}
     searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
     now = time.time()
     kicked = False
@@ -822,38 +854,31 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
                 files = 0
             if files > 0 or season.get("monitored") is False or s.get("monitored") is False:
                 continue
-            hit = mod.match_catalog(title, catalog) if catalog else None
-            has_torrent = False
-            torrent_complete = False
-            for t in torrents or []:
-                if not isinstance(t, dict):
-                    continue
-                tname = str(t.get("name") or t.get("title") or "")
-                if hit and hit.name.lower() in tname.lower():
-                    has_torrent = True
-                    torrent_complete = debrid_complete(t)
-                    break
-                if title and title.lower() in tname.lower():
-                    has_torrent = True
-                    torrent_complete = debrid_complete(t)
-                    break
-            action = mod.decide_missing_action(
-                has_files=False,
-                dump_has_media=_dump_has_media(mod, "sonarr", title),
-                has_catalog_hit=bool(hit),
-                has_torrent=has_torrent,
-                torrent_complete=torrent_complete,
-            )
+            hit = mod.match_catalog(title, catalog) if mod and catalog else None
+            has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
+            if mod:
+                action = mod.decide_missing_action(
+                    has_files=False,
+                    dump_has_media=_dump_has_media(mod, "sonarr", title),
+                    has_catalog_hit=bool(hit),
+                    has_torrent=has_torrent,
+                    torrent_complete=torrent_complete,
+                )
+            else:
+                action = "wait" if has_torrent and not torrent_complete else "search"
             sk = f"missing:{s['id']}:s{n}"
             if action == "relink":
+                filled = _try_fill_dump(mod, "sonarr", title, hit)
                 log(f"sonarr recover empty-symlink {title} S{n:02d} — create dump from FUSE")
                 kicked = True
-            elif action == "import":
+                if filled:
+                    continue
+                action = "search"
+            if action == "import":
                 log(f"sonarr recover dump-present {title} S{n:02d} — ManualImport")
                 kicked = True
             elif action == "search":
-                last = float(searched.get(sk) or 0)
-                if now - last < SEARCH_INTERVAL_SEC:
+                if not _should_search_missing(searched, sk, now):
                     continue
                 try:
                     call(
@@ -866,6 +891,73 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
                     searched[sk] = now
                 except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
                     log(f"sonarr SeasonSearch {title} {type(e).__name__} {e}")
+    state["searched"] = searched
+    return kicked
+
+
+def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> bool:
+    """0-file monitored movies: relink from FUSE or MoviesSearch. House Interstellar sat forever."""
+    if app["name"] != "radarr":
+        return False
+    try:
+        movies = call(f"{app['base']}/movie", key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+        return False
+    if not isinstance(movies, list):
+        return False
+    mod = _load_relink_mod()
+    catalog = _catalog_paths() if mod else {}
+    searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
+    now = time.time()
+    kicked = False
+    for m in movies:
+        if not isinstance(m, dict) or not m.get("id") or m.get("monitored") is False:
+            continue
+        stats = m.get("statistics") if isinstance(m.get("statistics"), dict) else {}
+        try:
+            files = int(stats.get("movieFileCount") or 0)
+        except (TypeError, ValueError):
+            files = 0
+        if m.get("hasFile") is True or files > 0:
+            continue
+        title = str(m.get("title") or "")
+        hit = mod.match_catalog(title, catalog) if mod and catalog else None
+        has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
+        if mod:
+            action = mod.decide_missing_action(
+                has_files=False,
+                dump_has_media=_dump_has_media(mod, "radarr", title),
+                has_catalog_hit=bool(hit),
+                has_torrent=has_torrent,
+                torrent_complete=torrent_complete,
+            )
+        else:
+            action = "wait" if has_torrent and not torrent_complete else "search"
+        sk = f"missing:movie:{m['id']}"
+        if action == "relink":
+            filled = _try_fill_dump(mod, "radarr", title, hit)
+            log(f"radarr recover empty-symlink {title} — create dump from FUSE")
+            kicked = True
+            if filled:
+                continue
+            action = "search"
+        if action == "import":
+            log(f"radarr recover dump-present {title} — ManualImport")
+            kicked = True
+        elif action == "search":
+            if not _should_search_missing(searched, sk, now):
+                continue
+            try:
+                call(
+                    f"{app['base']}/command",
+                    key,
+                    method="POST",
+                    body={"name": "MoviesSearch", "movieIds": [int(m["id"])]},
+                )
+                log(f"radarr MoviesSearch {title} — no FUSE/cache hit")
+                searched[sk] = now
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+                log(f"radarr MoviesSearch {title} {type(e).__name__} {e}")
     state["searched"] = searched
     return kicked
 
@@ -1123,6 +1215,8 @@ def sweep() -> int:
         if not key:
             continue
         if recover_missing_series(app, key, torrents, state):
+            recover = True
+        if recover_missing_movies(app, key, torrents, state):
             recover = True
 
     if recover:
@@ -1550,9 +1644,17 @@ def _self_test() -> int:
         def test_empty_symlink_recovery_is_wired(self):
             src = Path(__file__).read_text()
             self.assertIn("recover_missing_series", src)
+            self.assertIn("recover_missing_movies", src)
             self.assertIn("relink_dumps.py", src)
             self.assertIn("SeasonSearch", src)
+            self.assertIn("MoviesSearch", src)
             self.assertIn("empty-symlink", src)
+            self.assertIn('body={"name": "MoviesSearch"', src)
+
+        def test_search_interval_allows_first_missing_movie(self):
+            self.assertTrue(_should_search_missing({}, "missing:movie:1", 100.0))
+            self.assertFalse(_should_search_missing({"missing:movie:1": 50.0}, "missing:movie:1", 100.0))
+            self.assertTrue(_should_search_missing({"missing:movie:1": 50.0}, "missing:movie:1", 50.0 + SEARCH_INTERVAL_SEC))
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

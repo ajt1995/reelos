@@ -15,7 +15,7 @@ import {
   lookupFailureMessage,
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
-import { kickTvSeasonRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
+import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -1054,8 +1054,10 @@ async function handleRequest(req, res) {
         season != null && season !== "" ? Number(season) : reused.season != null ? Number(reused.season) : 1;
       note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${reuseSeason}`);
       send(res, 200, { ok: true, engine: "seerr", added: false, reused: true, id: reused.id, title: body.title || titleId });
-      // House: TWD series already in Sonarr with 0 files — reuse must still SeasonSearch.
-      if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season: reuseSeason });
+      // House: Interstellar already in Radarr / TWD in Sonarr with 0 files — reuse must still search.
+      if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
+        void kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, mediaType: parsed.mediaType });
+      }
       return;
     }
     const payload = buildSeerrAddPayload({
@@ -1077,7 +1079,9 @@ async function handleRequest(req, res) {
     }
     note(`seerr add ${added.status} type=${parsed.mediaType} season=${seasonN ?? ""}`);
     send(res, 200, { ok: true, engine: "seerr", added: added.ok || added.status === 409, title: body.title || titleId });
-    if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season: seasonN });
+    if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
+      void kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, mediaType: parsed.mediaType });
+    }
   } catch (e) {
     const error = String(e?.name === "AbortError" ? "Request UI timed out" : e);
     note(`request err ${error}`);
