@@ -30,10 +30,9 @@ def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
     by_name = {str(f.get("Name") or ""): f for f in folders}
     for name, _ctype in want:
         folder = by_name.get(name)
-        keep = library_symlink_path(name)
-        if not folder or not folder_has_symlinks(folder, keep):
+        if not folder or not folder_has_symlinks(folder, library_symlink_path(name)):
             return False
-        if extra_jellyfin_paths(folder, keep):
+        if extra_jellyfin_paths(folder, jellyfin_keep_paths(name)):
             return False
     return True
 
@@ -91,7 +90,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
                     if not folder_has_symlinks(folder, keep):
                         add_jellyfin_path(token, name)
                         log_wire(f"jellyfin path {name} {keep}")
-                    for extra in extra_jellyfin_paths(folder, keep):
+                    for extra in extra_jellyfin_paths(folder, jellyfin_keep_paths(name)):
                         remove_jellyfin_path(token, name, extra)
                         log_wire(f"jellyfin drop extra path {name} {extra}")
             except urllib.error.HTTPError as e:

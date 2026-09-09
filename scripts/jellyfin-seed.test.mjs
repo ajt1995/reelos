@@ -71,7 +71,8 @@ folder = {
 }
 keep = g["library_symlink_path"]("Movies")
 assert keep == "/symlinks/radarr", keep
-extras = g["extra_jellyfin_paths"](folder, keep)
+g["answers"] = lambda: {"storageMode": "debrid"}
+extras = g["extra_jellyfin_paths"](folder, g["jellyfin_keep_paths"]("Movies"))
 assert "/media/movies" in extras, extras
 assert "/symlinks" in extras, extras
 assert "/mnt/symlinks/radarr" in extras, extras
@@ -88,7 +89,27 @@ shows = {
     "Locations": ["/symlinks", "/symlinks/sonarr"],
     "LibraryOptions": {"PathInfos": []},
 }
-assert "/symlinks" in g["extra_jellyfin_paths"](shows, "/symlinks/sonarr")
+assert "/symlinks" in g["extra_jellyfin_paths"](shows, g["jellyfin_keep_paths"]("Shows"))
+
+# A local/both house keeps files on disk: /media is a real root, not a dupe view.
+for mode in ("local", "both"):
+    g["answers"] = lambda mode=mode: {"storageMode": mode}
+    keeps = g["jellyfin_keep_paths"]("Movies")
+    assert keeps == ["/symlinks/radarr", "/media/movies"], (mode, keeps)
+    extras = g["extra_jellyfin_paths"](folder, keeps)
+    assert "/media/movies" not in extras, (mode, extras)
+    assert "/symlinks" in extras, (mode, extras)
+    assert "/mnt/symlinks/radarr" in extras, (mode, extras)
+    assert g["jellyfin_keep_paths"]("Shows") == ["/symlinks/sonarr", "/media/tv"]
+    on_disk = {
+        "Name": "Movies",
+        "Locations": ["/symlinks/radarr", "/media/movies"],
+        "LibraryOptions": {"PathInfos": []},
+    }
+    assert g["libraries_ready"]([on_disk], [("Movies", "movies")]) is True, mode
+# No answers.json must not delete the disk library either.
+g["answers"] = lambda: {}
+assert "/media/movies" not in g["extra_jellyfin_paths"](folder, g["jellyfin_keep_paths"]("Movies"))
 calls = []
 g["call"] = lambda url, **kwargs: calls.append((url, kwargs))
 g["remove_jellyfin_path"]("token", "Movies", "/media/movies")
