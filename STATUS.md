@@ -5,6 +5,7 @@
 ## Stamp
 
 - **VERSION / channel:** still `1.2.48`
+- **PR:** https://github.com/ajt1995/reelos/pull/45 (`cursor/lockfile-npm-ci-cd90`)
 - **What it is:** #44 only changed the `test` script in `package.json`. Mailman `SKIP_NPM` compares `package.json`, so Apply ran `npm ci` against a lockfile named `app-builder-workspace` that was missing `fast-uri@3.1.7`, `require-from-string@2.0.2`, and a coherent ajv 6/8 + `json-schema-traverse` tree. `applied-sha` stayed pre-#44.
 
 ## Fix
