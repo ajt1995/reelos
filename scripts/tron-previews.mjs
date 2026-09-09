@@ -225,6 +225,12 @@ async function mockApis(page) {
       body: JSON.stringify({ titles: TITLES.slice(0, 3), error: null }),
     }),
   );
+  await page.route("**/api/books**", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ results: BOOKS, unavailable: [] }),
+    }),
+  );
   await page.route("**/api/books/file**", (route) =>
     route.fulfill({
       status: 200,
@@ -255,12 +261,6 @@ async function mockApis(page) {
     route.fulfill({
       contentType: "application/atom+xml",
       body: "<feed xmlns='http://www.w3.org/2005/Atom'><title>ReelOS Books</title></feed>",
-    }),
-  );
-  await page.route("**/api/books**", (route) =>
-    route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ results: BOOKS, unavailable: [] }),
     }),
   );
   await page.route("**/api/request**", (route) =>
@@ -319,6 +319,7 @@ async function main() {
 
   await phone.goto(`${ORIGIN}/`, { waitUntil: "networkidle" });
   await phone.getByText("On the shelf").waitFor({ timeout: 15000 });
+  await phone.getByRole("heading", { name: "Books" }).scrollIntoViewIfNeeded();
   await shot(phone, "home.png");
 
   await phone.getByRole("link", { name: "Discover" }).click();
@@ -326,10 +327,11 @@ async function main() {
   await shot(phone, "discover.png");
 
   const search = phone.getByLabel("Search movies, shows, and books");
+  await search.click();
   await search.fill("dracula");
-  await phone.getByText("Books", { exact: true }).waitFor({ timeout: 10000 });
+  await phone.locator("ul").getByText("Dracula").first().waitFor({ timeout: 10000 });
   await shot(phone, "discover-typeahead.png");
-  await phone.getByRole("link").filter({ hasText: "Dracula" }).first().click();
+  await phone.locator("ul").getByRole("link").filter({ hasText: "Dracula" }).first().click();
   await waitHeading(phone, "Books");
   await phone.getByRole("link", { name: "Download" }).first().waitFor();
   await shot(phone, "books.png");
@@ -347,7 +349,7 @@ async function main() {
   await phone.getByRole("link", { name: "Settings" }).first().click();
   await waitHeading(phone, "Settings");
   await phone.getByRole("button", { name: /How to watch/ }).click();
-  await phone.getByText("Download the file from the Books tab").waitFor();
+  await phone.getByText("Download the file from the Books tab").scrollIntoViewIfNeeded();
   await shot(phone, "settings.png");
 
   const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
