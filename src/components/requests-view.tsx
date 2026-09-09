@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
-import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import { isInFlightRequest } from "@/lib/sync-requests";
+import { isInFlightRequest, requestStatusWord } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { RequestStatus } from "@/lib/types";
 import { formatWhen } from "@/lib/utils";
@@ -14,8 +13,8 @@ import { Button } from "@/components/ui/button";
 
 const FILTERS: { id: "all" | RequestStatus; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "available", label: "Available" },
-  { id: "downloading", label: "Downloading" },
+  { id: "available", label: "Ready" },
+  { id: "downloading", label: "Grabbing" },
   { id: "waiting", label: "Waiting" },
   { id: "failed", label: "Failed" },
 ];
@@ -75,38 +74,33 @@ export function RequestsView() {
                 <p className="mt-1 text-xs text-muted">
                   {r.requester} · {formatWhen(r.createdAt)}
                 </p>
-                {r.status === "downloading" && r.progress > 0 ? (
-                  <div className="mt-2 h-1 max-w-xs overflow-hidden rounded-full bg-card-2">
-                    <div className="h-full bg-cyan" style={{ width: `${r.progress}%` }} />
-                  </div>
-                ) : null}
                 {r.status === "failed" ? (
                   <p className="mt-1 text-sm text-danger">{r.reason}</p>
                 ) : (
-                  <p className="mt-1 text-xs text-muted">
-                    {viaLabel(r.via, r.status) ??
-                      (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                    {r.status === "downloading" && r.progress > 0 ? ` · ${Math.round(r.progress)}%` : ""}
-                    {r.release ? ` · ${r.release}` : ""}
-                  </p>
+                  <p className="mt-1 text-xs text-muted">{requestStatusWord(r.status)}</p>
                 )}
               </div>
               {r.status === "failed" ? (
                 <Button size="sm" variant="ghost" onClick={() => retry(r.id)}>
                   Retry
                 </Button>
-              ) : r.status !== "available" ? (
+              ) : r.status === "available" ? (
+                <a
+                  href={
+                    typeof window !== "undefined"
+                      ? `http://${window.location.hostname}:8096`
+                      : "http://127.0.0.1:8096"
+                  }
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm text-gold hover:text-gold-bright"
+                >
+                  Watch
+                </a>
+              ) : (
                 <Button size="sm" variant="quiet" onClick={() => cancel(r.id)}>
                   Cancel
                 </Button>
-              ) : (
-                <Link
-                  to="/play/$id"
-                  params={{ id: titleId }}
-                  className="text-sm text-cyan hover:text-live"
-                >
-                  Play
-                </Link>
               )}
             </li>
           );
