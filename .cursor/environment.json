@@ -1,0 +1,16 @@
+{
+  "name": "ReelOS",
+  "install": "npm ci --no-audit --no-fund || npm install --no-audit --no-fund",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev"
+    }
+  ],
+  "ports": [
+    {
+      "name": "ReelOS dev server",
+      "port": 8080
+    }
+  ]
+}
