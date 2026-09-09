@@ -95,6 +95,9 @@ export function mergeServerRequests(local: MediaRequest[], server: MediaRequest[
 
   for (const row of server) {
     if (used.has(row.id)) continue;
+    const key = requestMatchKey(row);
+    const existing = out.find((r) => requestMatchKey(r) === key && r.status !== "failed");
+    if (existing && row.status !== "available") continue;
     out.push({
       ...row,
       progress: row.status === "available" ? 100 : (row.progress ?? 0),

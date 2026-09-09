@@ -1,5 +1,5 @@
 /** GET /api/request — Seerr status (and optional *arr sizeleft). Registered before lookup. */
-import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit } from "./reelos-seerr.mjs";
+import { collapseDuplicateRequests, parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit } from "./reelos-seerr.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -42,7 +42,7 @@ async function handleList(res) {
         return seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
       }),
     );
-    send(res, 200, { requests, titles: details.filter(Boolean), engine: "seerr" });
+    send(res, 200, { requests: collapseDuplicateRequests(requests), titles: details.filter(Boolean), engine: "seerr" });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }

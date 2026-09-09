@@ -98,6 +98,20 @@ test("honest local progress is kept when server still says downloading at 0", ()
   assert.equal(merged[0]?.progress, 37);
 });
 
+test("duplicate Seerr season rows collapse to the furthest-along request", () => {
+  const local = [
+    row({ id: "seerr-3", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+  ];
+  const server = [
+    row({ id: "seerr-3", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+    row({ id: "seerr-4", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+  ];
+  const merged = mergeServerRequests(local, server);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.id, "seerr-3");
+  assert.equal(merged[0]?.season, 1);
+});
+
 test("duplicate local rows for the same seerr title collapse to one", () => {
   const local = [
     row({ id: "req-old", titleId: "tmdb-10", status: "downloading", progress: 0 }),

@@ -1,41 +1,32 @@
 # STATUS.md
 
-**Reelist (enlisted fixer).** 2026-09-09. Stack-audited `#45`–`#50` so house Apply of the combined tree does not undo mailman, shelf, Finish-detach, or JF12 auth. `#50` already on `main` (`c3fa807`). This tip is overlay + named stamp **1.2.50**. Austin allowed VERSION + HAL/STATUS for a coherent house Apply.
+**Reelist (TV season import).** 2026-09-09. Patch the grab→symlink→Sonarr import path so a season request can finish. Separate from Tron #52. Stamp **1.2.50.1** (does not take 1.2.51).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50`
-- **PR:** https://github.com/ajt1995/reelos/pull/51 (`cursor/stack-audit-a560`)
-- **Writeup:** `docs/STACK-RISK.md` (go/no-go + merge order)
-- **What it is:** `#45`–`#50` already on main (1.2.49). This tip overlays house `compose/configs` so `#49`'s seed cannot nest `configs/configs`, retargets stale mailman canaries, and names the stacked Apply.
+- **VERSION / channel:** `1.2.50.1`
+- **Base:** latest `main` `0e9704d` (1.2.50)
+- **What it is:** Sonarr no longer scans `/mnt/symlinks` (Museum bleed). `_ep_tag` accepts `S01.E01` / `1x01`. Season-pack fallback + queue hint. `retry_import` posts Sonarr ManualImport (not only a dump scan). Duplicate same-season Seerr/queue rows are reused or failed-as-duplicate.
 
-## Fix
+## Root cause (house, verified in code)
 
-1. Rebased onto latest `main` (`c3fa807`). Duplicate `#50` commits dropped — they are already there (importPending + container ENOTCONN / `reelos-mnt-rshared.service`).
-2. Mailman overlays house `compose/configs/.` onto staging (daemon + install twins). `#50` rshared enable-after-swap kept.
-3. Stack smoke: lockfile `SKIP_NPM` + JF12 `Authorization` + `#46` cache + Finish no `spawnSync` pull + advisory search hop + importPending retry + rshared unit + parts twins.
-4. Retargeted three stale mailman `need()` canaries so push-time `check-ota.py` is green.
+1. `#50` retried **Radarr** ManualImport on `importPending`. Sonarr only got `DownloadedEpisodesScan` on a dump folder — that is not a series library.
+2. `sonarr_manual_import` and `kick_imports` listed **`/mnt/symlinks`** (parent of radarr+sonarr). Night at the Museum appeared in Sonarr unmatched samples.
+3. Scene names `The.Walking.Dead.S01.E01.…` did not parse (`\s*` between Sxx and Exx misses a dot). Season-pack folders without per-file tags never mapped.
+4. Duplicate Seerr POSTs (`seerr-3` + `seerr-4`) created a second grab that sat at honest 0% (we do not invent progress).
+
+Museum imported because Radarr retry had `movieId`. TWD never became playable.
 
 ## Owner / house Apply
 
-**GO for CLI Apply of 1.2.49 now** (`main` `c3fa807`). Do not wait for `#51`. Expect `ReelOS 1.2.49 applied.` Search hop red is OK.
-
-`#51` is optional follow-up (overlay + named **1.2.50**). If merged before Apply instead, expect `ReelOS 1.2.50 applied.`
-
-See `docs/STACK-RISK.md`. Short form:
-
-1. House CLI: `/opt/reelos/bin/reelos-update.sh apply` (or phone Check→Apply). Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.49` (or `1.2.50` if this tip landed first).
-3. Home/Library still lean-cached. Finish must not wedge `:8080`.
-4. `/api/box` Jellyfin green. Next cached grab should import when FUSE is readable (`#50`). Host listing is not enough — *arr containers must also `ls /mnt/debrid`.
+1. Merge to **main**. Phone Check→Apply (or `/opt/reelos/bin/reelos-update.sh apply`). Tarball `main.tar.gz`.
+2. `cat /opt/reelos/VERSION` → `1.2.50.1`.
+3. One TWD S01 request. Wait for `sonarr manualimport matched=` and `files=` > 0. Play on the TV.
+4. If two rows remain from before Apply, Cancel the newer 0% row. Do not request S01 a second time.
 
 ## Do not
 
-- Re-merge `#50` (already on `main` at `c3fa807`).
-- Apply a feature-branch tarball — **main only**.
-- Cut **1.2.51** in the same hour.
-- Scope into TorBox wipe / pirate books.
-
-## Hal / xorriso
-
-Hal: stamp **1.2.50** in HAL.md. Phone OTA uses `main.tar.gz` + `channel.json`. ISO not required for this Apply.
+- Cut **1.2.51** (Tron reserved).
+- Invent a progress % on Requests.
+- Change season-by-season TV UX.
+- SSH from the agent. Scope into Tron / books / TorBox wipe.
