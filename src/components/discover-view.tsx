@@ -9,6 +9,8 @@ import { installHonestRequest } from "@/lib/honest-request";
 export function DiscoverView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const [looking, setLooking] = useState(false);
+  const [lookupErr, setLookupErr] = useState<string | null>(null);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
@@ -35,21 +37,34 @@ export function DiscoverView() {
     const term = q.trim();
     if (term.length < 2) {
       setRemoteHits([]);
+      setLookupErr(null);
+      setLooking(false);
       return;
     }
+    setLooking(true);
+    setLookupErr(null);
     let cancelled = false;
     const t = window.setTimeout(() => {
       void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store" })
-        .then((res) => res.json() as Promise<{ titles?: Title[] }>)
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`lookup ${res.status}`);
+          return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
+        })
         .then((r) => {
           if (cancelled) return;
           const titles = Array.isArray(r?.titles) ? r.titles : [];
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
+          setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
+          setLooking(false);
         })
-        .catch(() => {
-          if (!cancelled) setRemoteHits([]);
+        .catch((e) => {
+          if (!cancelled) {
+            setRemoteHits([]);
+            setLookupErr(String(e?.name === "AbortError" ? "Seerr lookup timed out. Try the search again." : e));
+            setLooking(false);
+          }
         });
     }, 280);
     return () => {
@@ -80,8 +95,12 @@ export function DiscoverView() {
               <TitleCard key={t.id} title={t} />
             ))}
           </Row>
+        ) : looking ? (
+          <p className="mt-10 text-sm text-muted">Looking up movies and shows…</p>
         ) : (
-          <p className="mt-10 text-sm text-muted">No titles from Seerr for that search.</p>
+          <p className="mt-10 text-sm text-muted">
+            {lookupErr || "No titles from Seerr for that search."}
+          </p>
         )
       ) : (
         <>

@@ -11,6 +11,9 @@ import {
   seerrSearchHit,
   honestifyRequests,
   assembleRequestPayload,
+  mapSeerrSearchResults,
+  lookupFailureMessage,
+  buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
 import { kickTvSeasonRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import {
@@ -291,7 +294,7 @@ async function handleLookup(req, res) {
       send(res, 200, { titles, error });
       return;
     }
-    const r = await seerrFetch(`/api/v1/search?query=${encodeURIComponent(q)}`, { key, ms: 30000 });
+    const r = await seerrFetch(`/api/v1/search?query=${encodeURIComponent(q)}`, { key, ms: 45000 });
     if (!r.ok) {
       error = `seerr ${r.status}`;
       note(`seerr search ${r.status}`);
@@ -299,27 +302,12 @@ async function handleLookup(req, res) {
       return;
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    for (const h of hits) {
-      if (h?.mediaType !== "movie" && h?.mediaType !== "tv") continue;
-      const t = seerrSearchHit(h);
-      if (t) titles.push(t);
-      if (titles.length >= 16) break;
-    }
+    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
     note(`seerr hits=${hits.length} titles=${titles.length}`);
   } catch (e) {
-    error = `seerr ${e}`;
+    error = lookupFailureMessage(e);
     note(`seerr ${e}`);
   }
-  const qn = q.toLowerCase();
-  titles.sort((a, b) => {
-    const as = String(a?.title || "").toLowerCase();
-    const bs = String(b?.title || "").toLowerCase();
-    const ar = as === qn ? 0 : as.startsWith(qn) ? 1 : as.includes(qn) ? 2 : 3;
-    const br = bs === qn ? 0 : bs.startsWith(qn) ? 1 : bs.includes(qn) ? 2 : 3;
-    if (ar !== br) return ar - br;
-    if (ar === 0 && a.kind !== b.kind) return a.kind === "movie" ? -1 : 1;
-    return (Number(b?.year) || 0) - (Number(a?.year) || 0);
-  });
   send(res, 200, { titles, error });
 }
 
@@ -1062,20 +1050,24 @@ async function handleRequest(req, res) {
       season,
     });
     if (reused) {
-      note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${season ?? ""}`);
+      const reuseSeason =
+        season != null && season !== "" ? Number(season) : reused.season != null ? Number(reused.season) : 1;
+      note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${reuseSeason}`);
       send(res, 200, { ok: true, engine: "seerr", added: false, reused: true, id: reused.id, title: body.title || titleId });
       // House: TWD series already in Sonarr with 0 files — reuse must still SeasonSearch.
-      if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season });
+      if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season: reuseSeason });
       return;
     }
-    const payload = {
+    const payload = buildSeerrAddPayload({
       mediaType: parsed.mediaType,
-      mediaId: Number(parsed.tmdb),
-    };
-    if (parsed.mediaType === "tv") {
-      const n = Number(season);
-      payload.seasons = Number.isFinite(n) && n > 0 ? [n] : "all";
+      tmdb: parsed.tmdb,
+      season,
+    });
+    if (!payload) {
+      send(res, 400, { ok: false, error: "Search again, then request. Titles now use Seerr/TMDB ids." });
+      return;
     }
+    const seasonN = payload.mediaType === "tv" ? payload.seasons[0] : undefined;
     const added = await seerrFetch("/api/v1/request", { key, method: "POST", body: payload, ms: 30000 });
     if (!added.ok && added.status !== 409) {
       const msg = added.json?.message || added.json?.error || `seerr ${added.status}`;
@@ -1083,9 +1075,9 @@ async function handleRequest(req, res) {
       send(res, added.status >= 400 ? added.status : 500, { ok: false, error: String(msg) });
       return;
     }
-    note(`seerr add ${added.status} type=${parsed.mediaType} season=${season ?? ""}`);
+    note(`seerr add ${added.status} type=${parsed.mediaType} season=${seasonN ?? ""}`);
     send(res, 200, { ok: true, engine: "seerr", added: added.ok || added.status === 409, title: body.title || titleId });
-    if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season });
+    if (parsed.mediaType === "tv") void kickTvSeasonRecover({ tmdb: parsed.tmdb, season: seasonN });
   } catch (e) {
     const error = String(e?.name === "AbortError" ? "Request UI timed out" : e);
     note(`request err ${error}`);

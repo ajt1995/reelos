@@ -250,7 +250,11 @@ export function TitleView({ id }: { id: string }) {
                 setHashErr(!ok);
                 if (ok) {
                   setHash("");
-                  sendRequest({ titleId: resolved.id, hash });
+                  sendRequest({
+                    titleId: resolved.id,
+                    hash,
+                    season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                  });
                 }
               }}
             >
