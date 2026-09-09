@@ -18,11 +18,10 @@ def add_jellyfin_path(token: str, name: str) -> None:
 
 
 def remove_jellyfin_path(token: str, name: str, path: str) -> None:
-    q = urllib.parse.urlencode({"refreshLibrary": "true"})
+    q = urllib.parse.urlencode({"name": name, "path": path, "refreshLibrary": "true"})
     call(
         f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
         method="DELETE",
-        body={"Name": name, "Path": path, "PathInfo": {"Path": path}},
         headers={"X-Emby-Token": token},
     )
 

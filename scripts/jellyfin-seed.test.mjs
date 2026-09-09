@@ -89,6 +89,15 @@ shows = {
     "LibraryOptions": {"PathInfos": []},
 }
 assert "/symlinks" in g["extra_jellyfin_paths"](shows, "/symlinks/sonarr")
+calls = []
+g["call"] = lambda url, **kwargs: calls.append((url, kwargs))
+g["remove_jellyfin_path"]("token", "Movies", "/media/movies")
+url, kwargs = calls[0]
+assert "name=Movies" in url, url
+assert "path=%2Fmedia%2Fmovies" in url, url
+assert "refreshLibrary=true" in url, url
+assert kwargs["method"] == "DELETE", kwargs
+assert "body" not in kwargs, kwargs
 print("ok")
 `,
     ],
