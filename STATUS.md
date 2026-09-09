@@ -5,7 +5,7 @@
 ## Stamp
 
 - **VERSION / channel:** still `1.2.48`
-- **PR:** (this branch `cursor/library-cold-path-857b`)
+- **PR:** https://github.com/ajt1995/reelos/pull/46 (`cursor/library-cold-path-857b`)
 - **What it is:** Cold Home showed “Nothing in Jellyfin yet…” until a large Items payload finished. Home only paints `shelf.slice(0, 24)`.
 
 ## Fix
