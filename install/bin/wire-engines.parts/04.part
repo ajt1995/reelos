@@ -261,7 +261,7 @@ def ensure_public_indexers(prow_key: str) -> None:
             detail, _ready = mod.doctor_releases_detail(mod.enabled_indexer_names(have2v))
             log_wire(f"public TV indexers {detail}")
     if ota:
-        log_wire("OTA: added missing public indexers, skip live tests")
+        log_wire("OTA: public indexer add pass complete, skip live tests")
         return
     tested = []
     try:

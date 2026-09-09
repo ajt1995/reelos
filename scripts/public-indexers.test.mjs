@@ -26,7 +26,7 @@ test("public indexer roster: YTS movies-only; EZTV+ShowRSS for TV sitcoms", () =
 
 test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () => {
   const add = read("daemon/wire-engines.parts/04.part");
-  assert.match(add, /OTA: added missing public indexers, skip live tests/);
+  assert.match(add, /OTA: public indexer add pass complete, skip live tests/);
   assert.doesNotMatch(
     add,
     /if os\.environ\.get\("REELOS_OTA"\):\n        log_wire\("OTA: skip public indexer tests"\)\n        return/,
