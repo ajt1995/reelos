@@ -20,6 +20,10 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "hop FUSE"),
     ("daemon/reelos-update.sh", "hop Jellyfin"),
     ("daemon/reelos-update.sh", "hop search"),
+    ("daemon/reelos-update.sh", "package.json or package-lock.json changed"),
+    ("daemon/reelos-update.sh", "staging missing package.json"),
+    ("daemon/reelos-update.sh", "hop search red — not blocking UI-only stamp"),
+    ("daemon/reelos-update.sh", "npm ci failed — not swapping"),
 )
 
 
@@ -57,6 +61,14 @@ def main() -> int:
         return fail("OTA contract: ensure_door / VERSION stamp / applied. missing")
     if not (door < stamp < applied):
         return fail("OTA contract: stamp/applied must come after ensure_door")
+
+    pull = updater.find('stack images — docker compose pull')
+    if pull >= 0 and pull < applied:
+        return fail("OTA contract: compose pull must come after applied. stamp")
+
+    install_up = root / "install/bin/reelos-update.sh"
+    if install_up.is_file() and install_up.read_text() != updater:
+        return fail("OTA contract: install/bin/reelos-update.sh must match daemon/")
 
     fatal = 0
     warns = 0

@@ -295,6 +295,10 @@ need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
 need scripts/reelos-lookup-plugin.mjs 'Code update on'
 need daemon/reelos-update.sh 'not printing applied'
+need daemon/reelos-update.sh 'package.json or package-lock.json changed'
+need daemon/reelos-update.sh 'staging missing package.json'
+need daemon/reelos-update.sh 'hop search red — not blocking UI-only stamp'
+need daemon/reelos-update.sh 'npm ci failed — not swapping'
 need scripts/reelos-lookup-plugin.mjs 'Update already running'
 need scripts/check-ota.py 'VERSION skew'
 if grep -q '172.66.170.114' "$WORK/src/install/compose/docker-compose.yml"; then
@@ -314,7 +318,12 @@ cp -a "$WORK/src/install/." "$NEXT/" 2>/dev/null || true
 if [ -d "$WORK/src/src" ]; then
   rm -rf "$NEXT/app"
   mkdir -p "$NEXT/app"
-  cp -a "$WORK/src/package.json" "$WORK/src/package-lock.json" "$WORK/src/tsconfig.json" "$WORK/src/vite.config.ts" "$NEXT/app/" 2>/dev/null || true
+  if [ ! -f "$WORK/src/package.json" ] || [ ! -f "$WORK/src/package-lock.json" ]; then
+    log "staging missing package.json or lockfile in tarball"
+    exit 1
+  fi
+  cp -a "$WORK/src/package.json" "$WORK/src/package-lock.json" "$NEXT/app/"
+  cp -a "$WORK/src/tsconfig.json" "$WORK/src/vite.config.ts" "$NEXT/app/" 2>/dev/null || true
   cp -a "$WORK/src/src" "$NEXT/app/src"
   [ -d "$WORK/src/server" ] && cp -a "$WORK/src/server" "$NEXT/app/server"
   [ -d "$WORK/src/scripts" ] && cp -a "$WORK/src/scripts" "$NEXT/app/scripts"
@@ -343,9 +352,17 @@ if [ -f "$WORK/src/install/compose/Caddyfile" ]; then
   cp "$WORK/src/install/compose/Caddyfile" "$NEXT/compose/Caddyfile"
 fi
 
+if [ ! -f "$NEXT/app/package.json" ] || [ ! -f "$NEXT/app/package-lock.json" ]; then
+  log "staging missing package.json — not swapping"
+  rm -rf "$NEXT"
+  exit 1
+fi
+
 SKIP_NPM=0
 if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
-  if cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json"; then
+  if cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json" \
+    && [ -f "$ROOT/app/package-lock.json" ] && [ -f "$NEXT/app/package-lock.json" ] \
+    && cmp -s "$ROOT/app/package-lock.json" "$NEXT/app/package-lock.json"; then
     SKIP_NPM=1
     if [ -d "$ROOT/app/node_modules" ]; then
       log "copying node_modules into staging (8080 still up)"
@@ -355,16 +372,26 @@ step "Stage"
     else
       SKIP_NPM=0
     fi
+  else
+    log "package.json or package-lock.json changed — running npm ci"
   fi
 fi
 if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
   export DEBIAN_FRONTEND=noninteractive
   command -v npm >/dev/null 2>&1 || apt-get install -y nodejs npm || true
-  (cd "$NEXT/app" && { npm ci --no-audit --no-fund || npm install --no-audit --no-fund; }) || {
-    log "npm failed — not swapping"
-    rm -rf "$NEXT"
-    exit 1
-  }
+  if [ -f "$NEXT/app/package-lock.json" ]; then
+    (cd "$NEXT/app" && npm ci --no-audit --no-fund) || {
+      log "npm ci failed — not swapping"
+      rm -rf "$NEXT"
+      exit 1
+    }
+  else
+    (cd "$NEXT/app" && npm install --no-audit --no-fund) || {
+      log "npm failed — not swapping"
+      rm -rf "$NEXT"
+      exit 1
+    }
+  fi
 fi
 
 if [ -d "$ROOT.prev" ]; then
@@ -479,8 +506,13 @@ restore() {
   trap - ERR
   systemctl stop reelos 2>/dev/null || true
   if [ -d "$ROOT.prev/app" ]; then
-    rm -rf "$ROOT/app"
+    # Move the bad tree aside first. Never rm live app before .prev is ready.
+    rm -rf "$ROOT/app.broken"
+    if [ -d "$ROOT/app" ]; then
+      mv "$ROOT/app" "$ROOT/app.broken" || rm -rf "$ROOT/app"
+    fi
     mv "$ROOT.prev/app" "$ROOT/app"
+    rm -rf "$ROOT/app.broken"
     [ -f "$ROOT.prev/VERSION" ] && cp -a "$ROOT.prev/VERSION" "$ROOT/VERSION"
     [ -f "$ROOT.prev/docker-compose.yml" ] && cp -a "$ROOT.prev/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
   fi
@@ -539,14 +571,18 @@ start_shell
 probe_home() {
   local i code
   log "waiting for :8080 — door :80 stays on updating page"
-  for i in $(seq 1 45); do
+  # Vite cold-start after npm ci can exceed 45s under disk load. 90s of
+  # fast-fail curls; only nudge the unit every 5s so we do not restart storms.
+  for i in $(seq 1 90); do
     code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ 2>/dev/null || true)
     if [ "$code" = "200" ]; then
       log "home 200"
       return 0
     fi
-    printf '\r[waiting Home] %d/45   ' "$i" >&2
-    start_shell
+    printf '\r[waiting Home] %d/90   ' "$i" >&2
+    if [ "$i" = "1" ] || [ $((i % 5)) -eq 0 ]; then
+      start_shell
+    fi
     sleep 1
   done
   printf '\n' >&2
@@ -700,10 +736,6 @@ fi
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
   REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
-if [ -f /var/lib/reelos/stack-images ]; then
-  log "stack images — docker compose pull"
-  (cd "$ROOT/compose" && docker compose pull) || log "compose pull non-fatal"
-fi
 
 indexer_canary() {
   python3 - <<'PY'
@@ -777,9 +809,10 @@ PY
 
 CANARY_FAIL=0
 HOP_FAIL=0
+SEARCH_HOP_FAIL=0
 
 hop_stack() {
-  log "hops: FUSE + Jellyfin + search (fail-closed)"
+  log "hops: FUSE + Jellyfin + search (search advisory)"
   step "Jellyfin"
   if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
     log "hop FUSE green"
@@ -805,13 +838,16 @@ hop_stack() {
     HOP_FAIL=1
   fi
   step "Search"
+  # Seerr/TMDB can Abort under load, and /api/lookup returns 200 + empty
+  # titles when Seerr has no key yet. That is not "the tree missed disk."
+  # #47 retry (4×) kept; red still sets SEARCH_HOP_FAIL only (advisory).
   local s i
   s=0
   for i in $(seq 1 4); do
     if python3 - <<'PY'
 import json, sys, urllib.request
 try:
-    with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=Batman", timeout=45) as r:
+    with urllib.request.urlopen("http://127.0.0.1:8080/api/lookup?q=Batman", timeout=20) as r:
         d = json.load(r)
 except Exception as e:
     print(type(e).__name__, e, file=sys.stderr)
@@ -833,7 +869,7 @@ PY
   done
   if [ "$s" != "1" ]; then
     log "hop search red"
-    HOP_FAIL=1
+    SEARCH_HOP_FAIL=1
   fi
 }
 
@@ -853,10 +889,24 @@ if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
   }
   [ "$CANARY_FAIL" = "0" ] && log "indexer canary ${CANARY_OUT:-ok}"
 else
-  log "indexer canary skipped (compose unchanged — not a UI-only OTA)"
+  log "indexer canary skipped (compose unchanged — UI-only OTA)"
 fi
 
-if [ "$CANARY_FAIL" = "1" ] || [ "${HOP_FAIL:-0}" = "1" ]; then
+if [ "${SEARCH_HOP_FAIL:-0}" = "1" ]; then
+  log "hop search red — not blocking UI-only stamp"
+  bug_snap "search-hop-red"
+fi
+if [ "${HOP_FAIL:-0}" = "1" ] && [ "${COMPOSE_CHANGED:-0}" != "1" ]; then
+  log "hop FUSE/Jellyfin red — compose unchanged, not blocking stamp"
+  bug_snap "hops-red-ui-only"
+fi
+if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ "${HOP_FAIL:-0}" = "1" ]; then
+  log "not printing applied — hops or indexer red"
+  bug_snap "hops-red"
+  log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+  exit 1
+fi
+if [ "$CANARY_FAIL" = "1" ]; then
   log "not printing applied — hops or indexer red"
   bug_snap "hops-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
@@ -876,3 +926,9 @@ if [ -n "${HEAD_SHA:-}" ]; then
 fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
+# Pull after stamp so a long image fetch cannot un-apply a live tree.
+# Separate unit from Vite (unlike Finish/provision spawnSync pull).
+if [ -f /var/lib/reelos/stack-images ]; then
+  log "stack images — docker compose pull"
+  (cd "$ROOT/compose" && timeout 600 docker compose pull) || log "compose pull non-fatal"
+fi
