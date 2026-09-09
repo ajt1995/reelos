@@ -1,4 +1,4 @@
-import type { Kind, MediaRequest, RequestStatus } from "./types.ts";
+import type { Kind, MediaRequest, RequestStatus, Title } from "./types.ts";
 
 const IN_FLIGHT = new Set<RequestStatus>(["downloading", "waiting"]);
 
@@ -104,5 +104,75 @@ export function mergeServerRequests(local: MediaRequest[], server: MediaRequest[
     });
   }
 
+  return collapseDuplicateRequests(out);
+}
+
+const STATUS_RANK: Record<string, number> = { available: 4, downloading: 3, waiting: 2, failed: 1 };
+
+function markAvailable(row: MediaRequest): MediaRequest {
+  return { ...row, status: "available", progress: 100, reason: undefined };
+}
+
+function isMovieRequest(row: Pick<MediaRequest, "titleId" | "season">): boolean {
+  return !String(row.titleId).startsWith("tmdb-tv-") && row.season == null;
+}
+
+export function titlePresenceKeys(id: string, extra: string[] = []): string[] {
+  const keys = new Set<string>();
+  const add = (raw?: string) => {
+    const s = String(raw || "").trim();
+    if (!s) return;
+    keys.add(s);
+  };
+  add(id);
+  extra.forEach(add);
+  if (id.startsWith("tmdb-tv-")) add(`tmdb-${id.slice(8)}`);
+  return [...keys];
+}
+
+/** Collapse same titleId+season. A done sibling upgrades the rest. */
+export function collapseDuplicateRequests(rows: MediaRequest[]): MediaRequest[] {
+  const groups = new Map<string, MediaRequest[]>();
+  for (const row of rows) {
+    if (!row?.titleId) continue;
+    const key = requestMatchKey(row);
+    const list = groups.get(key) || [];
+    list.push(row);
+    groups.set(key, list);
+  }
+  const out: MediaRequest[] = [];
+  for (const list of groups.values()) {
+    const anyAvailable = list.some((r) => r.status === "available");
+    const picked = list.reduce((best, row) => {
+      const br = STATUS_RANK[best.status] || 0;
+      const rr = STATUS_RANK[row.status] || 0;
+      if (rr !== br) return rr > br ? row : best;
+      return (row.updatedAt || 0) >= (best.updatedAt || 0) ? row : best;
+    });
+    out.push(anyAvailable ? markAvailable(picked) : picked);
+  }
   return out;
+}
+
+/** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
+export function overlayLibraryPresence(
+  requests: MediaRequest[],
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "kind">[] },
+): MediaRequest[] {
+  const movieKeys = new Set<string>();
+  for (const id of opts.libraryIds || []) {
+    if (id.startsWith("tmdb-tv-") || id.startsWith("tvdb-")) continue;
+    for (const k of titlePresenceKeys(id)) movieKeys.add(k);
+  }
+  for (const t of opts.titles || []) {
+    if (t.kind === "tv" || t.kind === "anime") continue;
+    for (const k of titlePresenceKeys(t.id)) movieKeys.add(k);
+  }
+  const overlaid = requests.map((row) => {
+    if (row.status === "available") return row;
+    if (!isMovieRequest(row)) return row;
+    if (titlePresenceKeys(row.titleId).some((k) => movieKeys.has(k))) return markAvailable(row);
+    return row;
+  });
+  return collapseDuplicateRequests(overlaid);
 }

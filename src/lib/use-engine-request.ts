@@ -9,11 +9,24 @@ export function useEngineRequest(id: string) {
   useEffect(() => {
     void fetch("/api/library", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[] }[] }>)
-      .then((j) =>
-        setInJellyfin(
-          (j.titles || []).some((t) => t.id === id || (t.ids || []).includes(id)),
-        ),
-      )
+      .then((j) => {
+        const hit = (j.titles || []).some((t) => {
+          const ids = [t.id, ...(t.ids || [])];
+          if (ids.includes(id)) return true;
+          if (id.startsWith("tmdb-tv-")) return ids.includes(`tmdb-${id.slice(8)}`);
+          return false;
+        });
+        setInJellyfin(hit);
+        if (!hit || id.startsWith("tmdb-tv-")) return;
+        useReelStore.setState((s) => ({
+          requests: s.requests.map((x) =>
+            x.titleId === id && x.status !== "available" && x.season == null
+              ? { ...x, status: "available", progress: 100, updatedAt: Date.now() }
+              : x,
+          ),
+          library: s.library.includes(id) ? s.library : [...s.library, id],
+        }));
+      })
       .catch(() => {});
     const q = `id=${encodeURIComponent(id)}`;
     let stop = false;
@@ -44,6 +57,7 @@ export function useEngineRequest(id: string) {
             requests: s.requests.map((x) => {
               if (x.titleId !== id || x.status === "failed") return x;
               const status = (mapped as typeof x.status) || x.status;
+              if (x.status === "available" && status !== "available") return x;
               const progress =
                 status === "available"
                   ? 100
