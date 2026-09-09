@@ -19,18 +19,18 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: VERSION / channel / stamps agree (1.2.50.11)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.12)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.11");
-  assert.equal(chan.version, "1.2.50.11");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.11"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.11"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.11"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.11"/);
-  assert.match(read("HAL.md"), /1\.2\.50\.11/);
+  assert.equal(ver, "1.2.50.12");
+  assert.equal(chan.version, "1.2.50.12");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.12"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.12"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.12"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.12"/);
+  assert.match(read("HAL.md"), /1\.2\.50\.12/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -128,7 +128,9 @@ test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () =>
       encoding: "utf8",
     });
     assert.equal(r.status, 0, `${rel} compile\n${r.stderr}`);
-    assert.match(code, /Authorization.*MediaBrowser Client="ReelOS"/);
+    assert.match(code, /MediaBrowser Client="ReelOS"/);
+    assert.match(code, /def jellyfin_headers/);
+    assert.match(code, /Token=/);
     assert.match(code, /reveal_jellyfin_admin/);
     assert.match(code, /seed_jellyfin_network_xml/);
     assert.match(code, /wait_fuse_ready/);

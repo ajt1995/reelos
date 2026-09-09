@@ -27,7 +27,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
       encoding: "utf8",
     });
     assert.equal(r.status, 0, `${rel} compile\n${r.stderr}`);
-    assert.match(code, /Authorization.*MediaBrowser Client="ReelOS".*DeviceId="reelos"/);
+    assert.match(code, /MediaBrowser Client="ReelOS".*DeviceId="reelos"/);
+    assert.match(code, /def jellyfin_headers/);
+    assert.match(code, /Token=/);
     assert.match(code, /reveal_jellyfin_admin/);
     assert.match(code, /IsHidden/);
     assert.match(code, /restart_fuse_readers/);
@@ -69,6 +71,7 @@ test("Finish /api/provision does not spawnSync compose pull on the Vite thread",
 
 test("Seerr bootstrap turns preventSearch off on an existing Radarr/Sonarr", () => {
   const part = read("daemon/wire-engines.parts/09.part");
+  assert.match(part, /Final ok must re-read post-apply rows/);
   assert.match(part, /def seerr_needs_search_enable/);
   assert.match(part, /def ensure_seerr_arr_service/);
   assert.match(part, /preventSearch": False/);

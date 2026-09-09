@@ -111,36 +111,62 @@ def prowlarr_app_sync_level() -> str:
 
 
 SONARR_SYNC_CATEGORIES = (5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 8000)
+RADARR_SYNC_CATEGORIES = (2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 8000)
 
 
 def prowlarr_app_fields(name: str, fields) -> list[dict]:
-    """TorrentRss reports only 8000/Other; Sonarr must opt into it to receive RSS feeds."""
+    """TorrentRss reports only 8000/Other; Sonarr must opt into it to receive RSS feeds.
+
+    Radarr needs movie cats (2000+) or YTS/TPB never attach — Prowlarr-green is not MoviesSearch.
+    """
     out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
-    if name != "Sonarr":
+    if name == "Sonarr":
+        cats, extra = SONARR_SYNC_CATEGORIES, (8000,)
+    elif name == "Radarr":
+        cats, extra = RADARR_SYNC_CATEGORIES, RADARR_SYNC_CATEGORIES
+    else:
         return out
     hit = next((f for f in out if f.get("name") == "syncCategories"), None)
     if hit is None:
-        out.append({"name": "syncCategories", "value": list(SONARR_SYNC_CATEGORIES)})
+        out.append({"name": "syncCategories", "value": list(cats)})
         return out
     values = hit.get("value") if isinstance(hit.get("value"), list) else []
-    hit["value"] = list(dict.fromkeys([*values, 8000]))
+    hit["value"] = list(dict.fromkeys([*values, *extra]))
     return out
+
+
+def prowlarr_movie_cats_present(have) -> bool:
+    """8000/Other is not a movie category. Radarr needs 2000-2999 or YTS/TPB never sync."""
+    for c in have or []:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 2000 <= n < 3000:
+            return True
+    return False
 
 
 def prowlarr_app_needs_update(app: dict | None) -> bool:
     if not app:
         return False
+    if app.get("enable") is False:
+        return True
     if str(app.get("syncLevel") or "") != prowlarr_app_sync_level():
         return True
-    if app.get("name") != "Sonarr":
-        return False
+    name = str(app.get("name") or "")
     fields = app.get("fields") or []
     sync = next((f for f in fields if isinstance(f, dict) and f.get("name") == "syncCategories"), None)
-    return not sync or 8000 not in (sync.get("value") or [])
+    have = sync.get("value") if sync and isinstance(sync.get("value"), list) else []
+    if name == "Sonarr":
+        return not sync or 8000 not in have
+    if name == "Radarr":
+        return not sync or not prowlarr_movie_cats_present(have)
+    return False
 
 
 def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:
-    """Keep Prowlarr→*arr at fullSync so EZTV/ShowRSS land in Sonarr, not only Radarr/YTS."""
+    """Keep Prowlarr→*arr enabled at fullSync so YTS/TPB land in Radarr and EZTV in Sonarr."""
     url = "http://127.0.0.1:9696/api/v1/applications"
     try:
         apps = call(url, prow_key) or []
@@ -151,17 +177,19 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
             continue
         if app.get("id") is not None and prowlarr_app_needs_update(app):
             body = dict(app)
+            body["enable"] = True
             body["syncLevel"] = prowlarr_app_sync_level()
             body["fields"] = prowlarr_app_fields(name, body.get("fields"))
             try:
                 call(f"{url}/{app['id']}", prow_key, method="PUT", body=body)
-                suffix = " + 8000/Other" if name == "Sonarr" else ""
+                suffix = " + 8000/Other" if name == "Sonarr" else " + movie cats"
                 log_wire(f"prowlarr app {name} fullSync{suffix}")
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
                 pass
         return
     body = {
         "name": name,
+        "enable": True,
         "syncLevel": prowlarr_app_sync_level(),
         "implementation": implementation,
         "implementationName": implementation,
@@ -190,9 +218,9 @@ def sync_prowlarr_apps(prow_key: str) -> None:
                 "http://127.0.0.1:9696/api/v1/command",
                 prow_key,
                 method="POST",
-                body={"name": name},
+                body={"name": name, "forceSync": True},
             )
-            log_wire(f"prowlarr {name}")
+            log_wire(f"prowlarr {name} forceSync")
             return
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
             continue

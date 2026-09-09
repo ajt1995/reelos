@@ -2,7 +2,7 @@
         f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
         method="POST",
         body=body,
-        headers={"X-Emby-Token": token},
+        headers=jellyfin_headers(token),
     )
 
 
@@ -13,7 +13,7 @@ def add_jellyfin_path(token: str, name: str, path: str | None = None) -> None:
         f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
         method="POST",
         body={"Name": name, "Path": path, "PathInfo": {"Path": path}},
-        headers={"X-Emby-Token": token},
+        headers=jellyfin_headers(token),
     )
 
 
@@ -22,7 +22,7 @@ def remove_jellyfin_path(token: str, name: str, path: str) -> None:
     call(
         f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
         method="DELETE",
-        headers={"X-Emby-Token": token},
+        headers=jellyfin_headers(token),
     )
 
 
@@ -31,7 +31,7 @@ def delete_jellyfin_library(token: str, name: str) -> None:
     call(
         f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
         method="DELETE",
-        headers={"X-Emby-Token": token},
+        headers=jellyfin_headers(token),
     )
 
 
@@ -117,7 +117,7 @@ def fetch_jellyfin_series(token: str) -> list:
         }
     )
     try:
-        data = call(f"http://127.0.0.1:8096/Items?{q}", headers={"X-Emby-Token": token}) or {}
+        data = call(f"http://127.0.0.1:8096/Items?{q}", headers=jellyfin_headers(token)) or {}
     except NET_ERR:
         return []
     items = data.get("Items") if isinstance(data, dict) else data
@@ -142,7 +142,7 @@ def heal_season_folder_items(token: str, items=None, call_fn=None) -> int:
                 do(
                     f"http://127.0.0.1:8096/Items/{plan['id']}",
                     method="DELETE",
-                    headers={"X-Emby-Token": token},
+                    headers=jellyfin_headers(token),
                 )
                 log_wire(f"jellyfin drop season-folder item {plan['name']}")
             else:
@@ -152,7 +152,7 @@ def heal_season_folder_items(token: str, items=None, call_fn=None) -> int:
                     f"http://127.0.0.1:8096/Items/{plan['id']}",
                     method="POST",
                     body=body,
-                    headers={"X-Emby-Token": token},
+                    headers=jellyfin_headers(token),
                 )
                 log_wire(f"jellyfin rename season-folder item {plan['name']} -> {plan['as']}")
             n += 1
@@ -261,7 +261,7 @@ def heal_after_import() -> bool:
                 call(
                     "http://127.0.0.1:8096/Library/Refresh",
                     method="POST",
-                    headers={"X-Emby-Token": token},
+                    headers=jellyfin_headers(token),
                 )
                 log_wire("jellyfin refresh after post-import heal")
             except NET_ERR as e:
@@ -287,7 +287,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
                     call(
                         "http://127.0.0.1:8096/Library/Refresh",
                         method="POST",
-                        headers={"X-Emby-Token": token},
+                        headers=jellyfin_headers(token),
                     )
                     log_wire("jellyfin refresh after season-folder dump collapse")
                 except NET_ERR as e:
@@ -360,7 +360,7 @@ def bootstrap_jellyfin() -> None:
         call(
             "http://127.0.0.1:8096/Library/Refresh",
             method="POST",
-            headers={"X-Emby-Token": token},
+            headers=jellyfin_headers(token),
         )
         log_wire("jellyfin refresh")
     except NET_ERR as e:

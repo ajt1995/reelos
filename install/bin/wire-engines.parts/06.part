@@ -90,6 +90,22 @@ def _mount_extra_disks() -> None:
             print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
 
 
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.12"'
+
+
+def jellyfin_headers(token: str = "") -> dict:
+    """JF 10.10+ VirtualFolders 401s on X-Emby-Token alone — send MediaBrowser Token=."""
+    auth = JF_AUTH_CLIENT + (f', Token="{token}"' if token else "")
+    hdrs = {
+        "Accept": "application/json",
+        "Authorization": auth,
+        "X-Emby-Authorization": auth,
+    }
+    if token:
+        hdrs["X-Emby-Token"] = token
+    return hdrs
+
+
 def jellyfin_authenticate(user: str, password: str) -> str | None:
     body = json.dumps({"Username": user, "Pw": password}).encode()
     req = urllib.request.Request(
@@ -98,8 +114,7 @@ def jellyfin_authenticate(user: str, password: str) -> str | None:
         method="POST",
         headers={
             "Content-Type": "application/json",
-            "Authorization": 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.1"',
-            "X-Emby-Authorization": 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.1"',
+            **jellyfin_headers(),
         },
     )
     try:
@@ -113,7 +128,7 @@ def jellyfin_authenticate(user: str, password: str) -> str | None:
 def reveal_jellyfin_admin(token: str) -> None:
     """JF hides the first admin from /Users/Public (IsHidden=true) → empty login list."""
     try:
-        me = call("http://127.0.0.1:8096/Users/Me", headers={"X-Emby-Token": token}) or {}
+        me = call("http://127.0.0.1:8096/Users/Me", headers=jellyfin_headers(token)) or {}
     except NET_ERR:
         return
     uid = me.get("Id")
@@ -129,7 +144,7 @@ def reveal_jellyfin_admin(token: str) -> None:
             f"http://127.0.0.1:8096/Users/{uid}/Policy",
             method="POST",
             body=body,
-            headers={"X-Emby-Token": token},
+            headers=jellyfin_headers(token),
         )
         log_wire("jellyfin admin visible")
     except NET_ERR as e:
@@ -142,7 +157,7 @@ def jellyfin_token() -> str | None:
         t = cached.read_text().strip()
         if t:
             try:
-                call("http://127.0.0.1:8096/Users/Me", headers={"X-Emby-Token": t})
+                call("http://127.0.0.1:8096/Users/Me", headers=jellyfin_headers(t))
                 reveal_jellyfin_admin(t)
                 return t
             except NET_ERR:

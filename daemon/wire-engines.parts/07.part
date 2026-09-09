@@ -22,7 +22,7 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
         "ExtractChapterImagesDuringLibraryScan": not low,
         "DummyChapterDuration": 0 if low else 300,
     }
-    hdr = {"X-Emby-Token": token}
+    hdr = jellyfin_headers(token)
     try:
         folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
@@ -73,7 +73,7 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
 
 def jellyfin_folders(token: str):
     try:
-        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers={"X-Emby-Token": token}) or []
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=jellyfin_headers(token)) or []
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
         return []
     return folders if isinstance(folders, list) else []
@@ -339,7 +339,7 @@ def seed_jellyfin_network_xml() -> None:
 
 
 def apply_jellyfin_published_uri(token: str) -> None:
-    hdr = {"X-Emby-Token": token}
+    hdr = jellyfin_headers(token)
     try:
         cfg = call("http://127.0.0.1:8096/System/Configuration/network", headers=hdr) or {}
     except NET_ERR:

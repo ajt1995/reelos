@@ -248,8 +248,17 @@ def _arr_json(url: str, key: str):
         return json.loads(resp.read().decode() or "[]")
 
 
+def _indexer_is_rss_only(ix: dict) -> bool:
+    impl = str(ix.get("implementation") or "").lower()
+    name = str(ix.get("name") or "").lower()
+    return impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name
+
+
 def _indexer_can_search(ix: dict) -> bool:
+    """Fail-closed on RSS-only. Search flags on EZTV/ShowRSS are not MoviesSearch."""
     if not isinstance(ix, dict) or not ix.get("enable"):
+        return False
+    if _indexer_is_rss_only(ix):
         return False
     if ix.get("enableAutomaticSearch") is False and ix.get("enableInteractiveSearch") is False:
         return False
@@ -268,9 +277,15 @@ def request_hop_detail(*, radarr_up: bool, clients, indexers, lookup=None) -> tu
         return "request dead — Radarr", False
     if not _decypharr_client_ok(clients):
         return "Radarr has no Decypharr client — MoviesSearch cannot land", False
-    enabled = [ix for ix in (indexers or []) if _indexer_can_search(ix)]
-    if not enabled:
-        return "Radarr has no search indexer — MoviesSearch cannot land", False
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "doctor_radarr_indexers_detail", None):
+        _detail, ix_ok = mod.doctor_radarr_indexers_detail(indexers or [])
+        if not ix_ok:
+            return _detail, False
+    else:
+        enabled = [ix for ix in (indexers or []) if _indexer_can_search(ix)]
+        if not enabled:
+            return "Radarr has no search indexer — MoviesSearch cannot land", False
     if lookup is not None and not lookup_is_usable(lookup):
         return "Radarr movie lookup failed — add/search path dead", False
     return "Radarr accepts adds + search path", True
@@ -319,6 +334,9 @@ def sonarr_indexers_hop() -> dict:
     return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
 
 
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.12"'
+
+
 def jellyfin_api_token() -> str:
     try:
         return (STATE / "jellyfin.token").read_text().strip()
@@ -326,24 +344,116 @@ def jellyfin_api_token() -> str:
         return ""
 
 
+def jellyfin_auth_headers(token: str = "") -> dict:
+    """JF 10.10+ VirtualFolders returns HTTPError on X-Emby-Token alone."""
+    auth = JF_AUTH_CLIENT + (f', Token="{token}"' if token else "")
+    hdrs = {
+        "Accept": "application/json",
+        "Authorization": auth,
+        "X-Emby-Authorization": auth,
+    }
+    if token:
+        hdrs["X-Emby-Token"] = token
+    return hdrs
+
+
+def jellyfin_write_token(token: str) -> None:
+    if not token:
+        return
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "jellyfin.token").write_text(token + "\n")
+    except OSError:
+        pass
+
+
+def jellyfin_authenticate(user: str, password: str) -> str:
+    import urllib.request
+
+    body = json.dumps({"Username": user, "Pw": password}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:8096/Users/AuthenticateByName",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json", **jellyfin_auth_headers()},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode() or "{}")
+            return str(data.get("AccessToken") or "").strip()
+    except Exception:
+        return ""
+
+
+def jellyfin_reauth() -> str:
+    a = {}
+    try:
+        a = json.loads((STATE / "answers.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        a = {}
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    pws = []
+    for p in ((a.get("adminPassword") or "").strip(), str(a.get("password") or ""), "reelos", user):
+        if p and p not in pws:
+            pws.append(p)
+    names = []
+    for n in (user, "reelos"):
+        if n and n not in names:
+            names.append(n)
+    for n in names:
+        for p in pws:
+            tok = jellyfin_authenticate(n, p)
+            if tok:
+                jellyfin_write_token(tok)
+                return tok
+    return ""
+
+
+def jellyfin_read_virtual_folders(token: str):
+    import urllib.parse
+    import urllib.request
+
+    urls = [
+        "http://127.0.0.1:8096/Library/VirtualFolders",
+        "http://127.0.0.1:8096/Library/VirtualFolders?api_key=" + urllib.parse.quote(token),
+    ]
+    last = None
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers=jellyfin_auth_headers(token))
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                return json.loads(resp.read().decode() or "[]")
+        except Exception as e:
+            last = e
+    if last:
+        raise last
+    return []
+
+
 def jellyfin_libraries_hop() -> dict:
-    """TCP :8096 is not a library. Read VirtualFolders with the house token."""
+    """TCP :8096 is not a library. Read VirtualFolders with MediaBrowser Token headers."""
     if not listening(8096):
         return ok("Jellyfin libraries", "Not up", False)
     token = jellyfin_api_token()
-    if not token:
-        return ok("Jellyfin libraries", "Cannot read virtual folders (no token)", False)
-    import urllib.request
-
-    try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:8096/Library/VirtualFolders",
-            headers={"X-Emby-Token": token, "Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=6) as resp:
-            folders = json.loads(resp.read().decode() or "[]")
-    except Exception as e:
-        return ok("Jellyfin libraries", f"Cannot read virtual folders ({type(e).__name__})", False)
+    folders = None
+    err = None
+    if token:
+        try:
+            folders = jellyfin_read_virtual_folders(token)
+        except Exception as e:
+            err = e
+    if folders is None:
+        token = jellyfin_reauth()
+        if token:
+            try:
+                folders = jellyfin_read_virtual_folders(token)
+            except Exception as e:
+                err = e
+    if folders is None:
+        if not jellyfin_api_token() and err is None:
+            return ok("Jellyfin libraries", "Cannot read virtual folders (no token)", False)
+        kind = type(err).__name__ if err else "no token"
+        return ok("Jellyfin libraries", f"Cannot read virtual folders ({kind})", False)
     detail, good = doctor_jellyfin_library_detail(folders if isinstance(folders, list) else [])
     return ok("Jellyfin libraries", detail, good)
 
@@ -561,6 +671,32 @@ def _self_test() -> int:
             )
             self.assertFalse(muted_ok)
             self.assertIn("search indexer", muted)
+            rss_only, rss_ok = request_hop_detail(
+                radarr_up=True,
+                clients=[client],
+                indexers=[
+                    {
+                        "enable": True,
+                        "name": "ReelOS-eztv",
+                        "implementation": "TorrentRssIndexer",
+                        "enableAutomaticSearch": True,
+                        "enableInteractiveSearch": True,
+                    }
+                ],
+            )
+            self.assertFalse(rss_ok)
+            self.assertIn("RSS-only", rss_only)
+            self.assertFalse(
+                _indexer_can_search(
+                    {
+                        "enable": True,
+                        "name": "ReelOS-eztv",
+                        "implementation": "TorrentRssIndexer",
+                        "enableAutomaticSearch": True,
+                        "enableInteractiveSearch": True,
+                    }
+                )
+            )
             dead_lookup, dl_ok = request_hop_detail(
                 radarr_up=True,
                 clients=[client],
@@ -608,6 +744,15 @@ def _self_test() -> int:
             self.assertIn("doctor_jellyfin_library_detail", hop)
             self.assertIn("X-Emby-Token", hop)
             self.assertIn("jellyfin_api_token", hop)
+            self.assertIn("jellyfin_auth_headers", hop)
+            self.assertIn("jellyfin_reauth", hop)
+            self.assertIn("Authorization", hop)
+            self.assertIn("Token=", hop)
+            hdrs = jellyfin_auth_headers("house-token")
+            self.assertIn("house-token", hdrs["X-Emby-Token"])
+            self.assertIn('Token="house-token"', hdrs["Authorization"])
+            self.assertIn("MediaBrowser", hdrs["Authorization"])
+            self.assertEqual(hdrs["Authorization"], hdrs["X-Emby-Authorization"])
 
         def test_tpb_only_house_is_a_failed_releases_hop(self):
             mod = _load_public_indexers()

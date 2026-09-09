@@ -45,12 +45,22 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(apps, /fullSync/);
   assert.match(apps, /def sync_prowlarr_apps/);
   assert.match(apps, /ApplicationIndexerSync/);
+  assert.match(apps, /forceSync/);
   assert.match(apps, /SONARR_SYNC_CATEGORIES.*8000/);
+  assert.match(apps, /RADARR_SYNC_CATEGORIES/);
   assert.match(apps, /prowlarr_app_fields/);
+  assert.match(apps, /"enable": True/);
   assert.doesNotMatch(apps, /"syncLevel": "addOnly"/);
   const main = read("daemon/wire-engines.parts/09.part");
   assert.match(main, /if "indexers" in sys\.argv/);
   assert.match(main, /def ensure_indexers_and_sync/);
+  assert.match(main, /def ensure_arr_search_indexers/);
+  assert.match(main, /apply_arr_search_indexers/);
+  assert.match(main, /Final ok must re-read post-apply rows/);
+  assert.match(main, /read_arr_rows/);
+  assert.match(main, /def read_prow_rows/);
+  assert.match(main, /turns a blip into heal red/);
+  assert.match(main, /torznab/);
   assert.match(main, /widen_sonarr_hybrid/);
   assert.match(main, /research-missing/);
   assert.match(main, /--quick/);
@@ -80,7 +90,15 @@ assert sync == [5000, 5030, 8000], sync
 assert old[0]["value"] == [5000, 5030], old
 assert g["prowlarr_app_needs_update"]({"name": "Sonarr", "syncLevel": "fullSync", "fields": old})
 assert not g["prowlarr_app_needs_update"]({"name": "Sonarr", "syncLevel": "fullSync", "fields": out})
-assert g["prowlarr_app_fields"]("Radarr", []) == []
+radarr = g["prowlarr_app_fields"]("Radarr", [])
+rcats = next(f["value"] for f in radarr if f["name"] == "syncCategories")
+assert 2000 in rcats and 8000 in rcats, rcats
+assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "enable": False})
+assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": []})
+other = [{"name": "syncCategories", "value": [8000]}]
+assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": other})
+movie = [{"name": "syncCategories", "value": [2000, 8000]}]
+assert not g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": movie})
 `,
     ],
     { input: chunk, encoding: "utf8" },
@@ -98,6 +116,8 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   assert.match(out, /test_no_cardigann_schema_uses_torrent_rss_fallback/);
   assert.match(out, /test_empty_schema_still_posts_eztv_showrss/);
   assert.match(out, /test_sandbox_house_tpb_only_http_posts_eztv_showrss/);
+  assert.match(out, /test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync/);
+  assert.match(out, /test_radarr_rss_only_is_not_a_search_path/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);
 });
@@ -114,5 +134,8 @@ test("doctor lists every enabled indexer and fails closed without EZTV/ShowRSS",
   assert.doesNotMatch(hop, /\/indexer\/test/);
   assert.match(doc, /Sonarr has no Decypharr client/);
   assert.match(doc, /\/api\/v3\/downloadclient/);
+  assert.match(doc, /jellyfin_auth_headers/);
+  assert.match(doc, /Token=/);
+  assert.match(doc, /jellyfin_reauth/);
   assert.equal(read("install/bin/reelos-doctor.py"), doc);
 });
