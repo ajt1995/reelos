@@ -27,6 +27,8 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "npm ci failed — not swapping"),
     ("daemon/reelos-update.sh", "overlay house compose/configs onto staging"),
     ("daemon/reelos-update.sh", "still copying node_modules"),
+    ("daemon/reelos-update.sh", "ROOT.prev/docker-compose.yml"),
+    ("daemon/reelos-update.sh", "compose recreated — remount FUSE before hops"),
 )
 
 
@@ -56,6 +58,11 @@ def main() -> int:
         textc = (root / rel).read_text() if (root / rel).is_file() else ""
         if needle not in textc:
             return fail(f"OTA contract missing {rel} ~ {needle}")
+
+    if "stale ota.lock — taking lock" in updater or 'rm -f "$STATE/ota.lock"' in updater:
+        return fail("OTA contract: must not delete ota.lock (inode split = dual Apply)")
+    if 'cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"' in updater:
+        return fail("OTA contract: compose change must compare against pre-swap yml")
 
     stamp = updater.find('echo "$REMOTE" >"$ROOT/VERSION"')
     applied = updater.find('log "ReelOS $REMOTE applied."')
