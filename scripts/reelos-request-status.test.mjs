@@ -535,7 +535,7 @@ test("recover monitors an unmonitored National Treasure then MoviesSearchs", asy
       if (String(url).includes("/qualityprofile") && method === "GET") {
         return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
       }
-      if (String(url).includes("/command")) return { ok: true };
+      if (String(url).includes("/command")) return { id: 12, name: "MoviesSearch" };
       return { ok: true };
     },
   });
