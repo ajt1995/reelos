@@ -19,18 +19,18 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: VERSION / channel / stamps agree (1.2.50)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.1)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50");
-  assert.equal(chan.version, "1.2.50");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50"/);
-  assert.match(read("HAL.md"), /1\.2\.50/);
+  assert.equal(ver, "1.2.50.1");
+  assert.equal(chan.version, "1.2.50.1");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.1"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.1"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.1"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.1"/);
+  assert.match(read("HAL.md"), /1\.2\.50\.1/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -95,6 +95,20 @@ test("stack: #50 rshared unit + container ENOTCONN heal stay on main", () => {
   assert.match(stuck, /True if host OR \*arr\/Jellyfin rslave bind is ENOTCONN/);
   assert.match(stuck, /"--make-rshared"/);
   assert.equal(read("install/systemd/reelos-mnt-rshared.service"), read("firstboot/reelos-mnt-rshared.service"));
+});
+
+test("stack: TV season import stays on sonarr dumps and twins", () => {
+  const harden = read("install/bin/sonarr_manual_import.py");
+  assert.equal(harden, read("daemon/sonarr_manual_import.py"));
+  assert.equal(read("install/bin/stuck-downloads.py"), read("daemon/stuck-downloads.py"));
+  assert.match(harden, /S01\.E01/);
+  assert.match(harden, /is_foreign_media_path/);
+  assert.doesNotMatch(harden, /folders = \["\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\]/);
+  const stuck = read("install/bin/stuck-downloads.py");
+  assert.match(stuck, /_sonarr_manual_import/);
+  assert.match(stuck, /category_folders/);
+  const part = read("install/bin/wire-engines.parts/01.part");
+  assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\)/);
 });
 
 test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () => {

@@ -135,6 +135,57 @@ export function applyStuckNotes(row, notes) {
   };
 }
 
+export function requestIdentity(row) {
+  const season = row?.season == null ? "" : String(row.season);
+  return `${row?.titleId || ""}#${season}`;
+}
+
+const REQUEST_RANK = { available: 4, downloading: 3, waiting: 2, failed: 1 };
+
+export function preferRequest(a, b) {
+  const ra = REQUEST_RANK[a?.status] || 0;
+  const rb = REQUEST_RANK[b?.status] || 0;
+  if (rb !== ra) return rb > ra ? b : a;
+  const ta = Number(a?.createdAt) || 0;
+  const tb = Number(b?.createdAt) || 0;
+  if (tb && ta && tb !== ta) return tb < ta ? b : a;
+  return a;
+}
+
+/** One phone row per title+season. Keeps the furthest-along (or oldest) Seerr request. */
+export function collapseDuplicateRequests(rows) {
+  if (!Array.isArray(rows)) return [];
+  const byKey = new Map();
+  const order = [];
+  for (const r of rows) {
+    if (!r?.titleId) continue;
+    const key = requestIdentity(r);
+    const prev = byKey.get(key);
+    if (!prev) {
+      byKey.set(key, r);
+      order.push(key);
+      continue;
+    }
+    byKey.set(key, preferRequest(prev, r));
+  }
+  return order.map((k) => byKey.get(k)).filter(Boolean);
+}
+
+export function findExistingSeasonRequest(rows, { mediaType, tmdb, season } = {}) {
+  const wantType = mediaType === "tv" ? "tv" : "movie";
+  const wantTmdb = String(tmdb ?? "");
+  const wantSeason = wantType === "tv" && season != null && season !== "" ? Number(season) : undefined;
+  for (const raw of rows || []) {
+    const rec = raw?.titleId ? raw : seerrRequestRow(raw, {});
+    if (!rec?.titleId || String(rec.tmdb) !== wantTmdb) continue;
+    if ((rec.mediaType || (String(rec.titleId).startsWith("tmdb-tv-") ? "tv" : "movie")) !== wantType) continue;
+    if (wantType === "tv" && wantSeason && rec.season != null && Number(rec.season) !== wantSeason) continue;
+    if (rec.status === "failed") continue;
+    return rec;
+  }
+  return null;
+}
+
 export function seerrRequestRow(r, notes) {
   const media = r?.media || {};
   const mediaType = r?.type === "tv" || media.mediaType === "tv" ? "tv" : "movie";

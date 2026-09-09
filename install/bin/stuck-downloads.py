@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -304,28 +305,78 @@ def decide_queue_action(
     return "wait"
 
 
+def queue_season_key(item: dict) -> str | None:
+    """seriesId+season so a second Seerr grab of the same season is an extra."""
+    series = item.get("series") if isinstance(item.get("series"), dict) else {}
+    sid = item.get("seriesId") or series.get("id")
+    if not sid:
+        return None
+    season = item.get("seasonNumber")
+    ep = item.get("episode") if isinstance(item.get("episode"), dict) else {}
+    if season is None:
+        season = ep.get("seasonNumber")
+    if season is None:
+        for e in item.get("episodes") or []:
+            if isinstance(e, dict) and e.get("seasonNumber") is not None:
+                season = e.get("seasonNumber")
+                break
+    if season is None:
+        title = str(item.get("title") or "")
+        m = re.search(r"[Ss](\d{1,2})", title)
+        season = int(m.group(1)) if m else None
+    if season is None:
+        return None
+    try:
+        return f"series:{int(sid)}:s{int(season)}"
+    except (TypeError, ValueError):
+        return None
+
+
+def is_season_pack_row(item: dict) -> bool:
+    """True for a whole-season grab, not one SxxExx queue row."""
+    ep = item.get("episode") if isinstance(item.get("episode"), dict) else {}
+    if ep.get("episodeNumber"):
+        return False
+    eps = [e for e in (item.get("episodes") or []) if isinstance(e, dict)]
+    if len(eps) == 1 and eps[0].get("episodeNumber") and not eps[0].get("seasonNumber"):
+        return False
+    if len(eps) == 1 and eps[0].get("episodeNumber") and len(eps) < 2:
+        title = str(item.get("title") or "")
+        if re.search(r"[Ss]\d{1,2}\s*[Ee]\d", title) or re.search(r"\d{1,2}[xX]\d", title):
+            return False
+    title = str(item.get("title") or "")
+    if re.search(r"[Ss]\d{1,2}\s*[.\-_ ]?\s*[Ee]\d", title):
+        return False
+    return queue_season_key(item) is not None
+
+
 def extra_duplicate_queue_items(items: list) -> list:
-    """Newer *arr queue rows that repeat a hash already in the queue."""
+    """Newer *arr queue rows that repeat a hash, or a second season-pack of the same series+season."""
     seen: dict[str, dict] = {}
+    seen_season: dict[str, dict] = {}
     extras: list[dict] = []
 
     def sort_key(it: dict) -> tuple:
         raw = str(it.get("added") or "")
-        try:
-            # ISO-8601 → comparable string is enough; fallback to id
-            ts = raw
-        except Exception:
-            ts = ""
-        return (ts, int(it.get("id") or 0))
+        return (raw, int(it.get("id") or 0))
 
     for it in sorted((i for i in items if isinstance(i, dict)), key=sort_key):
+        marked = False
         h = normalize_hash(it.get("downloadId") or it.get("download_id") or "")
-        if not h:
-            continue
-        if h in seen:
-            extras.append(it)
-        else:
-            seen[h] = it
+        if h:
+            if h in seen:
+                extras.append(it)
+                marked = True
+            else:
+                seen[h] = it
+        if is_season_pack_row(it):
+            sk = queue_season_key(it)
+            if sk:
+                if sk in seen_season:
+                    if not marked:
+                        extras.append(it)
+                else:
+                    seen_season[sk] = it
     return extras
 
 
@@ -703,13 +754,23 @@ def movie_id_of(item: dict) -> int | None:
     return None
 
 
+def category_folders(app: dict, path: str) -> list[str]:
+    """Scan only this *arr's dump dir. Never /mnt/symlinks (Museum under Sonarr)."""
+    folders = [f for f in path_candidates(path) if f]
+    cat = app.get("category") or app["name"]
+    own = f"/{cat}/"
+    if folders:
+        folders = [f for f in folders if own in (f.rstrip("/") + "/") or f.rstrip("/").endswith(f"/{cat}")]
+    if not folders:
+        folders = [f"/mnt/symlinks/{cat}", f"/symlinks/{cat}"]
+    return folders
+
+
 def retry_arr_import(app: dict, key: str, item: dict) -> None:
     """Re-scan + ManualImport now that FUSE can stat the file. Does not re-add to TorBox."""
     path = content_path_of(item)
     scan_name = "DownloadedMoviesScan" if app["name"] == "radarr" else "DownloadedEpisodesScan"
-    folders = path_candidates(path)
-    if not folders:
-        folders = [f"/mnt/symlinks/{app['category']}", "/mnt/symlinks"]
+    folders = category_folders(app, path)
     for folder in folders:
         try:
             call(
@@ -731,6 +792,8 @@ def retry_arr_import(app: dict, key: str, item: dict) -> None:
         log(f"{app['name']} refresh downloads {type(e).__name__} {e}")
     if app["name"] == "radarr":
         _radarr_manual_import(app, key, item, folders)
+    elif app["name"] == "sonarr":
+        _sonarr_manual_import(key, item, folders)
 
 
 def _radarr_manual_import(app: dict, key: str, item: dict, folders: list[str]) -> None:
@@ -782,6 +845,29 @@ def _radarr_manual_import(app: dict, key: str, item: dict, folders: list[str]) -
         log(f"{app['name']} manualimport {len(files[:20])} files")
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
         log(f"{app['name']} manualimport {type(e).__name__} {e}")
+
+
+def _sonarr_manual_import(key: str, item: dict, folders: list[str]) -> None:
+    """Same harden as wire-engines: match S01.E01 / season packs, skip radarr dumps."""
+    mod_path = Path(__file__).resolve().with_name("sonarr_manual_import.py")
+    if not mod_path.is_file():
+        mod_path = Path("/opt/reelos/daemon/sonarr_manual_import.py")
+    if not mod_path.is_file():
+        log("sonarr manualimport harden missing")
+        return
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("reelos_sonarr_manual_import", mod_path)
+        if spec is None or spec.loader is None:
+            return
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod.bind(call_fn=call, log_fn=log)
+        scan = [f for f in folders if f and "radarr" not in f.lower()]
+        mod.sonarr_manual_import(key, hint=item, folders=scan or None)
+    except Exception as e:
+        log(f"sonarr manualimport {type(e).__name__} {e}")
 
 
 def sweep() -> int:
@@ -1259,6 +1345,68 @@ def _self_test() -> int:
                 ),
                 "recover",
             )
+
+        def test_category_folders_never_scan_symlink_parent(self):
+            radarr = {"name": "radarr", "category": "radarr"}
+            sonarr = {"name": "sonarr", "category": "sonarr"}
+            self.assertEqual(
+                category_folders(sonarr, "/mnt/symlinks/sonarr/The Walking Dead"),
+                ["/mnt/symlinks/sonarr/The Walking Dead", "/symlinks/sonarr/The Walking Dead"],
+            )
+            self.assertNotIn("/mnt/symlinks", category_folders(sonarr, ""))
+            self.assertTrue(all("sonarr" in f for f in category_folders(sonarr, "")))
+            self.assertTrue(all("radarr" in f for f in category_folders(radarr, "")))
+            self.assertFalse(any("radarr" in f for f in category_folders(sonarr, "/mnt/symlinks/radarr/Museum")))
+
+        def test_duplicate_season_pack_marks_newer_grab(self):
+            items = [
+                {
+                    "id": 1,
+                    "seriesId": 9,
+                    "seasonNumber": 1,
+                    "downloadId": "AA",
+                    "added": "2026-01-01T00:00:00Z",
+                    "title": "The Walking Dead - S01",
+                },
+                {
+                    "id": 2,
+                    "seriesId": 9,
+                    "seasonNumber": 1,
+                    "downloadId": "BB",
+                    "added": "2026-01-01T00:40:00Z",
+                    "title": "The Walking Dead - S01",
+                },
+            ]
+            extras = extra_duplicate_queue_items(items)
+            self.assertEqual([x["id"] for x in extras], [2])
+            self.assertEqual(queue_season_key(items[0]), "series:9:s1")
+
+        def test_same_season_episode_rows_are_not_duplicates(self):
+            items = [
+                {
+                    "id": 1,
+                    "seriesId": 9,
+                    "downloadId": "AA",
+                    "added": "2026-01-01T00:00:00Z",
+                    "title": "The Walking Dead - S01E01",
+                    "episode": {"seasonNumber": 1, "episodeNumber": 1},
+                },
+                {
+                    "id": 2,
+                    "seriesId": 9,
+                    "downloadId": "BB",
+                    "added": "2026-01-01T00:00:01Z",
+                    "title": "The Walking Dead - S01E02",
+                    "episode": {"seasonNumber": 1, "episodeNumber": 2},
+                },
+            ]
+            self.assertEqual(extra_duplicate_queue_items(items), [])
+
+        def test_retry_import_calls_sonarr_harden(self):
+            src = Path(__file__).read_text()
+            self.assertIn("_sonarr_manual_import", src)
+            self.assertIn("sonarr_manual_import.py", src)
+            self.assertIn('elif app["name"] == "sonarr"', src)
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

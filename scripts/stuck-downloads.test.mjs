@@ -31,6 +31,19 @@ test("daemon stuck-downloads stays twin with install/bin", () => {
   assert.match(p1, /wait_fuse_ready/);
 });
 
+test("TV retry posts Sonarr ManualImport and never scans /mnt/symlinks parent", () => {
+  const src = readFileSync(script, "utf8");
+  assert.match(src, /_sonarr_manual_import/);
+  assert.match(src, /category_folders/);
+  assert.match(src, /queue_season_key/);
+  assert.doesNotMatch(src, /folders = \[f"\/mnt\/symlinks\/\{app\['category'\]\}", "\/mnt\/symlinks"\]/);
+  const harden = readFileSync(join(root, "install/bin/sonarr_manual_import.py"), "utf8");
+  assert.match(harden, /SONARR_FOLDERS/);
+  assert.doesNotMatch(harden, /folders = \["\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\]/);
+  const r = spawnSync("python3", [join(root, "install/bin/sonarr_manual_import.py"), "--self-test"], { encoding: "utf8" });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+});
+
 test("importPending unexpected error is retried, not ignored", () => {
   const src = readFileSync(script, "utf8");
   assert.match(src, /import_is_stuck/);

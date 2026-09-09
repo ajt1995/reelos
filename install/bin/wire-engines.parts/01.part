@@ -29,8 +29,18 @@ def wait_http(url: str, seconds: int = 40) -> bool:
     return False
 
 
+def _relink_stem(name: str) -> str:
+    """Title stem only — do not match Museum into a Walking Dead dump via 20-char prefix."""
+    s = re.sub(r"[^a-z0-9]+", "", str(name or "").lower())
+    s = re.split(r"(?:19|20)\d{2}|2160p|1080p|720p|webdl|webrip|bluray", s, maxsplit=1)[0]
+    return s
+
+
 def relink_from_debrid() -> int:
-    """Empty *arr dump dirs → symlink files from FUSE /mnt/debrid/__all__."""
+    """Empty *arr dump dirs → symlink files from FUSE /mnt/debrid/__all__.
+
+    Only walk category folders. Scanning /mnt/symlinks mixed Museum into Sonarr.
+    """
     all_root = Path("/mnt/debrid/__all__")
     if not all_root.is_dir():
         log_wire("relink skip — no __all__")
@@ -43,7 +53,7 @@ def relink_from_debrid() -> int:
         log_wire(f"relink catalog {e}")
         return 0
     n = 0
-    for dump_root in (Path("/mnt/symlinks/sonarr"), Path("/mnt/symlinks/radarr"), Path("/mnt/symlinks")):
+    for dump_root in (Path("/mnt/symlinks/sonarr"), Path("/mnt/symlinks/radarr")):
         if not dump_root.is_dir():
             continue
         try:
@@ -62,11 +72,10 @@ def relink_from_debrid() -> int:
             key = dump.name.lower()
             hit = catalog.get(key)
             if not hit:
-                compact = re.sub(r"[^a-z0-9]+", "", key)[:20]
-                for name, p in catalog.items():
-                    if compact and compact in re.sub(r"[^a-z0-9]+", "", name):
-                        hit = p
-                        break
+                want = _relink_stem(key)
+                if len(want) >= 8:
+                    hits = [p for name, p in catalog.items() if _relink_stem(name) == want]
+                    hit = hits[0] if len(hits) == 1 else None
             if not hit:
                 continue
             try:
@@ -133,7 +142,7 @@ def kick_imports() -> None:
     if rk:
         for attempt in range(5):
             try:
-                for path in ("/mnt/symlinks/radarr", "/mnt/symlinks"):
+                for path in ("/mnt/symlinks/radarr", "/symlinks/radarr"):
                     call(
                         "http://127.0.0.1:7878/api/v3/command",
                         rk,
@@ -149,7 +158,7 @@ def kick_imports() -> None:
     if sk:
         for attempt in range(5):
             try:
-                for path in ("/mnt/symlinks/sonarr", "/mnt/symlinks"):
+                for path in ("/mnt/symlinks/sonarr", "/symlinks/sonarr"):
                     call(
                         "http://127.0.0.1:8989/api/v3/command",
                         sk,

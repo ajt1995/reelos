@@ -3,6 +3,8 @@ import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
   parseTitleId,
+  collapseDuplicateRequests,
+  findExistingSeasonRequest,
   seerrApiKey,
   seerrFetch,
   seerrRequestRow,
@@ -956,7 +958,7 @@ async function handleRequestList(res) {
     }
     const details = await Promise.all(need.map((p) => seerrTitleDetail(p).catch(() => null)));
     const titles = details.filter(Boolean);
-    send(res, 200, { requests, titles, engine: "seerr" });
+    send(res, 200, { requests: collapseDuplicateRequests(requests), titles, engine: "seerr" });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -1034,6 +1036,18 @@ async function handleRequest(req, res) {
     return;
   }
   try {
+    const listed = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 15000 });
+    const existingRows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
+    const reused = findExistingSeasonRequest(existingRows, {
+      mediaType: parsed.mediaType,
+      tmdb: parsed.tmdb,
+      season,
+    });
+    if (reused) {
+      note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${season ?? ""}`);
+      send(res, 200, { ok: true, engine: "seerr", added: false, reused: true, id: reused.id, title: body.title || titleId });
+      return;
+    }
     const payload = {
       mediaType: parsed.mediaType,
       mediaId: Number(parsed.tmdb),

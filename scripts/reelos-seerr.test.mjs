@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import {
   applyStuckNotes,
+  collapseDuplicateRequests,
+  findExistingSeasonRequest,
   mapSeerrStatus,
   parseTitleId,
   realSeasonNumbers,
@@ -112,6 +114,32 @@ test("stuck-notes mark a grabbing Seerr row failed and leave available alone", (
     notes,
   );
   assert.equal(ok.status, "available");
+});
+
+test("duplicate TWD S01 Seerr rows collapse to one phone request", () => {
+  const a = seerrRequestRow({
+    id: 3,
+    type: "tv",
+    status: 2,
+    createdAt: "2026-09-09T01:00:00.000Z",
+    updatedAt: "2026-09-09T01:00:00.000Z",
+    seasons: [{ seasonNumber: 1 }],
+    media: { tmdbId: 1402, status: 3 },
+  }, {});
+  const b = seerrRequestRow({
+    id: 4,
+    type: "tv",
+    status: 2,
+    createdAt: "2026-09-09T01:40:00.000Z",
+    updatedAt: "2026-09-09T01:40:00.000Z",
+    seasons: [{ seasonNumber: 1 }],
+    media: { tmdbId: 1402, status: 3 },
+  }, {});
+  const collapsed = collapseDuplicateRequests([a, b]);
+  assert.equal(collapsed.length, 1);
+  assert.equal(collapsed[0].id, "seerr-3");
+  assert.equal(findExistingSeasonRequest([a, b], { mediaType: "tv", tmdb: 1402, season: 1 })?.id, "seerr-3");
+  assert.equal(findExistingSeasonRequest([a], { mediaType: "tv", tmdb: 1402, season: 2 }), null);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {
