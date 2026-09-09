@@ -566,6 +566,10 @@ if [ -f "$ROOT/systemd/reelos-ensure.service" ]; then
   cp "$ROOT/systemd/reelos-ensure.service" /etc/systemd/system/reelos-ensure.service
   chmod 755 "$ROOT/bin/reelos-ensure.sh" 2>/dev/null || true
 fi
+if [ -f "$ROOT/systemd/reelos-mnt-rshared.service" ]; then
+  cp "$ROOT/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
+  systemctl enable --now reelos-mnt-rshared >/dev/null 2>&1 || true
+fi
 start_shell
 
 probe_home() {

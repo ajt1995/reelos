@@ -37,7 +37,20 @@ test("importPending unexpected error is retried, not ignored", () => {
   assert.match(src, /retry_import/);
   assert.match(src, /importPending/);
   assert.match(src, /fuse green — retry/);
+  assert.match(src, /docker exec/);
+  assert.match(src, /make_mnt_rshared/);
   assert.match(src, /test_import_pending_unexpected_error_retries_when_readable/);
+  assert.match(src, /test_docker_exec_enotconn_is_stale/);
+});
+
+test("rshared unit ships for firstboot and install so rslave *arr binds follow FUSE remount", () => {
+  const unit = readFileSync(join(root, "install/systemd/reelos-mnt-rshared.service"), "utf8");
+  const first = readFileSync(join(root, "firstboot/reelos-mnt-rshared.service"), "utf8");
+  assert.equal(unit, first);
+  assert.match(unit, /make-rshared \/mnt/);
+  assert.match(unit, /Before=docker.service/);
+  const updater = readFileSync(join(root, "daemon/reelos-update.sh"), "utf8");
+  assert.match(updater, /reelos-mnt-rshared/);
 });
 
 test("Requests overlay a stuck-note as failed without wiping an available title", () => {

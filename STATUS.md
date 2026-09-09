@@ -10,14 +10,16 @@
 
 ## Root cause
 
-`stuck-downloads.py` already stopped same-hash re-adds and stuck 0%. It treated a **visible symlink** as success (`ignore`). Decypharr notifies *arr as soon as the link exists; FUSE may not be readable yet. Heal remounted on `ENOTCONN` and returned without scanning. `/symlinks` vs `/mnt/symlinks` is already bind-mounted both ways — not the house fail.
+**House-confirmed (Night at the Museum):** host `ls /mnt/debrid` listed fine while Radarr/Sonarr/Jellyfin `docker exec ls /mnt/debrid` got **Socket not connected**. Compose binds `/mnt/debrid` **rslave**. After Decypharr remounts FUSE, those binds stay on the old connection unless `/mnt` is **rshared** on the host (before docker) and the reader containers are restarted.
+
+`fuse_stale()` only `listdir`’d the host, so heal never ran. `decide_queue_action` then treated `path_exists` + `completed` as **ignore**, so `importPending` + “Unexpected error processing file” sat forever. `/symlinks` vs `/mnt/symlinks` is already bind-mounted both ways — not the house fail.
 
 ## Fix
 
-- `importPending` / unexpected error → `retry_import` when FUSE `stat` works (scan + `RefreshMonitoredDownloads` + Radarr ManualImport with `movieId`). Wait if the file is not readable. Do not fail/blocklist (no second TorBox add).
-- After FUSE green, kick `wire-engines.py import`.
+- `fuse_stale()` also `docker exec` radarr/sonarr/jellyfin. Heal: `mount --make-rshared /mnt` **before** restarts; remount Decypharr only if the **host** is stale; always restart readers; then `kick_import`.
+- `reelos-mnt-rshared.service` (install + firstboot) makes `/mnt` rshared before docker. Wire-engines persist/enable the same unit. Apply copies it to `/etc`.
+- `importPending` / unexpected error → `retry_import` (house `reimport`) when the FUSE target is stat-able. Wait if not readable. Do not fail/blocklist.
 - `kick_imports` waits for FUSE `listdir` (skip `local-vpn`).
-- `lock-download-clients.py` unchanged — it already runs this sweep.
 - #49 kept: visible admin, Movies/Shows paths, published URI by request, wipe re-seed.
 
 ## Owner / house Apply

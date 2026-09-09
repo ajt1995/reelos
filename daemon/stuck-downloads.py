@@ -358,13 +358,64 @@ def extra_duplicate_torrents(torrents: list) -> list:
     return extras
 
 
-def fuse_stale(path: str = "/mnt/debrid") -> bool:
+FUSE_READERS = ("reelos-radarr-1", "reelos-sonarr-1", "reelos-jellyfin-1")
+
+
+def fuse_error_is_stale(msg: str, errno: int | None = None) -> bool:
+    blob = str(msg or "").lower()
+    if "not connected" in blob or "transport endpoint" in blob:
+        return True
+    return errno in (107, 116)
+
+
+def fuse_stale_host(path: str = "/mnt/debrid") -> bool:
     try:
         os.listdir(path)
         return False
     except OSError as e:
-        msg = str(e).lower()
-        return "not connected" in msg or getattr(e, "errno", None) in (107, 116)
+        return fuse_error_is_stale(str(e), getattr(e, "errno", None))
+
+
+def docker_exec_fuse_stale(returncode: int, stderr: str, stdout: str = "") -> bool:
+    """Parse `docker exec ls /mnt/debrid`. Missing/stopped container is not FUSE-stale."""
+    if returncode == 0:
+        return False
+    blob = f"{stderr} {stdout}".lower()
+    if "no such container" in blob or "is not running" in blob:
+        return False
+    return fuse_error_is_stale(blob)
+
+
+def fuse_stale_in_container(name: str, path: str = "/mnt/debrid") -> bool:
+    try:
+        r = subprocess.run(
+            ["docker", "exec", name, "ls", path],
+            capture_output=True,
+            text=True,
+            timeout=8,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return docker_exec_fuse_stale(r.returncode, r.stderr or "", r.stdout or "")
+
+
+def fuse_stale(path: str = "/mnt/debrid") -> bool:
+    """True if host OR *arr/Jellyfin rslave bind is ENOTCONN.
+
+    House: host `ls /mnt/debrid` listed while radarr/sonarr `docker exec` got
+    Socket not connected after Decypharr remounted and rslave did not follow.
+    """
+    if fuse_stale_host(path):
+        return True
+    for name in FUSE_READERS:
+        if fuse_stale_in_container(name, path):
+            return True
+    return False
+
+
+def make_mnt_rshared() -> None:
+    subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True)
 
 
 def title_id_of(item: dict, media_key: str) -> str | None:
@@ -599,17 +650,27 @@ def seed_failed_handling(app: dict, key: str) -> None:
 
 
 def heal_fuse_if_stale(state: dict) -> bool:
-    if not fuse_stale():
+    host_stale = fuse_stale_host()
+    stale_readers = [n for n in FUSE_READERS if fuse_stale_in_container(n)]
+    if not host_stale and not stale_readers:
         return False
     last = float(state.get("fuseRestartAt") or 0)
     now = time.time()
     if now - last < FUSE_RESTART_BACKOFF:
         log("fuse stale — backoff")
         return True
-    log("fuse Socket not connected — remount decypharr and restart *arr readers")
-    subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
-    time.sleep(4)
-    for name in ("reelos-jellyfin-1", "reelos-radarr-1", "reelos-sonarr-1"):
+    log(
+        "fuse Socket not connected — "
+        f"host={'stale' if host_stale else 'ok'} "
+        f"containers={','.join(stale_readers) or 'ok'} — "
+        "rshared /mnt then remount/restart readers"
+    )
+    make_mnt_rshared()
+    if host_stale:
+        subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
+        time.sleep(4)
+        make_mnt_rshared()
+    for name in FUSE_READERS:
         subprocess.run(["docker", "restart", name], check=False, capture_output=True)
     state["fuseRestartAt"] = now
     return True
@@ -807,7 +868,7 @@ def sweep() -> int:
                     "retryAt": prev.get("retryAt"),
                 }
                 continue
-            if action == "retry_import":
+            if action == "retry_import" or action == "reimport":
                 log(
                     f"{app['name']} retry import {title} — "
                     f"importPending/unexpected error, FUSE readable"
@@ -1003,6 +1064,19 @@ def _self_test() -> int:
 
         def test_safe_folder_colon(self):
             self.assertEqual(safe_folder_name("Spider-Man: Homecoming"), "Spider-Man - Homecoming")
+
+        def test_docker_exec_enotconn_is_stale(self):
+            self.assertTrue(
+                docker_exec_fuse_stale(1, "ls: /mnt/debrid: Transport endpoint is not connected")
+            )
+            self.assertTrue(docker_exec_fuse_stale(1, "Socket not connected"))
+            self.assertFalse(docker_exec_fuse_stale(0, ""))
+            self.assertFalse(docker_exec_fuse_stale(1, "Error: No such container: reelos-radarr-1"))
+            self.assertFalse(docker_exec_fuse_stale(1, "container is not running"))
+
+        def test_fuse_error_host_enotconn(self):
+            self.assertTrue(fuse_error_is_stale("Socket not connected", 107))
+            self.assertFalse(fuse_error_is_stale("permission denied", 13))
 
         def test_path_candidates_symlinks_vs_mnt(self):
             self.assertIn("/mnt/symlinks/radarr/X", path_candidates("/symlinks/radarr/X"))

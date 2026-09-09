@@ -6,14 +6,14 @@ RemainAfterExit=yes
 [Install]
 WantedBy=multi-user.target
 """
-    path = Path("/etc/systemd/system/reelos-mnt-shared.service")
+    path = Path("/etc/systemd/system/reelos-mnt-rshared.service")
     try:
         if path.exists() and path.read_text() == unit:
             return
         path.write_text(unit)
         subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
-        subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-shared"], check=False, capture_output=True)
-        log_wire("mnt-shared unit enabled")
+        subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-rshared"], check=False, capture_output=True)
+        log_wire("mnt-rshared unit enabled")
     except OSError as e:
         log_wire(f"mnt-shared unit {e}")
 

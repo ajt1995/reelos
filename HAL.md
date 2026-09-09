@@ -12,6 +12,6 @@ PR **#50** is the rest of this stamp: Decypharr→FUSE→*arr `importPending` re
 4. Owner phone: Settings → Check → Apply (SHA drift if 1.2.49 is already local). Search hop red is OK (#48).
 5. Proof:
    - `/api/box` Jellyfin **green**; Watch `http://<lan>:8096` (not docker `172.18.x`); no JF wizard after soft-reset (#49).
-   - Next cached TorBox grab leaves Radarr/Sonarr `hasFile=true` without a manual import. Logs: `retry import … FUSE readable` (#50).
+   - Next cached TorBox grab leaves Radarr/Sonarr `hasFile=true` without a manual import. Host FUSE listing is not enough — *arr containers must also `ls /mnt/debrid`. Logs: `retry import … FUSE readable` or `rshared /mnt then remount/restart readers` (#50).
 
 Do not Apply a feature-branch tarball. Do not wipe TorBox. Mailman from #48 stays fail-open on search.
