@@ -282,7 +282,8 @@ async function main() {
 
   await page.goto(`${ORIGIN}/settings`, { waitUntil: "networkidle" });
   await page.waitForTimeout(500);
-  await page.locator("main").getByRole("button", { name: /Library/ }).click();
+  await page.locator("main").getByRole("button", { name: /How to watch/ }).click();
+  await page.getByText("How to watch / read", { exact: true }).scrollIntoViewIfNeeded();
   await page.waitForTimeout(400);
   await shot(page, "settings.png");
 

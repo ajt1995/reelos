@@ -7,6 +7,7 @@ import {
   KeyRound,
   Shield,
   SlidersHorizontal,
+  Tv,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import {
   NotesPanel,
   QualityPanel,
   UsersPanel,
+  WatchReadPanel,
 } from "@/components/settings-accordions";
 import { PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panels";
 import { SourcePanel } from "@/components/settings-source";
@@ -62,6 +64,15 @@ export function SettingsView() {
       <HouseCard />
 
       <div className="mt-6 grid gap-2.5">
+        <Row
+          icon={Tv}
+          title="How to watch / read"
+          hint="Jellyfin for movies and TV. Kavita for books."
+          open={panel === "watch"}
+          onClick={() => setPanel(panel === "watch" ? null : "watch")}
+        >
+          <WatchReadPanel />
+        </Row>
         <Link
           to="/connect"
           className="card-glow flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"

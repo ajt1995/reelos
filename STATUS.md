@@ -33,6 +33,8 @@ Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on
 
 Design dialect: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta`. Discover typeahead is the hit list (plus Books hop to `/books?q=`). Idle Seerr shelves stay visible while typing. Discover idle has no In progress chrome — that lives on Requests as Grabbing / Waiting / Ready. Ready = Watch, never Send to Arr.
 
+Settings → **How to watch / read**: Jellyfin on the phone (LAN or Tailscale/MagicDNS) for movies/TV; Kavita `:5000` / `/kavita` for books in `/srv/media/books`. Not TorBox. Connect still holds the QR clutter.
+
 ## Tests
 
 ```
