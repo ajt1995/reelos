@@ -167,6 +167,17 @@ test("title-page poll does not paint another season available", () => {
   assert.equal(next.find((r) => r.season === 2)?.progress, 0);
 });
 
+test("title-page poll keeps the honest reason from GET-by-id", () => {
+  const requests = [row({ id: "seerr-9", titleId: "tmdb-2059", status: "downloading", progress: 0 })];
+  const next = applyTitleRequestPoll(requests, {
+    titleId: "tmdb-2059",
+    status: "grabbing",
+    progress: 0,
+    reason: "No grab client — search cannot land",
+  });
+  assert.equal(next[0]?.reason, "No grab client — search cannot land");
+});
+
 test("title-page movie poll does not touch TV season rows", () => {
   const requests = [
     row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 }),
@@ -186,6 +197,8 @@ test("default requestTitle never invents a 42 percent", () => {
   assert.doesNotMatch(store, /progress: fail \? 0 : cached \? 42 : 0/);
   assert.match(store, /status: fail \? "failed" : "waiting"/);
   assert.match(store, /progress: 0,/);
+  assert.match(store, /method: "POST"/);
+  assert.match(store, /titleId.startsWith\("tmdb-"\)/);
 });
 
 test("duplicate active rows for the same title+season collapse when one is available", () => {

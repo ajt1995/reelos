@@ -176,6 +176,19 @@ test("Ultra-HD 2160p-only falls back to Any so EZTV 720p can grab", () => {
     ]),
     false,
   );
+  assert.equal(
+    decypharrClientMissing([
+      {
+        enable: false,
+        implementation: "QBittorrent",
+        fields: [
+          { name: "host", value: "decypharr" },
+          { name: "port", value: 8282 },
+        ],
+      },
+    ]),
+    true,
+  );
 });
 
 test("kickArrRecover POSTs Decypharr client and Any profile before SeasonSearch", async () => {
@@ -400,9 +413,33 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
     movies: [{ tmdbId: 157336, monitored: true, hasFile: false, statistics: { movieFileCount: 0 } }],
     seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059 }],
   });
+  // Interstellar is sitting 0-file in Radarr but nobody requested it this recover.
   assert.deepEqual(
     targets.map((t) => `${t.mediaType}:${t.tmdb}`),
-    ["movie:157336", "movie:2059"],
+    ["movie:2059"],
+  );
+});
+
+test("recover with Seerr rows does not MoviesSearch the whole Radarr backlog", () => {
+  const targets = listRecoverTargets({
+    series: [
+      {
+        tmdbId: 48891,
+        title: "Brooklyn Nine-Nine",
+        monitored: true,
+        seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } }],
+      },
+    ],
+    movies: [
+      { tmdbId: 157336, title: "Interstellar", monitored: true, hasFile: false, statistics: { movieFileCount: 0 } },
+      { tmdbId: 245891, title: "John Wick", monitored: true, hasFile: false },
+      { tmdbId: 2059, title: "National Treasure", monitored: true, hasFile: false, statistics: { movieFileCount: 0 } },
+    ],
+    seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059, status: "downloading" }],
+  });
+  assert.deepEqual(
+    targets.map((t) => `${t.mediaType}:${t.tmdb}`),
+    ["movie:2059"],
   );
 });
 

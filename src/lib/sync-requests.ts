@@ -165,11 +165,11 @@ function mapEnginePollStatus(status?: string | null): RequestStatus | null {
 /** Title-page GET /api/request poll: only the matching title+season row. */
 export function applyTitleRequestPoll(
   requests: MediaRequest[],
-  opts: { titleId: string; season?: number; status?: string | null; progress?: number },
+  opts: { titleId: string; season?: number; status?: string | null; progress?: number; reason?: string },
 ): MediaRequest[] {
   const mapped = mapEnginePollStatus(opts.status);
   const apiProg = typeof opts.progress === "number" ? opts.progress : undefined;
-  if (!mapped && apiProg == null) return requests;
+  if (!mapped && apiProg == null && opts.reason == null) return requests;
   return requests.map((x) => {
     if (x.titleId !== opts.titleId || x.status === "failed") return x;
     if (opts.season != null) {
@@ -185,7 +185,13 @@ export function applyTitleRequestPoll(
         : typeof apiProg === "number"
           ? Math.max(0, Math.min(100, Math.round(apiProg)))
           : x.progress;
-    return { ...x, status, progress, updatedAt: Date.now() };
+    return {
+      ...x,
+      status,
+      progress,
+      reason: opts.reason !== undefined ? opts.reason : x.reason,
+      updatedAt: Date.now(),
+    };
   });
 }
 
