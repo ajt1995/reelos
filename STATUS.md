@@ -5,6 +5,7 @@
 ## Stamp
 
 - **VERSION / channel:** still `1.2.48`
+- **PR:** https://github.com/ajt1995/reelos/pull/44 (`cursor/request-ui-available-cd90`)
 - **What it is:** Available movie (Spider-Verse on house) showed Play + In library + Request together. Home counted localStorage `downloading` rows at 0% because only the title page polled `GET /api/request`.
 
 ## Fix
