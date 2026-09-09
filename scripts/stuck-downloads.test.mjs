@@ -59,6 +59,8 @@ test("importPending unexpected error is retried, not ignored", () => {
   assert.match(src, /make_mnt_rshared/);
   assert.match(src, /test_import_pending_unexpected_error_retries_when_readable/);
   assert.match(src, /test_docker_exec_enotconn_is_stale/);
+  assert.match(src, /recover_missing_movies/);
+  assert.match(src, /MoviesSearch/);
 });
 
 test("rshared unit ships for firstboot and install so rslave *arr binds follow FUSE remount", () => {

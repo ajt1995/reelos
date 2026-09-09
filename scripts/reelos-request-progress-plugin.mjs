@@ -9,7 +9,7 @@ import {
   pickSeerrRequestForTitle,
   assembleRequestPayload,
 } from "./reelos-seerr.mjs";
-import { kickTvSeasonRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
+import { kickArrRecover, listMissingRecoverTargets, loadPresenceFacts } from "./reelos-request-status.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -33,25 +33,13 @@ function mediaFromDetail(json) {
 async function maybeRecover(u, facts) {
   const flag = String(u.searchParams.get("recover") || "");
   if (flag !== "1" && flag !== "true") return null;
-  const missing = (facts?.series || []).flatMap((s) => {
-    const tmdb = s?.tmdbId;
-    if (tmdb == null) return [];
-    const out = [];
-    for (const season of s.seasons || []) {
-      const n = Number(season?.seasonNumber);
-      const files = Number(season?.statistics?.episodeFileCount || 0);
-      if (!Number.isFinite(n) || n <= 0 || files > 0) continue;
-      if (season?.monitored === false || s.monitored === false) continue;
-      out.push({ tmdb, season: n });
-    }
-    return out.length ? [out[0]] : [];
-  });
+  const missing = listMissingRecoverTargets({ series: facts?.series, movies: facts?.movies });
   const kicks = [];
   for (const m of missing) {
-    kicks.push(await kickTvSeasonRecover({ tmdb: m.tmdb, season: m.season }));
+    kicks.push(await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season }));
   }
   if (!kicks.length) {
-    kicks.push(await kickTvSeasonRecover({}));
+    kicks.push(await kickArrRecover({}));
   }
   return { recover: true, kicks };
 }

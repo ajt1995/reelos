@@ -67,12 +67,23 @@ test("Finish /api/provision does not spawnSync compose pull on the Vite thread",
   assert.match(src, /provisioning/);
 });
 
+test("Seerr bootstrap turns preventSearch off on an existing Radarr/Sonarr", () => {
+  const part = read("daemon/wire-engines.parts/09.part");
+  assert.match(part, /def seerr_needs_search_enable/);
+  assert.match(part, /def ensure_seerr_arr_service/);
+  assert.match(part, /preventSearch": False/);
+  assert.match(part, /seerr radarr search enabled/);
+  assert.match(part, /seerr sonarr search enabled/);
+  assert.equal(read("install/bin/wire-engines.parts/09.part"), part);
+});
+
 test("heal pulls wire-engines.parts, not only the shim", () => {
   for (const rel of ["install/bin/reelos-heal.sh", "daemon/reelos-heal.sh"]) {
     const src = read(rel);
     assert.match(src, /wire-engines\.parts\/\$i\.part/);
     assert.match(src, /relink_dumps\.py/);
     assert.match(src, /stuck-downloads\.py/);
+    assert.match(src, /public_indexers\.py/);
   }
 });
 

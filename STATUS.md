@@ -1,63 +1,65 @@
 # STATUS.md
 
-**Reelist (Discover→Request honesty on 1.2.50.4).** 2026-09-09. Fold-in after #56 merge (SeasonSearch + recover hop). Separate from Tron #52. Stamp **1.2.50.5**.
+**Reelist (public TV indexers on OTA).** 2026-09-09. House 1.2.50.5: Interstellar / John Wick / Expanse S01 **Available@100 via Decypharr**. B99 S01 + TWD S01 still `sonarr-missing@0`. Austin: thin indexers, not another symlink bug. Separate from Tron #52. Stamp **1.2.50.6**.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.5`
-- **Base:** latest `main` (merged #56 = 1.2.50.4)
+- **VERSION / channel:** `1.2.50.6`
+- **Base:** latest `main` (merged #57 = 1.2.50.5)
 - Did **not** take Tron chrome from #52
-- **What it is:** Discover search no longer looks like an empty shelf while Seerr is looking or timed out. TV `POST /api/request` is one season (`[n]` or S01), never `seasons: "all"`. Live TMDB/Seerr ids do not get a lab **Cached** glow. Unit sandbox locks Austin’s 4-title 2012–2016 gate: Interstellar + The Martian + Brooklyn Nine-Nine S01 + Mr. Robot S02 → search → Seerr POST → honest 0% / AVAILABLE.
+- **What it is:** OTA Apply adds missing **public** Prowlarr defs (EZTV, ShowRSS, 1337x, TPB; YTS stays movies-only) and **fullSyncs** them to Sonarr. No private tracker credentials.
 
-## Kept from 1.2.50.4 (#56)
+## Verdict (indexer gap vs code vs slow)
 
-- SeasonSearch on TV POST add/reuse when the season has 0 files.
-- `GET /api/request?recover=1`. stuck-downloads searches/relinks 0-file monitored seasons.
-- lock-download-clients keeps Decypharr dumps. Honest unfinished TV when Seerr is empty.
+| Title | House now | Why |
+| --- | --- | --- |
+| Interstellar, John Wick | Available@100 | YTS + TorBox + grab path work. Not a symlink bug. |
+| Expanse S01 | Available@100 | SeasonSearch **does fire**. Some TV indexer (TorBox/TPB/1337x) had a pack. |
+| B99 S01, TWD S01 | sonarr-missing@0 | Search likely ran and found nothing useful. YTS has **no TV**. EZTV was in git but **OTA skipped adding it**. Prowlarr→Sonarr was `addOnly`. |
 
-## House QA hole this stamp closes
+Not “just slow.” Movies and Expanse already finished. Residual after this stamp: publics still thin for some sitcom **Ultra-HD** season packs — then it stays missing (catalog), not a FUSE dump bug.
 
-- Discover typed ≥2 chars and immediately said “No titles from Seerr” (debounce + fetch + AbortError all looked empty).
-- TV POST without a season asked Seerr for **all** seasons (hash paste omitted season).
-- No unit proof that four 2012–2016 TMDB titles survive lookup→request without a year filter or fake %.
-- Discover search cards glowed **Cached** for every live `tmdb-*` id (`titleInCache` treated them as lab catalog).
+## What ReelOS provisions
 
-## Code changes (this stamp)
+1. **TorBox** official yml / `search-api.torbox.app` torznab (`ReelOS-torbox`).
+2. **Public first-party Prowlarr defs (no keys):** 1337x, TPB, YTS (movies), EZTV (TV), ShowRSS (TV).
+3. **Not shipped:** private trackers, passkeys, user-added Torznab from Settings (Connect paste still valid).
 
-1. **`mapSeerrSearchResults` / `normalizeMediaType`** — person/collection dropped; `Movie`/`TV` still map. **No year filter.**
-2. **`buildSeerrAddPayload` / `tvSeasonsForRequest`** — TV always `[season]` or `[1]`. Never `"all"`.
-3. **`GET /api/lookup`** — 45s Seerr search; `AbortError` → “Seerr lookup timed out. Try the search again.”
-4. **Discover** — Looking up… / real error / results. Title cards stay request-free (no In progress).
-5. **Title hash paste** — includes the selected TV season.
-6. **`ERA_QA_TITLES` / `proveEraLookupRequest`** — Interstellar (2014), The Martian (2015), Brooklyn Nine-Nine S01 (2013), Mr. Robot S02 (2015).
-7. **`titleInCache`** — live `tmdb-` / `tvdb-` / `jf-` ids are never lab-Cached.
+1.2.24 added TPB/YTS so Request could grab while TorBox DNS was dead. Later commits listed EZTV in `PUBLIC_INDEXERS`, but `ensure_public_indexers` **returned immediately on `REELOS_OTA=1`**, and UI-only Apply never ran that hop. House that first-booted on YTS/TPB never got EZTV on Sonarr.
+
+## Code changes
+
+1. **`public_indexers.py`** — roster + roles. Unit: YTS ⊄ TV; house-with-only-YTS still needs EZTV/ShowRSS.
+2. **`ensure_public_indexers`** — OTA **adds** missing defs; only live `indexer/test` is skipped.
+3. **`ensure_prowlarr_app`** — `fullSync`; PUT existing `addOnly` apps. `ApplicationIndexerSync`.
+4. **`wire-engines.py indexers`** — mailman runs this on **every** provisioned Apply (not only compose-changed).
+5. Kept from the first audit: MoviesSearch on movie POST, `?recover=1` includes movies, Seerr `preventSearch=false` PUT. Complementary; not why Expanse already landed.
 
 ## Residual (no code change)
 
-- Live e2e (2 random 2012–2016 movies + 2 TV seasons on the house box) still needs Seerr/TMDB/*arr/TorBox. Agent has no house secrets.
-- Discover **shelf** TV from Jellyfin still prefers `tvdb-*` when TMDB is present. Request from an unfinished shelf series can 400 (“Search again”) — use Discover **search** (`tmdb-tv-*`).
-- Seerr down / no API key still returns empty titles with an error string. House hop must read `error`, not only `titles.length`.
-- `TimeoutStartSec=infinity` + hung `cp`/`npm ci`/`compose up` can leave `running: true` forever.
+- Ultra-HD (`hybrid`) can reject EZTV’s typical 720p WEB-DL. Expanse 4K packs pass; B99 4K remuxes are rare on publics.
+- If Prowlarr has no EZTV/ShowRSS **schema**, we log `no schema` and skip — first-party Cardigann only.
+- TorBox rate limit / empty cache is house. Doctor hop / `releases-error.txt`.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs
-node --experimental-strip-types --test src/lib/sync-requests.test.ts src/lib/adapter.test.ts
+python3 daemon/public_indexers.py --self-test
+python3 daemon/stuck-downloads.py --self-test
+node --test scripts/public-indexers.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs scripts/wire-provision.test.mjs scripts/stuck-downloads.test.mjs
 ```
 
 ## Owner / house Apply
 
 1. Merge to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.5`. Expect `ReelOS 1.2.50.5 applied.`
-3. Discover: search two 2012–2016 movies and two 2012–2016 shows. Results, not an empty shelf or a silent timeout.
-4. Request each movie. Request **one season** of each show. Seerr → Radarr/Sonarr. Requests: AVAILABLE / Grabbing / Waiting — no fake %.
-5. Discover cards stay free of In progress and **Cached** glow on live TMDB ids (that stays on Requests / title).
+2. `cat /opt/reelos/VERSION` → `1.2.50.6`. Expect `ReelOS 1.2.50.6 applied.`
+3. Prowlarr: ReelOS-eztv / ReelOS-showrss present if schema exists. Sonarr indexers include them.
+4. B99 S01 / TWD S01: next lock-clients tick SeasonSearchs. Available if a public/TorBox pack matches the profile. Still 0% + `sonarr-missing` means the publics have no matching release — add your own indexer in Settings if you have one. Do not expect us to invent a private key.
 
 ## Do not
 
 - Cut **1.2.51** (Tron reserved).
-- Invent a progress % on Requests or Discover.
-- Change season-by-season TV UX back to all-at-once.
+- Commit private tracker credentials.
+- Invent a progress % on Requests.
 - SSH from the agent. Scope into Tron / books / TorBox wipe.

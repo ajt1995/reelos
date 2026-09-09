@@ -11,6 +11,32 @@
             pass
 
 
+def ensure_indexers_and_sync() -> int:
+    """OTA/Apply hop: add missing public TV indexers and fullSync them to *arr."""
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+    prow_key = wait_key(prow_xml, 40)
+    if not prow_key:
+        log_wire("indexers skip — no Prowlarr key")
+        return 0
+    try:
+        ensure_public_indexers(prow_key)
+    except Exception as e:
+        log_wire(f"public indexers {type(e).__name__} {e}")
+    a = answers()
+    intent = a.get("intent") or {}
+    radarr_key = wait_key(COMPOSE / "configs" / "radarr" / "config.xml") if intent.get("movies", True) else None
+    sonarr_key = wait_key(COMPOSE / "configs" / "sonarr" / "config.xml") if intent.get("tv") or intent.get("anime") else None
+    try:
+        if radarr_key:
+            ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
+        if sonarr_key:
+            ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
+        sync_prowlarr_apps(prow_key)
+    except Exception as e:
+        log_wire(f"prowlarr sync {type(e).__name__} {e}")
+    return 0
+
+
 def extra_access() -> None:
     if os.environ.get("REELOS_OTA") == "1":
         return
@@ -48,11 +74,44 @@ class Seerr:
             return {"raw": raw[:200]}
 
 
-def _seerr_has_service(rows, name: str) -> bool:
+def _seerr_service_rows(rows) -> list:
     items = rows if isinstance(rows, list) else (rows or {}).get("results") or rows or []
     if not isinstance(items, list):
-        return False
-    return any(str(x.get("name") or "") == name for x in items if isinstance(x, dict))
+        return []
+    return [x for x in items if isinstance(x, dict)]
+
+
+def _seerr_has_service(rows, name: str) -> bool:
+    return any(str(x.get("name") or "") == name for x in _seerr_service_rows(rows))
+
+
+def _seerr_find_service(rows, name: str) -> dict | None:
+    for x in _seerr_service_rows(rows):
+        if str(x.get("name") or "") == name:
+            return x
+    return None
+
+
+def seerr_needs_search_enable(service: dict | None) -> bool:
+    """Old house Seerr can sit on preventSearch=true after first bootstrap."""
+    return bool(service) and service.get("preventSearch") is True
+
+
+def ensure_seerr_arr_service(s, kind: str, existing, body: dict) -> str:
+    """POST if missing. PUT preventSearch=False so Request actually searches *arr."""
+    name = str(body.get("name") or "")
+    hit = _seerr_find_service(existing, name)
+    if not hit:
+        s.call(f"/api/v1/settings/{kind}", "POST", body)
+        return "created"
+    if not seerr_needs_search_enable(hit):
+        return "ok"
+    upd = dict(hit)
+    upd["preventSearch"] = False
+    sid = hit.get("id")
+    path = f"/api/v1/settings/{kind}/{sid}" if sid is not None else f"/api/v1/settings/{kind}"
+    s.call(path, "PUT", upd)
+    return "updated"
 
 
 def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
@@ -117,58 +176,56 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
     if radarr_key:
         try:
             existing = s.call("/api/v1/settings/radarr")
-            if not _seerr_has_service(existing, "Radarr"):
-                s.call(
-                    "/api/v1/settings/radarr",
-                    "POST",
-                    {
-                        "name": "Radarr",
-                        "hostname": "radarr",
-                        "port": 7878,
-                        "apiKey": radarr_key,
-                        "useSsl": False,
-                        "activeProfileId": qid or 1,
-                        "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
-                        "activeDirectory": "/symlinks/radarr",
-                        "isDefault": True,
-                        "is4k": False,
-                        "minimumAvailability": "released",
-                        "syncEnabled": True,
-                        "preventSearch": False,
-                        "tagRequests": False,
-                        "tags": [],
-                    },
-                )
+            body = {
+                "name": "Radarr",
+                "hostname": "radarr",
+                "port": 7878,
+                "apiKey": radarr_key,
+                "useSsl": False,
+                "activeProfileId": qid or 1,
+                "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
+                "activeDirectory": "/symlinks/radarr",
+                "isDefault": True,
+                "is4k": False,
+                "minimumAvailability": "released",
+                "syncEnabled": True,
+                "preventSearch": False,
+                "tagRequests": False,
+                "tags": [],
+            }
+            op = ensure_seerr_arr_service(s, "radarr", existing, body)
+            if op == "created":
                 log_wire("seerr radarr")
+            elif op == "updated":
+                log_wire("seerr radarr search enabled")
         except NET_ERR as e:
             log_wire(f"seerr radarr {type(e).__name__} {e}")
     sqid = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key) if sonarr_key else 1
     if sonarr_key:
         try:
             existing = s.call("/api/v1/settings/sonarr")
-            if not _seerr_has_service(existing, "Sonarr"):
-                s.call(
-                    "/api/v1/settings/sonarr",
-                    "POST",
-                    {
-                        "name": "Sonarr",
-                        "hostname": "sonarr",
-                        "port": 8989,
-                        "apiKey": sonarr_key,
-                        "useSsl": False,
-                        "activeProfileId": sqid or 1,
-                        "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
-                        "activeDirectory": "/symlinks/sonarr",
-                        "isDefault": True,
-                        "is4k": False,
-                        "syncEnabled": True,
-                        "preventSearch": False,
-                        "tagRequests": False,
-                        "enableSeasonFolders": True,
-                        "tags": [],
-                    },
-                )
+            body = {
+                "name": "Sonarr",
+                "hostname": "sonarr",
+                "port": 8989,
+                "apiKey": sonarr_key,
+                "useSsl": False,
+                "activeProfileId": sqid or 1,
+                "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
+                "activeDirectory": "/symlinks/sonarr",
+                "isDefault": True,
+                "is4k": False,
+                "syncEnabled": True,
+                "preventSearch": False,
+                "tagRequests": False,
+                "enableSeasonFolders": True,
+                "tags": [],
+            }
+            op = ensure_seerr_arr_service(s, "sonarr", existing, body)
+            if op == "created":
                 log_wire("seerr sonarr")
+            elif op == "updated":
+                log_wire("seerr sonarr search enabled")
         except NET_ERR as e:
             log_wire(f"seerr sonarr {type(e).__name__} {e}")
     try:
@@ -296,6 +353,8 @@ def main() -> int:
             ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
             if prow_key:
                 ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+        if prow_key:
+            sync_prowlarr_apps(prow_key)
     except Exception as e:
         log_wire(f"arr wire {type(e).__name__} {e}")
 
@@ -335,4 +394,6 @@ if __name__ == "__main__":
     if "import" in sys.argv:
         kick_imports()
         raise SystemExit(0)
+    if "indexers" in sys.argv:
+        raise SystemExit(ensure_indexers_and_sync())
     raise SystemExit(main())
