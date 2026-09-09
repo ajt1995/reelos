@@ -24,7 +24,9 @@ DECYPHARR = "http://127.0.0.1:8282"
 
 STUCK_ZERO_SEC = int(os.environ.get("REELOS_STUCK_DOWNLOAD_SEC", "900"))
 STUCK_SYMLINK_SEC = int(os.environ.get("REELOS_STUCK_SYMLINK_SEC", "180"))
+IMPORT_RETRY_SEC = int(os.environ.get("REELOS_IMPORT_RETRY_SEC", "90"))
 FUSE_RESTART_BACKOFF = 300
+MEDIA_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts", ".iso"}
 
 PRESENT_STATES = {
     "queued",
@@ -57,7 +59,7 @@ APPS = [
         "name": "radarr",
         "xml": COMPOSE / "configs" / "radarr" / "config.xml",
         "base": "http://127.0.0.1:7878/api/v3",
-        "queue_extra": "includeUnknownMovieItems=true",
+        "queue_extra": "includeUnknownMovieItems=true&includeMovie=true",
         "media_key": "movie",
         "category": "radarr",
     },
@@ -65,7 +67,7 @@ APPS = [
         "name": "sonarr",
         "xml": COMPOSE / "configs" / "sonarr" / "config.xml",
         "base": "http://127.0.0.1:8989/api/v3",
-        "queue_extra": "includeUnknownSeriesItems=true",
+        "queue_extra": "includeUnknownSeriesItems=true&includeSeries=true",
         "media_key": "series",
         "category": "sonarr",
     },
@@ -138,6 +140,82 @@ def content_path_of(item: dict) -> str:
     ).strip()
 
 
+def path_candidates(path: str) -> list[str]:
+    """Host + in-container *arr paths: /symlinks ↔ /mnt/symlinks, colon-safe names."""
+    if not path:
+        return []
+    out: list[str] = [path]
+    if path.startswith("/symlinks"):
+        out.append("/mnt" + path)
+    if path.startswith("/mnt/symlinks"):
+        out.append(path[4:])
+    p = Path(path)
+    sanitized = safe_folder_name(p.name)
+    if sanitized != p.name:
+        out.append(str(p.with_name(sanitized)))
+        if path.startswith("/symlinks"):
+            out.append(str(Path("/mnt" + path).with_name(sanitized)))
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for raw in out:
+        if raw not in seen:
+            seen.add(raw)
+            uniq.append(raw)
+    return uniq
+
+
+def status_message_blob(item: dict) -> str:
+    parts: list[str] = []
+    for sm in item.get("statusMessages") or []:
+        if isinstance(sm, str):
+            parts.append(sm)
+            continue
+        if not isinstance(sm, dict):
+            continue
+        if sm.get("title"):
+            parts.append(str(sm["title"]))
+        for m in sm.get("messages") or []:
+            parts.append(str(m))
+    return " ".join(parts).lower()
+
+
+def item_has_file(item: dict) -> bool:
+    if item.get("hasFile") is True:
+        return True
+    for key in ("movie", "series", "episode"):
+        media = item.get(key)
+        if not isinstance(media, dict):
+            continue
+        if media.get("hasFile") is True:
+            return True
+        stats = media.get("statistics") if isinstance(media.get("statistics"), dict) else {}
+        try:
+            if int(stats.get("movieFileCount") or 0) > 0:
+                return True
+            if int(stats.get("episodeFileCount") or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            pass
+    return False
+
+
+def import_is_stuck(item: dict) -> bool:
+    """Decypharr finished; *arr left the row completed/importPending (Night at the Museum)."""
+    if item_has_file(item):
+        return False
+    status = str(item.get("status") or "").lower()
+    tracked = str(item.get("trackedDownloadStatus") or "").lower()
+    state = str(item.get("trackedDownloadState") or "").lower()
+    blob = status_message_blob(item)
+    if state in {"importpending", "importblocked", "importfailed"}:
+        return True
+    if status in {"completed", "delay"} and tracked in {"warning", "error"}:
+        return True
+    if "unexpected error" in blob or "processing file" in blob:
+        return True
+    return False
+
+
 def debrid_complete(debrid: dict | None) -> bool:
     if not debrid:
         return False
@@ -177,13 +255,32 @@ def decide_queue_action(
     path_exists: bool,
     recover_attempted: bool,
     duplicate_of_active: bool = False,
+    path_readable: bool | None = None,
+    last_retry: float | None = None,
+    retry_interval_sec: int = 90,
 ) -> str:
-    """ignore | wait | recover | fail | fail_duplicate"""
+    """ignore | wait | recover | retry_import | fail | fail_duplicate"""
+    if path_readable is None:
+        path_readable = path_exists
     if duplicate_of_active:
         return "fail_duplicate"
+    if item_has_file(item):
+        return "ignore"
     status = str(item.get("status") or "").lower()
     tracked = str(item.get("trackedDownloadStatus") or "").lower()
     state = str(item.get("trackedDownloadState") or "").lower()
+    if import_is_stuck(item):
+        if path_readable:
+            if last_retry is None or (now - last_retry) >= retry_interval_sec:
+                return "retry_import"
+            return "wait"
+        if debrid_complete(debrid) and not path_exists:
+            if not recover_attempted:
+                return "recover"
+            if first_seen is not None and (now - first_seen) >= symlink_threshold_sec:
+                return "fail"
+            return "wait"
+        return "wait"
     if "fail" in status or tracked == "error" or "fail" in state:
         return "fail"
     ratio = queue_progress_ratio(item)
@@ -366,22 +463,44 @@ def write_note(title_id: str | None, reason: str) -> None:
 
 
 def path_is_visible(path: str) -> bool:
-    if not path:
-        return False
-    candidates = [path]
-    if path.startswith("/symlinks"):
-        candidates.append("/mnt" + path)
-    if path.startswith("/mnt/symlinks"):
-        candidates.append(path[4:])
-    p = Path(path)
-    sanitized = safe_folder_name(p.name)
-    if sanitized != p.name:
-        candidates.append(str(p.with_name(sanitized)))
-        if path.startswith("/symlinks"):
-            candidates.append(str(Path("/mnt" + path).with_name(sanitized)))
-    for raw in candidates:
+    for raw in path_candidates(path):
         if _dir_has_media(Path(raw)):
             return True
+    return False
+
+
+def _can_stat_media(p: Path) -> bool:
+    """Follow symlink into FUSE. ENOTCONN/EIO → not ready."""
+    try:
+        return p.stat().st_size > 0
+    except OSError:
+        return False
+
+
+def path_is_readable(path: str) -> bool:
+    """True when a media file under path is a live FUSE/target, not a dangling symlink."""
+    for raw in path_candidates(path):
+        p = Path(raw)
+        try:
+            if p.is_file() or p.is_symlink():
+                if _can_stat_media(p):
+                    return True
+            if not p.is_dir():
+                continue
+            for x in p.iterdir():
+                if x.suffix.lower() in MEDIA_EXT and _can_stat_media(x):
+                    return True
+                if (x.is_file() or x.is_symlink()) and _can_stat_media(x):
+                    return True
+                if not x.is_dir():
+                    continue
+                for y in x.iterdir():
+                    if y.suffix.lower() in MEDIA_EXT and _can_stat_media(y):
+                        return True
+                    if (y.is_file() or y.is_symlink()) and _can_stat_media(y):
+                        return True
+        except OSError:
+            continue
     return False
 
 
@@ -507,6 +626,103 @@ def kick_import() -> None:
         log(f"import {type(e).__name__} {e}")
 
 
+def movie_id_of(item: dict) -> int | None:
+    raw = item.get("movieId")
+    if raw:
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            pass
+    movie = item.get("movie") if isinstance(item.get("movie"), dict) else {}
+    if movie.get("id"):
+        try:
+            return int(movie["id"])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def retry_arr_import(app: dict, key: str, item: dict) -> None:
+    """Re-scan + ManualImport now that FUSE can stat the file. Does not re-add to TorBox."""
+    path = content_path_of(item)
+    scan_name = "DownloadedMoviesScan" if app["name"] == "radarr" else "DownloadedEpisodesScan"
+    folders = path_candidates(path)
+    if not folders:
+        folders = [f"/mnt/symlinks/{app['category']}", "/mnt/symlinks"]
+    for folder in folders:
+        try:
+            call(
+                f"{app['base']}/command",
+                key,
+                method="POST",
+                body={"name": scan_name, "path": folder},
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"{app['name']} scan {folder} {type(e).__name__} {e}")
+    try:
+        call(
+            f"{app['base']}/command",
+            key,
+            method="POST",
+            body={"name": "RefreshMonitoredDownloads"},
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        log(f"{app['name']} refresh downloads {type(e).__name__} {e}")
+    if app["name"] == "radarr":
+        _radarr_manual_import(app, key, item, folders)
+
+
+def _radarr_manual_import(app: dict, key: str, item: dict, folders: list[str]) -> None:
+    movie_id = movie_id_of(item)
+    files: list[dict] = []
+    download_id = str(item.get("downloadId") or "")
+    for folder in folders:
+        qs = {"folder": folder, "filterExistingFiles": "false"}
+        if download_id:
+            qs["downloadId"] = download_id
+        try:
+            rows = call(f"{app['base']}/manualimport?{urllib.parse.urlencode(qs)}", key)
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"{app['name']} manualimport list {folder} {type(e).__name__} {e}")
+            continue
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            pth = row.get("path")
+            if not pth or Path(pth).suffix.lower() not in MEDIA_EXT:
+                continue
+            movie = row.get("movie") if isinstance(row.get("movie"), dict) else {}
+            mid = movie.get("id") or movie_id
+            if not mid:
+                continue
+            files.append(
+                {
+                    "path": pth,
+                    "movieId": mid,
+                    "quality": row.get("quality")
+                    or {"quality": {"id": 1}, "revision": {"version": 1, "real": 0}},
+                    "languages": row.get("languages") or [{"id": 1}],
+                    "indexerFlags": row.get("indexerFlags") or 0,
+                }
+            )
+    by_path = {f["path"]: f for f in files}
+    files = list(by_path.values())
+    if not files:
+        return
+    try:
+        call(
+            f"{app['base']}/command",
+            key,
+            method="POST",
+            body={"name": "ManualImport", "files": files[:20], "importMode": "copy"},
+        )
+        log(f"{app['name']} manualimport {len(files[:20])} files")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        log(f"{app['name']} manualimport {type(e).__name__} {e}")
+
+
 def sweep() -> int:
     if source() == "local-vpn":
         return 0
@@ -517,6 +733,10 @@ def sweep() -> int:
     seen = state.get("seen") if isinstance(state.get("seen"), dict) else {}
     live_keys: set[str] = set()
     if heal_fuse_if_stale(state):
+        time.sleep(6)
+        if not fuse_stale():
+            log("fuse green — retry *arr import")
+            kick_import()
         state["seen"] = seen
         save_json(STATE / "stuck-downloads.json", state)
         return 0
@@ -550,6 +770,7 @@ def sweep() -> int:
             debrid = torrent_for_hash(torrents, download_id)
             path = content_path_of(item)
             exists = path_is_visible(path)
+            readable = path_is_readable(path) if exists else False
             action = decide_queue_action(
                 item,
                 now=now,
@@ -561,6 +782,9 @@ def sweep() -> int:
                 path_exists=exists,
                 recover_attempted=bool(prev.get("recoverAt")),
                 duplicate_of_active=id(item) in extra_ids,
+                path_readable=readable,
+                last_retry=prev.get("retryAt"),
+                retry_interval_sec=IMPORT_RETRY_SEC,
             )
             title = item.get("title") or download_id or sk
             if action == "fail_duplicate":
@@ -580,6 +804,21 @@ def sweep() -> int:
                     "firstSeen": first_seen,
                     "lastProgress": last_progress or 0.0,
                     "recoverAt": now,
+                    "retryAt": prev.get("retryAt"),
+                }
+                continue
+            if action == "retry_import":
+                log(
+                    f"{app['name']} retry import {title} — "
+                    f"importPending/unexpected error, FUSE readable"
+                )
+                retry_arr_import(app, key, item)
+                recover = True
+                seen[sk] = {
+                    "firstSeen": first_seen,
+                    "lastProgress": last_progress or 0.0,
+                    "recoverAt": prev.get("recoverAt"),
+                    "retryAt": now,
                 }
                 continue
             if action == "fail":
@@ -597,6 +836,7 @@ def sweep() -> int:
                 "firstSeen": first_seen,
                 "lastProgress": last_progress or 0.0,
                 "recoverAt": prev.get("recoverAt"),
+                "retryAt": prev.get("retryAt"),
             }
 
     if recover:
@@ -763,6 +1003,188 @@ def _self_test() -> int:
 
         def test_safe_folder_colon(self):
             self.assertEqual(safe_folder_name("Spider-Man: Homecoming"), "Spider-Man - Homecoming")
+
+        def test_path_candidates_symlinks_vs_mnt(self):
+            self.assertIn("/mnt/symlinks/radarr/X", path_candidates("/symlinks/radarr/X"))
+            self.assertIn("/symlinks/radarr/X", path_candidates("/mnt/symlinks/radarr/X"))
+
+        def test_import_pending_unexpected_error_retries_when_readable(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "warning",
+                "trackedDownloadState": "importPending",
+                "statusMessages": [
+                    {
+                        "title": "Night at the Museum",
+                        "messages": ["Unexpected error processing file"],
+                    }
+                ],
+                "size": 100,
+                "sizeleft": 0,
+                "outputPath": "/mnt/symlinks/radarr/Night at the Museum",
+                "movie": {"hasFile": False, "title": "Night at the Museum"},
+            }
+            self.assertTrue(import_is_stuck(item))
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=2000,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"progress": 1, "cached": True},
+                    path_exists=True,
+                    recover_attempted=False,
+                    path_readable=True,
+                ),
+                "retry_import",
+            )
+
+        def test_import_pending_wait_when_fuse_not_readable(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "warning",
+                "trackedDownloadState": "importPending",
+                "statusMessages": [{"messages": ["Unexpected error processing file"]}],
+                "size": 100,
+                "sizeleft": 0,
+                "movie": {"hasFile": False},
+            }
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=2000,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"cached": True},
+                    path_exists=True,
+                    recover_attempted=True,
+                    path_readable=False,
+                ),
+                "wait",
+            )
+
+        def test_import_pending_hasfile_ignore(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "warning",
+                "trackedDownloadState": "importPending",
+                "movie": {"hasFile": True},
+                "size": 100,
+                "sizeleft": 0,
+            }
+            self.assertFalse(import_is_stuck(item))
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=2000,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"progress": 1},
+                    path_exists=True,
+                    recover_attempted=False,
+                    path_readable=True,
+                ),
+                "ignore",
+            )
+
+        def test_import_pending_error_status_does_not_fail(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "error",
+                "trackedDownloadState": "importPending",
+                "statusMessages": [{"messages": ["Unexpected error processing file"]}],
+                "movie": {"hasFile": False},
+                "size": 100,
+                "sizeleft": 0,
+            }
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=2000,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"cached": True},
+                    path_exists=True,
+                    recover_attempted=False,
+                    path_readable=True,
+                ),
+                "retry_import",
+            )
+
+        def test_import_pending_retry_rate_limit(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "warning",
+                "trackedDownloadState": "importPending",
+                "movie": {"hasFile": False},
+                "size": 100,
+                "sizeleft": 0,
+            }
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=1089,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"cached": True},
+                    path_exists=True,
+                    recover_attempted=False,
+                    path_readable=True,
+                    last_retry=1000,
+                    retry_interval_sec=90,
+                ),
+                "wait",
+            )
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=1090,
+                    first_seen=1,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"cached": True},
+                    path_exists=True,
+                    recover_attempted=False,
+                    path_readable=True,
+                    last_retry=1000,
+                    retry_interval_sec=90,
+                ),
+                "retry_import",
+            )
+
+        def test_import_pending_missing_symlink_still_recovers(self):
+            item = {
+                "status": "completed",
+                "trackedDownloadStatus": "warning",
+                "trackedDownloadState": "importPending",
+                "movie": {"hasFile": False},
+            }
+            self.assertEqual(
+                decide_queue_action(
+                    item,
+                    now=1000,
+                    first_seen=999,
+                    last_progress=1,
+                    threshold_sec=900,
+                    symlink_threshold_sec=180,
+                    debrid={"progress": 1.0},
+                    path_exists=False,
+                    recover_attempted=False,
+                    path_readable=False,
+                ),
+                "recover",
+            )
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

@@ -102,7 +102,27 @@ def sonarr_manual_import(sk: str) -> None:
     mod.sonarr_manual_import(sk)
 
 
+def wait_fuse_ready(seconds: int = 40) -> bool:
+    """Do not scan *arr dumps until FUSE listdir works (import race)."""
+    if source() == "local-vpn":
+        return True
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if fuse_on_host():
+            try:
+                os.listdir("/mnt/debrid")
+                return True
+            except OSError:
+                pass
+        time.sleep(2)
+    return False
+
+
 def kick_imports() -> None:
+    if wait_fuse_ready(40):
+        log_wire("import — FUSE ready")
+    else:
+        log_wire("import — FUSE not ready, scan anyway")
     relink_from_debrid()
     wait_http("http://127.0.0.1:7878/ping", 90)
     wait_http("http://127.0.0.1:8989/ping", 90)
