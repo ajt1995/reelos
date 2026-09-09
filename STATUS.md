@@ -29,7 +29,7 @@ Not a duplicate sandbox Sonarr. Not “just catalog.” Movies + Expanse already
 4. **`widen_sonarr_hybrid`** — PUT Ultra-HD in place (same profile id on B99/TWD).
 5. **`--research-missing`** — lock Decypharr (`--quick`) then clear cooldown and SeasonSearch.
 6. **`kickArrRecover` / `?recover=1`** — POST ReelOS-Decypharr if missing; PUT series to Any when Ultra-HD disallows 720p; then SeasonSearch.
-7. **lock-clients.service** — `TimeoutStartSec=180`; OTA copies the unit; `wanted_apps` skips missing Lidarr; wait+sweep stay under the 90s oneshot default so SeasonSearch actually runs after boot.
+8. **Jellyfin dupes** — Movies/Shows keep only `/symlinks/radarr|sonarr`. Drop `/media/movies`, parent `/symlinks`, `/mnt/symlinks/*`. Home shelf unique by title.
 
 `/api/performance {low:true}` is Jellyfin trickplay. Not the grab path.
 

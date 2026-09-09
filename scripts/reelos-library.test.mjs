@@ -10,11 +10,13 @@ import {
   canServeStale,
   createLibraryCache,
   createTokenCache,
+  dedupeLibraryTitles,
   libraryItemsUrl,
   mapJellyfinItem,
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
+  shelfTitleKey,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -58,6 +60,64 @@ test("mapJellyfinItem drops Overview and keeps real ids", () => {
   assert.equal(t.overview, "");
   assert.equal(t.jellyfinId, "jf-1");
   assert.equal(t.poster, "http://10.0.0.5:8096/Items/jf-1/Images/Primary");
+});
+
+test("Home shelf collapses duplicate Interstellar / Expanse / Museum rows", () => {
+  const interstellar = (id, poster) =>
+    titleFrom({
+      Id: id,
+      Name: "Interstellar",
+      Type: "Movie",
+      ProductionYear: 2014,
+      ProviderIds: { Tmdb: "157336" },
+    }, "10.0.0.5");
+  const museumBare = titleFrom({
+    Id: "jf-museum-empty",
+    Name: "Night at the Museum",
+    Type: "Movie",
+    ProductionYear: 2006,
+    ProviderIds: {},
+  });
+  museumBare.poster = "";
+  const museumArt = titleFrom({
+    Id: "jf-museum-art",
+    Name: "Night at the Museum",
+    Type: "Movie",
+    ProductionYear: 2006,
+    ProviderIds: { Tmdb: "1593" },
+  });
+  const expanseArt = titleFrom({
+    Id: "jf-expanse",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: { Tvdb: "280619", Tmdb: "63639" },
+  });
+  const expanseBare = titleFrom({
+    Id: "jf-expanse-ph",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: {},
+  });
+  expanseBare.poster = "";
+  const out = dedupeLibraryTitles([
+    interstellar("jf-a"),
+    interstellar("jf-b"),
+    interstellar("jf-c"),
+    museumBare,
+    museumArt,
+    museumBare,
+    expanseBare,
+    expanseArt,
+  ]);
+  const titles = out.map((t) => t.title);
+  assert.equal(titles.filter((n) => n === "Interstellar").length, 1);
+  assert.equal(titles.filter((n) => n === "Night at the Museum").length, 1);
+  assert.equal(titles.filter((n) => n === "The Expanse").length, 1);
+  assert.equal(out.find((t) => t.title === "Night at the Museum").jellyfinId, "jf-museum-art");
+  assert.equal(out.find((t) => t.title === "The Expanse").jellyfinId, "jf-expanse");
+  assert.equal(shelfTitleKey(interstellar("jf-a")), "movie:interstellar");
 });
 
 test("token cache hits by user/PIN and expires", () => {

@@ -4,7 +4,7 @@ Hal. **2026-09-09.** Named stamp **1.2.50.7** (EZTV/ShowRSS actually land; docto
 
 ## Why public TV defs never appear after 1.2.50.6 Apply
 
-House doctor releases = **ReelOS-tpb only**. Not lock-clients. Not catalog.
+House doctor releases = **ReelOS-tpb only**. Not lock-clients. Not catalog. Jellyfin Interstellar×3 is extra library paths (`/media/movies` + `/symlinks` parent + `/mnt/symlinks` bind), not a second grab.
 
 | # | Hypothesis | Verdict |
 | --- | --- | --- |

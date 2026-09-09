@@ -61,6 +61,29 @@ export function mapJellyfinItem(it, host) {
   };
 }
 
+export function shelfTitleKey(t) {
+  const title = String(t?.title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  return `${t?.kind || "movie"}:${title}`;
+}
+
+export function dedupeLibraryTitles(titles) {
+  const score = (x) => {
+    const ids = Array.isArray(x?.ids) ? x.ids : [];
+    const hasId = ids.some((i) => /^tmdb-|^tvdb-/.test(String(i)));
+    return (x?.poster ? 2 : 0) + (hasId ? 4 : 0) + (x?.jellyfinId ? 1 : 0);
+  };
+  const best = new Map();
+  for (const t of titles || []) {
+    if (!t) continue;
+    const key = shelfTitleKey(t);
+    const prev = best.get(key);
+    if (!prev || score(t) > score(prev)) best.set(key, t);
+  }
+  return [...best.values()];
+}
+
 export function withPosterHost(titles, host) {
   return (titles || []).map((t) => ({
     ...t,
@@ -77,7 +100,7 @@ export function mergeShelf(prev, next, limited) {
   if (!limited) return next;
   if (!prev?.length) return next;
   const have = new Set(next.map((t) => t.id));
-  return [...next, ...prev.filter((t) => !have.has(t.id))];
+  return dedupeLibraryTitles([...next, ...prev.filter((t) => !have.has(t.id))]);
 }
 
 export function cacheIsFresh(entry, now, ttlMs = LIBRARY_CACHE_TTL_MS) {
@@ -161,7 +184,7 @@ export async function serveLibrary({
   const stale = cache.read();
 
   const serve = (titles, extra = {}) => ({
-    titles: withPosterHost(applyLibraryLimit(titles, limit), host),
+    titles: withPosterHost(applyLibraryLimit(dedupeLibraryTitles(titles), limit), host),
     error: extra.error ?? null,
     fromCache: Boolean(extra.fromCache),
   });
@@ -192,7 +215,7 @@ export async function serveLibrary({
   try {
     const data = await fetchItems(auth, limit);
     const items = Array.isArray(data?.Items) ? data.Items : [];
-    const titles = items.map((it) => mapJellyfinItem(it, host));
+    const titles = dedupeLibraryTitles(items.map((it) => mapJellyfinItem(it, host)));
     cache.write(titles, { now, complete: !limit });
     if (limit && typeof refresh === "function") void refresh();
     return serve(titles);

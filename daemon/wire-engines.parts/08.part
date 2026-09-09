@@ -17,11 +17,24 @@ def add_jellyfin_path(token: str, name: str) -> None:
     )
 
 
+def remove_jellyfin_path(token: str, name: str, path: str) -> None:
+    q = urllib.parse.urlencode({"refreshLibrary": "true"})
+    call(
+        f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
+        method="DELETE",
+        body={"Name": name, "Path": path, "PathInfo": {"Path": path}},
+        headers={"X-Emby-Token": token},
+    )
+
+
 def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
     by_name = {str(f.get("Name") or ""): f for f in folders}
     for name, _ctype in want:
         folder = by_name.get(name)
-        if not folder or not folder_has_symlinks(folder, library_symlink_path(name)):
+        keep = library_symlink_path(name)
+        if not folder or not folder_has_symlinks(folder, keep):
+            return False
+        if extra_jellyfin_paths(folder, keep):
             return False
     return True
 
@@ -70,13 +83,18 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
         by_name = {str(f.get("Name") or ""): f for f in folders}
         for name, ctype in want:
             folder = by_name.get(name)
+            keep = library_symlink_path(name)
             try:
                 if folder is None:
                     create_jellyfin_library(token, name, ctype)
                     log_wire(f"jellyfin library {name}")
-                elif not folder_has_symlinks(folder, library_symlink_path(name)):
-                    add_jellyfin_path(token, name)
-                    log_wire(f"jellyfin path {name} {library_symlink_path(name)}")
+                else:
+                    if not folder_has_symlinks(folder, keep):
+                        add_jellyfin_path(token, name)
+                        log_wire(f"jellyfin path {name} {keep}")
+                    for extra in extra_jellyfin_paths(folder, keep):
+                        remove_jellyfin_path(token, name, extra)
+                        log_wire(f"jellyfin drop extra path {name} {extra}")
             except urllib.error.HTTPError as e:
                 err = e.read().decode()[:240] if e.fp else str(e)
                 log_wire(f"jellyfin library {name} {e.code} {err}")

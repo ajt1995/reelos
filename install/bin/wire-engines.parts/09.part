@@ -39,6 +39,14 @@ def ensure_indexers_and_sync() -> int:
     except Exception as e:
         log_wire(f"sonarr hybrid {type(e).__name__} {e}")
     try:
+        jf_token = jellyfin_token()
+        if jf_token:
+            want = jellyfin_want_libraries()
+            if ensure_jellyfin_libraries(jf_token, want):
+                log_wire("jellyfin libraries one dump path each")
+    except Exception as e:
+        log_wire(f"jellyfin libraries {type(e).__name__} {e}")
+    try:
         research_missing_after_indexers()
     except Exception as e:
         log_wire(f"research-missing {type(e).__name__} {e}")

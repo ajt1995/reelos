@@ -46,9 +46,59 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /EnablePublishedServerUriByRequest/);
     assert.match(code, /apply_jellyfin_published_uri/);
     assert.match(code, /jellyfin_want_libraries/);
+    assert.match(code, /extra_jellyfin_paths/);
+    assert.match(code, /remove_jellyfin_path/);
+    assert.match(code, /jellyfin drop extra path/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
   }
+});
+
+test("Movies/Shows keep only /symlinks/radarr|sonarr — extra paths are dropped", () => {
+  const code = joinParts(join(root, "daemon/wire-engines.parts"));
+  const r = spawnSync(
+    "python3",
+    [
+      "-c",
+      `
+import sys
+g = {"__name__": "wire_engines"}
+exec(compile(sys.stdin.read(), "wire-engines.py", "exec"), g)
+folder = {
+    "Name": "Movies",
+    "Locations": ["/symlinks", "/symlinks/radarr", "/mnt/symlinks/radarr", "/media/movies"],
+    "LibraryOptions": {"PathInfos": []},
+}
+keep = g["library_symlink_path"]("Movies")
+assert keep == "/symlinks/radarr", keep
+extras = g["extra_jellyfin_paths"](folder, keep)
+assert "/media/movies" in extras, extras
+assert "/symlinks" in extras, extras
+assert "/mnt/symlinks/radarr" in extras, extras
+assert "/symlinks/radarr" not in extras, extras
+assert g["libraries_ready"]([folder], [("Movies", "movies")]) is False
+ready = {
+    "Name": "Movies",
+    "Locations": ["/symlinks/radarr"],
+    "LibraryOptions": {"PathInfos": [{"Path": "/symlinks/radarr"}]},
+}
+assert g["libraries_ready"]([ready], [("Movies", "movies")]) is True
+shows = {
+    "Name": "Shows",
+    "Locations": ["/symlinks", "/symlinks/sonarr"],
+    "LibraryOptions": {"PathInfos": []},
+}
+assert "/symlinks" in g["extra_jellyfin_paths"](shows, "/symlinks/sonarr")
+print("ok")
+`,
+    ],
+    { input: code, encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.match(r.stdout, /ok/);
+  const hop = read("daemon/wire-engines.parts/09.part");
+  assert.match(hop, /ensure_jellyfin_libraries/);
+  assert.match(hop, /jellyfin libraries one dump path each/);
 });
 
 test("install and daemon wire-engines bodies stay twins", () => {

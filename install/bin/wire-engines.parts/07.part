@@ -87,11 +87,27 @@ def library_symlink_path(name: str) -> str:
 
 def folder_has_symlinks(folder: dict, path: str | None = None) -> bool:
     want = (path or "/symlinks").rstrip("/")
-    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or [])]
+    return want in jellyfin_folder_paths(folder)
+
+
+def jellyfin_folder_paths(folder: dict) -> list[str]:
+    """Every media path Jellyfin is scanning for this virtual folder."""
+    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or []) if x]
     opts = folder.get("LibraryOptions") or {}
-    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or [])]
-    have = locs + paths
-    return want in have
+    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or []) if isinstance(p, dict)]
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in locs + paths:
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def extra_jellyfin_paths(folder: dict, keep: str) -> list[str]:
+    """House dupes: /media/movies + /symlinks parent + /mnt/symlinks bind of the same dumps."""
+    keep_n = (keep or "").rstrip("/")
+    return [p for p in jellyfin_folder_paths(folder) if p != keep_n]
 
 
 JF_NETWORK_XML = (
