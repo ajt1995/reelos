@@ -27,16 +27,15 @@ Waiting as pull requests — not on the box until we say merge:
 
 ## Cooking (branches only)
 
-- Music search/request
+- Music search/request (wizard chip only — lookup still movies/TV)
 - Extra hard drive for music and books
 - Request from the TV (Jellyfin plugin)
-- Ebooks on the phone (Kavita)
 
 ## Later
 
 Profiles, play-on-TV from the phone, trip downloads, HDMI kiosk, quiet hours, disk health, a real “it’s ready” notification, and a clean install disc when this is boring-stable.
 
-The pretty UI pass (“Light”) is designed, not painted.
+Phone chrome is **1.2.51 Tron-night** (not the parked Light pass). Discover is live Seerr. Books (Kavita + legal catalogs) ships on that stamp.
 
 ---
 

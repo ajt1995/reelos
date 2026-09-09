@@ -24,6 +24,7 @@ export function LibraryPanel() {
             ["anime", "Anime"],
             ["kids", "Kids"],
             ["music", "Music"],
+            ["books", "Books"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -40,7 +41,7 @@ export function LibraryPanel() {
             }}
             className={cn(
               "h-9 rounded-full px-4 text-sm",
-              answers.intent[k] ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+              answers.intent[k] ? "bg-gold text-gold-fg shadow-[var(--shadow-gold)]" : "bg-card-2 text-muted",
             )}
           >
             {label}

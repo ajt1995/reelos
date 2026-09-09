@@ -1,41 +1,66 @@
 # STATUS.md
 
-**Reelist (enlisted fixer).** 2026-09-09. Stack-audited `#45`–`#50` so house Apply of the combined tree does not undo mailman, shelf, Finish-detach, or JF12 auth. `#50` already on `main` (`c3fa807`). This tip is overlay + named stamp **1.2.50**. Austin allowed VERSION + HAL/STATUS for a coherent house Apply.
+**Reelist (enlisted fixer).** 2026-09-09. Phone UI was charcoal/gold and Discover idle was only the Jellyfin shelf — no Seerr trending, easy to look empty. Books lived on stale PRs #40/#42 (dirty / stacked, Standard Ebooks parser dead until #42). Owner asked for a Tron-night overhaul **and** legal Books in the same stamp. Did **not** add Anna’s Archive.
+
+Rebased onto **1.2.50** `main` (PR #51). Stack overlay / FUSE rslave / importPending / mailman canaries stay from that stamp.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50`
-- **PR:** https://github.com/ajt1995/reelos/pull/51 (`cursor/stack-audit-a560`)
-- **Writeup:** `docs/STACK-RISK.md` (go/no-go + merge order)
-- **What it is:** `#45`–`#50` already on main (1.2.49). This tip overlays house `compose/configs` so `#49`'s seed cannot nest `configs/configs`, retargets stale mailman canaries, and names the stacked Apply.
+- **VERSION / channel:** `1.2.51`
+- **PR:** https://github.com/ajt1995/reelos/pull/52 (`cursor/tron-ui-books-2ad2`)
+- **Base:** latest `main` **1.2.50** (PR #51 overlay + stack-smoke). Writeup for that stack: `docs/STACK-RISK.md`.
+- **What it is:** Tron-night design system across the phone shells + first-class Discover + Kavita/legal Books.
 
-## Fix
+## Discover (must work)
 
-1. Rebased onto latest `main` (`c3fa807`). Duplicate `#50` commits dropped — they are already there (importPending + container ENOTCONN / `reelos-mnt-rshared.service`).
-2. Mailman overlays house `compose/configs/.` onto staging (daemon + install twins). `#50` rshared enable-after-swap kept.
-3. Stack smoke: lockfile `SKIP_NPM` + JF12 `Authorization` + `#46` cache + Finish no `spawnSync` pull + advisory search hop + importPending retry + rshared unit + parts twins.
-4. Retargeted three stale mailman `need()` canaries so push-time `check-ota.py` is green.
+Idle Discover was a pretty empty room if Jellyfin had nothing. That fails this stamp.
+
+1. **Search** still hits live `GET /api/lookup?q=` (Seerr `/api/v1/search`). Typeahead + result row. Kind filter `movie|tv` is passed through. Tap opens `/title/$id`. Request is the existing `/api/request` path (Seerr/*arr). No fake %.
+2. **Idle rows** from `GET /api/discover`: Seerr `/discover/trending`, `/discover/movies`, `/discover/tv`, plus in-progress requests and recently added shelf. Honest error if Seerr has no key.
+3. **TV seasons** on the title page stay one-season-per-tap (`Request Sxx`). Unchanged contract.
+
+## Books (legal only)
+
+Folded the useful bits of #40 (Kavita compose, wizard chip, Connect card) and #42 (OPDS parser, IA public scans, hardened download) onto latest main.
+
+- Search: Gutenberg (Gutendex), Standard Ebooks OPDS (`/open-access` + query-string hrefs), Open Library `ebook_access=public` → archive.org EPUB.
+- Download: HTTPS + host allowlist only. Staged `.part` + 200 MB cap. Path segments cannot traverse.
+- Kavita: compose profile `books`, `:5000`, Caddy `/kavita*` (not `/books` — that is the phone tab).
+- Settings → Library can toggle Books and `POST /api/intent` starts/stops Kavita.
+
+## UI
+
+Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on `#03060c`). Page enter, card hover glow, live chips. `prefers-reduced-motion` kills motion. Contrast kept readable (cool white + `#8aa3b8` muted).
+
+## Stack kept from 1.2.50
+
+`#45`–`#51` already on the rebase base. Mailman overlays house `compose/configs/.` so `#49` seed cannot nest. `#50` importPending + container ENOTCONN / `reelos-mnt-rshared.service`. Stack smoke and mailman canaries stay. Search hop red is still OK.
 
 ## Owner / house Apply
 
-**GO for CLI Apply of 1.2.49 now** (`main` `c3fa807`). Do not wait for `#51`. Expect `ReelOS 1.2.49 applied.` Search hop red is OK.
+1. Merge to **main**. Channel tarball stays `main.tar.gz`. VERSION **1.2.51**.
+2. Phone Check → Apply (or house CLI `/opt/reelos/bin/reelos-update.sh apply`).
+3. Proof:
+   - Discover: type a real title → results → title page → Request (TV: pick a season). Idle: trending/popular if Seerr is up.
+   - Books: search `dracula` → Add → file under `/srv/media/books`. Open Kavita `:5000`.
+   - Nav: Home / Discover / Requests / Library / Books.
+   - Stack: Home/Library lean-cached. Finish must not wedge `:8080`. `/api/box` Jellyfin green. Next cached grab should import when FUSE is readable (`#50`). Host listing is not enough — *arr containers must also `ls /mnt/debrid`.
 
-`#51` is optional follow-up (overlay + named **1.2.50**). If merged before Apply instead, expect `ReelOS 1.2.50 applied.`
+## Tests
 
-See `docs/STACK-RISK.md`. Short form:
-
-1. House CLI: `/opt/reelos/bin/reelos-update.sh apply` (or phone Check→Apply). Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.49` (or `1.2.50` if this tip landed first).
-3. Home/Library still lean-cached. Finish must not wedge `:8080`.
-4. `/api/box` Jellyfin green. Next cached grab should import when FUSE is readable (`#50`). Host listing is not enough — *arr containers must also `ls /mnt/debrid`.
+```
+node --test scripts/books-catalog.test.mjs scripts/reelos-seerr.test.mjs
+npx tsc --noEmit
+```
 
 ## Do not
 
-- Re-merge `#50` (already on `main` at `c3fa807`).
-- Apply a feature-branch tarball — **main only**.
-- Cut **1.2.51** in the same hour.
-- Scope into TorBox wipe / pirate books.
+- Merge `feature/3-books` / pirate book indexers.
+- Point Caddy `/books*` at Kavita (steals the phone tab).
+- Cut **1.2.52** in the same hour.
+- Apply a feature-branch tarball.
+- Re-merge `#50` / `#51` (already on `main`).
 
 ## Hal / xorriso
 
-Hal: stamp **1.2.50** in HAL.md. Phone OTA uses `main.tar.gz` + `channel.json`. ISO not required for this Apply.
+Stamp **1.2.51**. Phone OTA uses `main.tar.gz` + `channel.json`. ISO not required for a phone-shell + API refresh.

@@ -26,13 +26,13 @@ export function Row({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-card shadow-[var(--shadow-border)]">
+    <div className="rounded-2xl bg-card shadow-[var(--shadow-border)] transition-shadow duration-150 hover:shadow-[var(--shadow-border-hover)]">
       <button
         type="button"
         onClick={onClick}
         className="flex w-full items-center gap-4 px-5 py-4 text-left"
       >
-        <Icon className="size-5 text-gold" />
+        <Icon className="size-5 text-cyan" />
         <span className="flex-1">
           <span className="block font-display font-medium">{title}</span>
           <span className="mt-0.5 block text-sm text-muted">{hint}</span>
@@ -53,7 +53,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
       onClick={() => onChange(!on)}
       className={cn(
         "relative h-6 w-11 rounded-full transition-colors",
-        on ? "bg-gold" : "bg-card-2",
+        on ? "bg-cyan" : "bg-card-2",
       )}
     >
       <span

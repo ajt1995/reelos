@@ -22,7 +22,7 @@ export const Route = createRootRoute({
         name: "description",
         content: "Install. Point. Stream. A personal media appliance.",
       },
-      { name: "theme-color", content: "#0B0D10" },
+      { name: "theme-color", content: "#03060C" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -37,7 +37,7 @@ export const Route = createRootRoute({
       },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&family=Share+Tech+Mono&display=swap",
       },
     ],
   }),

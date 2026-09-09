@@ -36,6 +36,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: true,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -57,12 +58,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50";
-export const SHIPPED_VERSION = "1.2.50";
+export const LATEST_VERSION = "1.2.51";
+export const SHIPPED_VERSION = "1.2.51";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
-  "1.2.50: Stacked house Apply (#45–#50). Overlay house compose/configs so #49 seed cannot nest. FUSE rslave ENOTCONN heal + importPending retry. Check then Apply.",
+  "1.2.51: Tron-night phone UI. Discover is live Seerr (search + trending/popular + Request). Books tab: Gutenberg / Standard Ebooks / Internet Archive → Kavita. Check then Apply.",
 ];
 function makeAdapter(answers: WizardAnswers): AdapterState {
   const p = adapterProfile(answers.source, answers.frontend);
@@ -174,6 +175,7 @@ function logFor(id: string, label: string) {
     sonarr: "Root folder /srv/media/tv. Quality profile applied.",
     anime: "Anime-sane profile attached to Sonarr.",
     lidarr: "Root folder /srv/media/music.",
+    kavita: "Root folder /srv/media/books.",
     seerr: "Request UI linked. No setup screen left.",
     jellyfin: "Libraries published. Hardware transcode noted.",
     plex: "Claim accepted. Libraries published.",
@@ -203,6 +205,7 @@ export function buildPlan(answers: WizardAnswers): BuildStep[] {
   if (answers.intent.tv) steps.push({ id: "sonarr", label: "TV engine" });
   if (answers.intent.anime) steps.push({ id: "anime", label: "Anime profile" });
   if (answers.intent.music) steps.push({ id: "lidarr", label: "Music engine" });
+  if (answers.intent.books) steps.push({ id: "kavita", label: "Book engine" });
   steps.push({ id: "seerr", label: "Request UI" });
   if (answers.frontend !== "plex") steps.push({ id: "jellyfin", label: "Jellyfin" });
   if (answers.frontend !== "jellyfin") steps.push({ id: "plex", label: "Plex" });
@@ -230,7 +233,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "RD-LAB-KEY-7F3A",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: true },
   quality: "hybrid",
   frontend: "jellyfin",
 };
@@ -714,6 +717,9 @@ export const useReelStore = create<ReelState>()(
         if (!state) return;
         state.update = idleUpdate();
         if (state.shelf?.length) state.shelfReady = true;
+        if (state.answers?.intent && state.answers.intent.books === undefined) {
+          state.answers.intent.books = true;
+        }
       },
     },
   ),

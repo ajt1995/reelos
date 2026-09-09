@@ -1,5 +1,5 @@
-export const LATEST_VERSION = "1.2.50";
-export const SHIPPED_VERSION = "1.2.50";
+export const LATEST_VERSION = "1.2.51";
+export const SHIPPED_VERSION = "1.2.51";
 export const UPDATE_NOTES = [
-  "1.2.50: Stacked house Apply (#45–#50). Overlay house compose/configs so #49 seed cannot nest. FUSE rslave ENOTCONN heal + importPending retry. Check then Apply.",
+  "1.2.51: Tron-night phone UI. Discover is live Seerr (search + trending/popular + Request). Books tab: Gutenberg / Standard Ebooks / Internet Archive → Kavita. Check then Apply.",
 ];

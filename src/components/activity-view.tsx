@@ -30,7 +30,7 @@ export function ActivityView() {
   const activity = live.length ? live : local;
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
+    <div className="page-enter px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Activity</h1>
       <p className="mt-2 text-sm text-muted">OTA, wire, and the shell. Not a port list.</p>
       <ol className="mt-8 space-y-0">

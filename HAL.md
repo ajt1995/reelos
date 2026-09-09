@@ -1,16 +1,16 @@
 # HAL.md
 
-Hal. **2026-09-09.** Named stamp **1.2.50**.
-
-Read enlisted STATUS on `cursor/stack-audit-a560` (PR #51). Stack-integration of `#45`–`#50`. `#50` is already on `main` (`c3fa807`).
+Hal. **2026-09-09.** Named stamp **1.2.51** (Tron UI + Discover + legal Books). Rebased onto **1.2.50** `main` (PR #51 overlay / FUSE / OTA stack). Do not merge `feature/3-books` / pirate indexers.
 
 ## xorriso — do this
 
-1. **GO** house CLI Apply of **1.2.49** on current `main` (`c3fa807`) **now** — do not wait for `#51`.
-2. Merge `#51` when convenient (overlay + named **1.2.50**). `#50` is already merged — do not re-land it.
-3. On `main`, **`channel.json` tarball = `main.tar.gz`**. Do not leave a feature-branch archive as the house channel.
-4. Books / Kavita / `ReelOS-libgen` stay **off** this stamp (`feature/3-books` stays a branch). Do not wipe TorBox.
-5. Owner CLI or phone Check→Apply of current `main` prints `ReelOS 1.2.49 applied.` After `#51` lands, a later Apply prints `ReelOS 1.2.50 applied.`
-6. Proof: Home/Library paint from lean `/api/library`. Finish does not wedge `:8080`. `/api/box` Jellyfin **green**, Watch `http://<lan>:8096` (not docker `172.18.x`). Next cached TorBox grab imports when FUSE is readable (`retry import` in stuck log). Host `ls /mnt/debrid` is not enough — *arr containers must also list (rslave / `reelos-mnt-rshared.service`). Search hop red is OK.
+1. Merge this tip → **main**. Channel tarball = `main.tar.gz`. VERSION **1.2.51**.
+2. Books is legal catalogs only (Gutenberg, Standard Ebooks, Internet Archive public scans) + Kavita. No Anna’s Archive / Libgen.
+3. Owner phone: Settings → Check → Apply.
+4. Proof:
+   - Phone chrome is Tron-night (cyan/magenta/neon-gold on black). Home / Discover / Library / Requests / Settings / title share the system.
+   - Discover idle shows Seerr trending/popular (or an honest Seerr error) plus in-progress requests and recently added. Search hits `/api/lookup`, opens a title page, Request still season-by-season for TV.
+   - Books tab search returns real catalog rows; Add writes under `/srv/media/books`. Kavita on `:5000` / `/kavita`.
+   - Stack from **1.2.50** stays: Home/Library lean `/api/library`. Finish does not wedge `:8080`. `/api/box` Jellyfin **green**. Cached TorBox grab imports when FUSE is readable (`retry import`). Host `ls /mnt/debrid` is not enough — *arr containers must also list (rslave / `reelos-mnt-rshared.service`). Search hop red is OK.
 
-Do not Apply the feature tarball as if it were main. Do not use the owner as a debugger.
+Do not Apply a feature-branch tarball. Do not cut 1.2.52 in the same hour. Mailman from #48 stays fail-open on search.

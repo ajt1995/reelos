@@ -6,7 +6,7 @@ export function ReelMark({ className }: { className?: string }) {
       viewBox="0 0 64 64"
       fill="none"
       aria-hidden="true"
-      className={cn("text-gold", className)}
+      className={cn("text-gold drop-shadow-[0_0_10px_rgb(232_197_71_/_0.45)]", className)}
     >
       <circle
         cx="32"
@@ -20,8 +20,8 @@ export function ReelMark({ className }: { className?: string }) {
         cx="32"
         cy="32"
         r="25.5"
-        stroke="#3EC6D8"
-        strokeOpacity="0.55"
+        stroke="#00E5FF"
+        strokeOpacity="0.75"
         strokeWidth="1.4"
         strokeDasharray="18 80"
         strokeDashoffset="8"
@@ -47,7 +47,7 @@ export function Wordmark({
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <ReelMark className={cn("size-8", markClassName)} />
-      <span className="font-display text-[1.35rem] font-semibold tracking-[0.18em] text-gold">
+      <span className="font-display text-[1.35rem] font-semibold tracking-[0.22em] text-gold drop-shadow-[0_0_12px_rgb(232_197_71_/_0.35)]">
         ReelOS
       </span>
     </span>

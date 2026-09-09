@@ -9,6 +9,7 @@ import {
   parseTitleId,
   realSeasonNumbers,
   seasonCount,
+  seerrListHits,
   seerrRequestRow,
   seerrSearchHit,
   titleIdFor,
@@ -114,6 +115,35 @@ test("stuck-notes mark a grabbing Seerr row failed and leave available alone", (
   assert.equal(ok.status, "available");
 });
 
+test("discover lists map TMDB hits and invent mediaType for /movies /tv", () => {
+  const payload = {
+    results: [
+      {
+        id: 550,
+        title: "Fight Club",
+        releaseDate: "1999-10-15",
+        posterPath: "/pB8BM7pdSp6B6Ih7QZ9Wbu2uLku.jpg",
+        popularity: 88,
+      },
+      { id: 11, mediaType: "person", name: "Someone" },
+    ],
+  };
+  const movies = seerrListHits(payload, "movie");
+  assert.equal(movies.length, 1);
+  assert.equal(movies[0].id, "tmdb-550");
+  assert.equal(movies[0].kind, "movie");
+
+  const trending = seerrListHits({
+    results: [
+      { id: 1396, mediaType: "tv", name: "Breaking Bad", firstAirDate: "2008-01-20", numberOfSeasons: 5 },
+      { id: 550, mediaType: "movie", title: "Fight Club", releaseDate: "1999-10-15" },
+    ],
+  });
+  assert.equal(trending.length, 2);
+  assert.equal(trending[0].id, "tmdb-tv-1396");
+  assert.equal(trending[1].id, "tmdb-550");
+});
+
 test("compose and Caddy name the service seerr on 5055", () => {
   const yml = readFileSync(join(root, "install/compose/docker-compose.yml"), "utf8");
   const caddy = readFileSync(join(root, "install/compose/Caddyfile"), "utf8");
@@ -123,4 +153,17 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(yml, /profiles: \["jellyfin", "seerr"\]/);
   assert.match(caddy, /handle \/seerr\*/);
   assert.match(caddy, /127\.0\.0\.1:5055/);
+});
+
+test("Kavita is on the books profile; Caddy does not steal /books from the phone tab", () => {
+  const yml = readFileSync(join(root, "install/compose/docker-compose.yml"), "utf8");
+  const caddy = readFileSync(join(root, "install/compose/Caddyfile"), "utf8");
+  const rootYml = readFileSync(join(root, "compose/docker-compose.yml"), "utf8");
+  assert.match(yml, /^\s+kavita:/m);
+  assert.match(yml, /profiles: \["books"\]/);
+  assert.match(yml, /lscr\.io\/linuxserver\/kavita/);
+  assert.match(rootYml, /^\s+kavita:/m);
+  assert.match(caddy, /handle \/kavita\*/);
+  assert.match(caddy, /127\.0\.0\.1:5000/);
+  assert.doesNotMatch(caddy, /handle \/books\*/);
 });

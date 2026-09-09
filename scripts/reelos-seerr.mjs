@@ -79,6 +79,22 @@ export function mapSeerrStatus(mediaStatus, requestStatus) {
   return "unknown";
 }
 
+/**
+ * Jellyseerr discover/search payloads are either a bare array or `{ results }`.
+ * Movies/TV discover endpoints omit `mediaType` on each hit.
+ */
+export function seerrListHits(payload, mediaTypeHint) {
+  const hits = Array.isArray(payload) ? payload : payload?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const typed = mediaTypeHint && !h?.mediaType ? { ...h, mediaType: mediaTypeHint } : h;
+    const t = seerrSearchHit(typed, mediaTypeHint);
+    if (t) out.push(t);
+    if (out.length >= 16) break;
+  }
+  return out;
+}
+
 export function seerrSearchHit(h, mediaTypeHint) {
   const rawType = h?.mediaType || mediaTypeHint;
   const mediaType = rawType === "tv" ? "tv" : rawType === "movie" ? "movie" : null;
