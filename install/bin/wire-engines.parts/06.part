@@ -90,7 +90,7 @@ def _mount_extra_disks() -> None:
             print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
 
 
-JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.12"'
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.13"'
 
 
 def jellyfin_headers(token: str = "") -> dict:

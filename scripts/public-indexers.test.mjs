@@ -46,6 +46,7 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(apps, /def sync_prowlarr_apps/);
   assert.match(apps, /ApplicationIndexerSync/);
   assert.match(apps, /forceSync/);
+  assert.match(apps, /docker_service_ip/);
   assert.match(apps, /SONARR_SYNC_CATEGORIES.*8000/);
   assert.match(apps, /RADARR_SYNC_CATEGORIES/);
   assert.match(apps, /prowlarr_app_fields/);
@@ -60,6 +61,9 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /read_arr_rows/);
   assert.match(main, /def read_prow_rows/);
   assert.match(main, /turns a blip into heal red/);
+  assert.match(main, /400 \+ name is not attached/);
+  assert.match(main, /forceSave=true/);
+  assert.match(main, /pick_torznab_schema/);
   assert.match(main, /torznab/);
   assert.match(main, /widen_sonarr_hybrid/);
   assert.match(main, /research-missing/);
@@ -117,6 +121,8 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   assert.match(out, /test_empty_schema_still_posts_eztv_showrss/);
   assert.match(out, /test_sandbox_house_tpb_only_http_posts_eztv_showrss/);
   assert.match(out, /test_radarr_and_sonarr_receive_enabled_search_indexers_after_sync/);
+  assert.match(out, /test_house_prowlarr_green_arr_empty_after_false_attach/);
+  assert.match(out, /test_adversarial_wire_attach_honesty/);
   assert.match(out, /test_radarr_rss_only_is_not_a_search_path/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);

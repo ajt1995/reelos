@@ -114,12 +114,24 @@ SONARR_SYNC_CATEGORIES = (5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 8000)
 RADARR_SYNC_CATEGORIES = (2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 8000)
 
 
-def prowlarr_app_fields(name: str, fields) -> list[dict]:
+def _set_app_field(fields: list[dict], name: str, value) -> None:
+    hit = next((f for f in fields if isinstance(f, dict) and f.get("name") == name), None)
+    if hit is None:
+        fields.append({"name": name, "value": value})
+    else:
+        hit["value"] = value
+
+
+def prowlarr_app_fields(name: str, fields, *, prow_url: str | None = None, arr_url: str | None = None) -> list[dict]:
     """TorrentRss reports only 8000/Other; Sonarr must opt into it to receive RSS feeds.
 
     Radarr needs movie cats (2000+) or YTS/TPB never attach — Prowlarr-green is not MoviesSearch.
     """
     out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
+    if prow_url:
+        _set_app_field(out, "prowlarrUrl", prow_url)
+    if arr_url:
+        _set_app_field(out, "baseUrl", arr_url)
     if name == "Sonarr":
         cats, extra = SONARR_SYNC_CATEGORIES, (8000,)
     elif name == "Radarr":
@@ -147,7 +159,7 @@ def prowlarr_movie_cats_present(have) -> bool:
     return False
 
 
-def prowlarr_app_needs_update(app: dict | None) -> bool:
+def prowlarr_app_needs_update(app: dict | None, *, prow_url: str | None = None, arr_url: str | None = None) -> bool:
     if not app:
         return False
     if app.get("enable") is False:
@@ -158,16 +170,62 @@ def prowlarr_app_needs_update(app: dict | None) -> bool:
     fields = app.get("fields") or []
     sync = next((f for f in fields if isinstance(f, dict) and f.get("name") == "syncCategories"), None)
     have = sync.get("value") if sync and isinstance(sync.get("value"), list) else []
-    if name == "Sonarr":
-        return not sync or 8000 not in have
-    if name == "Radarr":
-        return not sync or not prowlarr_movie_cats_present(have)
+    if name == "Sonarr" and (not sync or 8000 not in have):
+        return True
+    if name == "Radarr" and (not sync or not prowlarr_movie_cats_present(have)):
+        return True
+    if prow_url:
+        cur = next((f.get("value") for f in fields if isinstance(f, dict) and f.get("name") == "prowlarrUrl"), None)
+        if cur != prow_url:
+            return True
+    if arr_url:
+        cur = next((f.get("value") for f in fields if isinstance(f, dict) and f.get("name") == "baseUrl"), None)
+        if cur != arr_url:
+            return True
     return False
+
+
+def docker_service_ip(service: str) -> str | None:
+    """Custom compose dns: 1.1.1.1 can hide Docker service names. *arr still reaches the IP."""
+    try:
+        q = subprocess.run(
+            ["docker", "compose", "ps", "-q", service],
+            cwd=str(COMPOSE),
+            env=compose_env(),
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        cid = next((ln.strip() for ln in (q.stdout or "").splitlines() if ln.strip()), "")
+        if not cid:
+            return None
+        ins = subprocess.run(
+            [
+                "docker",
+                "inspect",
+                "-f",
+                "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+                cid,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        ip = next((p for p in (ins.stdout or "").split() if p), "")
+        return ip or None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def docker_service_url(service: str, port: int, fallback: str) -> str:
+    ip = docker_service_ip(service)
+    return f"http://{ip}:{port}" if ip else f"http://{fallback}:{port}"
 
 
 def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:
     """Keep Prowlarr→*arr enabled at fullSync so YTS/TPB land in Radarr and EZTV in Sonarr."""
     url = "http://127.0.0.1:9696/api/v1/applications"
+    prow_url = docker_service_url("prowlarr", 9696, "prowlarr")
     try:
         apps = call(url, prow_key) or []
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
@@ -175,11 +233,13 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
     for app in apps if isinstance(apps, list) else []:
         if app.get("name") != name:
             continue
-        if app.get("id") is not None and prowlarr_app_needs_update(app):
+        if app.get("id") is not None and prowlarr_app_needs_update(app, prow_url=prow_url, arr_url=base_url):
             body = dict(app)
             body["enable"] = True
             body["syncLevel"] = prowlarr_app_sync_level()
-            body["fields"] = prowlarr_app_fields(name, body.get("fields"))
+            body["fields"] = prowlarr_app_fields(
+                name, body.get("fields"), prow_url=prow_url, arr_url=base_url
+            )
             try:
                 call(f"{url}/{app['id']}", prow_key, method="PUT", body=body)
                 suffix = " + 8000/Other" if name == "Sonarr" else " + movie cats"
@@ -197,10 +257,12 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
         "fields": prowlarr_app_fields(
             name,
             [
-                {"name": "prowlarrUrl", "value": "http://prowlarr:9696"},
+                {"name": "prowlarrUrl", "value": prow_url},
                 {"name": "baseUrl", "value": base_url},
                 {"name": "apiKey", "value": arr_key},
             ],
+            prow_url=prow_url,
+            arr_url=base_url,
         ),
     }
     try:
@@ -211,16 +273,30 @@ def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: 
 
 
 def sync_prowlarr_apps(prow_key: str) -> None:
-    """Push current Prowlarr indexers into *arr. addOnly houses never got EZTV on Sonarr."""
+    """Push current Prowlarr indexers into *arr. Wait — fire-and-forget left house *arr empty."""
     for name in ("ApplicationIndexerSync", "IndexerSync"):
         try:
-            call(
+            cmd = call(
                 "http://127.0.0.1:9696/api/v1/command",
                 prow_key,
                 method="POST",
                 body={"name": name, "forceSync": True},
             )
-            log_wire(f"prowlarr {name} forceSync")
+            cid = (cmd or {}).get("id") if isinstance(cmd, dict) else None
+            if cid is not None:
+                status = "queued"
+                for _ in range(20):
+                    time.sleep(0.5)
+                    try:
+                        row = call(f"http://127.0.0.1:9696/api/v1/command/{cid}", prow_key) or {}
+                    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+                        break
+                    status = str((row or {}).get("status") or "").lower()
+                    if status in ("completed", "failed", "aborted"):
+                        break
+                log_wire(f"prowlarr {name} forceSync {status}")
+            else:
+                log_wire(f"prowlarr {name} forceSync")
             return
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
             continue

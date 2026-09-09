@@ -29,9 +29,13 @@ def ensure_indexers_and_sync() -> int:
     rc_sync = True
     try:
         if radarr_key:
-            ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
+            ensure_prowlarr_app(
+                "Radarr", "Radarr", docker_service_url("radarr", 7878, "radarr"), radarr_key, prow_key
+            )
         if sonarr_key:
-            ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
+            ensure_prowlarr_app(
+                "Sonarr", "Sonarr", docker_service_url("sonarr", 8989, "sonarr"), sonarr_key, prow_key
+            )
         sync_prowlarr_apps(prow_key)
         if radarr_key and not ensure_arr_search_indexers(
             "Radarr", "http://127.0.0.1:7878/api/v3", radarr_key, prow_key, "movie"
@@ -188,28 +192,18 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         return rows if isinstance(rows, list) else []
 
     prow_rows = read_prow_rows()
-
-    def post(ix_name, body):
-        try:
-            call(f"{origin}/indexer", arr_key, method="POST", body=body)
-            log_wire(f"{name} torznab {ix_name}")
-            return True
-        except urllib.error.HTTPError as e:
-            err = e.read().decode()[:240] if e.fp else str(e)
-            log_wire(f"{name} torznab {ix_name} {e.code}: {err}")
-            return e.code == 400 and ix_name.lower() in err.lower()
-        except NET_ERR as e:
-            log_wire(f"{name} torznab {ix_name} {e}")
-            return False
-
-    def put(iid, body):
-        try:
-            call(f"{origin}/indexer/{iid}", arr_key, method="PUT", body=body)
-            log_wire(f"{name} indexer {body.get('name')} search enabled")
-            return True
-        except NET_ERR as e:
-            log_wire(f"{name} indexer enable {e}")
-            return False
+    write_url = (
+        mod.arr_indexer_write_url(origin)
+        if getattr(mod, "arr_indexer_write_url", None)
+        else f"{origin}/indexer?forceSave=true"
+    )
+    prow_host = docker_service_ip("prowlarr") or "prowlarr"
+    schema = None
+    try:
+        schemas = call(f"{origin}/indexer/schema", arr_key) or []
+        schema = mod.pick_torznab_schema(schemas) if getattr(mod, "pick_torznab_schema", None) else None
+    except NET_ERR as e:
+        log_wire(f"{name} indexer schema {e}")
 
     def read_arr_rows() -> list:
         try:
@@ -218,6 +212,39 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
             log_wire(f"{name} indexer list {e}")
             rows = []
         return rows if isinstance(rows, list) else []
+
+    def post(ix_name, body):
+        try:
+            call(write_url, arr_key, method="POST", body=body)
+            log_wire(f"{name} torznab {ix_name}")
+            status = 200
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"{name} torznab {ix_name} {e.code}: {err}")
+            # 400 + name is not attached. House #67 treated it as success and left *arr empty.
+            status = int(getattr(e, "code", 0) or 0)
+        except NET_ERR as e:
+            log_wire(f"{name} torznab {ix_name} {e}")
+            return False
+        rows = read_arr_rows()
+        if getattr(mod, "arr_indexer_write_landed", None):
+            return mod.arr_indexer_write_landed(status, rows, role)
+        _, good = mod.arr_search_indexers_ok(rows, role)
+        return 200 <= status < 300 and good
+
+    def put(iid, body):
+        put_url = (
+            mod.arr_indexer_write_url(origin, iid)
+            if getattr(mod, "arr_indexer_write_url", None)
+            else f"{origin}/indexer/{iid}?forceSave=true"
+        )
+        try:
+            call(put_url, arr_key, method="PUT", body=body)
+            log_wire(f"{name} indexer {body.get('name')} search enabled")
+            return True
+        except NET_ERR as e:
+            log_wire(f"{name} indexer enable {e}")
+            return False
 
     arr_rows: list = []
     for attempt in range(5):
@@ -229,7 +256,15 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         # A one-shot Prowlarr read makes every retry a no-op and turns a blip into heal red.
         if not prow_rows:
             prow_rows = read_prow_rows()
-        landed = mod.apply_arr_search_indexers(prow_rows, arr_rows, role, prow_key, post, put)
+        if schema is None:
+            try:
+                schemas = call(f"{origin}/indexer/schema", arr_key) or []
+                schema = mod.pick_torznab_schema(schemas) if getattr(mod, "pick_torznab_schema", None) else None
+            except NET_ERR:
+                schema = None
+        landed = mod.apply_arr_search_indexers(
+            prow_rows, arr_rows, role, prow_key, post, put, schema=schema, prow_host=prow_host
+        )
         if landed:
             log_wire(f"{name} attached {','.join(landed)}")
             # Re-read immediately so a last-attempt attach is not judged on stale pre-apply rows.
@@ -332,9 +367,23 @@ def _seerr_find_service(rows, name: str) -> dict | None:
     return None
 
 
-def seerr_needs_search_enable(service: dict | None) -> bool:
-    """Old house Seerr can sit on preventSearch=true after first bootstrap."""
-    return bool(service) and service.get("preventSearch") is True
+def seerr_needs_search_enable(service: dict | None, body: dict | None = None) -> bool:
+    """Old house Seerr can sit on preventSearch=true, or hostname radarr that DNS cannot resolve."""
+    return seerr_needs_arr_update(service, body)
+
+
+def seerr_needs_arr_update(service: dict | None, body: dict | None = None) -> bool:
+    if not service:
+        return False
+    if service.get("preventSearch") is True:
+        return True
+    if not body:
+        return False
+    if str(service.get("hostname") or "") != str(body.get("hostname") or ""):
+        return True
+    if body.get("apiKey") and str(service.get("apiKey") or "") != str(body.get("apiKey") or ""):
+        return True
+    return False
 
 
 def ensure_seerr_arr_service(s, kind: str, existing, body: dict) -> str:
@@ -344,10 +393,14 @@ def ensure_seerr_arr_service(s, kind: str, existing, body: dict) -> str:
     if not hit:
         s.call(f"/api/v1/settings/{kind}", "POST", body)
         return "created"
-    if not seerr_needs_search_enable(hit):
+    if not seerr_needs_arr_update(hit, body):
         return "ok"
     upd = dict(hit)
     upd["preventSearch"] = False
+    if body.get("hostname"):
+        upd["hostname"] = body.get("hostname")
+    if body.get("apiKey"):
+        upd["apiKey"] = body.get("apiKey")
     sid = hit.get("id")
     path = f"/api/v1/settings/{kind}/{sid}" if sid is not None else f"/api/v1/settings/{kind}"
     s.call(path, "PUT", upd)
@@ -418,7 +471,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
             existing = s.call("/api/v1/settings/radarr")
             body = {
                 "name": "Radarr",
-                "hostname": "radarr",
+                "hostname": docker_service_ip("radarr") or "radarr",
                 "port": 7878,
                 "apiKey": radarr_key,
                 "useSsl": False,
@@ -446,7 +499,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
             existing = s.call("/api/v1/settings/sonarr")
             body = {
                 "name": "Sonarr",
-                "hostname": "sonarr",
+                "hostname": docker_service_ip("sonarr") or "sonarr",
                 "port": 8989,
                 "apiKey": sonarr_key,
                 "useSsl": False,
@@ -580,7 +633,13 @@ def main() -> int:
             ensure_roots("http://127.0.0.1:7878/api/v3", radarr_key, "movie")
             engine["radarrQuality"] = quality_id("http://127.0.0.1:7878/api/v3", radarr_key)
             if prow_key:
-                ensure_prowlarr_app("Radarr", "Radarr", "http://radarr:7878", radarr_key, prow_key)
+                ensure_prowlarr_app(
+                    "Radarr",
+                    "Radarr",
+                    docker_service_url("radarr", 7878, "radarr"),
+                    radarr_key,
+                    prow_key,
+                )
         if sonarr_key:
             kind = "anime" if intent.get("anime") and not intent.get("tv") else "tv"
             ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, kind)
@@ -588,11 +647,23 @@ def main() -> int:
                 ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, "anime")
             engine["sonarrQuality"] = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key)
             if prow_key:
-                ensure_prowlarr_app("Sonarr", "Sonarr", "http://sonarr:8989", sonarr_key, prow_key)
+                ensure_prowlarr_app(
+                    "Sonarr",
+                    "Sonarr",
+                    docker_service_url("sonarr", 8989, "sonarr"),
+                    sonarr_key,
+                    prow_key,
+                )
         if lidarr_key:
             ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
             if prow_key:
-                ensure_prowlarr_app("Lidarr", "Lidarr", "http://lidarr:8686", lidarr_key, prow_key)
+                ensure_prowlarr_app(
+                    "Lidarr",
+                    "Lidarr",
+                    docker_service_url("lidarr", 8686, "lidarr"),
+                    lidarr_key,
+                    prow_key,
+                )
         if prow_key:
             sync_prowlarr_apps(prow_key)
         widen_sonarr_hybrid()
