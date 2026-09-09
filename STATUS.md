@@ -24,14 +24,14 @@ TV and movie **Request / grab / TorBox / Seerr** are broken or mocked in this cl
 
 1. **Search** hits live `GET /api/lookup?q=` when Seerr has a key. Typeahead is the primary hit list; kind `movie|tv` is passed through. Honesty from 1.2.50.5: timeout/empty is not a silent empty shelf. No Cached glow on live TMDB ids. Books group hops to `/books?q=`.
 2. **TV POST** is one season (`seasons: [n]`, never `all`). SeasonSearch + `?recover=1` from 1.2.50.4. Import/symlink from 1.2.50.1.
-3. **Requests** tell the truth (1.2.50.2): AVAILABLE / Grabbing / Waiting. No invented %.
+3. **Requests** tell the truth (1.2.50.2): AVAILABLE / Grabbing / Waiting. No invented %. Active grabs live on **Requests** only — Discover idle has no In progress row.
 4. **Public TV indexers** (1.2.50.6): EZTV/ShowRSS + Prowlarr `fullSync`. YTS is movies-only. No private tracker credentials.
 
 ## UI
 
 Global tokens in `src/styles.css` (cyan / magenta / electric blue / neon-gold on `#03060c`). Page enter, card hover glow, live chips. `prefers-reduced-motion` kills motion. Contrast kept readable (cool white + `#8aa3b8` muted).
 
-Design dialect: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Discover typeahead is the hit list (plus Books hop to `/books?q=`). Idle Seerr shelves stay visible while typing.
+Design dialect: chrome select (FilterChip) = cyan glow; commit CTAs stay gold. Books uses `--shadow-magenta` (source chips, Kavita card, Library→Books hop, Discover Books group). Discover typeahead is the hit list (plus Books hop to `/books?q=`). Idle Seerr shelves stay visible while typing. Discover idle has no In progress chrome — that lives on Requests.
 
 ## Tests
 

@@ -6,11 +6,8 @@ import { Chip, FilterChip } from "@/components/chip";
 import { Page, PageTitle } from "@/components/page";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
-import { getTitle } from "@/lib/catalog";
 import { installHonestRequest } from "@/lib/honest-request";
 import { useReelStore } from "@/lib/store";
-import { isInFlightRequest } from "@/lib/sync-requests";
-import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
 
 type KindFilter = "all" | "movie" | "tv";
@@ -41,9 +38,7 @@ export function DiscoverView() {
   const shelf = useReelStore((s) => s.shelf);
   const shelfError = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
-  const requests = useReelStore((s) => s.requests);
   const navigate = useNavigate();
-  useSyncRequests();
 
   useEffect(() => {
     installHonestRequest();
@@ -152,17 +147,12 @@ export function DiscoverView() {
 
   const searching = q.trim().length >= 2;
   const typeaheadOpen = searching && (hits.length > 0 || bookHits.length > 0);
-  const inFlight = requests.filter(isInFlightRequest);
   const recentShelf = shelf.slice(0, 16);
   const trending = discover.trending ?? [];
   const movies = discover.movies ?? [];
   const tv = discover.tv ?? [];
   const idleHasRows =
-    inFlight.length > 0 ||
-    trending.length > 0 ||
-    movies.length > 0 ||
-    tv.length > 0 ||
-    recentShelf.length > 0;
+    trending.length > 0 || movies.length > 0 || tv.length > 0 || recentShelf.length > 0;
 
   return (
     <Page>
@@ -253,15 +243,6 @@ export function DiscoverView() {
         <Chip live>Seerr</Chip>
         <Chip magenta>Books</Chip>
       </div>
-
-      {inFlight.length > 0 ? (
-        <Row label="In progress" tone="magenta">
-          {inFlight.map((r) => {
-            const t = getTitle(r.titleId);
-            return t ? <TitleCard key={r.id} title={t} request={r} /> : null;
-          })}
-        </Row>
-      ) : null}
 
       {trending.length > 0 ? (
         <Row label="Trending">

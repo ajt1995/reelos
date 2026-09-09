@@ -8,7 +8,7 @@ Hal. **2026-09-09.** Named stamp **1.2.51 candidate** (Tron-night UI + legal Boo
 2. Books is legal catalogs only (Gutenberg, Standard Ebooks, Internet Archive public scans) + Kavita. No Anna’s Archive / Libgen. No private book keys.
 3. TV/movie Request/grab **will be broken or mocked** in this cloud VM — no TorBox / Seerr / house secrets. That is expected. Do not fake live debrid e2e.
 4. Hold Tron redesign for production. Do not wipe TorBox. Do not paste private tracker keys.
-5. Discover typeahead (when previewed): `/api/lookup` hits + a Books group hopping to `/books?q=`. Idle shelves stay visible while typing.
+5. Discover typeahead (when previewed): `/api/lookup` hits + a Books group hopping to `/books?q=`. Idle shelves stay visible while typing. Active grabs live on **Requests** only.
 
 ## Proof on this test-build (no house keys)
 
