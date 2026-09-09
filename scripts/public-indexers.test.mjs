@@ -45,6 +45,8 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(apps, /fullSync/);
   assert.match(apps, /def sync_prowlarr_apps/);
   assert.match(apps, /ApplicationIndexerSync/);
+  assert.match(apps, /SONARR_SYNC_CATEGORIES.*8000/);
+  assert.match(apps, /prowlarr_app_fields/);
   assert.doesNotMatch(apps, /"syncLevel": "addOnly"/);
   const main = read("daemon/wire-engines.parts/09.part");
   assert.match(main, /if "indexers" in sys\.argv/);
@@ -55,6 +57,35 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   const updater = read("daemon/reelos-update.sh");
   assert.match(updater, /wire-engines\.py" indexers/);
   assert.match(updater, /EZTV\/ShowRSS/);
+});
+
+test("Sonarr fullSync includes TorrentRss 8000/Other and preserves TV categories", () => {
+  const apps = read("daemon/wire-engines.parts/02.part");
+  const chunk = apps.slice(
+    apps.indexOf("def prowlarr_app_sync_level"),
+    apps.indexOf("def ensure_prowlarr_app"),
+  );
+  const r = spawnSync(
+    "python3",
+    [
+      "-c",
+      `
+import sys
+g = {}
+exec(compile(sys.stdin.read(), "apps.py", "exec"), g)
+old = [{"name": "syncCategories", "value": [5000, 5030]}]
+out = g["prowlarr_app_fields"]("Sonarr", old)
+sync = next(f["value"] for f in out if f["name"] == "syncCategories")
+assert sync == [5000, 5030, 8000], sync
+assert old[0]["value"] == [5000, 5030], old
+assert g["prowlarr_app_needs_update"]({"name": "Sonarr", "syncLevel": "fullSync", "fields": old})
+assert not g["prowlarr_app_needs_update"]({"name": "Sonarr", "syncLevel": "fullSync", "fields": out})
+assert g["prowlarr_app_fields"]("Radarr", []) == []
+`,
+    ],
+    { input: chunk, encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
 });
 
 test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
