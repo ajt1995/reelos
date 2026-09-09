@@ -46,6 +46,200 @@ export function titleIdFor(mediaType, tmdb) {
   return mediaType === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
 }
 
+/** Seerr/TMDB type strings vary; person/collection must not become movie. */
+export function normalizeMediaType(raw) {
+  const s = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (s === "tv" || s === "tvshow" || s === "tvshows" || s === "series" || s === "show") return "tv";
+  if (s === "movie" || s === "movies") return "movie";
+  return null;
+}
+
+/** Never request every season. Missing/invalid season → S01, not "all". */
+export function tvSeasonsForRequest(season) {
+  const n = Number(season);
+  return Number.isFinite(n) && n > 0 ? [n] : [1];
+}
+
+/** POST /api/v1/request body. TV is always one season. */
+export function buildSeerrAddPayload({ mediaType, tmdb, season } = {}) {
+  const type = normalizeMediaType(mediaType);
+  const id = Number(tmdb);
+  if (!type || !Number.isFinite(id) || id <= 0) return null;
+  const payload = { mediaType: type, mediaId: id };
+  if (type === "tv") payload.seasons = tvSeasonsForRequest(season);
+  return payload;
+}
+
+export function lookupFailureMessage(err) {
+  const name = err?.name || "";
+  const text = String(err?.message || err || "");
+  if (name === "AbortError" || /abort/i.test(name) || /aborted|timeout/i.test(text)) {
+    return "Seerr lookup timed out. Try the search again.";
+  }
+  return `seerr ${text}`;
+}
+
+export function rankLookupTitles(titles, q) {
+  const qn = String(q || "")
+    .trim()
+    .toLowerCase();
+  return [...(titles || [])].sort((a, b) => {
+    const as = String(a?.title || "").toLowerCase();
+    const bs = String(b?.title || "").toLowerCase();
+    const ar = as === qn ? 0 : as.startsWith(qn) ? 1 : as.includes(qn) ? 2 : 3;
+    const br = bs === qn ? 0 : bs.startsWith(qn) ? 1 : bs.includes(qn) ? 2 : 3;
+    if (ar !== br) return ar - br;
+    if (ar === 0 && a.kind !== b.kind) return a.kind === "movie" ? -1 : 1;
+    return (Number(b?.year) || 0) - (Number(a?.year) || 0);
+  });
+}
+
+/** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */
+export function mapSeerrSearchResults(hits, { q = "", limit = 16 } = {}) {
+  const titles = [];
+  for (const h of hits || []) {
+    const mediaType = normalizeMediaType(h?.mediaType);
+    if (!mediaType) continue;
+    const t = seerrSearchHit(h, mediaType);
+    if (!t) continue;
+    titles.push(t);
+    if (titles.length >= limit) break;
+  }
+  return rankLookupTitles(titles, q);
+}
+
+/**
+ * Unit-sandbox: search hits → pick title → Seerr POST body → honest status.
+ * Mock Seerr/*arr only. No house keys.
+ */
+export function simulateLookupAndRequest(
+  { searchHits = [], movieHasFile = false, seasonFileCount = 0, seerrMediaStatus = 3 } = {},
+  { q = "", pickId, season } = {},
+) {
+  const titles = mapSeerrSearchResults(searchHits, { q });
+  const picked = pickId ? titles.find((t) => t.id === pickId) : titles[0];
+  if (!picked) {
+    return { titles, picked: null, payload: null, request: null, error: "Seerr returned no titles" };
+  }
+  const parsed = parseTitleId(picked.id);
+  const payload = buildSeerrAddPayload({
+    mediaType: parsed?.mediaType,
+    tmdb: parsed?.tmdb,
+    season: parsed?.mediaType === "tv" ? season : undefined,
+  });
+  const seasons = payload?.seasons?.map((n) => ({ seasonNumber: n }));
+  const row = seerrRequestRow(
+    {
+      id: 1,
+      type: parsed.mediaType,
+      status: 2,
+      createdAt: "2014-11-07T00:00:00.000Z",
+      updatedAt: "2014-11-07T00:00:00.000Z",
+      seasons,
+      media: {
+        tmdbId: Number(parsed.tmdb),
+        mediaType: parsed.mediaType,
+        status: seerrMediaStatus,
+        seasons: seasons?.map((s) => ({ ...s, status: seerrMediaStatus })),
+      },
+    },
+    {},
+  );
+  const series =
+    parsed.mediaType === "tv" && payload?.seasons?.[0]
+      ? [
+          {
+            tmdbId: Number(parsed.tmdb),
+            seasons: [{ seasonNumber: payload.seasons[0], statistics: { episodeFileCount: seasonFileCount } }],
+          },
+        ]
+      : [];
+  const movies =
+    parsed.mediaType === "movie"
+      ? [{ tmdbId: Number(parsed.tmdb), hasFile: movieHasFile, statistics: { movieFileCount: movieHasFile ? 1 : 0 } }]
+      : [];
+  const honest = honestifyRequests([row], {
+    arrReady: true,
+    arrIndex: buildArrIndex({ movies, series }),
+  });
+  return { titles, picked, payload, request: honest[0] || row, parsed };
+}
+
+/** Austin DoD 2026-09-08: two 2012–2016 movies + two TV seasons. */
+export const ERA_QA_TITLES = [
+  {
+    q: "interstellar",
+    id: 157336,
+    mediaType: "movie",
+    title: "Interstellar",
+    year: 2014,
+    releaseDate: "2014-11-07",
+  },
+  {
+    q: "the martian",
+    id: 286217,
+    mediaType: "movie",
+    title: "The Martian",
+    year: 2015,
+    releaseDate: "2015-09-30",
+  },
+  {
+    q: "brooklyn nine-nine",
+    id: 48891,
+    mediaType: "tv",
+    title: "Brooklyn Nine-Nine",
+    year: 2013,
+    firstAirDate: "2013-09-17",
+    season: 1,
+  },
+  {
+    q: "mr robot",
+    id: 62560,
+    mediaType: "tv",
+    title: "Mr. Robot",
+    year: 2015,
+    firstAirDate: "2015-06-24",
+    season: 2,
+  },
+];
+
+export function eraSearchHit(spec) {
+  if (spec.mediaType === "tv") {
+    return {
+      id: spec.id,
+      mediaType: "tv",
+      name: spec.title,
+      firstAirDate: spec.firstAirDate,
+      seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+    };
+  }
+  return {
+    id: spec.id,
+    mediaType: "movie",
+    title: spec.title,
+    releaseDate: spec.releaseDate,
+  };
+}
+
+/** Search → Seerr POST → honest 0% (no file) or AVAILABLE (hasFile). */
+export function proveEraLookupRequest(spec, { hasFile = false } = {}) {
+  return simulateLookupAndRequest(
+    {
+      searchHits: [eraSearchHit(spec)],
+      movieHasFile: spec.mediaType === "movie" && hasFile,
+      seasonFileCount: spec.mediaType === "tv" && hasFile ? 10 : 0,
+      seerrMediaStatus: hasFile ? 5 : 3,
+    },
+    {
+      q: spec.q,
+      pickId: titleIdFor(spec.mediaType, spec.id),
+      season: spec.season,
+    },
+  );
+}
+
 export function tmdbPoster(path) {
   const p = String(path || "");
   if (!p) return "";
@@ -494,8 +688,7 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
-  const rawType = h?.mediaType || mediaTypeHint;
-  const mediaType = rawType === "tv" ? "tv" : rawType === "movie" ? "movie" : null;
+  const mediaType = normalizeMediaType(h?.mediaType || mediaTypeHint);
   if (!mediaType) return null;
   const tmdb = h?.id ?? h?.tmdbId ?? h?.mediaInfo?.tmdbId;
   if (!tmdb) return null;

@@ -1,65 +1,63 @@
 # STATUS.md
 
-**Reelist (TV recover extras on 1.2.50.3).** 2026-09-09. Fold-in after #55 merge (Stage 3 heartbeat + FUSE dump recreate). Separate from Tron #52. Stamp **1.2.50.4**.
+**Reelist (Discover→Request honesty on 1.2.50.4).** 2026-09-09. Fold-in after #56 merge (SeasonSearch + recover hop). Separate from Tron #52. Stamp **1.2.50.5**.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.4`
-- **Base:** latest `main` (merged #55 = 1.2.50.3)
+- **VERSION / channel:** `1.2.50.5`
+- **Base:** latest `main` (merged #56 = 1.2.50.4)
 - Did **not** take Tron chrome from #52
-- **What it is:** SeasonSearch on TV POST add/reuse when the season has 0 files. `GET /api/request?recover=1`. stuck-downloads searches/relinks 0-file monitored seasons. lock-download-clients keeps Decypharr dumps (`removeCompletedDownloads: false`). Requests stay visible if Seerr is empty but Sonarr/Decypharr still have unfinished TV.
+- **What it is:** Discover search no longer looks like an empty shelf while Seerr is looking or timed out. TV `POST /api/request` is one season (`[n]` or S01), never `seasons: "all"`. Live TMDB/Seerr ids do not get a lab **Cached** glow. Unit sandbox locks Austin’s 4-title 2012–2016 gate: Interstellar + The Martian + Brooklyn Nine-Nine S01 + Mr. Robot S02 → search → Seerr POST → honest 0% / AVAILABLE.
 
-## Kept from 1.2.50.3 (#55)
+## Kept from 1.2.50.4 (#56)
 
-- Stage 3 `cp -a node_modules` heartbeats.
-- `relink_dumps.py` recreates empty `sonarr`/`radarr` dumps from FUSE.
-- Title-page GET `/api/request` is season-scoped (`pickSeerrRequestForTitle`). `requestTitle` no longer invents 42%.
+- SeasonSearch on TV POST add/reuse when the season has 0 files.
+- `GET /api/request?recover=1`. stuck-downloads searches/relinks 0-file monitored seasons.
+- lock-download-clients keeps Decypharr dumps. Honest unfinished TV when Seerr is empty.
 
-## House QA (1.2.50.2) — still the hole this stamp closes
+## House QA hole this stamp closes
 
-- Requests honesty PASS (`/api/request count=0`, no stale Museum grabbing).
-- Library: Museum only.
-- TWD never landed files after wipe. Relink can recreate dumps when FUSE has the pack (#55). If FUSE is also empty, the POST/reuse/recover hops must `SeasonSearch`.
+- Discover typed ≥2 chars and immediately said “No titles from Seerr” (debounce + fetch + AbortError all looked empty).
+- TV POST without a season asked Seerr for **all** seasons (hash paste omitted season).
+- No unit proof that four 2012–2016 TMDB titles survive lookup→request without a year filter or fake %.
+- Discover search cards glowed **Cached** for every live `tmdb-*` id (`titleInCache` treated them as lab catalog).
 
 ## Code changes (this stamp)
 
-1. **POST `/api/request` TV** — after add **or reuse**, `SeasonSearch` if that season has 0 files, then kick relink + ManualImport.
-2. **GET `/api/request?recover=1`** — HTTP recover for QA (search missing + import). Phone polls omit this flag.
-3. **stuck-downloads** — 0-file monitored season: relink/import or SeasonSearch (15 min after the first). Uses `#55` `relink_dumps.py` (`decide_missing_action`).
-4. **lock-download-clients** — `removeCompletedDownloads: false`; PUT existing Decypharr clients.
-5. **Honesty** — empty Seerr + unfinished Sonarr/Decypharr/Seerr-media still shows one S01 row. Ghost Seerr AVAILABLE + files=0 stays downloading. Museum on JF is not re-invented.
+1. **`mapSeerrSearchResults` / `normalizeMediaType`** — person/collection dropped; `Movie`/`TV` still map. **No year filter.**
+2. **`buildSeerrAddPayload` / `tvSeasonsForRequest`** — TV always `[season]` or `[1]`. Never `"all"`.
+3. **`GET /api/lookup`** — 45s Seerr search; `AbortError` → “Seerr lookup timed out. Try the search again.”
+4. **Discover** — Looking up… / real error / results. Title cards stay request-free (no In progress).
+5. **Title hash paste** — includes the selected TV season.
+6. **`ERA_QA_TITLES` / `proveEraLookupRequest`** — Interstellar (2014), The Martian (2015), Brooklyn Nine-Nine S01 (2013), Mr. Robot S02 (2015).
+7. **`titleInCache`** — live `tmdb-` / `tvdb-` / `jf-` ids are never lab-Cached.
 
 ## Residual (no code change)
 
+- Live e2e (2 random 2012–2016 movies + 2 TV seasons on the house box) still needs Seerr/TMDB/*arr/TorBox. Agent has no house secrets.
+- Discover **shelf** TV from Jellyfin still prefers `tvdb-*` when TMDB is present. Request from an unfinished shelf series can 400 (“Search again”) — use Discover **search** (`tmdb-tv-*`).
+- Seerr down / no API key still returns empty titles with an error string. House hop must read `error`, not only `titles.length`.
 - `TimeoutStartSec=infinity` + hung `cp`/`npm ci`/`compose up` can leave `running: true` forever.
-- Relink still cannot classify a FUSE pack if *arr has no series/movie/queue row for it (need the TWD S01 POST, or a leftover Sonarr series).
-- If `pipeline.sonarrMissing`, `fuseTv`, and `decypharr` are all 0 after recover, the POST did not land — grab miss, not matching.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-python3 install/bin/relink_dumps.py --self-test
-python3 install/bin/lock-download-clients.py --self-test
-python3 install/bin/stuck-downloads.py --self-test
-python3 install/bin/sonarr_manual_import.py --self-test
-node --test scripts/reelos-update.test.mjs scripts/relink-dumps.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stuck-downloads.test.mjs scripts/sonarr-manual-import.test.mjs scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs
-node --experimental-strip-types --test src/lib/sync-requests.test.ts
+node --test scripts/reelos-seerr.test.mjs scripts/reelos-request-status.test.mjs scripts/stack-smoke.test.mjs
+node --experimental-strip-types --test src/lib/sync-requests.test.ts src/lib/adapter.test.ts
 ```
 
 ## Owner / house Apply
 
 1. Merge to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.4`. Expect `ReelOS 1.2.50.4 applied.`
-3. In-flight or new `POST /api/request` TWD S01 → one downloading S01 row at 0%.
-4. `GET /api/request?recover=1` once. Then `GET /api/activity` for relink / ManualImport / SeasonSearch.
-5. That S01 row → Available / Play. Title: TWD S01 Play does not hide Request S02. No 42%.
+2. `cat /opt/reelos/VERSION` → `1.2.50.5`. Expect `ReelOS 1.2.50.5 applied.`
+3. Discover: search two 2012–2016 movies and two 2012–2016 shows. Results, not an empty shelf or a silent timeout.
+4. Request each movie. Request **one season** of each show. Seerr → Radarr/Sonarr. Requests: AVAILABLE / Grabbing / Waiting — no fake %.
+5. Discover cards stay free of In progress and **Cached** glow on live TMDB ids (that stays on Requests / title).
 
 ## Do not
 
 - Cut **1.2.51** (Tron reserved).
-- Invent a progress % on Requests.
-- Change season-by-season TV UX.
+- Invent a progress % on Requests or Discover.
+- Change season-by-season TV UX back to all-at-once.
 - SSH from the agent. Scope into Tron / books / TorBox wipe.
-- Scan parent `/mnt/symlinks`.
-- Replace `#55` `relink_dumps.py` with a second dump-recreate module.

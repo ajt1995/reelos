@@ -6,14 +6,20 @@ import { test } from "node:test";
 import {
   applyStuckNotes,
   buildArrIndex,
+  buildSeerrAddPayload,
   collapseDuplicateRequests,
   findExistingSeasonRequest,
   pickSeerrRequestForTitle,
   honestifyRequests,
   assembleRequestPayload,
+  ERA_QA_TITLES,
+  lookupFailureMessage,
+  mapSeerrSearchResults,
   mapSeerrStatus,
+  proveEraLookupRequest,
   mergeUnfinishedRows,
   missingArrRequests,
+  normalizeMediaType,
   seerrAvailableIsGhost,
   seerrMediaGhostRows,
   parseTitleId,
@@ -21,8 +27,10 @@ import {
   seasonCount,
   seerrRequestRow,
   seerrSearchHit,
+  simulateLookupAndRequest,
   titleIdFor,
   tmdbPoster,
+  tvSeasonsForRequest,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -600,6 +608,182 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
+});
+
+test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", () => {
+  const hits = [
+    { id: 287, mediaType: "person", name: "Brad Pitt" },
+    {
+      id: 157336,
+      mediaType: "Movie",
+      title: "Interstellar",
+      releaseDate: "2014-11-07",
+      posterPath: "/interstellar.jpg",
+    },
+    {
+      id: 286217,
+      mediaType: "movie",
+      title: "The Martian",
+      releaseDate: "2015-09-30",
+    },
+    {
+      id: 48891,
+      mediaType: "TV",
+      name: "Brooklyn Nine-Nine",
+      firstAirDate: "2013-09-17",
+      numberOfSeasons: 8,
+      seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+    },
+    {
+      id: 62560,
+      mediaType: "tv",
+      name: "Mr. Robot",
+      firstAirDate: "2015-06-24",
+      numberOfSeasons: 4,
+      seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
+    },
+    { id: 10, mediaType: "collection", title: "A Collection" },
+  ];
+  const titles = mapSeerrSearchResults(hits, { q: "interstellar" });
+  assert.equal(normalizeMediaType("Movie"), "movie");
+  assert.equal(normalizeMediaType("TV"), "tv");
+  assert.equal(normalizeMediaType("person"), null);
+  assert.deepEqual(
+    titles.map((t) => t.id),
+    ["tmdb-157336", "tmdb-286217", "tmdb-tv-62560", "tmdb-tv-48891"],
+  );
+  const interstellar = titles.find((t) => t.id === "tmdb-157336");
+  const b99 = titles.find((t) => t.id === "tmdb-tv-48891");
+  assert.equal(interstellar.kind, "movie");
+  assert.equal(interstellar.year, 2014);
+  assert.equal(b99.kind, "tv");
+  assert.equal(b99.year, 2013);
+  assert.deepEqual(b99.seasonList, [1, 2]);
+  assert.ok(titles.every((t) => t.year >= 2012 && t.year <= 2016));
+});
+
+test("QA gate: 2 movies + 2 TV seasons (2012–2016) search→request→honest 0%/AVAILABLE", () => {
+  assert.equal(ERA_QA_TITLES.length, 4);
+  assert.equal(ERA_QA_TITLES.filter((t) => t.mediaType === "movie").length, 2);
+  assert.equal(ERA_QA_TITLES.filter((t) => t.mediaType === "tv").length, 2);
+  for (const spec of ERA_QA_TITLES) {
+    assert.ok(spec.year >= 2012 && spec.year <= 2016, spec.title);
+    const grabbing = proveEraLookupRequest(spec, { hasFile: false });
+    assert.ok(grabbing.picked, spec.title);
+    assert.equal(grabbing.picked.title, spec.title);
+    assert.equal(grabbing.picked.year, spec.year);
+    assert.ok(grabbing.titles.some((t) => t.id === grabbing.picked.id));
+    if (spec.mediaType === "movie") {
+      assert.deepEqual(grabbing.payload, { mediaType: "movie", mediaId: spec.id });
+      assert.equal("seasons" in grabbing.payload, false);
+      assert.equal(grabbing.request.season, undefined);
+    } else {
+      assert.deepEqual(grabbing.payload, {
+        mediaType: "tv",
+        mediaId: spec.id,
+        seasons: [spec.season],
+      });
+      assert.equal(grabbing.payload.seasons.length, 1);
+      assert.notEqual(grabbing.payload.seasons, "all");
+      assert.equal(grabbing.request.season, spec.season);
+    }
+    assert.equal(grabbing.request.status, "downloading");
+    assert.equal(grabbing.request.progress, 0);
+    assert.ok(![42, 62].includes(grabbing.request.progress), spec.title);
+
+    const landed = proveEraLookupRequest(spec, { hasFile: true });
+    assert.equal(landed.request.status, "available");
+    assert.equal(landed.request.progress, 100);
+    assert.equal(landed.request.engine, "downloaded");
+    if (spec.mediaType === "tv") assert.equal(landed.request.season, spec.season);
+  }
+});
+
+test("lookup+request: Interstellar (2014) movie — Seerr POST, honest 0% then AVAILABLE", () => {
+  const searchHits = [
+    { id: 157336, mediaType: "movie", title: "Interstellar", releaseDate: "2014-11-07" },
+  ];
+  const grabbing = simulateLookupAndRequest(
+    { searchHits, movieHasFile: false, seerrMediaStatus: 3 },
+    { q: "interstellar", pickId: "tmdb-157336" },
+  );
+  assert.equal(grabbing.picked.title, "Interstellar");
+  assert.equal(grabbing.picked.year, 2014);
+  assert.deepEqual(grabbing.payload, { mediaType: "movie", mediaId: 157336 });
+  assert.equal("seasons" in grabbing.payload, false);
+  assert.equal(grabbing.request.status, "downloading");
+  assert.equal(grabbing.request.progress, 0);
+  assert.notEqual(grabbing.request.progress, 42);
+  assert.notEqual(grabbing.request.progress, 62);
+
+  const available = simulateLookupAndRequest(
+    { searchHits, movieHasFile: true, seerrMediaStatus: 5 },
+    { q: "interstellar", pickId: "tmdb-157336" },
+  );
+  assert.equal(available.request.status, "available");
+  assert.equal(available.request.progress, 100);
+  assert.equal(available.request.engine, "downloaded");
+});
+
+test("lookup+request: Brooklyn Nine-Nine (2013) S01 only — never seasons=all", () => {
+  const searchHits = [
+    {
+      id: 48891,
+      mediaType: "tv",
+      name: "Brooklyn Nine-Nine",
+      firstAirDate: "2013-09-17",
+      seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+    },
+  ];
+  const s01 = simulateLookupAndRequest(
+    { searchHits, seasonFileCount: 0, seerrMediaStatus: 3 },
+    { q: "brooklyn", pickId: "tmdb-tv-48891", season: 1 },
+  );
+  assert.equal(s01.picked.kind, "tv");
+  assert.equal(s01.picked.year, 2013);
+  assert.deepEqual(s01.payload, { mediaType: "tv", mediaId: 48891, seasons: [1] });
+  assert.notEqual(s01.payload.seasons, "all");
+  assert.equal(s01.request.season, 1);
+  assert.equal(s01.request.status, "downloading");
+  assert.equal(s01.request.progress, 0);
+
+  const missingSeason = buildSeerrAddPayload({ mediaType: "tv", tmdb: 62560 });
+  assert.deepEqual(missingSeason, { mediaType: "tv", mediaId: 62560, seasons: [1] });
+  assert.deepEqual(tvSeasonsForRequest(undefined), [1]);
+  assert.deepEqual(tvSeasonsForRequest("all"), [1]);
+  assert.deepEqual(tvSeasonsForRequest(2), [2]);
+
+  const landed = simulateLookupAndRequest(
+    { searchHits, seasonFileCount: 22, seerrMediaStatus: 5 },
+    { q: "brooklyn", pickId: "tmdb-tv-48891", season: 1 },
+  );
+  assert.equal(landed.request.status, "available");
+  assert.equal(landed.request.progress, 100);
+  assert.equal(landed.request.season, 1);
+});
+
+test("AbortError / timeout is a retryable lookup error, not an empty shelf", () => {
+  const abort = new Error("The operation was aborted");
+  abort.name = "AbortError";
+  assert.equal(lookupFailureMessage(abort), "Seerr lookup timed out. Try the search again.");
+  assert.match(lookupFailureMessage(new Error("timeout")), /timed out/);
+  assert.deepEqual(mapSeerrSearchResults([], { q: "interstellar" }), []);
+});
+
+test("Discover stays free of In progress; POST never sends seasons=all", () => {
+  const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
+  const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  assert.doesNotMatch(discover, /In progress/i);
+  assert.doesNotMatch(discover, /request=\{/);
+  assert.match(discover, /Looking up movies and shows/);
+  assert.match(discover, /lookupErr/);
+  assert.match(lookup, /mapSeerrSearchResults/);
+  assert.match(lookup, /buildSeerrAddPayload/);
+  assert.match(lookup, /lookupFailureMessage/);
+  assert.match(lookup, /ms: 45000/);
+  assert.doesNotMatch(lookup, /seasons = .*["']all["']/);
+  assert.match(title, /season: resolved\.kind === "tv" \|\| resolved\.kind === "anime" \? season/);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {
