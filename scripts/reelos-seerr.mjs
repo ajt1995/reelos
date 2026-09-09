@@ -390,6 +390,36 @@ function demoteGhost(row) {
   };
 }
 
+export function radarrDecypharrMissing(clients) {
+  if (!Array.isArray(clients)) return false;
+  return !clients.some((c) => {
+    if (!c || c.implementation !== "QBittorrent") return false;
+    const host = String((c.fields || []).find((f) => f && f.name === "host")?.value || "");
+    const port = Number((c.fields || []).find((f) => f && f.name === "port")?.value);
+    return host === "decypharr" && port === 8282;
+  });
+}
+
+/** Seerr requested but Radarr never searched / has no grab client. Keep downloading@0, say why. */
+export function movieRequestReason(
+  row,
+  { movies, radarrClients, arrMoviesReady } = {},
+) {
+  if (!row?.titleId) return undefined;
+  const parsed = parseTitleId(row.titleId);
+  if (parsed?.mediaType !== "movie") return undefined;
+  if (row.status === "available" || row.engine === "downloaded") return undefined;
+  if (arrMoviesReady === false || !Array.isArray(movies)) return undefined;
+  const hit = movies.find((m) => String(m?.tmdbId) === String(parsed.tmdb));
+  if (!hit) return "Requested — Radarr has no movie yet";
+  const files = Number(hit.statistics?.movieFileCount || 0);
+  if (hit.hasFile === true || files > 0) return undefined;
+  if (radarrClients != null && radarrDecypharrMissing(radarrClients)) {
+    return "No grab client — search cannot land";
+  }
+  return undefined;
+}
+
 /**
  * Honest request status, no fake %:
  * 1. Seerr declined/failed → failed
@@ -403,18 +433,19 @@ function demoteGhost(row) {
  */
 export function overlayPresence(
   rows,
-  { libraryTitles = [], arrIndex = null, seerrMediaByTitleId = null, arrReady = false } = {},
+  facts = {},
 ) {
+  const { libraryTitles = [], arrIndex = null, seerrMediaByTitleId = null, arrReady = false } = facts;
   const mediaOf = (row) => {
     if (!seerrMediaByTitleId) return null;
     if (typeof seerrMediaByTitleId.get === "function") return seerrMediaByTitleId.get(row.titleId) || null;
     return seerrMediaByTitleId[row.titleId] || null;
   };
-  const facts = { arrIndex, arrReady, libraryTitles };
+  const presence = { arrIndex, arrReady, libraryTitles };
   return (rows || []).map((row) => {
     if (!row) return row;
     if (row.status === "available" || row.engine === "downloaded") {
-      if (seerrAvailableIsGhost(row, facts)) return demoteGhost(row);
+      if (seerrAvailableIsGhost(row, presence)) return demoteGhost(row);
       return markAvailable(row);
     }
     const media = mediaOf(row);
@@ -422,13 +453,14 @@ export function overlayPresence(
       const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
       if (engine === "downloaded") {
         const promoted = markAvailable(row);
-        if (seerrAvailableIsGhost(promoted, facts)) return demoteGhost(row);
+        if (seerrAvailableIsGhost(promoted, presence)) return demoteGhost(row);
         return promoted;
       }
     }
     if (libraryHit(row, libraryTitles)) return markAvailable(row);
     if (arrHasFile(row, arrIndex)) return markAvailable(row);
-    return row;
+    const reason = movieRequestReason(row, facts);
+    return reason ? { ...row, reason } : row;
   });
 }
 

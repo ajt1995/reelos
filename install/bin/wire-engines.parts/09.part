@@ -39,6 +39,10 @@ def ensure_indexers_and_sync() -> int:
     except Exception as e:
         log_wire(f"sonarr hybrid {type(e).__name__} {e}")
     try:
+        widen_radarr_hybrid()
+    except Exception as e:
+        log_wire(f"radarr hybrid {type(e).__name__} {e}")
+    try:
         jf_token = jellyfin_token()
         if jf_token:
             want = jellyfin_want_libraries()
@@ -92,6 +96,46 @@ def widen_sonarr_hybrid() -> None:
             log_wire(f"sonarr {name} allows 720p/1080p/2160p (hybrid)")
         except NET_ERR as e:
             log_wire(f"sonarr hybrid profile {e}")
+        return
+
+
+def widen_radarr_hybrid() -> None:
+    """MoviesSearch against Ultra-HD 2160p-only rejects 1080p National Treasure."""
+    want_q = answers().get("quality") or "hybrid"
+    if want_q != "hybrid":
+        return
+    xml = COMPOSE / "configs" / "radarr" / "config.xml"
+    key = wait_key(xml, 20)
+    if not key:
+        return
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "widen_hybrid_profile_items", None):
+        return
+    name = QUALITY.get(want_q, "Ultra-HD")
+    try:
+        profiles = call("http://127.0.0.1:7878/api/v3/qualityprofile", key) or []
+    except NET_ERR:
+        return
+    for p in profiles if isinstance(profiles, list) else []:
+        if p.get("name") != name:
+            continue
+        items = p.get("items") or []
+        if not mod.widen_hybrid_profile_items(items):
+            log_wire(f"radarr {name} already allows HD+UHD")
+            return
+        body = dict(p)
+        body["items"] = items
+        body["upgradeAllowed"] = True
+        try:
+            call(
+                f"http://127.0.0.1:7878/api/v3/qualityprofile/{p.get('id')}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"radarr {name} allows 720p/1080p/2160p (hybrid)")
+        except NET_ERR as e:
+            log_wire(f"radarr hybrid profile {e}")
         return
 
 
@@ -441,6 +485,7 @@ def main() -> int:
         if prow_key:
             sync_prowlarr_apps(prow_key)
         widen_sonarr_hybrid()
+        widen_radarr_hybrid()
     except Exception as e:
         log_wire(f"arr wire {type(e).__name__} {e}")
 

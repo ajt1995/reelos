@@ -49,6 +49,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /extra_jellyfin_paths/);
     assert.match(code, /remove_jellyfin_path/);
     assert.match(code, /jellyfin drop extra path/);
+    assert.match(code, /delete_jellyfin_library/);
+    assert.match(code, /collapse_season_named_dumps/);
+    assert.match(code, /extra_jellyfin_libraries/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
   }
@@ -119,6 +122,54 @@ assert "path=%2Fmedia%2Fmovies" in url, url
 assert "refreshLibrary=true" in url, url
 assert kwargs["method"] == "DELETE", kwargs
 assert "body" not in kwargs, kwargs
+
+# Extra virtual folders (TV + Movies 2) drop; /media migrates onto Movies for local/both.
+g["answers"] = lambda: {"storageMode": "both"}
+folders = [
+    folder,
+    {"Name": "TV", "CollectionType": "tvshows", "Locations": ["/symlinks"], "LibraryOptions": {"PathInfos": []}},
+    {
+        "Name": "Movies 2",
+        "CollectionType": "movies",
+        "Locations": ["/media/movies"],
+        "LibraryOptions": {"PathInfos": [{"Path": "/media/movies"}]},
+    },
+]
+extras = g["extra_jellyfin_libraries"](folders, [("Movies", "movies"), ("Shows", "tvshows")])
+assert {f["Name"] for f in extras} == {"TV", "Movies 2"}, extras
+assert g["strip_season_folder_suffix"]("Brooklyn Nine-Nine S01") == "Brooklyn Nine-Nine"
+assert g["strip_season_folder_suffix"]("The Walking Dead - Season 1") == "The Walking Dead"
+import tempfile, os
+from pathlib import Path
+td = tempfile.mkdtemp()
+# collapse must refuse /media
+media_root = Path(td) / "media" / "tv"
+media_root.mkdir(parents=True)
+(media_root / "Brooklyn Nine-Nine").mkdir()
+(media_root / "Brooklyn Nine-Nine S01").mkdir()
+assert g["collapse_season_named_dumps"](str(media_root)) == 0
+assert (media_root / "Brooklyn Nine-Nine S01").is_dir()
+# refuse anything that is not the sonarr dump root
+assert g["collapse_season_named_dumps"](str(Path(td) / "other")) == 0
+dump = Path(td) / "sonarr"
+dump.mkdir()
+(dump / "Brooklyn Nine-Nine").mkdir()
+(dump / "Brooklyn Nine-Nine" / "S01E01.mkv").write_bytes(b"x")
+(dump / "Brooklyn Nine-Nine S01").mkdir()
+(dump / "Brooklyn Nine-Nine S01" / "ep.mkv").write_bytes(b"x")
+(dump / "The Walking Dead").mkdir()
+(dump / "The Walking Dead" / "video.mkv").write_bytes(b"x")
+(dump / "The Walking Dead - Season 1").mkdir()
+os.environ["REELOS_TEST_DUMP_ROOT"] = str(dump)
+try:
+    n = g["collapse_season_named_dumps"](str(dump))
+finally:
+    os.environ.pop("REELOS_TEST_DUMP_ROOT", None)
+assert n == 2, n
+assert (dump / "Brooklyn Nine-Nine").is_dir()
+assert not (dump / "Brooklyn Nine-Nine S01").exists()
+assert (dump / "The Walking Dead").is_dir()
+assert not (dump / "The Walking Dead - Season 1").exists()
 print("ok")
 `,
     ],
@@ -129,6 +180,11 @@ print("ok")
   const hop = read("daemon/wire-engines.parts/09.part");
   assert.match(hop, /ensure_jellyfin_libraries/);
   assert.match(hop, /jellyfin libraries one dump path each/);
+  assert.match(hop, /widen_radarr_hybrid/);
+  const eight = read("daemon/wire-engines.parts/08.part");
+  assert.match(eight, /delete_jellyfin_library/);
+  assert.match(eight, /collapse_season_named_dumps/);
+  assert.match(eight, /drop_extra_jellyfin_libraries/);
 });
 
 test("install and daemon wire-engines bodies stay twins", () => {

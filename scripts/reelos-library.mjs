@@ -61,8 +61,20 @@ export function mapJellyfinItem(it, host) {
   };
 }
 
+/** JF season-folder names are the same show: "B99 S01", "TWD - Season 1". Trailing only. */
+export function stripSeasonFolderSuffix(title) {
+  return String(title || "")
+    .replace(/[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$/i, "")
+    .trim();
+}
+
+export function looksLikeSeasonFolderTitle(title) {
+  const raw = String(title || "").trim();
+  return Boolean(raw) && stripSeasonFolderSuffix(raw) !== raw;
+}
+
 export function shelfTitleKey(t) {
-  const title = String(t?.title || "")
+  const title = stripSeasonFolderSuffix(t?.title)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
   return `${t?.kind || "movie"}:${title}`;
@@ -97,7 +109,12 @@ export function dedupeLibraryTitles(titles) {
     // A copy Jellyfin never matched has year 0. Keep the resolved year so the
     // next unmatched copy still collapses and a real remake still does not.
     slot.year = slot.year || year;
-    if (score(t) > score(slot.best)) slot.best = t;
+    const betterScore = score(t) > score(slot.best);
+    const preferSeriesName =
+      score(t) === score(slot.best) &&
+      looksLikeSeasonFolderTitle(slot.best?.title) &&
+      !looksLikeSeasonFolderTitle(t?.title);
+    if (betterScore || preferSeriesName) slot.best = t;
   }
   return [...groups.values()]
     .flat()

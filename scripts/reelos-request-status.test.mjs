@@ -7,6 +7,8 @@ import {
   kickArrRecover,
   kickTvSeasonRecover,
   listMissingRecoverTargets,
+  listRecoverTargets,
+  listSeerrOrphanMovieTargets,
   loadPresenceFacts,
   planArrPostRecover,
   planTvPostRecover,
@@ -34,7 +36,9 @@ test("presence facts read the JF shelf cache and *arr hasFile index", async () =
     force: true,
     libraryFile: file,
     fetchArr: async (url) => {
+      if (String(url).includes("/downloadclient")) return [];
       if (String(url).includes("/movie")) return [{ tmdbId: 1593, hasFile: true }];
+      if (String(url).includes("/torrents")) return [];
       return [
         {
           tmdbId: 1402,
@@ -364,4 +368,129 @@ test("waitForArrRow returns null when *arr never gets the title", async () => {
     fetchArr: async () => [],
   });
   assert.equal(hit, null);
+});
+
+test("recover includes Seerr movie orphans that Radarr never grew", () => {
+  const orphans = listSeerrOrphanMovieTargets({
+    seerrRows: [
+      { titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059 },
+      { titleId: "tmdb-157336", mediaType: "movie", tmdb: 157336 },
+    ],
+    movies: [{ tmdbId: 157336, hasFile: false }],
+  });
+  assert.deepEqual(
+    orphans.map((t) => t.tmdb),
+    [2059],
+  );
+  const targets = listRecoverTargets({
+    series: [],
+    movies: [{ tmdbId: 157336, monitored: true, hasFile: false, statistics: { movieFileCount: 0 } }],
+    seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059 }],
+  });
+  assert.deepEqual(
+    targets.map((t) => `${t.mediaType}:${t.tmdb}`),
+    ["movie:157336", "movie:2059"],
+  );
+});
+
+test("kickArrRecover POSTs Decypharr + Any on Radarr before MoviesSearch", async () => {
+  const calls = [];
+  const result = await kickArrRecover({
+    mediaType: "movie",
+    tmdb: 2059,
+    radarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("/movie") && !String(url).includes("lookup") && method === "GET") {
+        return [{ id: 12, tmdbId: 2059, title: "National Treasure", hasFile: false, qualityProfileId: 6 }];
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") return [];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [
+          {
+            id: 6,
+            name: "Ultra-HD",
+            items: [
+              { quality: { name: "WEBDL-720p" }, allowed: false },
+              { quality: { name: "WEBDL-2160p" }, allowed: true },
+            ],
+          },
+          { id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] },
+        ];
+      }
+      return { ok: true, id: 12 };
+    },
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.movieId, 12);
+  assert.equal(result.command, "MoviesSearch");
+  assert.equal(result.grabPath?.clientAdded, true);
+  const clientPost = calls.find((c) => c.url.includes("/downloadclient") && c.method === "POST");
+  assert.equal(clientPost?.body?.name, "ReelOS-Decypharr");
+  assert.equal(
+    clientPost?.body?.fields?.find((f) => f.name === "movieCategory")?.value,
+    "radarr",
+  );
+  const search = calls.find((c) => c.url.includes("/command"));
+  assert.equal(search?.body?.name, "MoviesSearch");
+  assert.deepEqual(search?.body?.movieIds, [12]);
+  const searchIdx = calls.indexOf(search);
+  const clientIdx = calls.indexOf(clientPost);
+  assert.ok(clientIdx >= 0 && clientIdx < searchIdx);
+});
+
+test("kickArrRecover adds National Treasure when Seerr requested but Radarr is empty", async () => {
+  const calls = [];
+  let movies = [];
+  const result = await kickArrRecover({
+    mediaType: "movie",
+    tmdb: 2059,
+    radarrKey: "test",
+    waitTries: 2,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("lookup")) {
+        return [{ tmdbId: 2059, title: "National Treasure", year: 2004, titleSlug: "national-treasure-2059" }];
+      }
+      if (String(url).includes("/rootfolder")) return [{ path: "/symlinks/radarr" }];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") {
+        return [
+          {
+            implementation: "QBittorrent",
+            fields: [
+              { name: "host", value: "decypharr" },
+              { name: "port", value: 8282 },
+            ],
+          },
+        ];
+      }
+      if (String(url).includes("/movie") && method === "POST") {
+        movies = [{ id: 9, tmdbId: 2059, title: "National Treasure", hasFile: false, qualityProfileId: 1 }];
+        return movies[0];
+      }
+      if (String(url).includes("/movie") && method === "GET") return movies;
+      if (String(url).includes("/command")) return { ok: true };
+      return { ok: true };
+    },
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.movieId, 9);
+  assert.equal(result.command, "MoviesSearch");
+  assert.equal(result.grabPath?.added, true);
+  const add = calls.find((c) => c.url.includes("/movie") && c.method === "POST");
+  assert.equal(add?.body?.tmdbId, 2059);
+  assert.equal(add?.body?.rootFolderPath, "/symlinks/radarr");
+  assert.equal(add?.body?.addOptions?.searchForMovie, false);
+  const search = calls.find((c) => c.url.includes("/command"));
+  assert.equal(search?.body?.name, "MoviesSearch");
 });

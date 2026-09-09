@@ -12,11 +12,13 @@ import {
   createTokenCache,
   dedupeLibraryTitles,
   libraryItemsUrl,
+  looksLikeSeasonFolderTitle,
   mapJellyfinItem,
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
   shelfTitleKey,
+  stripSeasonFolderSuffix,
   titleYear,
 } from "./reelos-library.mjs";
 
@@ -136,6 +138,54 @@ test("Home shelf keeps remakes: Dune 1984 is not a duplicate of Dune 2021", () =
     out.map((t) => t.year).sort(),
     [1984, 2021],
   );
+});
+
+test("Home shelf collapses JF season-folder names onto the real series row", () => {
+  assert.equal(stripSeasonFolderSuffix("Brooklyn Nine-Nine S01"), "Brooklyn Nine-Nine");
+  assert.equal(stripSeasonFolderSuffix("The Walking Dead - Season 1"), "The Walking Dead");
+  assert.equal(stripSeasonFolderSuffix("The Walking Dead"), "The Walking Dead");
+  assert.equal(looksLikeSeasonFolderTitle("Brooklyn Nine-Nine S01"), true);
+  const b99 = titleFrom({
+    Id: "jf-b99",
+    Name: "Brooklyn Nine-Nine",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: { Tvdb: "269586" },
+  });
+  const b99s01 = titleFrom({
+    Id: "jf-b99-s01",
+    Name: "Brooklyn Nine-Nine S01",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: {},
+  });
+  b99s01.poster = "";
+  const twd = titleFrom({
+    Id: "jf-twd",
+    Name: "The Walking Dead",
+    Type: "Series",
+    ProductionYear: 2010,
+    ProviderIds: { Tvdb: "153021" },
+  });
+  const twds1 = titleFrom({
+    Id: "jf-twd-s1",
+    Name: "The Walking Dead - Season 1",
+    Type: "Series",
+    ProductionYear: 2010,
+    ProviderIds: {},
+  });
+  twds1.poster = "";
+  const out = dedupeLibraryTitles([b99s01, b99, twd, twds1]);
+  assert.equal(out.length, 2);
+  assert.equal(
+    out.filter((t) => stripSeasonFolderSuffix(t.title) === "Brooklyn Nine-Nine").length,
+    1,
+  );
+  assert.equal(out.filter((t) => stripSeasonFolderSuffix(t.title) === "The Walking Dead").length, 1);
+  assert.equal(out.find((t) => t.title === "Brooklyn Nine-Nine").jellyfinId, "jf-b99");
+  assert.equal(out.find((t) => t.title === "The Walking Dead").jellyfinId, "jf-twd");
+  assert.equal(shelfTitleKey(b99), shelfTitleKey(b99s01));
+  assert.equal(shelfTitleKey(twd), shelfTitleKey(twds1));
 });
 
 test("an unmatched copy with no year still collapses into the matched row", () => {

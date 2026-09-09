@@ -9,7 +9,11 @@ import {
   pickSeerrRequestForTitle,
   assembleRequestPayload,
 } from "./reelos-seerr.mjs";
-import { kickArrRecover, listMissingRecoverTargets, loadPresenceFacts } from "./reelos-request-status.mjs";
+import {
+  kickArrRecover,
+  listRecoverTargets,
+  loadPresenceFacts,
+} from "./reelos-request-status.mjs";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -33,7 +37,22 @@ function mediaFromDetail(json) {
 async function maybeRecover(u, facts) {
   const flag = String(u.searchParams.get("recover") || "");
   if (flag !== "1" && flag !== "true") return null;
-  const missing = listMissingRecoverTargets({ series: facts?.series, movies: facts?.movies });
+  let seerrRows = [];
+  const key = seerrApiKey();
+  if (key) {
+    try {
+      const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 15000 });
+      const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
+      seerrRows = rows.map((row) => seerrRequestRow(row)).filter((rec) => rec?.titleId);
+    } catch {
+      seerrRows = [];
+    }
+  }
+  const missing = listRecoverTargets({
+    series: facts?.series,
+    movies: facts?.movies,
+    seerrRows,
+  });
   const kicks = [];
   for (const m of missing) {
     kicks.push(await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season }));

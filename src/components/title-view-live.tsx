@@ -202,9 +202,11 @@ export function TitleView({ id }: { id: string }) {
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
                   {typeof request.progress === "number" && request.progress > 0
                     ? `Grabbing · ${Math.round(request.progress)}%`
-                    : request.via === "cache"
-                      ? "Cache hit · importing"
-                      : "Grabbing"}
+                    : request.reason
+                      ? request.reason
+                      : request.via === "cache"
+                        ? "Cache hit · importing"
+                        : "Grabbing"}
                 </span>
               ) : request?.status === "waiting" || engineStatus === "queued" ? (
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">

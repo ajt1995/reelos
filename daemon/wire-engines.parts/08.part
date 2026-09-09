@@ -6,8 +6,8 @@
     )
 
 
-def add_jellyfin_path(token: str, name: str) -> None:
-    path = library_symlink_path(name)
+def add_jellyfin_path(token: str, name: str, path: str | None = None) -> None:
+    path = path or library_symlink_path(name)
     q = urllib.parse.urlencode({"refreshLibrary": "true"})
     call(
         f"http://127.0.0.1:8096/Library/VirtualFolders/Paths?{q}",
@@ -26,6 +26,95 @@ def remove_jellyfin_path(token: str, name: str, path: str) -> None:
     )
 
 
+def delete_jellyfin_library(token: str, name: str) -> None:
+    q = urllib.parse.urlencode({"name": name, "refreshLibrary": "true"})
+    call(
+        f"http://127.0.0.1:8096/Library/VirtualFolders?{q}",
+        method="DELETE",
+        headers={"X-Emby-Token": token},
+    )
+
+
+def dump_dir_has_media(path: Path) -> bool:
+    try:
+        for x in path.rglob("*"):
+            if x.is_file() or x.is_symlink():
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr") -> int:
+    """Remove leftover season-folder dumps when the series folder already has media.
+
+    House Home still double-counted Brooklyn Nine-Nine S01 and The Walking Dead - Season 1
+    next to the real series. Never touch /media (local/both disk libraries).
+    """
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/sonarr", "/symlinks/sonarr"}
+    extra = str(os.environ.get("REELOS_TEST_DUMP_ROOT") or "").rstrip("/")
+    if extra:
+        allowed.add(extra)
+    if resolved not in allowed:
+        return 0
+    if "/media/" in resolved or resolved == "/media":
+        return 0
+    if not base.is_dir():
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir()]
+    except OSError:
+        return 0
+    by_name = {p.name: p for p in kids}
+    dropped = 0
+    for p in kids:
+        series = strip_season_folder_suffix(p.name)
+        if not series or series == p.name:
+            continue
+        canon = by_name.get(series)
+        if canon is None or not dump_dir_has_media(canon):
+            continue
+        try:
+            shutil.rmtree(p)
+            dropped += 1
+            log_wire(f"jellyfin drop season-folder dump {p.name}")
+        except OSError as e:
+            log_wire(f"jellyfin season-folder dump {p.name} {e}")
+    return dropped
+
+
+def migrate_keep_paths_from_extra(token: str, extra: dict, canon_name: str) -> None:
+    keep = {str(p).rstrip("/") for p in jellyfin_keep_paths(canon_name) if p}
+    for path in jellyfin_folder_paths(extra):
+        if path in keep:
+            add_jellyfin_path(token, canon_name, path)
+            log_wire(f"jellyfin keep path {canon_name} {path}")
+
+
+def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
+    """Delete leftover Movies/Shows virtual folders. Keep /media roots on the canonical lib."""
+    type_to_name = {str(ctype).lower(): name for name, ctype in want}
+    n = 0
+    for extra in extra_jellyfin_libraries(folders, want):
+        name = str(extra.get("Name") or "")
+        ctype = str(extra.get("CollectionType") or extra.get("collectionType") or "").lower()
+        canon = type_to_name.get(ctype)
+        try:
+            if canon:
+                migrate_keep_paths_from_extra(token, extra, canon)
+            delete_jellyfin_library(token, name)
+            log_wire(f"jellyfin drop extra library {name}")
+            n += 1
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"jellyfin drop extra library {name} {e.code} {err}")
+        except NET_ERR as e:
+            log_wire(f"jellyfin drop extra library {name} {e}")
+    return n
+
+
 def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
     by_name = {str(f.get("Name") or ""): f for f in folders}
     for name, _ctype in want:
@@ -34,6 +123,8 @@ def libraries_ready(folders: list, want: list[tuple[str, str]]) -> bool:
             return False
         if extra_jellyfin_paths(folder, jellyfin_keep_paths(name)):
             return False
+    if extra_jellyfin_libraries(folders, want):
+        return False
     return True
 
 
@@ -73,11 +164,23 @@ def wait_jellyfin(seconds: int = 90, *, wizard_completed: bool | None = None) ->
 
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
+    dropped = collapse_season_named_dumps()
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
         if libraries_ready(folders, want):
+            if dropped:
+                try:
+                    call(
+                        "http://127.0.0.1:8096/Library/Refresh",
+                        method="POST",
+                        headers={"X-Emby-Token": token},
+                    )
+                    log_wire("jellyfin refresh after season-folder dump collapse")
+                except NET_ERR as e:
+                    log_wire(f"jellyfin refresh {e}")
             return True
+        drop_extra_jellyfin_libraries(token, folders, want)
         by_name = {str(f.get("Name") or ""): f for f in folders}
         for name, ctype in want:
             folder = by_name.get(name)

@@ -34,6 +34,9 @@ test("relink_dumps and wire-engines import stay twins and category-only", () => 
   assert.match(updater, /need daemon\/lock-download-clients\.py '--quick'/);
   assert.match(updater, /need daemon\/lock-download-clients\.py 'wanted_apps'/);
   assert.match(updater, /need scripts\/reelos-request-status\.mjs 'ensureTvGrabPath'/);
+  assert.match(updater, /need scripts\/reelos-request-status\.mjs 'ensureMovieGrabPath'/);
+  assert.match(updater, /need scripts\/reelos-library\.mjs 'stripSeasonFolderSuffix'/);
+  assert.match(updater, /need daemon\/wire-engines.parts\/08.part 'collapse_season_named_dumps'/);
   assert.match(updater, /need daemon\/public_indexers\.py 'TorrentRssIndexer'/);
   assert.match(updater, /need daemon\/public_indexers\.py 'apply_public_indexers'/);
   assert.match(updater, /need daemon\/reelos-doctor\.py 'doctor_releases_detail'/);

@@ -129,6 +129,31 @@ def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
     return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
 
 
+_SEASON_FOLDER = re.compile(r"[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$", re.I)
+
+
+def strip_season_folder_suffix(name: str) -> str:
+    """Brooklyn Nine-Nine S01 / The Walking Dead - Season 1 → the series name."""
+    return _SEASON_FOLDER.sub("", str(name or "")).strip()
+
+
+def extra_jellyfin_libraries(folders: list, want: list[tuple[str, str]]) -> list[dict]:
+    """Second Movies/Shows virtual folders leftover after path cleanup. Keep canonical names."""
+    canonical = {str(name) for name, _ctype in want}
+    want_types = {str(ctype).lower() for _name, ctype in want}
+    extras: list[dict] = []
+    for folder in folders or []:
+        if not isinstance(folder, dict):
+            continue
+        name = str(folder.get("Name") or "")
+        if name in canonical:
+            continue
+        ctype = str(folder.get("CollectionType") or folder.get("collectionType") or "").lower()
+        if ctype and ctype in want_types:
+            extras.append(folder)
+    return extras
+
+
 JF_NETWORK_XML = (
     '<?xml version="1.0" encoding="utf-8"?>\n'
     '<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '

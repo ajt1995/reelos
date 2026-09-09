@@ -109,6 +109,40 @@ export function listMissingRecoverTargets({ series = [], movies = [] } = {}) {
   return out;
 }
 
+/** Seerr requested National Treasure, Radarr never grew a row — recover must still add+search. */
+export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}) {
+  const have = new Set(
+    (movies || []).map((m) => (m?.tmdbId == null ? "" : String(m.tmdbId))).filter(Boolean),
+  );
+  const out = [];
+  const seen = new Set();
+  for (const row of seerrRows || []) {
+    const mediaType =
+      row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row?.tmdb ?? row?.tmdbId;
+    if (mediaType !== "movie" || tmdb == null) continue;
+    const id = String(tmdb);
+    if (have.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ mediaType: "movie", tmdb });
+  }
+  return out;
+}
+
+export function listRecoverTargets({ series = [], movies = [], seerrRows = [] } = {}) {
+  const missing = listMissingRecoverTargets({ series, movies });
+  const orphans = listSeerrOrphanMovieTargets({ seerrRows, movies });
+  const seen = new Set(missing.map((t) => `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`));
+  const out = [...missing];
+  for (const t of orphans) {
+    const key = `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
 export function spawnWireImport() {
   const script = [
     "/opt/reelos/bin/wire-engines.py",
@@ -157,6 +191,32 @@ export function decypharrClientMissing(clients) {
 }
 
 export function sonarrDecypharrPayload() {
+  return decypharrPayload("tv");
+}
+
+export function radarrDecypharrPayload() {
+  return decypharrPayload("movie");
+}
+
+export function arrGrabService(kind) {
+  if (kind === "movie") {
+    return {
+      origin: "http://127.0.0.1:7878/api/v3",
+      itemPath: "movie",
+      categoryField: "movieCategory",
+      category: "radarr",
+    };
+  }
+  return {
+    origin: "http://127.0.0.1:8989/api/v3",
+    itemPath: "series",
+    categoryField: "tvCategory",
+    category: "sonarr",
+  };
+}
+
+export function decypharrPayload(kind) {
+  const svc = arrGrabService(kind);
   return {
     enable: true,
     protocol: "torrent",
@@ -174,7 +234,7 @@ export function sonarrDecypharrPayload() {
       { name: "urlBase", value: "" },
       { name: "username", value: "" },
       { name: "password", value: "" },
-      { name: "tvCategory", value: "sonarr" },
+      { name: svc.categoryField, value: svc.category },
     ],
   };
 }
@@ -237,28 +297,29 @@ export function widenHybridProfileItems(items) {
   return changed;
 }
 
-/** SeasonSearch success + 0 files: no Decypharr client and/or Ultra-HD rejecting EZTV 720p. */
-export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series } = {}) {
+/** SeasonSearch/MoviesSearch success + 0 files: no Decypharr client and/or Ultra-HD rejecting 720p. */
+export async function ensureArrGrabPath({ fetchArr = arrJson, key, item, kind = "tv" } = {}) {
   const out = { clientAdded: false, profileFallback: "ok", profileWidened: false };
-  if (!sonarrKey || !series?.id) return out;
+  const svc = arrGrabService(kind);
+  if (!key || !item?.id) return out;
   spawnLockClients();
-  const clients = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey);
+  const clients = await fetchArr(`${svc.origin}/downloadclient`, key);
   if (decypharrClientMissing(clients)) {
-    const added = await fetchArr("http://127.0.0.1:8989/api/v3/downloadclient", sonarrKey, 12000, {
+    const added = await fetchArr(`${svc.origin}/downloadclient`, key, 12000, {
       method: "POST",
-      body: sonarrDecypharrPayload(),
+      body: decypharrPayload(kind),
     });
     out.clientAdded = Boolean(added);
   }
-  const profiles = await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey);
+  const profiles = await fetchArr(`${svc.origin}/qualityprofile`, key);
   const rows = Array.isArray(profiles) ? profiles : [];
   const ultra = rows.find((p) => p?.name === "Ultra-HD");
   if (ultra && !profileAllowsHd(ultra)) {
     const items = structuredClone(ultra.items || []);
     if (widenHybridProfileItems(items)) {
       const widened = await fetchArr(
-        `http://127.0.0.1:8989/api/v3/qualityprofile/${ultra.id}`,
-        sonarrKey,
+        `${svc.origin}/qualityprofile/${ultra.id}`,
+        key,
         12000,
         {
           method: "PUT",
@@ -269,18 +330,59 @@ export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series }
     }
   }
   const refreshed = out.profileWidened
-    ? await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey)
+    ? await fetchArr(`${svc.origin}/qualityprofile`, key)
     : rows;
-  const fb = pickFallbackProfile(Array.isArray(refreshed) ? refreshed : rows, series.qualityProfileId);
+  const fb = pickFallbackProfile(Array.isArray(refreshed) ? refreshed : rows, item.qualityProfileId);
   out.profileFallback = fb.reason;
-  if (fb.reason !== "ok" && fb.id != null && fb.id !== series.qualityProfileId) {
-    const changed = await fetchArr(`http://127.0.0.1:8989/api/v3/series/${series.id}`, sonarrKey, 12000, {
+  if (fb.reason !== "ok" && fb.id != null && fb.id !== item.qualityProfileId) {
+    const changed = await fetchArr(`${svc.origin}/${svc.itemPath}/${item.id}`, key, 12000, {
       method: "PUT",
-      body: { ...series, qualityProfileId: fb.id },
+      body: { ...item, qualityProfileId: fb.id },
     });
     if (!changed) out.profileFallback = "failed";
   }
   return out;
+}
+
+export async function ensureTvGrabPath({ fetchArr = arrJson, sonarrKey, series } = {}) {
+  return ensureArrGrabPath({ fetchArr, key: sonarrKey, item: series, kind: "tv" });
+}
+
+export async function ensureMovieGrabPath({ fetchArr = arrJson, radarrKey, movie } = {}) {
+  return ensureArrGrabPath({ fetchArr, key: radarrKey, item: movie, kind: "movie" });
+}
+
+export function pickRadarrRootPath(roots) {
+  const rows = Array.isArray(roots) ? roots : [];
+  const prefer = rows.find((r) => String(r?.path || "").replace(/\/+$/, "") === "/symlinks/radarr");
+  return String(prefer?.path || rows[0]?.path || "/symlinks/radarr");
+}
+
+/** Seerr 200 but Radarr never got the movie (National Treasure). Lookup + add, then MoviesSearch. */
+export async function addRadarrMovie({ fetchArr = arrJson, radarrKey, tmdb } = {}) {
+  if (!radarrKey || tmdb == null) return null;
+  const term = encodeURIComponent(`tmdb:${tmdb}`);
+  const hits = await fetchArr(`http://127.0.0.1:7878/api/v3/movie/lookup?term=${term}`, radarrKey);
+  const movie = Array.isArray(hits) ? hits[0] : hits;
+  if (!movie || typeof movie !== "object") return null;
+  const roots = await fetchArr("http://127.0.0.1:7878/api/v3/rootfolder", radarrKey);
+  const profiles = await fetchArr("http://127.0.0.1:7878/api/v3/qualityprofile", radarrKey);
+  const rows = Array.isArray(profiles) ? profiles : [];
+  const fb = pickFallbackProfile(rows, movie.qualityProfileId);
+  const profileId = fb.id != null ? fb.id : rows[0]?.id;
+  if (profileId == null) return null;
+  const body = {
+    ...movie,
+    qualityProfileId: profileId,
+    rootFolderPath: pickRadarrRootPath(roots),
+    monitored: true,
+    minimumAvailability: movie.minimumAvailability || "released",
+    addOptions: { searchForMovie: false },
+  };
+  return fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey, 15000, {
+    method: "POST",
+    body,
+  });
 }
 
 export async function kickArrRecover({
@@ -333,26 +435,49 @@ export async function kickArrRecover({
       }
     }
   } else if (type === "movie" && radarrKey && tmdb) {
-    const hit = await waitForArrRow({
+    const matchMovie = (m) => String(m?.tmdbId) === String(tmdb);
+    let hit = await waitForArrRow({
       fetchArr,
       url: "http://127.0.0.1:7878/api/v3/movie",
       key: radarrKey,
-      match: (m) => String(m?.tmdbId) === String(tmdb),
+      match: matchMovie,
       tries: waitTries,
       delayMs: waitMs,
     });
+    let added = false;
+    if (!hit?.id) {
+      const created = await addRadarrMovie({ fetchArr, radarrKey, tmdb });
+      added = Boolean(created);
+      hit =
+        created?.id && matchMovie(created)
+          ? created
+          : await waitForArrRow({
+              fetchArr,
+              url: "http://127.0.0.1:7878/api/v3/movie",
+              key: radarrKey,
+              match: matchMovie,
+              tries: waitTries,
+              delayMs: waitMs,
+            });
+    }
     if (hit?.id) {
       movieId = hit.id;
       const hasFile = arrHasFile({ titleId: `tmdb-${tmdb}` }, buildArrIndex({ movies: [hit] }));
       const plan = planArrPostRecover({ mediaType: "movie", arrHasFile: hasFile });
       if (plan.search) {
+        grabPath = await ensureMovieGrabPath({ fetchArr, radarrKey, movie: hit });
+        grabPath.added = added;
         const posted = await fetchArr("http://127.0.0.1:7878/api/v3/command", radarrKey, 12000, {
           method: "POST",
           body: { name: "MoviesSearch", movieIds: [hit.id] },
         });
         searched = Boolean(posted);
         command = searched ? "MoviesSearch" : null;
+      } else if (added) {
+        grabPath = { added, clientAdded: false, profileFallback: "ok", profileWidened: false };
       }
+    } else {
+      grabPath = { added, clientAdded: false, profileFallback: "none", missing: true };
     }
   }
   const importSpawned = spawnImport();
@@ -379,10 +504,12 @@ export async function loadPresenceFacts({
   if (!force && cache.facts && now - cache.at < ttlMs) return cache.facts;
   const entry = readLibraryCacheFile(libraryFile);
   const libraryTitles = entry?.titles || [];
-  const [movies, series, torrents] = await Promise.all([
-    fetchArr("http://127.0.0.1:7878/api/v3/movie", arrApiKey("radarr")),
+  const radarrKey = arrApiKey("radarr");
+  const [movies, series, torrents, radarrClients] = await Promise.all([
+    fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey),
     fetchArr("http://127.0.0.1:8989/api/v3/series", arrApiKey("sonarr")),
     fetchArr("http://127.0.0.1:8282/api/v2/torrents/info", null),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/downloadclient", radarrKey) : Promise.resolve(null),
   ]);
   const movieRows = Array.isArray(movies) ? movies : [];
   const seriesRows = Array.isArray(series) ? series : [];
@@ -392,7 +519,9 @@ export async function loadPresenceFacts({
     movies: movieRows,
     series: seriesRows,
     torrents: torrentRows,
+    radarrClients: Array.isArray(radarrClients) ? radarrClients : radarrClients == null ? null : [],
     arrReady: Array.isArray(movies) || Array.isArray(series),
+    arrMoviesReady: Array.isArray(movies),
     arrIndex: buildArrIndex({
       movies: movieRows,
       series: seriesRows,
