@@ -19,17 +19,18 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: VERSION / channel / stamps agree (1.2.50.6)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.51 candidate on 1.2.50.6)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.6");
-  assert.equal(chan.version, "1.2.50.6");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.6"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.6"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.6"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.6"/);
+  assert.equal(ver, "1.2.51");
+  assert.equal(chan.version, "1.2.51");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.51"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.51"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.51"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.51"/);
+  assert.match(read("HAL.md"), /1\.2\.51/);
   assert.match(read("HAL.md"), /1\.2\.50\.6/);
 });
 
