@@ -94,6 +94,84 @@ def folder_has_symlinks(folder: dict, path: str | None = None) -> bool:
     return want in have
 
 
+JF_NETWORK_XML = (
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n'
+    "  <EnableUPnP>false</EnableUPnP>\n"
+    "  <EnableIPv4>true</EnableIPv4>\n"
+    "  <EnableIPv6>false</EnableIPv6>\n"
+    "  <EnableRemoteAccess>true</EnableRemoteAccess>\n"
+    "  <RequireHttps>false</RequireHttps>\n"
+    "  <AutoDiscovery>true</AutoDiscovery>\n"
+    "  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>\n"
+    "</NetworkConfiguration>\n"
+)
+
+
+def seed_jellyfin_network_xml() -> None:
+    """LAN/remote clients must not see docker 172.18.x as LocalAddress."""
+    dest = COMPOSE / "configs" / "jellyfin" / "config" / "network.xml"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    text = dest.read_text() if dest.exists() else ""
+    if re.search(r"<EnablePublishedServerUriByRequest>\s*true\s*<", text, re.I):
+        return
+    if "<EnablePublishedServerUriByRequest>" in text:
+        dest.write_text(
+            re.sub(
+                r"<EnablePublishedServerUriByRequest>[^<]*</EnablePublishedServerUriByRequest>",
+                "<EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>",
+                text,
+            )
+        )
+        return
+    if "</NetworkConfiguration>" in text:
+        dest.write_text(
+            text.replace(
+                "</NetworkConfiguration>",
+                "  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>\n</NetworkConfiguration>",
+            )
+        )
+        return
+    dest.write_text(JF_NETWORK_XML)
+
+
+def apply_jellyfin_published_uri(token: str) -> None:
+    hdr = {"X-Emby-Token": token}
+    try:
+        cfg = call("http://127.0.0.1:8096/System/Configuration/network", headers=hdr) or {}
+    except NET_ERR:
+        cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    if cfg.get("EnablePublishedServerUriByRequest") is True and cfg.get("EnableRemoteAccess") is not False:
+        return
+    cfg["EnablePublishedServerUriByRequest"] = True
+    cfg["EnableRemoteAccess"] = True
+    try:
+        call(
+            "http://127.0.0.1:8096/System/Configuration/network",
+            method="POST",
+            body=cfg,
+            headers=hdr,
+        )
+        log_wire("jellyfin published URI by request")
+    except NET_ERR as e:
+        log_wire(f"jellyfin network {e}")
+
+
+def jellyfin_want_libraries(a: dict | None = None) -> list[tuple[str, str]]:
+    intent = (a or answers()).get("intent") or {}
+    want: list[tuple[str, str]] = []
+    if intent.get("movies", True):
+        want.append(("Movies", "movies"))
+    if intent.get("tv", True) or intent.get("anime"):
+        want.append(("Shows", "tvshows"))
+    if intent.get("music"):
+        want.append(("Music", "music"))
+    return want
+
+
 def complete_jellyfin_startup(user: str, password: str) -> None:
     try:
         with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=5) as resp:

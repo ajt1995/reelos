@@ -39,18 +39,26 @@ def reset_jellyfin_config() -> None:
                     child.unlink()
             except OSError as e:
                 log_wire(f"jellyfin reset skip {child.name} {e}")
+    seed_jellyfin_network_xml()
     compose("up", "-d", "jellyfin")
 
 
-def wait_jellyfin(seconds: int = 90) -> dict | None:
+def wait_jellyfin(seconds: int = 90, *, wizard_completed: bool | None = None) -> dict | None:
     deadline = time.time() + seconds
+    last = None
     while time.time() < deadline:
         try:
             with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=3) as resp:
-                return json.loads(resp.read().decode())
+                last = json.loads(resp.read().decode())
+            if wizard_completed is None:
+                return last
+            if bool(last.get("StartupWizardCompleted")) == wizard_completed:
+                return last
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
             time.sleep(2)
-    return None
+            continue
+        time.sleep(1)
+    return last
 
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
@@ -79,6 +87,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]]) -> bool:
 
 
 def bootstrap_jellyfin() -> None:
+    seed_jellyfin_network_xml()
     info = wait_jellyfin(90)
     if not info:
         log_wire("jellyfin not up")
@@ -91,14 +100,7 @@ def bootstrap_jellyfin() -> None:
     ensure_host_symlinks()
     if not info.get("StartupWizardCompleted"):
         complete_jellyfin_startup(user, password)
-    intent = a.get("intent") or {}
-    want: list[tuple[str, str]] = []
-    if intent.get("movies", True):
-        want.append(("Movies", "movies"))
-    if intent.get("tv") or intent.get("anime"):
-        want.append(("Shows", "tvshows"))
-    if intent.get("music"):
-        want.append(("Music", "music"))
+    want = jellyfin_want_libraries(a)
     token = jellyfin_token()
     if not token:
         if os.environ.get("REELOS_OTA"):
@@ -106,7 +108,8 @@ def bootstrap_jellyfin() -> None:
             return
         log_wire("jellyfin auth mismatch — resetting jellyfin config")
         reset_jellyfin_config()
-        if not wait_jellyfin(90):
+        info = wait_jellyfin(90, wizard_completed=False) or wait_jellyfin(30)
+        if not info:
             log_wire("jellyfin not up after reset")
             return
         complete_jellyfin_startup(user, password)
@@ -114,6 +117,7 @@ def bootstrap_jellyfin() -> None:
     if not token:
         log_wire("jellyfin auth failed")
         return
+    apply_jellyfin_published_uri(token)
     ready = ensure_jellyfin_libraries(token, want)
     if not ready:
         log_wire("jellyfin libraries missing after retry")

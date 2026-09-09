@@ -20,7 +20,20 @@ if [ -f "$ROOT/compose/docker-compose.yml" ]; then
 fi
 rm -f "$STATE/provisioned" "$STATE/answers.json" "$STATE/engine.json"
 rm -rf "$ROOT/compose/configs"
-mkdir -p "$ROOT/compose/configs"
-echo "reset: configs and provisioned removed" >>"$LOG"
+mkdir -p "$ROOT/compose/configs/jellyfin/config"
+# Soft-reset must not leave JF on a first-run with docker LocalAddress 172.18.x.
+cat >"$ROOT/compose/configs/jellyfin/config/network.xml" <<'XML'
+<?xml version="1.0" encoding="utf-8"?>
+<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EnableUPnP>false</EnableUPnP>
+  <EnableIPv4>true</EnableIPv4>
+  <EnableIPv6>false</EnableIPv6>
+  <EnableRemoteAccess>true</EnableRemoteAccess>
+  <RequireHttps>false</RequireHttps>
+  <AutoDiscovery>true</AutoDiscovery>
+  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>
+</NetworkConfiguration>
+XML
+echo "reset: configs wiped; jellyfin network.xml re-seeded" >>"$LOG"
 systemctl restart reelos >>"$LOG" 2>&1 || true
 echo "reset done" >>"$LOG"

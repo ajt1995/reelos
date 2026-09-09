@@ -335,6 +335,52 @@ async function probeJson(url, ms = 3000) {
 const JF_AUTH =
   'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"';
 
+const JF_NETWORK_XML = `<?xml version="1.0" encoding="utf-8"?>
+<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EnableUPnP>false</EnableUPnP>
+  <EnableIPv4>true</EnableIPv4>
+  <EnableIPv6>false</EnableIPv6>
+  <EnableRemoteAccess>true</EnableRemoteAccess>
+  <RequireHttps>false</RequireHttps>
+  <AutoDiscovery>true</AutoDiscovery>
+  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>
+</NetworkConfiguration>
+`;
+
+function seedJellyfinNetworkXml(composeDir) {
+  const dest = `${composeDir}/configs/jellyfin/config/network.xml`;
+  try {
+    mkdirSync(`${composeDir}/configs/jellyfin/config`, { recursive: true });
+    if (existsSync(dest)) {
+      const text = readFileSync(dest, "utf8");
+      if (/<EnablePublishedServerUriByRequest>\s*true\s*</i.test(text)) return;
+      if (text.includes("<EnablePublishedServerUriByRequest>")) {
+        writeFileSync(
+          dest,
+          text.replace(
+            /<EnablePublishedServerUriByRequest>[^<]*<\/EnablePublishedServerUriByRequest>/,
+            "<EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>",
+          ),
+        );
+        return;
+      }
+      if (text.includes("</NetworkConfiguration>")) {
+        writeFileSync(
+          dest,
+          text.replace(
+            "</NetworkConfiguration>",
+            "  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>\n</NetworkConfiguration>",
+          ),
+        );
+        return;
+      }
+    }
+    writeFileSync(dest, JF_NETWORK_XML);
+  } catch {
+    /* */
+  }
+}
+
 async function revealJellyfinAdmin(token, user) {
   try {
     let me = user;
@@ -373,8 +419,8 @@ async function jellyfinToken(user, password) {
     if (!r.ok) return null;
     const j = await r.json();
     const auth = { token: j.AccessToken, id: j.User?.Id };
-    jellyfinTokens.set(user, password, auth);
     if (auth.token) void revealJellyfinAdmin(auth.token, j.User);
+    jellyfinTokens.set(user, password, auth);
     return auth;
   } catch {
     return null;
@@ -409,7 +455,7 @@ async function jellyfinState(ip) {
   }
   const need = [];
   if (intent.movies !== false) need.push("Movies");
-  if (intent.tv || intent.anime) need.push("Shows");
+  if (intent.tv !== false || intent.anime) need.push("Shows");
   const missing = need.filter((n) => !names.includes(n));
   if (missing.length) {
     return { state: "red", detail: `Missing library ${missing.join(", ")}`, libraries: names };
@@ -1473,7 +1519,8 @@ sleep 2
 (cd "\$ROOT/compose" && docker compose down --remove-orphans) || true
 rm -f "\$STATE/provisioned" "\$STATE/answers.json" "\$STATE/engine.json"
 rm -rf "\$ROOT/compose/configs"
-mkdir -p "\$ROOT/compose/configs"
+mkdir -p "\$ROOT/compose/configs/jellyfin/config"
+printf '%s\\n' '<?xml version="1.0" encoding="utf-8"?>' '<NetworkConfiguration>' '  <EnableRemoteAccess>true</EnableRemoteAccess>' '  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>' '</NetworkConfiguration>' > "\$ROOT/compose/configs/jellyfin/config/network.xml"
 systemctl restart reelos || true
 `,
       { mode: 0o755 },
@@ -1634,6 +1681,7 @@ async function handleProvision(req, res) {
   try {
     mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
     mkdirSync(`${composeDir}/configs/decypharr`, { recursive: true });
+    seedJellyfinNetworkXml(composeDir);
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
     const profiles = composeProfiles(a).join(",");
     const envLines = [
