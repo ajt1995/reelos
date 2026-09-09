@@ -95,6 +95,10 @@ rcats = next(f["value"] for f in radarr if f["name"] == "syncCategories")
 assert 2000 in rcats and 8000 in rcats, rcats
 assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "enable": False})
 assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": []})
+other = [{"name": "syncCategories", "value": [8000]}]
+assert g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": other})
+movie = [{"name": "syncCategories", "value": [2000, 8000]}]
+assert not g["prowlarr_app_needs_update"]({"name": "Radarr", "syncLevel": "fullSync", "fields": movie})
 `,
     ],
     { input: chunk, encoding: "utf8" },

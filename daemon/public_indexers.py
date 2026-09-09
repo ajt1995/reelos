@@ -90,6 +90,18 @@ def prowlarr_app_fields(name: str, fields) -> list[dict]:
     return out
 
 
+def prowlarr_movie_cats_present(have) -> bool:
+    """8000/Other is not a movie category. Radarr needs 2000-2999 or YTS/TPB never sync."""
+    for c in have or []:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 2000 <= n < 3000:
+            return True
+    return False
+
+
 def prowlarr_app_needs_update(app: dict | None) -> bool:
     if not app:
         return False
@@ -106,7 +118,7 @@ def prowlarr_app_needs_update(app: dict | None) -> bool:
     have = sync.get("value") if sync and isinstance(sync.get("value"), list) else []
     if name == "Sonarr":
         return not sync or 8000 not in have
-    return not sync or not any(c in have for c in cats)
+    return not sync or not prowlarr_movie_cats_present(have)
 
 
 def prowlarr_sync_command_body(name: str = "ApplicationIndexerSync") -> dict:
@@ -798,6 +810,20 @@ def _self_test() -> int:
             self.assertIn(2000, cats)
             self.assertIn(8000, cats)
             self.assertTrue(prowlarr_app_needs_update({"name": "Radarr", "syncLevel": "fullSync", "fields": []}))
+            other_only = {
+                "name": "Radarr",
+                "syncLevel": "fullSync",
+                "fields": [{"name": "syncCategories", "value": [8000]}],
+            }
+            self.assertTrue(prowlarr_app_needs_update(other_only))
+            self.assertFalse(prowlarr_movie_cats_present([8000]))
+            self.assertTrue(prowlarr_movie_cats_present(["2000", 8000]))
+            radarr_ok = {
+                "name": "Radarr",
+                "syncLevel": "fullSync",
+                "fields": [{"name": "syncCategories", "value": [2000, 8000]}],
+            }
+            self.assertFalse(prowlarr_app_needs_update(radarr_ok))
 
         def test_no_cardigann_schema_uses_torrent_rss_fallback(self):
             plan = pick_add_plan("ReelOS-eztv", ("eztv",), list(HOUSE_TPB_YTS_SCHEMAS))

@@ -135,6 +135,18 @@ def prowlarr_app_fields(name: str, fields) -> list[dict]:
     return out
 
 
+def prowlarr_movie_cats_present(have) -> bool:
+    """8000/Other is not a movie category. Radarr needs 2000-2999 or YTS/TPB never sync."""
+    for c in have or []:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 2000 <= n < 3000:
+            return True
+    return False
+
+
 def prowlarr_app_needs_update(app: dict | None) -> bool:
     if not app:
         return False
@@ -149,7 +161,7 @@ def prowlarr_app_needs_update(app: dict | None) -> bool:
     if name == "Sonarr":
         return not sync or 8000 not in have
     if name == "Radarr":
-        return not sync or not any(c in have for c in RADARR_SYNC_CATEGORIES)
+        return not sync or not prowlarr_movie_cats_present(have)
     return False
 
 
