@@ -20,7 +20,7 @@ Seerr had `seerr-9` (tmdb-2059). `pipeline.radarrMissing=[]` — Radarr had no 0
 ## 1.2.50.8
 
 1. Collapse trailing `S01` / `Season 1` folder names on `/api/library`. Remakes with different years stay separate.
-2. Apply: drop extra Jellyfin libraries (migrate `/media` keep-paths onto Movies/Shows first). Remove season-named sonarr dumps only when the series folder already has media. **Do not wipe `/media`.**
+2. Apply: drop extra Jellyfin libraries, but only once every path they hold is safe to lose — keep-paths migrate onto Movies/Shows first, dump views (`/symlinks`, `/mnt/symlinks`) just go, and any other `/media` path on a `local`/`both` house **blocks the delete**. Remove season-named sonarr dumps only when the series folder already has media. **Do not wipe `/media`.**
 3. Movie recover: add to Radarr if missing, lock client, quality fallback, MoviesSearch. Honest request reason when the hop never ran.
 
 ## xorriso — do this

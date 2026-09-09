@@ -14,13 +14,13 @@
 | Surface | Before | After Apply 1.2.50.8 |
 | --- | --- | --- |
 | Home `/api/library` | `Brooklyn Nine-Nine` **and** `Brooklyn Nine-Nine S01`; `The Walking Dead` **and** `The Walking Dead - Season 1` | One B99, one TWD. `Dune (1984)` / `Dune (2021)` still two rows |
-| Jellyfin Shows | Same double series (season-folder dumps next to imported series; leftover extra libraries/paths after #60) | Extra virtual folders deleted (keep-paths like `/media/movies` migrate onto Movies first). Season-named dumps under `/mnt/symlinks/sonarr` removed only when the series folder already has media. `/media` not wiped |
+| Jellyfin Shows | Same double series (season-folder dumps next to imported series; leftover extra libraries/paths after #60) | Extra virtual folders deleted once their paths are safe to lose (keep-paths like `/media/movies` migrate onto Movies first; a `/media` path we cannot hand over keeps the library). Season-named dumps under `/mnt/symlinks/sonarr` removed only when the series folder already has media. `/media` not wiped |
 | Requests · National Treasure (tmdb-2059) | Seerr reuse, `downloading@0`, `radarrMissing=[]`, MoviesSearch never locked a client / never added the movie | Honest reason if Radarr has no row or no Decypharr client. Recover adds+MoviesSearch after lock/quality, same hop TV already had for SeasonSearch |
 
 ## Code changes
 
 1. **`reelos-library.mjs`** — `stripSeasonFolderSuffix` so `Title S01` / `Title - Season 1` share a shelf key with `Title`. Year-aware remake split from #60 unchanged.
-2. **`wire-engines` Jellyfin heal** — `extra_jellyfin_libraries` + `delete_jellyfin_library`; `collapse_season_named_dumps` (sonarr dump root only). `jellyfin_keep_paths` still keeps `/media` for local/both.
+2. **`wire-engines` Jellyfin heal** — `extra_jellyfin_libraries` + `delete_jellyfin_library`; `collapse_season_named_dumps` (sonarr dump root only, allowlist is a parameter not an env var). `plan_extra_library_drop` is the gate: a leftover library is deleted only when every path it holds is already on the canonical library, is a keep-path we migrate first, or is a `/symlinks`/`/mnt/symlinks` dump view. Any other `/media` path on a local/both house blocks the delete, and nothing is deleted before the canonical library exists. `jellyfin_keep_paths` still keeps `/media` for local/both.
 3. **`kickArrRecover` movies** — `ensureMovieGrabPath` (Decypharr client + Ultra-HD→Any) then MoviesSearch. `addRadarrMovie` when Seerr requested but Radarr has no row. `?recover=1` also kicks Seerr movie orphans.
 4. **Honesty** — `Requested — Radarr has no movie yet` / `No grab client — search cannot land` on the downloading row (not a fake %). Doctor Download lock probes Radarr too.
 
