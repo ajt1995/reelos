@@ -93,7 +93,7 @@ test("stack: #50 rshared unit + container ENOTCONN heal stay on main", () => {
   assert.match(updater, /reelos-mnt-rshared\.service/);
   assert.match(updater, /systemctl enable --now reelos-mnt-rshared/);
   assert.match(stuck, /True if host OR \*arr\/Jellyfin rslave bind is ENOTCONN/);
-  assert.match(stuck, /mount --make-rshared/);
+  assert.match(stuck, /"--make-rshared"/);
   assert.equal(read("install/systemd/reelos-mnt-rshared.service"), read("firstboot/reelos-mnt-rshared.service"));
 });
 
