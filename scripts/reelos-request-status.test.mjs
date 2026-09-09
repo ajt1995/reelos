@@ -9,6 +9,7 @@ import {
   listMissingRecoverTargets,
   listRecoverTargets,
   listSeerrOrphanMovieTargets,
+  listUnmonitoredMovieRecoverTargets,
   loadPresenceFacts,
   planArrPostRecover,
   planTvPostRecover,
@@ -403,6 +404,71 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
     targets.map((t) => `${t.mediaType}:${t.tmdb}`),
     ["movie:157336", "movie:2059"],
   );
+});
+
+test("recover monitors an unmonitored National Treasure then MoviesSearchs", async () => {
+  const calls = [];
+  const movie = {
+    id: 12,
+    tmdbId: 2059,
+    title: "National Treasure",
+    hasFile: false,
+    monitored: false,
+    qualityProfileId: 1,
+  };
+  assert.deepEqual(
+    listUnmonitoredMovieRecoverTargets({
+      seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059, status: "downloading" }],
+      movies: [movie],
+    }).map((t) => t.tmdb),
+    [2059],
+  );
+  const targets = listRecoverTargets({
+    series: [],
+    movies: [movie],
+    seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", tmdb: 2059 }],
+  });
+  assert.deepEqual(
+    targets.map((t) => `${t.mediaType}:${t.tmdb}`),
+    ["movie:2059"],
+  );
+  const result = await kickArrRecover({
+    mediaType: "movie",
+    tmdb: 2059,
+    radarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("/movie/") && method === "PUT") return { ...movie, monitored: true };
+      if (String(url).includes("/movie") && method === "GET") return [movie];
+      if (String(url).includes("/downloadclient") && method === "GET") {
+        return [
+          {
+            implementation: "QBittorrent",
+            fields: [
+              { name: "host", value: "decypharr" },
+              { name: "port", value: 8282 },
+            ],
+          },
+        ];
+      }
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
+      }
+      if (String(url).includes("/command")) return { ok: true };
+      return { ok: true };
+    },
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.command, "MoviesSearch");
+  const put = calls.find((c) => c.method === "PUT" && c.url.includes("/movie/12"));
+  assert.equal(put?.body?.monitored, true);
+  const search = calls.find((c) => c.url.includes("/command"));
+  assert.equal(search?.body?.name, "MoviesSearch");
+  assert.ok(calls.indexOf(put) < calls.indexOf(search));
 });
 
 test("kickArrRecover POSTs Decypharr + Any on Radarr before MoviesSearch", async () => {

@@ -134,7 +134,70 @@ _SEASON_FOLDER = re.compile(r"[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$", re.I
 
 def strip_season_folder_suffix(name: str) -> str:
     """Brooklyn Nine-Nine S01 / The Walking Dead - Season 1 → the series name."""
-    return _SEASON_FOLDER.sub("", str(name or "")).strip()
+    raw = str(name or "").strip()
+    stripped = _SEASON_FOLDER.sub("", raw).strip()
+    return stripped or raw
+
+
+def looks_like_season_folder_title(name: str) -> bool:
+    raw = str(name or "").strip()
+    return bool(raw) and strip_season_folder_suffix(raw) != raw
+
+
+def jellyfin_provider_id(item: dict) -> str:
+    pids = item.get("ProviderIds") or {}
+    if not isinstance(pids, dict):
+        return ""
+    tvdb = pids.get("Tvdb") or pids.get("tvdb")
+    tmdb = pids.get("Tmdb") or pids.get("tmdb")
+    if tvdb:
+        return f"tvdb-{tvdb}"
+    if tmdb:
+        return f"tmdb-{tmdb}"
+    return ""
+
+
+def series_title_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", strip_season_folder_suffix(name).lower())
+
+
+def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
+    """jf-only season-folder Series: delete when a real series exists, else rename.
+
+    Two series that both carry different tvdb/tmdb ids stay (anime split seasons).
+    Season-folder PremiereDate ≠ series start year is ignored here — names + ids decide.
+    """
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("Name") or "")
+    if not looks_like_season_folder_title(name):
+        return None
+    item_id = item.get("Id") or item.get("id")
+    if not item_id:
+        return None
+    key = series_title_key(name)
+    if not key:
+        return None
+    own = jellyfin_provider_id(item)
+    canons: list[dict] = []
+    for sib in siblings or []:
+        if sib is item or not isinstance(sib, dict):
+            continue
+        sib_name = str(sib.get("Name") or "")
+        if series_title_key(sib_name) != key:
+            continue
+        if looks_like_season_folder_title(sib_name):
+            continue
+        canons.append(sib)
+    series_name = strip_season_folder_suffix(name)
+    if own:
+        for canon in canons:
+            if jellyfin_provider_id(canon) == own:
+                return {"action": "delete", "id": str(item_id), "name": name, "as": series_name}
+        return None
+    if canons:
+        return {"action": "delete", "id": str(item_id), "name": name, "as": series_name}
+    return {"action": "rename", "id": str(item_id), "name": name, "as": series_name}
 
 
 def extra_jellyfin_libraries(folders: list, want: list[tuple[str, str]]) -> list[dict]:

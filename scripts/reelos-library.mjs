@@ -98,6 +98,18 @@ export function titleYear(t) {
   return Number(t?.year) || 0;
 }
 
+/** Season-folder PremiereDate (TWD S01 → 2011) is not a remake of the series (2010). */
+export function isSeasonFolderAlias(a, b) {
+  if (!a || !b) return false;
+  if (shelfLiteralKey(a) === shelfLiteralKey(b)) return false;
+  return looksLikeSeasonFolderTitle(a.title) || looksLikeSeasonFolderTitle(b.title);
+}
+
+export function yearsCompatible(slotYear, year, best, incoming) {
+  if (!slotYear || !year || slotYear === year) return true;
+  return isSeasonFolderAlias(best, incoming);
+}
+
 /** One dump scanned twice repeats the year; a remake does not. Dune 1984 is not Dune 2021. */
 export function dedupeLibraryTitles(titles) {
   const score = (x) => {
@@ -124,20 +136,25 @@ export function dedupeLibraryTitles(titles) {
       const b = titleProviderId(t);
       return !a || !b || a === b;
     };
-    const slot = bucket.find((s) => (!s.year || !year || s.year === year) && aliasSafe(s));
+    const slot = bucket.find((s) => yearsCompatible(s.year, year, s.best, t) && aliasSafe(s));
     if (!slot) {
       bucket.push({ best: t, year });
       continue;
     }
     // A copy Jellyfin never matched has year 0. Keep the resolved year so the
     // next unmatched copy still collapses and a real remake still does not.
-    slot.year = slot.year || year;
+    // Prefer the id'd / series-named row's year when a season folder disagrees.
     const betterScore = score(t) > score(slot.best);
     const preferSeriesName =
       score(t) === score(slot.best) &&
       looksLikeSeasonFolderTitle(slot.best?.title) &&
       !looksLikeSeasonFolderTitle(t?.title);
-    if (betterScore || preferSeriesName) slot.best = t;
+    if (betterScore || preferSeriesName) {
+      slot.best = t;
+      if (year) slot.year = year;
+    } else {
+      slot.year = slot.year || year;
+    }
   }
   return [...groups.values()]
     .flat()

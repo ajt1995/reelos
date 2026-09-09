@@ -400,10 +400,37 @@ export function radarrDecypharrMissing(clients) {
   });
 }
 
+export function qualityFloorRejectsHd(profiles, profileId) {
+  const profile = (profiles || []).find((p) => p?.id === profileId);
+  if (!profile) return false;
+  const walk = (items) => {
+    if (!Array.isArray(items)) return false;
+    for (const item of items) {
+      if (item?.items && walk(item.items)) return true;
+      const qname = String(item?.quality?.name || item?.name || "")
+        .toLowerCase()
+        .replace(/[\s_-]/g, "");
+      if (item?.allowed === true && (qname.includes("720p") || qname.includes("1080p"))) return true;
+    }
+    return false;
+  };
+  return !walk(profile.items);
+}
+
+export function movieInRadarrQueue(queue, hit, tmdb) {
+  const rows = Array.isArray(queue) ? queue : [];
+  return rows.some((q) => {
+    if (!q) return false;
+    if (hit?.id != null && String(q.movieId ?? q.movie?.id) === String(hit.id)) return true;
+    if (tmdb != null && String(q.movie?.tmdbId ?? q.remoteMovie?.tmdbId) === String(tmdb)) return true;
+    return false;
+  });
+}
+
 /** Seerr requested but Radarr never searched / has no grab client. Keep downloading@0, say why. */
 export function movieRequestReason(
   row,
-  { movies, radarrClients, arrMoviesReady } = {},
+  { movies, radarrClients, arrMoviesReady, radarrQueue, radarrProfiles } = {},
 ) {
   if (!row?.titleId) return undefined;
   const parsed = parseTitleId(row.titleId);
@@ -417,7 +444,14 @@ export function movieRequestReason(
   if (radarrClients != null && radarrDecypharrMissing(radarrClients)) {
     return "No grab client — search cannot land";
   }
-  return undefined;
+  if (hit.monitored === false) return "Unmonitored in Radarr — search will not run";
+  if (qualityFloorRejectsHd(radarrProfiles, hit.qualityProfileId)) {
+    return "Quality floor is rejecting HD releases";
+  }
+  if (movieInRadarrQueue(radarrQueue, hit, parsed.tmdb)) {
+    return "Grabbed — waiting on Decypharr";
+  }
+  return "Searching — no file yet";
 }
 
 /**
