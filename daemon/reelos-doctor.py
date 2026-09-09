@@ -343,7 +343,7 @@ def sonarr_indexers_hop() -> dict:
     return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
 
 
-JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.18"'
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.19"'
 
 
 def jellyfin_api_token() -> str:
@@ -594,9 +594,12 @@ def main() -> int:
     fuse_detail = "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs"
     fuse_ok = False
     try:
-        kids = list(Path("/mnt/debrid").iterdir()) if Path("/mnt/debrid").exists() else []
-        fuse_ok = Path("/mnt/debrid/__all__").exists() or Path("/mnt/debrid/version.txt").exists() or bool(kids)
-        fuse_detail = "FUSE visible on the box" if fuse_ok else fuse_detail
+        os.listdir("/mnt/debrid/__all__")
+        fuse_ok = True
+        fuse_detail = "FUSE visible on the box"
+    except FileNotFoundError:
+        fuse_ok = False
+        fuse_detail = "Decypharr is up but /mnt/debrid is empty — TV cannot see grabs"
     except OSError as e:
         fuse_ok = False
         fuse_detail = f"FUSE stale ({e}) — remount Decypharr and restart *arrs"

@@ -83,6 +83,25 @@ test("compose pull is after applied. and time-bounded", () => {
   assert.match(updater, /timeout 600 docker compose pull/);
 });
 
+test("FUSE hops use ls not -e; stale unmount runs before compose up", () => {
+  assert.match(updater, /fuse_live\(\) \{/);
+  assert.match(updater, /ls \/mnt\/debrid\/__all__/);
+  assert.match(updater, /clear stale FUSE before compose up/);
+  assert.match(updater, /start_fuse_readers\(\) \{/);
+  assert.match(updater, /docker start decypharr/);
+  const clear = updater.indexOf('log "clear stale FUSE before compose up"');
+  const up = updater.indexOf("up -d --remove-orphans");
+  const remount = updater.indexOf('log "compose recreated — remount FUSE before hops"');
+  const startReaders = updater.lastIndexOf("start_fuse_readers");
+  assert.ok(clear >= 0 && up > clear, "stale FUSE must unmount before compose up");
+  assert.ok(remount > up && startReaders > remount, "exited readers start after remount");
+  assert.equal(
+    updater.includes("[ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]"),
+    false,
+    "ENOTCONN leftovers make -e true; hops must ls",
+  );
+});
+
 test("compose change is vs pre-swap yml; FUSE remounts after compose up", () => {
   assert.match(
     updater,
