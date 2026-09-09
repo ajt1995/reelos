@@ -1,51 +1,41 @@
 # STATUS.md
 
-***arr Torznab attach actually lands.*** 2026-09-09. House **1.2.50.11** after #67 Apply of 1.2.50.12 heal_red (no stamp). Prowlarr green; Radarr/Sonarr empty; NT `Requested — Radarr has no movie yet`. Stamp **1.2.50.13**. Complements #67. Does not take Tron.
+***Tracker-tagged FUSE dumps relink into the series folder.*** 2026-09-09. A requested show sat at silent 0% because `[Bitsearch.to] Justified.S01…` never matched Sonarr title `Justified`. Relink strips tracker tags, prefers the *arr folder name, and TV Requests say why they are still at 0%. Library Items send MediaBrowser Token so Jellyfin 12 does not 401 the shelf. Stamp **1.2.50.18**. Complements #69. Does not take Tron.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.13`
-- **Base:** latest `main` (merged #67 = 1.2.50.12)
+- **VERSION / channel:** `1.2.50.18`
+- **Base:** this PR’s 1.2.50.14 DNS + 1.2.50.15 mailman + 1.2.50.16 enable=null + 1.2.50.17 Discover
 - Did **not** take Tron chrome from #52
-- **What it is:** Apply persists searchable indexers on Sonarr and Radarr. #67's POST never saved a row on the real house.
+- **What it is:** `relink_stem` drops leading `[tracker]` tags and remux quality tokens. Missing dumps are created as `sonarr/<series title>` from the best FUSE pack (exact title folder wins over Bitsearch names). TV GET `/api/request` uses `tvRequestReason` so downloading@0 is not silent. `/api/library` sends `Authorization: MediaBrowser … Token=` so JF 12 returns the shelf.
 
-## Before / after (house after #67 Apply)
+## Live test (this agent VM)
 
-| Surface | After 1.2.50.12 Apply | After Apply 1.2.50.13 |
-| --- | --- | --- |
-| Stamp | heal_red, still 1.2.50.11 | 1.2.50.13 only if *arr has a search indexer |
-| Prowlarr | eztv/showrss/tpb/yts PASS | unchanged |
-| Request hop | Radarr has no search indexer | YTS/TPB searchable on Radarr |
-| Sonarr indexers | no enabled indexer | TPB (not RSS-only EZTV) searchable |
-| NT seerr-9 / tmdb-2059 | `Requested — Radarr has no movie yet` | recover/POST adds via lookup/tmdb |
-
-## Code changes
-
-1. **`public_indexers` / wire-engines 02+09** — schema clone, `forceSave`, honest 400, sync wait, container IP (compose `dns: 1.1.1.1` left alone).
-2. **Seerr hostname** — PUT when hostname/apiKey drift so Seerr can reach Radarr.
-3. **House HTTP test** — Prowlarr green + *arr empty after 400-name "attach" stays heal red; schema+forceSave lands.
+| Surface | Result |
+| --- | --- |
+| Movies (Dune, The Matrix) | Radarr hasFile + `/api/library` |
+| Justified S01 | FUSE had the pack; Sonarr 0/13 until 1.2.50.18 relink |
+| Discover empty-search | unowned popular (not Interstellar / B99) |
+| Wizard Finish | not clicked here (full wire storms Prowlarr DNS on this VM) |
+| Wizard steps | Repair wizard renders; TorBox Validate accepts; admin Continue needs name+8 char password |
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
+python3 daemon/relink_dumps.py --self-test
 python3 daemon/reelos-doctor.py --self-test
-python3 daemon/public_indexers.py --self-test
-node --test scripts/reelos-request-status.test.mjs scripts/public-indexers.test.mjs scripts/stack-smoke.test.mjs scripts/jellyfin-seed.test.mjs scripts/wire-provision.test.mjs
+node --test scripts/reelos-update.test.mjs scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/relink-dumps.test.mjs
 ```
 
 ## Owner / house Apply
 
-1. Merge this to **main**. Phone Check→Apply. Tarball `main.tar.gz`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.13`. Expect `ReelOS 1.2.50.13 applied.`
-3. Doctor Request hop / Sonarr indexers must not stay Prowlarr-only green.
-4. National Treasure recover must add the Radarr row.
+1. Merge this to **main**. Phone Check→Apply **once**. Tarball `main.tar.gz`.
+2. `cat /opt/reelos/VERSION` → `1.2.50.18`.
+3. Discover should show titles not already in Jellyfin. A requested show that is already on TorBox should relink into the series folder without extra taps.
 
 ## Do not
 
-- Cut **1.2.51** (Tron reserved).
-- Merge this PR from the agent.
-- Storm the whole *arr backlog on recover.
-- Duplicate #62 TWD heal / #64 lock enable / #66 OTA heal stamp / #67 attach attempt.
-- Wipe `/media` local-disk libraries.
-- SSH from the agent. Scope into Tron / books / TorBox wipe.
+- Cut 1.2.51 / Tron #52
+- Tap Apply twice
+- Re-add compose `dns: 1.1.1.1`

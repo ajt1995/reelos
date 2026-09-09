@@ -629,6 +629,7 @@ export async function loadPresenceFacts({
     radarrClients: Array.isArray(radarrClients) ? radarrClients : radarrClients == null ? null : [],
     arrReady: Array.isArray(movies) || Array.isArray(series),
     arrMoviesReady: Array.isArray(movies),
+    arrSeriesReady: Array.isArray(series),
     arrIndex: buildArrIndex({
       movies: movieRows,
       series: seriesRows,

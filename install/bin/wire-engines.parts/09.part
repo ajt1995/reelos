@@ -89,7 +89,10 @@ def ensure_indexers_and_sync() -> int:
             log_wire(f"indexers verify {type(e).__name__} {e}")
             rc = 1
     try:
-        research_missing_after_indexers()
+        if rc == 0:
+            research_missing_after_indexers()
+        else:
+            log_wire("research-missing skipped — indexer heal red")
     except Exception as e:
         log_wire(f"research-missing {type(e).__name__} {e}")
     return rc
@@ -197,7 +200,7 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         if getattr(mod, "arr_indexer_write_url", None)
         else f"{origin}/indexer?forceSave=true"
     )
-    prow_host = docker_service_ip("prowlarr") or "prowlarr"
+    prow_host = "prowlarr"
     schema = None
     try:
         schemas = call(f"{origin}/indexer/schema", arr_key) or []
@@ -412,7 +415,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
     user = (a.get("adminName") or "reelos").strip() or "reelos"
     password = (a.get("adminPassword") or "reelos").strip() or "reelos"
     up = False
-    for _ in range(40):
+    for _ in range(90):
         try:
             urllib.request.urlopen("http://127.0.0.1:5055/api/v1/status", timeout=3).read()
             up = True
@@ -471,7 +474,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
             existing = s.call("/api/v1/settings/radarr")
             body = {
                 "name": "Radarr",
-                "hostname": docker_service_ip("radarr") or "radarr",
+                "hostname": "radarr",
                 "port": 7878,
                 "apiKey": radarr_key,
                 "useSsl": False,
@@ -499,7 +502,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
             existing = s.call("/api/v1/settings/sonarr")
             body = {
                 "name": "Sonarr",
-                "hostname": docker_service_ip("sonarr") or "sonarr",
+                "hostname": "sonarr",
                 "port": 8989,
                 "apiKey": sonarr_key,
                 "useSsl": False,
@@ -525,6 +528,7 @@ def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
         main = s.call("/api/v1/settings/main") or {}
         main["localLogin"] = True
         main["mediaServerLogin"] = True
+        main["hideAvailable"] = True
         main["defaultPermissions"] = SEERR_HOUSEHOLD
         s.call("/api/v1/settings/main", "POST", main)
     except NET_ERR as e:

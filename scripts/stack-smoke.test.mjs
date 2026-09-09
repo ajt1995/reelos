@@ -19,12 +19,17 @@ function joinParts(dir) {
     .join("");
 }
 
-test("stack: compose dns stays public (no 127.0.0.11) and OTA does not stamp heal red", () => {
+test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA does not stamp heal red", () => {
   const compose = read("compose/docker-compose.yml");
+  const installCompose = read("install/compose/docker-compose.yml");
   const dnsHosts = read("daemon/wire-engines.parts/03.part");
-  assert.match(compose, /dns:\n\s+- 1\.1\.1\.1/);
+  assert.match(compose, /Do not set dns: 1\.1\.1\.1/);
+  assert.doesNotMatch(compose, /^\s+dns:\s*$/m);
+  assert.doesNotMatch(compose, /^\s+- 1\.1\.1\.1\s*$/m);
+  assert.doesNotMatch(installCompose, /^\s+- 1\.1\.1\.1\s*$/m);
   assert.doesNotMatch(compose, /127\.0\.0\.11/);
-  assert.match(dnsHosts, /DNS_HOSTS = """    dns:\n      - 1.1.1.1/);
+  assert.match(dnsHosts, /stripped compose dns/);
+  assert.doesNotMatch(dnsHosts, /DNS_HOSTS = """    dns:\n      - 1\.1\.1\.1/);
   assert.doesNotMatch(dnsHosts, /127\.0\.0\.11/);
   const updater = read("daemon/reelos-update.sh");
   const heal = updater.indexOf('if [ "${HEAL_FAIL:-0}" = "1" ]; then');
@@ -36,20 +41,21 @@ test("stack: compose dns stays public (no 127.0.0.11) and OTA does not stamp hea
   assert.equal(read("install/bin/public_indexers.py"), read("daemon/public_indexers.py"));
   assert.equal(read("install/bin/wire-engines.parts/09.part"), read("daemon/wire-engines.parts/09.part"));
   assert.equal(read("install/bin/wire-engines.parts/02.part"), read("daemon/wire-engines.parts/02.part"));
+  assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.13)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.18)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.13");
-  assert.equal(chan.version, "1.2.50.13");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.13"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.13"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.13"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.13"/);
-  assert.match(read("HAL.md"), /1\.2\.50\.13/);
+  assert.equal(ver, "1.2.50.18");
+  assert.equal(chan.version, "1.2.50.18");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.18"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.18"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.18"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.18"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.18/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -68,6 +74,8 @@ test("stack: jellyfinToken Authorization + #46 cache + lean /api/library", () =>
   assert.match(src, /Authorization: JF_AUTH/);
   assert.match(src, /"X-Emby-Authorization": JF_AUTH/);
   assert.match(src, /jellyfinTokens\.set\(user, password, auth\)/);
+  assert.match(src, /function jellyfinAuthedHeaders/);
+  assert.match(src, /jellyfinAuthedHeaders\(auth\.token\)/);
   assert.match(src, /createLibraryCache/);
   assert.match(src, /serveLibrary/);
   assert.match(src, /revealJellyfinAdmin/);

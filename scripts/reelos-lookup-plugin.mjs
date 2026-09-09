@@ -12,6 +12,7 @@ import {
   honestifyRequests,
   assembleRequestPayload,
   mapSeerrSearchResults,
+  mapSeerrDiscoverResults,
   lookupFailureMessage,
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
@@ -51,7 +52,7 @@ async function refreshLibraryFull(host) {
     const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     if (!auth?.token) return;
     const r = await fetch(libraryItemsUrl(), {
-      headers: { "X-Emby-Token": auth.token },
+      headers: jellyfinAuthedHeaders(auth.token),
       signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
     });
     if (!r.ok) return;
@@ -311,6 +312,67 @@ async function handleLookup(req, res) {
   send(res, 200, { titles, error });
 }
 
+function ownedDiscoverIds() {
+  const ids = new Set();
+  const entry = libraryCache.read();
+  for (const t of entry?.titles || []) {
+    if (t?.id) ids.add(String(t.id));
+    for (const extra of t?.ids || []) {
+      if (extra) ids.add(String(extra));
+    }
+  }
+  return ids;
+}
+
+async function handleDiscover(_req, res) {
+  const movies = [];
+  const tv = [];
+  let error = null;
+  const key = seerrApiKey();
+  note(`api discover seerr=${key ? "yes" : "NO"}`);
+  if (!key) {
+    error = "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.";
+    send(res, 200, { movies, tv, error });
+    return;
+  }
+  try {
+    const [movieRes, tvRes] = await Promise.all([
+      seerrFetch("/api/v1/discover/movies", { key, ms: 45000 }),
+      seerrFetch("/api/v1/discover/tv", { key, ms: 45000 }),
+    ]);
+    if (!movieRes.ok && !tvRes.ok) {
+      error =
+        movieRes.status === 403 || tvRes.status === 403
+          ? "Request UI is still finishing setup. Wait, then refresh Discover."
+          : `seerr ${movieRes.status || tvRes.status}`;
+      note(`seerr discover movies=${movieRes.status} tv=${tvRes.status}`);
+      send(res, 200, { movies, tv, error });
+      return;
+    }
+    const excludeIds = ownedDiscoverIds();
+    if (movieRes.ok) {
+      const hits = Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || [];
+      movies.push(...mapSeerrDiscoverResults(hits, { mediaType: "movie", limit: 16, excludeIds }));
+    } else {
+      note(`seerr discover movies ${movieRes.status}`);
+    }
+    if (tvRes.ok) {
+      const hits = Array.isArray(tvRes.json) ? tvRes.json : tvRes.json?.results || [];
+      tv.push(...mapSeerrDiscoverResults(hits, { mediaType: "tv", limit: 16, excludeIds }));
+    } else {
+      note(`seerr discover tv ${tvRes.status}`);
+    }
+    if (!movies.length && !tv.length) {
+      error = error || "Seerr has nothing new to show yet.";
+    }
+    note(`seerr discover movies=${movies.length} tv=${tv.length}`);
+  } catch (e) {
+    error = lookupFailureMessage(e);
+    note(`seerr discover ${e}`);
+  }
+  send(res, 200, { movies, tv, error });
+}
+
 async function probeJson(url, ms = 3000) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
@@ -326,7 +388,17 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.15"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.18"';
+
+function jellyfinAuthedHeaders(token) {
+  const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
+  const headers = {
+    Authorization: auth,
+    "X-Emby-Authorization": auth,
+  };
+  if (token) headers["X-Emby-Token"] = token;
+  return headers;
+}
 
 const JF_NETWORK_XML = `<?xml version="1.0" encoding="utf-8"?>
 <NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -379,7 +451,7 @@ async function revealJellyfinAdmin(token, user) {
     let me = user;
     if (!me?.Id || !me.Policy) {
       const r = await fetch("http://127.0.0.1:8096/Users/Me", {
-        headers: { "X-Emby-Token": token },
+        headers: jellyfinAuthedHeaders(token),
       });
       me = r.ok ? await r.json() : null;
     }
@@ -387,7 +459,7 @@ async function revealJellyfinAdmin(token, user) {
     if (me.Policy.IsHidden === false) return;
     await fetch(`http://127.0.0.1:8096/Users/${me.Id}/Policy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Emby-Token": token },
+      headers: { "Content-Type": "application/json", ...jellyfinAuthedHeaders(token) },
       body: JSON.stringify({ ...me.Policy, IsHidden: false }),
     });
   } catch {
@@ -439,7 +511,7 @@ async function jellyfinState(ip) {
   let names = [];
   try {
     const r = await fetch("http://127.0.0.1:8096/Library/VirtualFolders", {
-      headers: { "X-Emby-Token": auth.token },
+      headers: jellyfinAuthedHeaders(auth.token),
     });
     const folders = r.ok ? await r.json() : [];
     names = (Array.isArray(folders) ? folders : []).map((x) => String(x.Name || ""));
@@ -1186,16 +1258,16 @@ async function tvHop() {
     try {
       const r = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie,Series&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       );
       const data = await r.json();
       const movies = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Movie&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       ).then((x) => x.json());
       const shows = await fetch(
         "http://127.0.0.1:8096/Items?Recursive=true&IncludeItemTypes=Series&Limit=1",
-        { headers: { "X-Emby-Token": auth.token }, signal: AbortSignal.timeout(5000) },
+        { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(5000) },
       ).then((x) => x.json());
       jf = `jellyfin movies=${movies.TotalRecordCount ?? "?"} series=${shows.TotalRecordCount ?? "?"} total=${data.TotalRecordCount ?? "?"}`;
     } catch (e) {
@@ -1237,7 +1309,7 @@ async function handleLogs(_req, res) {
     "=== ota.log ===",
     tailFile("/var/lib/reelos/ota.log", 40).trim(),
     "=== wire.log ===",
-    tailFile("/var/lib/reelos/wire.log", 30).trim(),
+    tailFile("/var/lib/reelos/wire.log", 80).trim(),
     "=== docker ps ===",
     shOut(["docker", "ps", "--format", "table {{.Names}}\\t{{.Status}}"], 2500).trim(),
     "",
@@ -1346,7 +1418,7 @@ async function handlePassword(req, res) {
     try {
       const r = await fetch(`http://127.0.0.1:8096/Users/${auth.id}/Password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Emby-Token": auth.token },
+        headers: { "Content-Type": "application/json", ...jellyfinAuthedHeaders(auth.token) },
         body: JSON.stringify({ CurrentPw: current, NewPw: next }),
       });
       jellyfin = r.ok;
@@ -1623,7 +1695,7 @@ async function handleLibrary(req, res) {
     },
     fetchItems: async (auth, limit) => {
       const r = await fetch(libraryItemsUrl({ limit }), {
-        headers: { "X-Emby-Token": auth.token },
+        headers: jellyfinAuthedHeaders(auth.token),
         signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
       });
       if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
@@ -1843,7 +1915,11 @@ async function handlePing(req, res) {
     }
     if (source === "torbox") {
       const r = await fetch("https://api.torbox.app/v1/api/user/me", {
-        headers: { Authorization: `Bearer ${key}` },
+        headers: {
+          Authorization: `Bearer ${key}`,
+          Accept: "application/json",
+          "User-Agent": "ReelOS",
+        },
         signal: AbortSignal.timeout(8000),
       });
       if (!r.ok) {
@@ -1939,6 +2015,7 @@ export function reelosLookupPlugin() {
         const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
         try {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
+          if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));

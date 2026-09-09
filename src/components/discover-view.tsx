@@ -11,16 +11,46 @@ export function DiscoverView() {
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [looking, setLooking] = useState(false);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
+  const [browseMovies, setBrowseMovies] = useState<Title[]>([]);
+  const [browseTv, setBrowseTv] = useState<Title[]>([]);
+  const [browseErr, setBrowseErr] = useState<string | null>(null);
+  const [browseReady, setBrowseReady] = useState(false);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
-  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
-  const shelf = useReelStore((s) => s.shelf);
-  const shelfError = useReelStore((s) => s.shelfError);
-  const shelfReady = useReelStore((s) => s.shelfReady);
 
   useEffect(() => {
     installHonestRequest();
-    hydrateShelf();
-  }, [hydrateShelf]);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/discover", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`discover ${res.status}`);
+        return res.json() as Promise<{ movies?: Title[]; tv?: Title[]; error?: string | null }>;
+      })
+      .then((r) => {
+        if (cancelled) return;
+        const movies = Array.isArray(r?.movies) ? r.movies : [];
+        const tv = Array.isArray(r?.tv) ? r.tv : [];
+        rememberCatalogTitles([...movies, ...tv]);
+        rememberTitles?.([...movies, ...tv]);
+        setBrowseMovies(movies);
+        setBrowseTv(tv);
+        setBrowseErr(movies.length || tv.length ? null : r?.error || null);
+        setBrowseReady(true);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setBrowseMovies([]);
+          setBrowseTv([]);
+          setBrowseErr(String(e));
+          setBrowseReady(true);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rememberTitles]);
 
   const hits = useMemo(() => {
     const seen = new Set<string>();
@@ -73,12 +103,10 @@ export function DiscoverView() {
     };
   }, [q, rememberTitles]);
 
-  const movies = shelf.filter((t) => t.kind === "movie").slice(0, 16);
-  const tv = shelf.filter((t) => t.kind === "tv" || t.kind === "anime").slice(0, 16);
-
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Discover</h1>
+      <p className="mt-2 text-sm text-muted">Titles this box does not have. Search to find something else.</p>
       <div className="relative mt-6 max-w-xl">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint" />
         <input
@@ -104,26 +132,24 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          {movies.length > 0 ? (
-            <Row label="Movies on this box">
-              {movies.map((t) => (
+          {browseMovies.length > 0 ? (
+            <Row label="Movies">
+              {browseMovies.map((t) => (
                 <TitleCard key={t.id} title={t} />
               ))}
             </Row>
           ) : null}
-          {tv.length > 0 ? (
-            <Row label="Shows on this box">
-              {tv.map((t) => (
+          {browseTv.length > 0 ? (
+            <Row label="Shows">
+              {browseTv.map((t) => (
                 <TitleCard key={t.id} title={t} />
               ))}
             </Row>
           ) : null}
-          {shelf.length === 0 ? (
+          {browseMovies.length === 0 && browseTv.length === 0 ? (
             <p className="mt-10 text-sm text-muted">
-              {shelfError ||
-                (shelfReady
-                  ? "Nothing in Jellyfin yet. Search above, then Request."
-                  : "Loading library…")}
+              {browseErr ||
+                (browseReady ? "Seerr has nothing new to show yet." : "Looking up movies and shows…")}
             </p>
           ) : null}
         </>

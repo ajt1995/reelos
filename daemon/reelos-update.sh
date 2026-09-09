@@ -158,21 +158,13 @@ fi
 if [ "$MODE" = "apply" ]; then
   mkdir -p "$STATE"
   exec 9>"$STATE/ota.lock"
+  # flock is released when the holder exits. Deleting ota.lock while another
+  # Apply still holds the old inode lets a second Apply lock a new file
+  # (house dual Apply: every ota.log line twice).
   if ! flock -n 9; then
-    if pgrep -f 'update-apply.sh apply|reelos-update.sh apply' >/dev/null 2>&1; then
-      log "apply already running — refusing second Apply"
-      echo "apply already running"
-      exit 0
-    fi
-    log "stale ota.lock — taking lock"
-    exec 9>&-
-    rm -f "$STATE/ota.lock"
-    exec 9>"$STATE/ota.lock"
-    if ! flock -n 9; then
-      log "apply already running — refusing second Apply"
-      echo "apply already running"
-      exit 0
-    fi
+    log "apply already running — refusing second Apply"
+    echo "apply already running"
+    exit 0
   fi
 fi
 
@@ -303,7 +295,7 @@ need scripts/reelos-lookup-plugin.mjs '/api/library'
 need scripts/reelos-lookup-plugin.mjs 'episodeFileCount'
 need scripts/reelos-lookup-plugin.mjs '=== sonarr series ==='
 need install/compose/docker-compose.yml '/mnt/symlinks:/symlinks'
-need install/compose/docker-compose.yml '1.1.1.1'
+need install/compose/docker-compose.yml 'Do not set dns: 1.1.1.1'
 need src/components/shell.tsx 'to: "/settings"'
 need daemon/wire-engines.py 'restart_fuse_readers'
 need daemon/wire-engines.py 'not bind-mounting /mnt'
@@ -314,6 +306,8 @@ need daemon/reelos-update.sh 'skip second download'
 need daemon/reelos-update.sh 'home up — not stamping'
 need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
+need daemon/reelos-update.sh 'ROOT.prev/docker-compose.yml'
+need daemon/reelos-update.sh 'compose recreated — remount FUSE before hops'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
@@ -381,9 +375,15 @@ need daemon/public_indexers.py 'forceSave=true'
 need daemon/public_indexers.py 'torznab_body_from_schema'
 need daemon/public_indexers.py 'legacy_arr_post_treats_400_as_attached'
 need daemon/public_indexers.py 'arr_indexer_write_landed'
+need daemon/public_indexers.py 'indexer_is_enabled'
 need daemon/wire-engines.parts/02.part 'forceSync'
 need daemon/wire-engines.parts/02.part 'RADARR_SYNC_CATEGORIES'
 need daemon/wire-engines.parts/02.part 'docker_service_ip'
+need daemon/wire-engines.parts/02.part 'Inspect by container name'
+need daemon/wire-engines.parts/03.part 'stripped compose dns'
+need daemon/public_indexers.py 'strip_compose_dns_text'
+need daemon/wire-engines.parts/09.part 'research-missing skipped'
+need daemon/reelos-update.sh 'heal red|torznab |search indexers'
 need daemon/wire-engines.parts/09.part 'ensure_arr_search_indexers'
 need daemon/wire-engines.parts/09.part 'def read_prow_rows'
 need daemon/wire-engines.parts/09.part '400 + name is not attached'
@@ -825,6 +825,19 @@ nudge_fuse() {
     log "fuse not mounted — skip remount"
   fi
 }
+
+wait_fuse() {
+  local i
+  for i in $(seq 1 30); do
+    if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+      log "fuse ready ($i/30)"
+      return 0
+    fi
+    sleep 2
+  done
+  log "fuse not ready after wait — hops will fail-close if still empty"
+  return 0
+}
 nudge_fuse
 step "FUSE"
 
@@ -843,7 +856,12 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   load_env
   COMPOSE_CHANGED=0
   if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
-    if cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null; then
+    # Swap already copied the tarball onto $ROOT/compose. Comparing those two
+    # always says unchanged and skips `docker compose up` — house 1.2.50.13
+    # kept 14h-old containers with HostConfig.Dns=1.1.1.1. Compare the tarball
+    # to the pre-swap yml instead.
+    PREV_YML="$ROOT.prev/docker-compose.yml"
+    if [ -f "$PREV_YML" ] && cmp -s "$WORK/src/install/compose/docker-compose.yml" "$PREV_YML" 2>/dev/null; then
       log "compose yml unchanged — skip full compose up and indexer test (FUSE remount still runs)"
     else
       COMPOSE_CHANGED=1
@@ -863,6 +881,9 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
       fi
       sleep 1
     done
+    log "compose recreated — remount FUSE before hops"
+    nudge_fuse
+    wait_fuse
   fi
 fi
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
@@ -949,17 +970,26 @@ hop_stack() {
   if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
     log "hop FUSE green"
   else
-    log "hop FUSE red — /mnt/debrid empty"
-    HOP_FAIL=1
+    if [ "${COMPOSE_CHANGED:-0}" = "1" ]; then
+      log "hop FUSE empty after compose — waiting"
+      wait_fuse
+    fi
+    if [ -e /mnt/debrid/__all__ ] || [ -e /mnt/debrid/version.txt ]; then
+      log "hop FUSE green"
+    else
+      log "hop FUSE red — /mnt/debrid empty"
+      HOP_FAIL=1
+    fi
   fi
-  local j i
+  local j i jf_tries=20
+  [ "${COMPOSE_CHANGED:-0}" = "1" ] && jf_tries=60
   j=0
-  for i in $(seq 1 20); do
+  for i in $(seq 1 "$jf_tries"); do
     if curl -fsS --max-time 3 http://127.0.0.1:8096/System/Info/Public >/dev/null 2>&1; then
       j=1
       break
     fi
-    printf '\r[waiting Jellyfin] %d/20   ' "$i" >&2
+    printf '\r[waiting Jellyfin] %d/%d   ' "$i" "$jf_tries" >&2
     sleep 1
   done
   printf '\n' >&2
@@ -1012,6 +1042,11 @@ if [ -f /var/lib/reelos/provisioned ]; then
     log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
     if ! python3 "$ROOT/bin/wire-engines.py" indexers; then
       log "indexers heal red"
+      if [ -f /var/lib/reelos/wire.log ]; then
+        grep -E 'heal red|torznab |search indexers |prowlarr api' /var/lib/reelos/wire.log | tail -n 20 | while IFS= read -r line; do
+          log "wire ${line}"
+        done
+      fi
       HEAL_FAIL=1
     fi
     log "import after hops (TV/movies into the library)"

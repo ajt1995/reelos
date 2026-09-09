@@ -82,3 +82,27 @@ test("compose pull is after applied. and time-bounded", () => {
   assert.ok(applied >= 0 && pull > applied, "pull must not run before stamp");
   assert.match(updater, /timeout 600 docker compose pull/);
 });
+
+test("compose change is vs pre-swap yml; FUSE remounts after compose up", () => {
+  assert.match(
+    updater,
+    /cmp -s "\$WORK\/src\/install\/compose\/docker-compose\.yml" "\$PREV_YML"/,
+  );
+  assert.match(updater, /PREV_YML="\$ROOT\.prev\/docker-compose\.yml"/);
+  assert.equal(
+    updater.includes(
+      'cmp -s "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"',
+    ),
+    false,
+    "live compose was already swapped — comparing it to the tarball always skips up",
+  );
+  const up = updater.indexOf("up -d --remove-orphans");
+  const remount = updater.indexOf('log "compose recreated — remount FUSE before hops"');
+  assert.ok(up >= 0 && remount > up, "FUSE remount must run after compose up");
+});
+
+test("second Apply is refused; ota.lock is never deleted", () => {
+  assert.match(updater, /apply already running — refusing second Apply/);
+  assert.equal(updater.includes("stale ota.lock — taking lock"), false);
+  assert.equal(updater.includes('rm -f "$STATE/ota.lock"'), false);
+});

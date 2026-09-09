@@ -63,29 +63,25 @@ def torbox_search_ip() -> str:
     return "172.66.170.114"
 
 
-DNS_HOSTS = """    dns:
-      - 1.1.1.1
-      - 8.8.8.8
-"""
-
-
 def ensure_compose_dns() -> None:
-    """Persist Docker DNS. Do not pin search-api to another hostname's A."""
+    """Do not pin search-api. Do not inject dns: 1.1.1.1 — that hid service names."""
     p = COMPOSE / "docker-compose.yml"
     if not p.exists():
         log_wire("compose yml missing")
         return
     stripped = strip_compose_extra_hosts()
     text = p.read_text()
-    if "1.1.1.1" not in text:
-        for port in ("9696:9696", "7878:7878", "8989:8989", "8282:8282"):
-            old = f'      - "127.0.0.1:{port}"\n'
-            new = f'      - "127.0.0.1:{port}"\n{DNS_HOSTS}'
-            if old in text:
-                text = text.replace(old, new, 1)
-        p.write_text(text)
-        log_wire("compose dns written")
-        recreate_prowlarr()
+    stripper = _load_public_indexers()
+    if stripper and getattr(stripper, "strip_compose_dns_text", None):
+        new, n = stripper.strip_compose_dns_text(text)
+    else:
+        block = "    dns:\n      - 1.1.1.1\n      - 8.8.8.8\n"
+        n = text.count(block)
+        new = text.replace(block, "") if n else text
+    if n:
+        p.write_text(new)
+        log_wire(f"stripped compose dns ({n}) — Docker service names")
+        recreate_arrs()
         return
     if stripped or prowlarr_has_hosts():
         log_wire("dropping pinned extra_hosts")
