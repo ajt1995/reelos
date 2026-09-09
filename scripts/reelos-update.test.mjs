@@ -61,6 +61,12 @@ test("restore moves the broken tree aside instead of deleting live app first", (
   assert.equal(blindRm, -1);
 });
 
+test("house compose/configs overlay onto staging (no dest-exists nest)", () => {
+  assert.match(updater, /overlay house compose\/configs onto staging/);
+  assert.match(updater, /cp -a "\$ROOT\/compose\/configs\/\." "\$NEXT\/compose\/configs\/"/);
+  assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs" "\$NEXT\/compose\/configs"/);
+});
+
 test("compose pull is after applied. and time-bounded", () => {
   const applied = updater.indexOf('log "ReelOS $REMOTE applied."');
   const pull = updater.indexOf("stack images — docker compose pull");

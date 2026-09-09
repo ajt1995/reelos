@@ -1,48 +1,41 @@
 # STATUS.md
 
-**Reelist (enlisted fixer).** 2026-09-09. #49 already stamped **1.2.49** (durable Jellyfin seed). This tip is PR **#50**: TorBox already cached, Decypharr symlink under `/mnt/symlinks/{radarr|sonarr}`, Radarr/Sonarr stuck `completed`/`importPending` with “Unexpected error processing file”, `hasFile` false until manual import or FUSE heal. Night at the Museum 2026-09-09. VERSION stays 1.2.49 — do not cut 1.2.50.
+**Reelist (enlisted fixer).** 2026-09-09. Stack-audited `#45`–`#50` so house Apply of the combined tree does not undo mailman, shelf, Finish-detach, or JF12 auth. `#50` already on `main` (`c3fa807`). This tip is overlay + named stamp **1.2.50**. Austin allowed VERSION + HAL/STATUS for a coherent house Apply.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.49` (already on main from #49)
-- **PR:** https://github.com/ajt1995/reelos/pull/50 (`cursor/fuse-arr-import-0b46`)
-- **What it is:** Retry *arr import when the FUSE target is stat-able. Do not ignore `importPending`+warning. Keep #49 JF seed.
-
-## Root cause
-
-**House-confirmed (Night at the Museum):** host `ls /mnt/debrid` listed fine while Radarr/Sonarr/Jellyfin `docker exec ls /mnt/debrid` got **Socket not connected**. Compose binds `/mnt/debrid` **rslave**. After Decypharr remounts FUSE, those binds stay on the old connection unless `/mnt` is **rshared** on the host (before docker) and the reader containers are restarted.
-
-`fuse_stale()` only `listdir`’d the host, so heal never ran. `decide_queue_action` then treated `path_exists` + `completed` as **ignore**, so `importPending` + “Unexpected error processing file” sat forever. `/symlinks` vs `/mnt/symlinks` is already bind-mounted both ways — not the house fail.
+- **VERSION / channel:** `1.2.50`
+- **PR:** https://github.com/ajt1995/reelos/pull/51 (`cursor/stack-audit-a560`)
+- **Writeup:** `docs/STACK-RISK.md` (go/no-go + merge order)
+- **What it is:** `#45`–`#50` already on main (1.2.49). This tip overlays house `compose/configs` so `#49`'s seed cannot nest `configs/configs`, retargets stale mailman canaries, and names the stacked Apply.
 
 ## Fix
 
-- `fuse_stale()` also `docker exec` radarr/sonarr/jellyfin. Heal: `mount --make-rshared /mnt` **before** restarts; remount Decypharr only if the **host** is stale; always restart readers; then `kick_import`.
-- `reelos-mnt-rshared.service` (install + firstboot) makes `/mnt` rshared before docker. Wire-engines persist/enable the same unit. Apply copies it to `/etc`.
-- `importPending` / unexpected error → `retry_import` (house `reimport`) when the FUSE target is stat-able. Wait if not readable. Do not fail/blocklist.
-- `kick_imports` waits for FUSE `listdir` (skip `local-vpn`).
-- #49 kept: visible admin, Movies/Shows paths, published URI by request, wipe re-seed.
+1. Rebased onto latest `main` (`c3fa807`). Duplicate `#50` commits dropped — they are already there (importPending + container ENOTCONN / `reelos-mnt-rshared.service`).
+2. Mailman overlays house `compose/configs/.` onto staging (daemon + install twins). `#50` rshared enable-after-swap kept.
+3. Stack smoke: lockfile `SKIP_NPM` + JF12 `Authorization` + `#46` cache + Finish no `spawnSync` pull + advisory search hop + importPending retry + rshared unit + parts twins.
+4. Retargeted three stale mailman `need()` canaries so push-time `check-ota.py` is green.
 
 ## Owner / house Apply
 
-1. Merge this tip to **main**. Channel tarball stays `main.tar.gz`. VERSION stays **1.2.49**.
-2. Phone Check→Apply. SHA drift if 1.2.49 is already local. Search hop red is OK (#48).
-3. `applied-sha` is this tip. `/opt/reelos/bin/stuck-downloads.py` contains `retry_import`.
-4. Proof: `/api/box` Jellyfin green (#49). Next cached TorBox movie imports without babysitting (`hasFile=true`). Stuck log: `retry import … FUSE readable`.
+**GO for CLI Apply of 1.2.49 now** (`main` `c3fa807`). Do not wait for `#51`. Expect `ReelOS 1.2.49 applied.` Search hop red is OK.
 
-## Tests
+`#51` is optional follow-up (overlay + named **1.2.50**). If merged before Apply instead, expect `ReelOS 1.2.50 applied.`
 
-```
-python3 install/bin/stuck-downloads.py --self-test
-node --test scripts/stuck-downloads.test.mjs
-```
+See `docs/STACK-RISK.md`. Short form:
+
+1. House CLI: `/opt/reelos/bin/reelos-update.sh apply` (or phone Check→Apply). Tarball `main.tar.gz`.
+2. `cat /opt/reelos/VERSION` → `1.2.49` (or `1.2.50` if this tip landed first).
+3. Home/Library still lean-cached. Finish must not wedge `:8080`.
+4. `/api/box` Jellyfin green. Next cached grab should import when FUSE is readable (`#50`). Host listing is not enough — *arr containers must also `ls /mnt/debrid`.
 
 ## Do not
 
+- Re-merge `#50` (already on `main` at `c3fa807`).
 - Apply a feature-branch tarball — **main only**.
-- Cut **1.2.50** in the same hour.
-- Merge `feature/3-books` / pirate book indexers.
-- Wipe TorBox / add wipe features.
+- Cut **1.2.51** in the same hour.
+- Scope into TorBox wipe / pirate books.
 
 ## Hal / xorriso
 
-Stamp stays **1.2.49**. Phone OTA uses `main.tar.gz` + `channel.json`. ISO not required.
+Hal: stamp **1.2.50** in HAL.md. Phone OTA uses `main.tar.gz` + `channel.json`. ISO not required for this Apply.

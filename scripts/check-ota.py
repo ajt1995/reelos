@@ -24,6 +24,7 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "staging missing package.json"),
     ("daemon/reelos-update.sh", "hop search red — not blocking UI-only stamp"),
     ("daemon/reelos-update.sh", "npm ci failed — not swapping"),
+    ("daemon/reelos-update.sh", "overlay house compose/configs onto staging"),
 )
 
 

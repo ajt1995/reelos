@@ -1,6 +1,6 @@
 # ReelOS Apply / OTA audit
 
-**House stamp is 1.2.49** (already on `main` via #49 Jellyfin seed). This tree adds PR #50 FUSE/*arr `importPending` retry — Check is SHA drift if 1.2.49 is already local. Mailman notes below still apply. Expect `ReelOS 1.2.49 applied.`
+**House stamp for this tree is 1.2.50** (PR #51, stacked `#45`–`#50` + configs overlay). `#49`/`#50` on `main` are 1.2.49 (`c3fa807`). Mailman notes below still apply. Expect `ReelOS 1.2.50 applied.`
 
 **2026-09-09.** Code-verified against `daemon/reelos-update.sh`, `scripts/reelos-lookup-plugin.mjs` (`/api/update/*`), `scripts/check-ota.py`, `install/systemd/reelos.service`. Rebased onto main after **#46** (lean cached `/api/library`) and **#47** (JF12 auth, Finish no longer `spawnSync` pull inside Vite; search hop 4× retry). Mailman repair shipped as #48 without a VERSION bump.
 
@@ -19,7 +19,7 @@ Phone Settings → Updates → Check → Apply, or SSH `reelos-update.sh apply`.
 5. **Channel + tarball** — `fetch_channel` prefers GitHub API `channel.json` (raw CDN is stale). Tarball URL today is `…/archive/refs/heads/main.tar.gz`, not a version tag. `HEAD_SHA` is `commits/main` at start. If channel version is not newer but SHA drifted, Apply still continues.
 6. **Mailman re-exec** — If the tarball's `daemon/reelos-update.sh` differs, `exec` it with `REELOS_OTA_REEXEC=1` (keeps the extracted tree; no second download). Version compare happens after that. Tarball `VERSION` wins if newer than a stale channel.
 7. **Static canaries + `check-ota.py --apply`** — Missing files abort. Copy-string misses warn on the box. Pinned Cloudflare `extra_hosts` aborts.
-8. **Stage `/opt/reelos.next`** while `:8080` still serves. Copies `package.json` + lockfile + `src/` + `server/` + `scripts/` + daemon → `bin/` + compose/Caddy. House configs/`.env` come from the live tree.
+8. **Stage `/opt/reelos.next`** while `:8080` still serves. Copies `package.json` + lockfile + `src/` + `server/` + `scripts/` + daemon → `bin/` + compose/Caddy. House configs/`.env` overlay onto staging (`configs/.`) so a seeded `install/compose/configs/jellyfin` tree cannot nest house data as `configs/configs`.
 9. **`SKIP_NPM`** — Reuses live `node_modules` only when **both** `package.json` and `package-lock.json` match (this PR). Otherwise `npm ci` in the staging tree. Lockfile present → no `npm install` fallback. Failure deletes `.next` only; live `/opt/reelos/app` is not touched.
 10. **Prepare `.prev`** — Drops the previous backup, copies `VERSION` + compose yml. Does not snapshot `app` yet.
 11. **Park Caddy** on “ReelOS is updating…” (`admin off`, so later reload is a no-op — restart is required). Install `reelos.service` + `daemon-reload` **before** stop.
@@ -69,7 +69,7 @@ Daily timer (`reelos-autoupdate.service`) runs `/opt/reelos/bin/reelos-update.sh
 5. **Home probe 90s**, `start_shell` every 5s (plus first tick). Search hop timeout 20s (was 45) so a red search cannot sit on the oneshot as long.
 6. **`docker compose pull` after `applied.`**, `timeout 600`. Does not un-stamp. Still not inside Vite.
 
-Not changed in the mailman PR: TorBox, Caddy unit design, flock, channel fetch URL. Finish provision pull-in-Vite is **#47 on main** (kept). Stamp **1.2.49** is PR #50.
+Not changed in the mailman PR: TorBox, Caddy unit design, flock, channel fetch URL. Finish provision pull-in-Vite is **#47 on main** (kept). Stamp **1.2.50** is this integration PR (#51). `#50` is already on `main`.
 
 ## Trustworthiness after this PR
 
@@ -91,14 +91,14 @@ Do this on the HP. Do not stamp VERSION by hand.
 
 1. Merge this tip to **main**. Phone Apply fetches mailman from `main` first — this PR must be on `main` before the house run.
 2. If `reelos-ota` is `activating` from an older Apply: wait it out or `systemctl reset-failed reelos-ota` after you confirm no `update-apply.sh` process. Do not start a second Apply on a dead Caddy.
-3. Settings → Updates → **Check**. Expect available: channel **1.2.49** > local, or SHA drift.
+3. Settings → Updates → **Check**. Expect available: channel **1.2.50** > local, or SHA drift.
 4. **Apply.** Watch `/var/lib/reelos/ota.log` (or the phone step log).
    - `package.json or package-lock.json changed — running npm ci` **or** `package.json unchanged — reused node_modules`.
    - `npm ci failed` must **not** appear. If it does, live `/opt/reelos/app/package.json` must still exist.
    - `home 200` then hops. `hop search red — not blocking UI-only stamp` is OK.
-   - Must print `ReelOS 1.2.49 applied.`
+   - Must print `ReelOS 1.2.50 applied.`
 5. Proof files:
-   - `cat /opt/reelos/VERSION` → `1.2.49`
+   - `cat /opt/reelos/VERSION` → `1.2.50`
    - `cat /var/lib/reelos/applied-sha` → this merge commit (or current `main`)
    - `test -f /opt/reelos/app/package.json && test -d /opt/reelos/app/node_modules`
 6. Phone **Check** again → **up to date** (not another Apply).
@@ -106,4 +106,4 @@ Do this on the HP. Do not stamp VERSION by hand.
 8. If “Also pull Jellyfin / engine images” is on: pull happens **after** `applied.` and the oneshot may stay `activating` up to 10 minutes. Home must stay up during that pull.
 9. Negative (optional): `systemctl is-active reelos-ota` is `inactive` after Apply, not stuck `activating`.
 
-Do not: Apply a feature-branch tarball, or run Finish/provision during Apply. Stamp is **1.2.49** (HAL.md).
+Do not: Apply a feature-branch tarball, or run Finish/provision during Apply. Stamp is **1.2.50** (HAL.md).
