@@ -167,10 +167,7 @@ export function BooksView() {
       ) : null}
 
       {searched && !searching && results.length === 0 && !errors.__search ? (
-        <p className="mt-6 text-sm text-muted">
-          Nothing in the open catalogs matches that. They carry public-domain and openly licensed
-          titles, so most books still in copyright will not be here.
-        </p>
+        <p className="mt-6 text-sm text-muted">Nothing in these catalogs matches that.</p>
       ) : null}
 
       {results.length > 0 ? (
