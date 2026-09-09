@@ -179,11 +179,15 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
     if not mod or not getattr(mod, "apply_arr_search_indexers", None):
         log_wire(f"{name} search indexers skip — no public_indexers")
         return False
-    try:
-        prow_rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
-    except NET_ERR as e:
-        log_wire(f"{name} prow list {e}")
-        prow_rows = []
+    def read_prow_rows() -> list:
+        try:
+            rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+        except NET_ERR as e:
+            log_wire(f"{name} prow list {e}")
+            return []
+        return rows if isinstance(rows, list) else []
+
+    prow_rows = read_prow_rows()
 
     def post(ix_name, body):
         try:
@@ -222,6 +226,9 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
         if good:
             log_wire(f"{name} search indexers {detail}")
             return True
+        # A one-shot Prowlarr read makes every retry a no-op and turns a blip into heal red.
+        if not prow_rows:
+            prow_rows = read_prow_rows()
         landed = mod.apply_arr_search_indexers(prow_rows, arr_rows, role, prow_key, post, put)
         if landed:
             log_wire(f"{name} attached {','.join(landed)}")

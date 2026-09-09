@@ -58,6 +58,8 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /apply_arr_search_indexers/);
   assert.match(main, /Final ok must re-read post-apply rows/);
   assert.match(main, /read_arr_rows/);
+  assert.match(main, /def read_prow_rows/);
+  assert.match(main, /turns a blip into heal red/);
   assert.match(main, /torznab/);
   assert.match(main, /widen_sonarr_hybrid/);
   assert.match(main, /research-missing/);
