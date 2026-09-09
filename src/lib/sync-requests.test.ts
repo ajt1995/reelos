@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
+  applyTitleRequestPoll,
   collapseDuplicateRequests,
   isInFlightRequest,
   mergeServerRequests,
@@ -147,6 +149,43 @@ test("TV library series does not mark a grabbing season available on the client"
   });
   assert.equal(honest[0]?.status, "downloading");
   assert.equal(honest[0]?.progress, 0);
+});
+
+test("title-page poll does not paint another season available", () => {
+  const requests = [
+    row({ id: "seerr-3", titleId: "tmdb-tv-1402", status: "available", progress: 100, season: 1 }),
+    row({ id: "seerr-4", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 2 }),
+  ];
+  const next = applyTitleRequestPoll(requests, {
+    titleId: "tmdb-tv-1402",
+    season: 1,
+    status: "downloaded",
+    progress: 100,
+  });
+  assert.equal(next.find((r) => r.season === 1)?.status, "available");
+  assert.equal(next.find((r) => r.season === 2)?.status, "downloading");
+  assert.equal(next.find((r) => r.season === 2)?.progress, 0);
+});
+
+test("title-page movie poll does not touch TV season rows", () => {
+  const requests = [
+    row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 }),
+    row({ id: "seerr-5", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+  ];
+  const next = applyTitleRequestPoll(requests, {
+    titleId: "tmdb-1593",
+    status: "downloaded",
+    progress: 100,
+  });
+  assert.equal(next.find((r) => r.titleId === "tmdb-1593")?.status, "available");
+  assert.equal(next.find((r) => r.titleId === "tmdb-tv-1402")?.status, "downloading");
+});
+
+test("default requestTitle never invents a 42 percent", () => {
+  const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(store, /progress: fail \? 0 : cached \? 42 : 0/);
+  assert.match(store, /status: fail \? "failed" : "waiting"/);
+  assert.match(store, /progress: 0,/);
 });
 
 test("duplicate active rows for the same title+season collapse when one is available", () => {

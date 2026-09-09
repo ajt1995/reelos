@@ -1,5 +1,5 @@
 /** GET /api/request — Seerr + library + *arr hasFile. Registered before lookup. */
-import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit, honestifyRequests } from "./reelos-seerr.mjs";
+import { parseTitleId, seerrApiKey, seerrFetch, seerrRequestRow, seerrSearchHit, honestifyRequests, pickSeerrRequestForTitle } from "./reelos-seerr.mjs";
 import { loadPresenceFacts } from "./reelos-request-status.mjs";
 
 function send(res, code, body) {
@@ -93,11 +93,17 @@ async function handleGet(req, res) {
     const r = await seerrFetch(path, { key, ms: 15000 });
     const media = mediaFromDetail(r.json) || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
-    const last = reqs[0] || { media, type: parsed.mediaType };
+    const seasonRaw = u.searchParams.get("season");
+    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
+    const last = pickSeerrRequestForTitle(reqs, {
+      media: { ...media, tmdbId: Number(parsed.tmdb) },
+      mediaType: parsed.mediaType,
+      season,
+    });
     const mapped = seerrRequestRow({
       ...last,
       type: parsed.mediaType,
-      media: { ...media, tmdbId: Number(parsed.tmdb) },
+      media: { ...media, tmdbId: Number(parsed.tmdb), ...(last.media || {}) },
     });
     const facts = await loadPresenceFacts();
     const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);

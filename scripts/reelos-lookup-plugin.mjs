@@ -4,6 +4,7 @@ import os from "node:os";
 import {
   parseTitleId,
   findExistingSeasonRequest,
+  pickSeerrRequestForTitle,
   seerrApiKey,
   seerrFetch,
   seerrRequestRow,
@@ -987,7 +988,13 @@ async function handleRequestStatus(req, res) {
     const r = await seerrFetch(path, { key, ms: 15000 });
     const media = r.json?.mediaInfo || r.json?.media || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
-    const last = reqs[0] || {};
+    const seasonRaw = u.searchParams.get("season");
+    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
+    const last = pickSeerrRequestForTitle(reqs, {
+      media: { ...media, tmdbId: parsed.tmdb },
+      mediaType: parsed.mediaType,
+      season,
+    });
     const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
     const facts = await loadPresenceFacts();
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;

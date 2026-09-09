@@ -67,6 +67,15 @@ test("house compose/configs overlay onto staging (no dest-exists nest)", () => {
   assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs" "\$NEXT\/compose\/configs"/);
 });
 
+test("Stage 3 node_modules copy heartbeats so a long cp does not look wedged", () => {
+  assert.match(updater, /copy_node_modules_with_heartbeat/);
+  assert.match(updater, /still copying node_modules/);
+  assert.match(updater, /copying node_modules into staging \(8080 still up\)/);
+  const copy = updater.indexOf("copy_node_modules_with_heartbeat");
+  const swap = updater.indexOf('mv "$ROOT/app" "$ROOT.prev/app"');
+  assert.ok(copy >= 0 && swap > copy, "node_modules copy must stay before the live mv");
+});
+
 test("compose pull is after applied. and time-bounded", () => {
   const applied = updater.indexOf('log "ReelOS $REMOTE applied."');
   const pull = updater.indexOf("stack images — docker compose pull");

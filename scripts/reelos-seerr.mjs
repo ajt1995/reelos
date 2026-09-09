@@ -315,6 +315,30 @@ export function collapseDuplicateRequests(rows) {
   return order.map((k) => byKey.get(k)).filter(Boolean);
 }
 
+/** Pick the Seerr request for this title/season. Never use reqs[0] for another season. */
+export function pickSeerrRequestForTitle(reqs, { media, mediaType, season } = {}) {
+  const list = Array.isArray(reqs) ? reqs : [];
+  const type = mediaType === "tv" ? "tv" : "movie";
+  const n = season == null || season === "" ? NaN : Number(season);
+  const withMedia = (row) => ({
+    ...row,
+    type,
+    media: { ...(media || {}), ...(row?.media || {}) },
+  });
+  if (type === "tv" && Number.isFinite(n) && n > 0) {
+    const exact = list.find((r) => {
+      const seasons = realSeasonNumbers(r?.seasons);
+      return seasons.length === 1 && seasons[0] === n;
+    });
+    if (exact) return withMedia(exact);
+    const any = list.find((r) => realSeasonNumbers(r?.seasons).includes(n));
+    if (any) return withMedia(any);
+    return { type, media: media || {}, seasons: [{ seasonNumber: n }] };
+  }
+  if (list[0]) return withMedia(list[0]);
+  return { type, media: media || {} };
+}
+
 export function findExistingSeasonRequest(rows, { mediaType, tmdb, season } = {}) {
   const wantType = mediaType === "tv" ? "tv" : "movie";
   const wantTmdb = String(tmdb ?? "");

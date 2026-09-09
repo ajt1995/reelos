@@ -154,6 +154,41 @@ export function collapseDuplicateRequests(rows: MediaRequest[]): MediaRequest[] 
   return out;
 }
 
+function mapEnginePollStatus(status?: string | null): RequestStatus | null {
+  if (status === "downloaded" || status === "available") return "available";
+  if (status === "grabbing" || status === "downloading") return "downloading";
+  if (status === "failed") return "failed";
+  if (status === "queued" || status === "waiting") return "waiting";
+  return null;
+}
+
+/** Title-page GET /api/request poll: only the matching title+season row. */
+export function applyTitleRequestPoll(
+  requests: MediaRequest[],
+  opts: { titleId: string; season?: number; status?: string | null; progress?: number },
+): MediaRequest[] {
+  const mapped = mapEnginePollStatus(opts.status);
+  const apiProg = typeof opts.progress === "number" ? opts.progress : undefined;
+  if (!mapped && apiProg == null) return requests;
+  return requests.map((x) => {
+    if (x.titleId !== opts.titleId || x.status === "failed") return x;
+    if (opts.season != null) {
+      if (x.season !== opts.season) return x;
+    } else if (x.season != null) {
+      return x;
+    }
+    if (x.status === "available" && mapped !== "available") return x;
+    const status = mapped || x.status;
+    const progress =
+      status === "available"
+        ? 100
+        : typeof apiProg === "number"
+          ? Math.max(0, Math.min(100, Math.round(apiProg)))
+          : x.progress;
+    return { ...x, status, progress, updatedAt: Date.now() };
+  });
+}
+
 /** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
 export function overlayLibraryPresence(
   requests: MediaRequest[],

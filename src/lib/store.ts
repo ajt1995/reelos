@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.2";
-export const SHIPPED_VERSION = "1.2.50.2";
+export const LATEST_VERSION = "1.2.50.3";
+export const SHIPPED_VERSION = "1.2.50.3";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.3: Apply Stage 3 node_modules copy heartbeats. Title-page Requests stay season-honest and never invent 42%. Not 1.2.51 (Tron #52).",
   "1.2.50.2: Requests tell the truth. Library / Seerr available / *arr hasFile ⇒ AVAILABLE, not grabbing. Duplicate same title+season collapses. Not 1.2.51 (Tron #52).",
   "1.2.50.1: TV season grab→symlink→Sonarr import. Skip movie dumps under Sonarr. Match S01.E01 / season packs. Reuse duplicate season requests.",
   "1.2.50: Stacked house Apply (#45–#50). Overlay house compose/configs so #49 seed cannot nest. FUSE rslave ENOTCONN heal + importPending retry. Check then Apply.",
@@ -429,8 +430,8 @@ export const useReelStore = create<ReelState>()(
         const rec: MediaRequest = {
           id: uid("req"),
           titleId,
-          status: fail ? "failed" : cached ? "downloading" : "waiting",
-          progress: fail ? 0 : cached ? 42 : 0,
+          status: fail ? "failed" : "waiting",
+          progress: 0,
           reason: fail ? "No release matches your quality floor" : undefined,
           season,
           createdAt: Date.now(),

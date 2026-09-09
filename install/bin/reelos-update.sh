@@ -21,6 +21,32 @@ step() {
   done
   log "[${bar}] ${label}  ${STEP}/${STEPS}"
 }
+
+# Stage 3 `cp -a node_modules` is silent and can sit minutes on a spinning disk.
+# Heartbeat only — same copy, so Apply does not look wedged in ota.log / phone status.
+copy_node_modules_with_heartbeat() {
+  local src=$1 dest=$2 hb sec bytes
+  (
+    sec=0
+    while sleep 15; do
+      sec=$((sec + 15))
+      bytes=$(du -sb "$dest" 2>/dev/null | awk '{print $1}')
+      if [ -n "$bytes" ]; then
+        log "still copying node_modules (${sec}s, staging ${bytes} bytes)"
+      else
+        log "still copying node_modules (${sec}s)"
+      fi
+    done
+  ) &
+  hb=$!
+  if ! cp -a "$src" "$dest"; then
+    kill "$hb" 2>/dev/null || true
+    wait "$hb" 2>/dev/null || true
+    return 1
+  fi
+  kill "$hb" 2>/dev/null || true
+  wait "$hb" 2>/dev/null || true
+}
 bug_snap() {
   local why=${1:-unknown} f
   mkdir -p "$STATE/bugs"
@@ -375,7 +401,7 @@ if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
     if [ -d "$ROOT/app/node_modules" ]; then
       log "copying node_modules into staging (8080 still up)"
 step "Stage"
-      cp -a "$ROOT/app/node_modules" "$NEXT/app/node_modules"
+      copy_node_modules_with_heartbeat "$ROOT/app/node_modules" "$NEXT/app/node_modules"
       log "package.json unchanged — reused node_modules"
     else
       SKIP_NPM=0
