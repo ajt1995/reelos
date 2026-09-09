@@ -129,7 +129,7 @@ function Heading({ kicker, title, sub }: { kicker?: string; title: string; sub: 
   return (
     <div className="mb-8 rise">
       {kicker ? (
-        <p className="mb-2 font-display text-xs tracking-[0.22em] text-gold uppercase">{kicker}</p>
+        <p className="mb-2 font-display text-xs tracking-[0.22em] text-cyan uppercase">{kicker}</p>
       ) : null}
       <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
         {title}
@@ -160,14 +160,14 @@ function Card({
       className={cn(
         "relative w-full rounded-2xl p-5 text-left transition-[box-shadow,background-color,transform] duration-150 ease-out",
         selected
-          ? "bg-gold/8 shadow-[var(--shadow-gold)]"
+          ? "bg-cyan/8 shadow-[var(--shadow-cyan)]"
           : "bg-card shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
         disabled && "opacity-45",
         className,
       )}
     >
       {selected ? (
-        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-gold text-gold-fg">
+        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-cyan text-background shadow-[var(--shadow-cyan)]">
           <Check className="size-3.5" strokeWidth={3} />
         </span>
       ) : null}
@@ -219,7 +219,7 @@ function StepStorage() {
         {options.map((o) => (
           <Card key={o.id} selected={mode === o.id} onClick={() => patch({ storageMode: o.id })}>
             <div className="flex gap-4 pr-8">
-              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-gold" : "text-muted")} />
+              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-cyan" : "text-muted")} />
               <div>
                 <p className="font-display text-lg font-medium">{o.title}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{o.body}</p>
@@ -352,7 +352,7 @@ function StepSource() {
               <span
                 className={cn(
                   "flex size-10 items-center justify-center rounded-lg font-display text-xs tracking-wide",
-                  answers.source === s.id ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+                  answers.source === s.id ? "bg-cyan text-background" : "bg-card-2 text-muted",
                 )}
               >
                 {s.mark}
@@ -377,7 +377,7 @@ function StepSource() {
                 className={cn(
                   "h-10 rounded-xl capitalize",
                   answers.vpnProvider === v
-                    ? "bg-gold text-gold-fg"
+                    ? "bg-cyan text-background shadow-[var(--shadow-cyan)]"
                     : "bg-card text-muted shadow-[var(--shadow-border)]",
                 )}
               >
