@@ -18,6 +18,7 @@ export function LibraryView() {
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const items = useReelStore((s) => s.shelf);
   const err = useReelStore((s) => s.shelfError);
+  const shelfReady = useReelStore((s) => s.shelfReady);
   const intent = useReelStore((s) => s.answers.intent);
 
   useEffect(() => {
@@ -59,7 +60,10 @@ export function LibraryView() {
         ))}
       </div>
       {shown.length === 0 ? (
-        <p className="mt-12 text-sm text-muted">{err ?? "Nothing in Jellyfin yet. Request a title from Home."}</p>
+        <p className="mt-12 text-sm text-muted">
+          {err ??
+            (shelfReady ? "Nothing in Jellyfin yet. Request a title from Home." : "Loading library…")}
+        </p>
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {shown.map((t) => (
