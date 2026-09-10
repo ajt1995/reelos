@@ -17,7 +17,7 @@ export function Gate({
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
 
-  if (!hydrated) return <Splash />;
+  if (!hydrated) return <Splash warming />;
   if (!provisioned || phase === "wizard") return <Navigate to="/" />;
   if (phase === "building") return <Provision />;
   if (!chrome) return children;
@@ -30,7 +30,7 @@ export function Boot() {
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
 
-  if (!hydrated) return <Splash />;
+  if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;
   if (phase === "building") return <Provision />;
   if (phase === "ready" && !provisioned) return <Provision />;
@@ -41,5 +41,6 @@ export function Boot() {
       </Shell>
     );
   }
+  if (phase === "splash") return <Splash />;
   return <Wizard />;
 }

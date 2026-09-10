@@ -297,6 +297,10 @@ need daemon/reelos-lid.sh HandleLidSwitch
 need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs 'serveLibrary'
 need daemon/reelos-update.sh 'overlay house compose/configs onto staging'
+need daemon/reelos-update.sh "decypharr/cache/"
+need daemon/reelos-update.sh 'not 200 after 15s'
+need scripts/reelos-lookup-plugin.mjs '/api/ready'
+need src/components/splash.tsx 'Local state'
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs 'scheduleBoxProbe'
 need scripts/reelos-request-progress-plugin.mjs 'const recoverNote = maybeRecover'
@@ -500,15 +504,44 @@ if [ -d "$WORK/src/daemon" ]; then
   cp -a "$WORK/src/daemon/." "$NEXT/bin/"
 fi
 chmod 755 "$NEXT/bin/"* 2>/dev/null || true
+# Overlay house compose/configs onto staging. Never walk FUSE dumps
+# (decypharr/cache/dfs) — cp -a of those starved the 4GB box and killed Vite.
+overlay_house_configs() {
+  mkdir -p "$NEXT/compose/configs"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --exclude 'decypharr/cache/' --exclude '**/cache/dfs/' --exclude 'jellyfin/**/cache/' --exclude 'jellyfin/**/transcodes/' --exclude '**/MediaCover/' --exclude '**/logs/' --exclude '*.db-wal' --exclude '*.db-shm' \
+      "$ROOT/compose/configs/" "$NEXT/compose/configs/" \
+      || log "config copy skipped vanished sqlite sidecars"
+    return 0
+  fi
+  log "rsync missing — copy top-level config dirs without cache/dfs"
+  local src dest name child
+  for src in "$ROOT/compose/configs"/*; do
+    [ -e "$src" ] || continue
+    name=$(basename "$src")
+    dest="$NEXT/compose/configs/$name"
+    if [ -d "$src" ]; then
+      mkdir -p "$dest"
+      for child in "$src"/*; do
+        [ -e "$child" ] || continue
+        case "$(basename "$child")" in
+          cache|dfs|logs|MediaCover|transcodes) continue ;;
+        esac
+        cp -a "$child" "$dest/" || log "config copy skipped vanished sqlite sidecars"
+      done
+    else
+      cp -a "$src" "$dest" || log "config copy skipped vanished sqlite sidecars"
+    fi
+  done
+}
+
 if [ -d "$ROOT/compose/configs" ]; then
   mkdir -p "$NEXT/compose/configs"
-  # Overlay: cp -a src dest on an existing dest dir nests as dest/src.
-  # House sqlite + metadata live at $ROOT/compose/configs — copy *contents*
-  # so they stay at $NEXT/compose/configs, not $NEXT/compose/configs/configs.
+  # Overlay: copy *contents* so they stay at $NEXT/compose/configs, not nested.
   # #49 seeds install/compose/configs/jellyfin/config/network.xml; without
   # overlay, mailman `cp -a install/. $NEXT` then this copy would nest the
   # house tree and Jellyfin would lose Network.xml after swap.
-  cp -a "$ROOT/compose/configs/." "$NEXT/compose/configs/" || log "config copy skipped vanished sqlite sidecars"
+  overlay_house_configs
   log "overlay house compose/configs onto staging"
   [ -f "$ROOT/compose/.env" ] && cp -a "$ROOT/compose/.env" "$NEXT/compose/.env"
 fi
@@ -752,8 +785,12 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell
 
 probe_home() {
-  local i code
+  local i code restarted=0
   log "waiting for :8080 — door :80 stays on updating page"
+  # Unit file may have changed on disk (house: daemon-reload needed).
+  # systemctl start is a no-op on a hung/failed unit — restart once at ~15s.
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  start_shell
   # Vite cold-start after npm ci can exceed 45s under disk load. 90s of
   # fast-fail curls; only nudge the unit every 5s so we do not restart storms.
   for i in $(seq 1 90); do
@@ -763,7 +800,12 @@ probe_home() {
       return 0
     fi
     printf '\r[waiting Home] %d/90   ' "$i" >&2
-    if [ "$i" = "1" ] || [ $((i % 5)) -eq 0 ]; then
+    if [ "$restarted" = "0" ] && [ "$i" -ge 15 ]; then
+      log "probe_home :8080 not 200 after 15s — restart hung reelos"
+      timeout 20 systemctl restart reelos >/dev/null 2>&1 || true
+      restarted=1
+      start_shell
+    elif [ "$i" = "1" ] || [ $((i % 5)) -eq 0 ]; then
       start_shell
     fi
     sleep 1

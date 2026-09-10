@@ -156,6 +156,24 @@
   animation-delay: 240ms;
 }
 
+@keyframes reel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.reel-spin-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: reel-spin 2.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reel-spin-ring {
+    animation: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rise,
   .kenburns {

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export function ReelMark({ className }: { className?: string }) {
+export function ReelMark({ className, spinRing = false }: { className?: string; spinRing?: boolean }) {
   return (
     <svg
       viewBox="0 0 64 64"
@@ -25,6 +25,7 @@ export function ReelMark({ className }: { className?: string }) {
         strokeWidth="1.4"
         strokeDasharray="18 80"
         strokeDashoffset="8"
+        className={spinRing ? "reel-spin-ring" : undefined}
       />
       <circle cx="32" cy="32" r="23.5" stroke="currentColor" strokeWidth="3.2" />
       <circle cx="32" cy="32" r="11.2" stroke="currentColor" strokeWidth="2.4" />
@@ -40,13 +41,15 @@ export function ReelMark({ className }: { className?: string }) {
 export function Wordmark({
   className,
   markClassName,
+  spinRing = false,
 }: {
   className?: string;
   markClassName?: string;
+  spinRing?: boolean;
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <ReelMark className={cn("size-8", markClassName)} />
+      <ReelMark className={cn("size-8", markClassName)} spinRing={spinRing} />
       <span className="font-display text-[1.35rem] font-semibold tracking-[0.18em] text-gold">
         ReelOS
       </span>

@@ -533,11 +533,10 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(store, /shelf: s\.shelf/);
   const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");
   assert.match(rootFile, /setHydrated\(\);/);
-  assert.ok(
-    rootFile.indexOf("setHydrated();") < rootFile.indexOf('fetch("/api/box"'),
-    "Splash must not wait on /api/box",
-  );
-  assert.doesNotMatch(store, /if \(get\(\)\.shelf\.length\) return/);
+  assert.match(rootFile, /\/api\/ready\?limit=24/);
+  assert.match(rootFile, /applyReadyPayload/);
+  assert.match(rootFile, /AbortSignal\.timeout\(4000\)/);
+  assert.match(store, /if \(get\(\)\.shelfReady\) return/);
 });
 
 test("cache freshness helper", () => {

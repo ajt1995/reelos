@@ -19,6 +19,7 @@ import {
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
+import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -398,7 +399,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.28"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.29"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -605,7 +606,7 @@ function scheduleBoxProbe(ip) {
     });
 }
 
-async function handleBox(_req, res) {
+function boxSyncSlice() {
   const a = answers();
   const ip = ipv4();
   const now = Date.now();
@@ -621,7 +622,7 @@ async function handleBox(_req, res) {
     dns: null,
     tailnet: null,
   };
-  send(res, 200, {
+  return {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     provisioning: existsSync("/var/lib/reelos/provisioning"),
     provisionError: existsSync("/var/lib/reelos/provision.error")
@@ -635,7 +636,6 @@ async function handleBox(_req, res) {
     frontend: a.frontend || "jellyfin",
     access: a.access || "lan",
     adminName: a.adminName || "reelos",
-    adminPassword: a.adminPassword || "reelos",
     answers: a,
     tailscaleAuth: ts.auth,
     tailscaleInstalled: ts.installed,
@@ -644,6 +644,14 @@ async function handleBox(_req, res) {
     tailscaleDns: ts.dns,
     tailscaleState: ts.state,
     tailnet: ts.tailnet,
+  };
+}
+
+async function handleBox(_req, res) {
+  const slice = boxSyncSlice();
+  send(res, 200, {
+    ...slice,
+    adminPassword: slice.answers.adminPassword || "reelos",
   });
 }
 
@@ -1821,6 +1829,143 @@ async function handleLibrary(req, res) {
   send(res, 200, { titles: result.titles, error: result.error });
 }
 
+let fuseReadersKick = 0;
+function scheduleFuseReaders() {
+  const now = Date.now();
+  if (now - fuseReadersKick < 30_000) return;
+  fuseReadersKick = now;
+  spawn(
+    "bash",
+    [
+      "-lc",
+      'docker start decypharr reelos-jellyfin-1 reelos-radarr-1 reelos-sonarr-1 >/dev/null 2>&1 || true; for c in $(docker ps -aq --filter "label=com.docker.compose.project=reelos" 2>/dev/null); do docker start "$c" >/dev/null 2>&1 || true; done',
+    ],
+    { detached: true, stdio: "ignore" },
+  ).unref();
+}
+
+function publicAnswers(a) {
+  const out = { ...(a || {}) };
+  delete out.adminPassword;
+  return out;
+}
+
+function withBudget(promise, ms, fallback) {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+async function handleReady(req, res) {
+  const started = Date.now();
+  scheduleFuseReaders();
+  const host =
+    String(req.headers.host || "")
+      .split(":")[0]
+      .replace(/[^a-zA-Z0-9.-]/g, "") ||
+    ipv4() ||
+    "127.0.0.1";
+  const u = new URL(req.url || "/api/ready", "http://reelos.local");
+  const limitRaw = Number(u.searchParams.get("limit") || 24);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 80) : 24;
+  const timings = {};
+  const mark = (name, t0) => {
+    timings[name] = Date.now() - t0;
+  };
+
+  const boxP = (async () => {
+    const t0 = Date.now();
+    const slice = boxSyncSlice();
+    mark("box", t0);
+    return slice;
+  })();
+
+  const updateP = (async () => {
+    const t0 = Date.now();
+    const running = applyIsRunning();
+    const payload = {
+      ok: true,
+      local: localVersion(),
+      running,
+      target: running ? applyTargetFromLog(otaLogText()) : null,
+      log: lastOtaLines(3),
+    };
+    mark("update", t0);
+    return payload;
+  })();
+
+  const libraryP = (async () => {
+    const t0 = Date.now();
+    try {
+      const result = await serveLibrary({
+        url: `/api/library?limit=${encodeURIComponent(String(limit))}`,
+        host,
+        cache: libraryCache,
+        getAuth: async () => {
+          const a = answers();
+          return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+        },
+        fetchItems: async (auth, lim) => {
+          const r = await fetch(libraryItemsUrl({ limit: lim }), {
+            headers: jellyfinAuthedHeaders(auth.token),
+            signal: AbortSignal.timeout(Math.min(JELLYFIN_ITEMS_TIMEOUT_MS, 2500)),
+          });
+          if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
+          return r.json();
+        },
+        refresh: () => refreshLibraryFull(host),
+      });
+      persistLibraryCache();
+      mark("library", t0);
+      return result;
+    } catch (e) {
+      mark("library", t0);
+      return { titles: [], error: String(e) };
+    }
+  })();
+
+  const requestsP = (async () => {
+    const t0 = Date.now();
+    try {
+      const listed = await collectRequestList();
+      mark("requests", t0);
+      return listed;
+    } catch (e) {
+      mark("requests", t0);
+      return { requests: [], titles: [], error: String(e) };
+    }
+  })();
+
+  const [box, update, library, requests] = await Promise.all([
+    withBudget(boxP, 800, null),
+    withBudget(updateP, 800, null),
+    withBudget(libraryP, 2500, { titles: [], error: "timeout" }),
+    withBudget(requestsP, 2500, { requests: [], error: "timeout" }),
+  ]);
+
+  const slice = box || boxSyncSlice();
+  send(res, 200, {
+    provisioned: Boolean(slice.provisioned),
+    answers: publicAnswers(slice.answers),
+    jellyfin: slice.jellyfin,
+    update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
+    titles: Array.isArray(library?.titles) ? library.titles : [],
+    requests: Array.isArray(requests?.requests) ? requests.requests : [],
+    pipeline: requests?.pipeline || null,
+    timings: { ...timings, total: Date.now() - started },
+  });
+}
+
 async function handleDisks(_req, res) {
   const r = spawnSync("lsblk", ["-J", "-o", "NAME,SIZE,TYPE,MOUNTPOINT,MODEL,FSTYPE"], {
     encoding: "utf8",
@@ -2131,6 +2276,7 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
           if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
           if (pathOnly === "/api/box") return void (await handleBox(req, res));
+          if (pathOnly === "/api/ready") return void (await handleReady(req, res));
           if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
           if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));
           if (pathOnly === "/api/tailscale/install") return void (await handleTailscaleInstall(req, res));

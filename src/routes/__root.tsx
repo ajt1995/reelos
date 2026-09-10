@@ -68,24 +68,26 @@ function Runtime({ children }: { children: React.ReactNode }) {
     void Promise.resolve(useReelStore.persist.rehydrate())
       .catch(() => {})
       .then(() => {
-        useReelStore.getState().setHydrated();
-        useReelStore.getState().syncUpdateFromBox();
-        return fetch("/api/box", { cache: "no-store", signal: AbortSignal.timeout(4000) })
+        const s = useReelStore.getState();
+        s.setBootStep("local", "ok");
+        s.setBootStep("house", "running");
+        s.setBootStep("library", "running");
+        s.setBootStep("requests", "running");
+        s.syncUpdateFromBox();
+        return fetch("/api/ready?limit=24", { cache: "no-store", signal: AbortSignal.timeout(4000) })
           .then(async (r) => {
-            const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
-            if (box.provisioned) {
-              const s = useReelStore.getState();
-              if (box.answers && typeof box.answers === "object") {
-                s.patchAnswers(box.answers as Parameters<typeof s.patchAnswers>[0]);
-              }
-              if (!s.provisioned || s.phase === "wizard") s.openReelOS();
-            } else {
-              const s = useReelStore.getState();
-              if (s.provisioned || s.phase !== "wizard") s.factoryReset();
-            }
+            const ready = (await r.json()) as Parameters<typeof s.applyReadyPayload>[0];
+            useReelStore.getState().applyReadyPayload(ready);
           })
           .catch(() => {
-            /* preview / no box */
+            const cur = useReelStore.getState();
+            cur.setBootStep("house", cur.provisioned ? "ok" : "fail");
+            cur.setBootStep("library", cur.shelfReady ? "ok" : "fail");
+            cur.setBootStep("requests", cur.requestsSeeded ? "ok" : "fail");
+            if (cur.provisioned) cur.openReelOS();
+          })
+          .finally(() => {
+            useReelStore.getState().setHydrated();
           });
       });
   }, []);

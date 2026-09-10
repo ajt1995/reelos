@@ -21,6 +21,7 @@ import type {
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
+import { mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -57,11 +58,37 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.28";
-export const SHIPPED_VERSION = "1.2.50.28";
+export const LATEST_VERSION = "1.2.50.29";
+export const SHIPPED_VERSION = "1.2.50.29";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
+export type BootStepId = "local" | "house" | "library" | "requests";
+export type BootStepStatus = "pending" | "running" | "ok" | "fail";
+
+export const BOOT_STEPS: { id: BootStepId; label: string }[] = [
+  { id: "local", label: "Local state" },
+  { id: "house", label: "This house" },
+  { id: "library", label: "Library" },
+  { id: "requests", label: "Requests" },
+];
+
+export function idleBootSteps(): Record<BootStepId, BootStepStatus> {
+  return { local: "pending", house: "pending", library: "pending", requests: "pending" };
+}
+
+export type ReadyPayload = {
+  provisioned?: boolean;
+  answers?: Partial<WizardAnswers>;
+  jellyfin?: unknown;
+  update?: { running?: boolean; local?: string; target?: string | null; log?: string };
+  titles?: Title[];
+  requests?: MediaRequest[];
+  pipeline?: unknown;
+  timings?: Record<string, number>;
+};
+
 export const UPDATE_NOTES = [
+  "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
   "1.2.50.28: Phone Home does not wait on Jellyfin or a Seerr title fan-out. /api/box returns provisioned immediately; Requests lists in one Seerr call. Recover still kicks in the background. Complements #83. Not 1.2.51 (Tron).",
   "1.2.50.27: Heal-red Apply still brings :80/:8080 back before exiting. Restart hung Vite instead of a no-op systemctl start. Still no stamp on indexer/import red. Complements #82. Not 1.2.51 (Tron).",
   "1.2.50.26: Low performance mode actually caps the 4GB box: VAAPI when /dev/dri exists (HEVC decode), one ffmpeg thread, throttle + delete transcode segments. Scene previews stay off either way. Complements #82. Not 1.2.51 (Tron).",
@@ -148,7 +175,11 @@ export interface ReelState {
   adapter: AdapterState;
   indexers: IndexerEntry[];
   remoteTitles: Title[];
+  bootSteps: Record<BootStepId, BootStepStatus>;
+  requestsSeeded: boolean;
   setHydrated: () => void;
+  setBootStep: (id: BootStepId, status: BootStepStatus) => void;
+  applyReadyPayload: (ready: ReadyPayload) => void;
   setPhase: (p: Phase) => void;
   setWizardStep: (n: number) => void;
   patchAnswers: (p: Partial<WizardAnswers>) => void;
@@ -403,6 +434,8 @@ const initial = {
   adapter: makeAdapter(defaultAnswers),
   indexers: [] as IndexerEntry[],
   remoteTitles: [] as Title[],
+  bootSteps: idleBootSteps(),
+  requestsSeeded: false,
 };
 
 export const useReelStore = create<ReelState>()(
@@ -410,6 +443,75 @@ export const useReelStore = create<ReelState>()(
     (set, get) => ({
       ...initial,
       setHydrated: () => set({ hydrated: true }),
+      setBootStep: (id, status) => set({ bootSteps: { ...get().bootSteps, [id]: status } }),
+      applyReadyPayload: (ready) => {
+        const provisioned = Boolean(ready?.provisioned);
+        const incoming = ready?.answers && typeof ready.answers === "object" ? ready.answers : null;
+        const titles = Array.isArray(ready?.titles) ? ready.titles : [];
+        const live = Array.isArray(ready?.requests) ? ready.requests : [];
+        if (titles.length) rememberCatalogTitles(titles);
+        set((s) => {
+          const { adminPassword: _omitPassword, ...safeIncoming } = (incoming || {}) as WizardAnswers & {
+            adminPassword?: string;
+          };
+          void _omitPassword;
+          const answers = incoming ? { ...s.answers, ...safeIncoming, adminPassword: s.answers.adminPassword } : s.answers;
+          const shelf = titles.length ? mergeShelf(s.shelf, titles, true) : s.shelf;
+          const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
+            libraryIds: shelf.map((t) => t.id),
+            titles: shelf,
+          });
+          const extra = requests.filter((r) => r.status === "available").map((r) => r.titleId);
+          const library = [...new Set([...shelf.map((t) => t.id), ...s.library, ...extra])];
+          const libraryOk = Array.isArray(ready?.titles);
+          const requestsOk = Array.isArray(ready?.requests);
+          return {
+            answers,
+            shelf,
+            shelfError: libraryOk ? null : s.shelfError,
+            shelfReady: libraryOk || s.shelfReady || Boolean(shelf.length),
+            library,
+            requests,
+            requestsSeeded: requestsOk || s.requestsSeeded,
+            bootSteps: {
+              ...s.bootSteps,
+              local: "ok" as const,
+              house: provisioned ? ("ok" as const) : ("fail" as const),
+              library: libraryOk ? ("ok" as const) : ("fail" as const),
+              requests: requestsOk ? ("ok" as const) : ("fail" as const),
+            },
+          };
+        });
+        const s = get();
+        if (provisioned) {
+          if (!s.provisioned || s.phase === "wizard" || s.phase === "splash") s.openReelOS();
+        } else if (s.provisioned || s.phase !== "wizard") {
+          s.factoryReset();
+        }
+        const st = ready?.update;
+        if (st) {
+          const cur = get();
+          const last = (st.log || "").trim().split("\n").pop() || "";
+          if (st.running) {
+            const steps = (cur.update.steps?.length ? cur.update.steps : updatePlan()).map((x) => ({ ...x }));
+            if (steps[0]) {
+              steps[0].status = "running";
+              steps[0].label = "Configuring this house";
+              steps[0].log = last.slice(0, 160);
+            }
+            set({
+              update: {
+                ...cur.update,
+                status: "applying",
+                current: st.local || cur.update.current,
+                target: st.target || cur.update.target,
+                steps,
+                notes: [],
+              },
+            });
+          }
+        }
+      },
       setPhase: (phase) => set({ phase }),
       setWizardStep: (wizardStep) => set({ wizardStep }),
       patchAnswers: (p) => set({ answers: { ...get().answers, ...p } }),
@@ -754,6 +856,7 @@ export const useReelStore = create<ReelState>()(
         set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
       },
       hydrateShelf: (opts) => {
+        if (get().shelfReady) return;
         const limit = opts?.limit;
         const key = limit ? `n${limit}` : "all";
         if (shelfFetches.has(key)) return;

@@ -1,6 +1,7 @@
-export const LATEST_VERSION = "1.2.50.28";
-export const SHIPPED_VERSION = "1.2.50.28";
+export const LATEST_VERSION = "1.2.50.29";
+export const SHIPPED_VERSION = "1.2.50.29";
 export const UPDATE_NOTES = [
+  "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
   "1.2.50.28: Phone Home does not wait on Jellyfin or a Seerr title fan-out. /api/box returns provisioned immediately; Requests lists in one Seerr call. Recover still kicks in the background. Complements #83. Not 1.2.51 (Tron).",
   "1.2.50.27: Heal-red Apply still brings :80/:8080 back before exiting. Restart hung Vite instead of a no-op systemctl start. Still no stamp on indexer/import red. Complements #82. Not 1.2.51 (Tron).",
   "1.2.50.26: Low performance mode actually caps the 4GB box: VAAPI when /dev/dri exists (HEVC decode), one ffmpeg thread, throttle + delete transcode segments. Scene previews stay off either way. Complements #82. Not 1.2.51 (Tron).",
