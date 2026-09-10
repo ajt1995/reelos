@@ -22,10 +22,18 @@ step() {
   log "[${bar}] ${label}  ${STEP}/${STEPS}"
 }
 
-# Stage 3 `cp -a node_modules` is silent and can sit minutes on a spinning disk.
-# Heartbeat only — same copy, so Apply does not look wedged in ota.log / phone status.
+# node_modules is identical here (package.json/lock unchanged), so hardlink it
+# into staging instead of deep-copying ~300MB. Near-instant, ~no IO/RAM — the old
+# `cp -a` "sat minutes" and starved a low-power box mid-Apply. Safe: after the
+# swap the old tree moves to .prev and a later `rm -rf .prev` drops one hardlink;
+# the inodes stay alive under the live tree. Falls back to a heartbeat deep copy
+# when hardlinks are not possible (cross-device).
 copy_node_modules_with_heartbeat() {
   local src=$1 dest=$2 hb sec bytes
+  if cp -al "$src" "$dest" 2>/dev/null; then
+    log "hardlinked node_modules into staging (no copy)"
+    return 0
+  fi
   (
     sec=0
     while sleep 15; do
@@ -967,7 +975,14 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   fi
 fi
 if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
-  REELOS_OTA=1 python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
+  # Run the heavy wire (import loops, 1080 companion sweep, recycle) at the
+  # lowest CPU + idle IO priority so it yields to Vite/the app on a low-power
+  # box. Same work, just deprioritized — children inherit the nice/ionice level,
+  # so the app stays responsive and the door probe does not time out mid-Apply.
+  NICE=""
+  command -v nice >/dev/null 2>&1 && NICE="nice -n 19"
+  command -v ionice >/dev/null 2>&1 && NICE="$NICE ionice -c 3"
+  REELOS_OTA=1 $NICE python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
 fi
 
 indexer_canary() {

@@ -303,6 +303,20 @@ def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: s
             log_wire(f"{name} indexer enable {e}")
             return False
 
+    # A just-(re)created arr answers /indexer with an error for 10-30s (longer on
+    # a loaded low-power box). The short attach loop below then reads zero rows
+    # and wrongly logs "no enabled indexer" heal red even though the indexers are
+    # persisted on the config volume. Wait for the API to come up first so the
+    # check judges a ready arr, not a starting one.
+    for _ in range(45):
+        try:
+            status = call(f"{origin}/system/status", arr_key)
+            if isinstance(status, dict) and status.get("version"):
+                break
+        except NET_ERR:
+            pass
+        time.sleep(2)
+
     arr_rows: list = []
     for attempt in range(5):
         arr_rows = read_arr_rows()
