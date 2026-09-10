@@ -1,49 +1,51 @@
 # STATUS.md
 
-***1.2.50.22 is the ship.*** 2026-09-10. One Apply from house **1.2.50.21** / #73. Fixes the hybrid 1080+4K path so a title lands both resolutions in one Jellyfin tile. Does not take Tron (#52 / #70).
+***1.2.50.23 is the ship.*** 2026-09-10. House already stamped **1.2.50.22**. This Apply is honesty: the phone tells the truth during CLI Apply, Settings does not 500, `/api/box` does not call Jellyfin red when VirtualFolders is slow. Does not take Tron (#52 / #70).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.22`
-- **Base:** `main` at 1.2.50.21 (#73)
-- **PR:** https://github.com/ajt1995/reelos/pull/79
+- **VERSION / channel:** `1.2.50.23`
+- **Base:** `main` at 1.2.50.22 (#79 / #80 / #81)
 - Did **not** take Tron chrome from #52 / #70
 
-## Changelog (everything in this Apply)
+## Changelog
 
-Each fix was root-caused on the live house box and proven on a faithful cloud replica of it (its real Radarr/Sonarr/Prowlarr DBs + the same TorBox mount).
+Proven against the live house on Tailscale (`100.100.154.16`). Doctor hops were already green on 1.2.50.22. The phone still lied.
 
-### Hybrid recycle keeps the 1080 (Radarr no longer 400s)
+### Phone shows Applying while mailman is still in hops
 
-OTA runs `wire-engines` as root, so `/mnt/symlinks/.reel-recycle` was created root-owned and Radarr's `FolderWritableValidator` rejected the `config/mediamanagement` PUT with `400 "not writable by user 'abc'"` — every Apply logged `radarr hybrid recycle put HTTP Error 400`, the recycle bin was never set, and a 4K upgrade deleted the 1080. The bin is now `chmod 0775` + `chown 1000:1000` after mkdir, so the PUT lands and the 1080 is recycled.
+`/api/update/status` only asked `systemctl is-active reelos-ota`. SSH `curl | bash -s apply` is not that unit, so `running` was false while hops/heal still ran. Home looked finished. Status now uses the **held** `ota.lock` flock (a leftover lock file is not running). Never delete `ota.lock`. Gold bar on every page. Caddy door no longer promises “a minute.”
 
-### Apply removes leftover `dns:1.1.1.1` before recreate
+### `/api/box` no longer invents missing Movies/Shows
 
-`docker compose up -d` cannot replace the fixed-name `seerr` / `decypharr` containers, so it failed with `container name "/seerr" is already in use` → `compose up skipped`, and the stale `HostConfig.Dns=1.1.1.1` survived every Apply. Apply now `docker rm -f` the containers still carrying `dns 1.1.1.1` before the recreate, so compose brings them back fresh.
+Jellyfin VirtualFolders on this HP often takes longer than 2.5s. The box probe aborted, treated `[]` as “no libraries,” and painted Jellyfin red while Doctor and `/api/library` were green. The probe now waits 8s, retries with `?api_key=`, and says **Cannot read virtual folders** when the read fails — **Missing library** only when the read succeeded and the folder is actually absent.
 
-### Sonarr manualimport no longer times out
+### Settings auto-update no longer 500s
 
-One `manualimport` call on the whole `/symlinks/sonarr` tree made Sonarr probe every episode over the FUSE debrid mount and blow past the 120s client timeout, so TV dumps never imported. It now scans each dump subfolder on its own (bounded) and drops the duplicate `/symlinks` vs `/mnt/symlinks` alias.
+Toggling daily Apply wrote `/etc/systemd/system/reelos-autoupdate.service` as the Vite user and threw `EACCES`. Settings JSON is written first; the systemd unit is best-effort (`sudo -n tee`). The toggle persists even when the unit cannot be installed.
 
-### 1080 companion actually grabs for 4K-only titles
+### Shelf titles do not double the year
 
-Radarr's interactive `/release` search (live Prowlarr→indexer aggregation, 30–60s) was capped at 25s → `radarr hybrid 1080 <title> TimeoutError timed out`, and the `--hybrid-1080` sweep was killed at 90s, so a 4K-only title never got a 1080. The `/release` search now gets 90s and the sweep 300s.
+Unmatched Jellyfin movies keep the folder name `John Wick (2014)` plus `ProductionYear` 2014. The shelf now strips a trailing `(Year)` that matches the year field.
+
+### Caddy :80 stays reachable after Apply
+
+Apply now `ufw allow` 80/8080/8096 when Caddy is restored, so the Tailscale door is not a black hole after a firewall reload.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-python3 daemon/stuck-downloads.py --self-test
-python3 daemon/sonarr_manual_import.py --self-test
-node --test scripts/stack-smoke.test.mjs scripts/sonarr-manual-import.test.mjs
+node --test scripts/reelos-ota-status.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-library.test.mjs scripts/jellyfin-seed.test.mjs
+python3 daemon/reelos-doctor.py --self-test
 ```
 
 ## Owner / house Apply
 
-1. Merge #79 to **main**. Phone Check→Apply **once**, or CLI mailman from `main`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.22`.
-3. A requested hybrid title lands `Title (Year) - 1080p` + `Title (Year) - 2160p` in one folder → one Jellyfin tile with a version picker.
-4. No container carries `HostConfig.Dns=1.1.1.1` after Apply.
+1. Merge this to **main**. Phone **Check → Apply once**, or CLI mailman from `main`.
+2. `cat /opt/reelos/VERSION` → `1.2.50.23`.
+3. Next Apply (phone or CLI) shows the gold bar until mailman prints `ReelOS 1.2.50.23 applied.`
+4. Settings → Updates daily toggle does not error. Home / Settings do not say Movies/Shows are missing while the library shelf has titles.
 
 ## Do not
 

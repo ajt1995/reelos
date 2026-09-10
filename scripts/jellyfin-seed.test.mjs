@@ -680,6 +680,8 @@ test("/api/box requires Movies/Shows unless intent turns them off", () => {
   assert.match(chunk, /intent\.movies !== false/);
   assert.match(chunk, /intent\.tv !== false/);
   assert.match(chunk, /no matching user\/PIN/);
+  assert.match(chunk, /Cannot read virtual folders/);
+  assert.match(chunk, /readJellyfinVirtualFolders/);
 });
 
 test("soft-reset re-seeds jellyfin network.xml", () => {

@@ -8,6 +8,7 @@ import {
   Search,
   Settings,
 } from "lucide-react";
+import { ApplyingBar } from "@/components/applying-bar";
 import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
@@ -29,7 +30,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const transferring = useReelStore((s) => s.requests.filter(isInFlightRequest).length);
 
   return (
-    <div className="min-h-dvh bg-background md:flex">
+    <div className="min-h-dvh bg-background">
+      <ApplyingBar />
+      <div className="md:flex">
       <aside className="hidden w-[220px] shrink-0 flex-col border-r border-border md:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <ReelMark className="size-7" />
@@ -112,6 +115,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 
+      </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 flex border-t border-border bg-background/90 backdrop-blur-md md:hidden">
         {NAV.filter((n) => n.to !== "/activity").map((n) => {
           const on = n.to === "/" ? path === "/" : path.startsWith(n.to);

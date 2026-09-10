@@ -69,6 +69,7 @@ function Runtime({ children }: { children: React.ReactNode }) {
       .catch(() => {})
       .then(() => {
         useReelStore.getState().setHydrated();
+        useReelStore.getState().syncUpdateFromBox();
         return fetch("/api/box", { cache: "no-store" })
           .then(async (r) => {
             const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
@@ -93,6 +94,13 @@ function Runtime({ children }: { children: React.ReactNode }) {
     const id = window.setInterval(() => {
       useReelStore.getState().tick();
     }, 480);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      useReelStore.getState().syncUpdateFromBox();
+    }, 2500);
     return () => window.clearInterval(id);
   }, []);
 

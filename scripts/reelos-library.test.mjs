@@ -18,6 +18,7 @@ import {
   parseLibraryLimit,
   serveLibrary,
   shelfTitleKey,
+  stripMatchingYear,
   stripSeasonFolderSuffix,
   titleYear,
   yearsCompatible,
@@ -64,6 +65,22 @@ test("mapJellyfinItem drops Overview and keeps real ids", () => {
   assert.equal(t.overview, "");
   assert.equal(t.jellyfinId, "jf-1");
   assert.equal(t.poster, "/api/jf/Items/jf-1/Images/Primary?maxWidth=240&quality=70");
+});
+
+test("mapJellyfinItem strips a trailing (Year) that matches ProductionYear", () => {
+  assert.equal(stripMatchingYear("John Wick (2014)", 2014), "John Wick");
+  assert.equal(stripMatchingYear("Night at the Museum (2006)", 2006), "Night at the Museum");
+  assert.equal(stripMatchingYear("Interstellar", 2014), "Interstellar");
+  assert.equal(stripMatchingYear("Dune (1984)", 2021), "Dune (1984)");
+  const t = titleFrom({
+    Id: "jf-wick",
+    Name: "John Wick (2014)",
+    Type: "Movie",
+    ProductionYear: 2014,
+    ProviderIds: { Tmdb: "245891" },
+  });
+  assert.equal(t.title, "John Wick");
+  assert.equal(t.year, 2014);
 });
 
 test("Home shelf collapses duplicate Interstellar / Expanse / Museum rows", () => {
