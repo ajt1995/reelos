@@ -43,10 +43,13 @@ def answers() -> dict:
 
 def source() -> str:
     env = COMPOSE / ".env"
-    if env.exists():
-        for line in env.read_text().splitlines():
-            if line.startswith("SOURCE="):
-                return line.split("=", 1)[1].strip()
+    try:
+        if env.exists():
+            for line in env.read_text().splitlines():
+                if line.startswith("SOURCE="):
+                    return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
     return answers().get("source") or "real-debrid"
 
 
@@ -105,12 +108,15 @@ def wait_key(xml: Path, seconds: int = 90) -> str | None:
 def compose_env() -> dict:
     env = os.environ.copy()
     p = COMPOSE / ".env"
-    if p.exists():
-        for line in p.read_text().splitlines():
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            env.setdefault(k.strip(), v.strip())
+    try:
+        if p.exists():
+            for line in p.read_text().splitlines():
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, _, v = line.partition("=")
+                env.setdefault(k.strip(), v.strip())
+    except OSError:
+        pass
     return env
 
 
