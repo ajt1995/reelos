@@ -9,11 +9,11 @@ The project rules for ReelOS. Owner: **Austin**. This file is the single source 
 
 ## Done means a movie plays
 
-A title is requested in ReelOS and it **plays in Jellyfin on the TV** (`:8096`, original quality). Not "looks nicer." Not "a version exists." Not "Home returned 200 once."
+A title is requested in ReelOS and it **plays in Jellyfin on the TV** (`:8096`, original quality). Not "looks nicer." Not "a version exists." Not "Home returned 200 once." Home `200` is not success on its own — the Apply canary is what proves a stamp landed.
 
 ## VERSION discipline
 
-- Docs and mailbox files (this file, `STATUS.md`, `ROADMAP.md`, `DEV.md`, `OTA.md`, `FACELIFT.md`) never get a `VERSION` bump.
+- Docs and mailbox files (this file, `STATUS.md`, `ROADMAP.md`, `FACELIFT.md`) never get a `VERSION` bump.
 - Do not cut a patch because a hypothesis changed.
 - If Apply / the canary refuses `applied.`, do **not** stamp `VERSION` on the box. A `heal_red` blocks the stamp — that is honest, not a bug to paper over.
 
@@ -30,9 +30,15 @@ The updater (`daemon/reelos-update.sh`, a.k.a. the mailman) is the only pipe ont
 - Keep the updater **frozen across feature PRs**. A feature may *run* compose, but it must not add new canary sentences, new Python, or a new fetch URL in the same stamp.
 - **One Apply.** Flock; a second Apply is refused, not queued on a dead Caddy. The owner is not the debugger — never hand them "run these three curls."
 - Prefer the GitHub API. The tarball version wins over a stale CDN `channel.json`. Re-exec from the tarball **before** the version compare.
-- Stamp last: stage `.next` while `:8080` still serves → FUSE/mounts → Caddy **systemd unit** serving `:80` → `ensure_door` → print `applied.` once → then write `VERSION` / `applied-sha`.
+- Stamp last: stage `.next` while `:8080` still serves → FUSE/mounts (do not bind-mount `/mnt` over Decypharr) → Caddy **systemd unit** serving `:80` → `ensure_door` → print `applied.` once → then write `VERSION` / `applied-sha`.
+- Phone Apply (`reelos-ota.service`) and SSH Apply run the **same** script. No divergent fetch path.
 - Canaries: missing **files** abort; copy-string / Doctor sentences only **warn**.
 - Doctor green means the **service**, not the file.
+
+## Logs and debugging
+
+- Agents cannot SSH into the box. The owner is not the debugger — do not invent curls they must type unless Apply itself is dead.
+- Read `STATUS.md` and the latest `reelos-house.txt` (Logs dump), fix the hop that is actually red, and ship one stamp at a time.
 
 ## Never
 
@@ -47,7 +53,7 @@ The updater (`daemon/reelos-update.sh`, a.k.a. the mailman) is the only pipe ont
 ## Status and handoff
 
 - `STATUS.md` is the current ship state — what is on the tree and what is on the box. Keep it truthful; an agent updates it but never invents a stamp.
-- `DEV.md` is product law (what "done" means). `OTA.md` covers the updater in depth. `ROADMAP.md` is the work queue. `FACELIFT.md` is the parked design system.
+- `ROADMAP.md` is the work queue. `FACELIFT.md` is the parked design system.
 
 ## Cutting a disc
 

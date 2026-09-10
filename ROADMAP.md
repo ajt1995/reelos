@@ -1,6 +1,6 @@
 # ROADMAP.md
 
-Lock: **1.2.39**. Rules: [`RULES.md`](RULES.md) [`DEV.md`](DEV.md).
+Lock: **1.2.39**. Rules: [`RULES.md`](RULES.md).
 
 ## In the 1.2.39 tree (closed)
 

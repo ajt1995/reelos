@@ -53,7 +53,7 @@ Daily timer (`reelos-autoupdate.service`) runs `/opt/reelos/bin/reelos-update.sh
 ## Other foot-guns (in scope, not in the house list)
 
 - **Stamp is last, on purpose.** `VERSION` / `applied-sha` are written only after hops/door. A live new tree with an old SHA is an uncommitted Apply. Check cannot see “tree is HEAD.”
-- **Tarball is `main.tar.gz`.** Channel version is a label. SHA drift is the real “is there code to apply?” signal (`OTA.md` #27).
+- **Tarball is `main.tar.gz`.** Channel version is a label. SHA drift is the real “is there code to apply?” signal (`RULES.md` → OTA; #27).
 - **`HEAD_SHA` is fetched at start**, not from the tarball commit. A race if `main` moves during download is possible; not fixed here (need tarball SHA).
 - **Phone Apply always fetches mailman from `main`.** House does not get these fixes until this PR is on `main`. Then the next Check→Apply downloads the new mailman *before* the tarball.
 - **`reelos.service` `TimeoutStartSec=90`** is Type=simple (process start, not port bind). Not the 45s probe bug.
