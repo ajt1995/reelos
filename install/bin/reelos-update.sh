@@ -272,7 +272,11 @@ need() {
   fi
   log "canary warn $f ~ $pat (copy drift, not fatal)"
 }
+need src/routes/__root.tsx 'setHydrated();'
 need src/components/home-view.tsx '/api/lookup'
+need scripts/reelos-lookup-plugin.mjs '/api/jf/Items/'
+need scripts/reelos-lookup-plugin.mjs 'handleJellyfinImage'
+need scripts/reelos-library.mjs '/api/jf/Items/'
 need src/components/title-view-live.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Get Tailscale login'
@@ -288,6 +292,15 @@ need daemon/reelos-update.sh 'overlay house compose/configs onto staging'
 need scripts/reelos-lookup-plugin.mjs '/api/request'
 need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
 need scripts/reelos-lookup-plugin.mjs '/api/activity'
+need scripts/reelos-lookup-plugin.mjs '/api/doctor'
+need scripts/reelos-lookup-plugin.mjs '/api/repair'
+need scripts/reelos-repair.mjs 'Unknown repair'
+need src/components/settings-fix.tsx '/api/repair'
+need src/components/settings-fix.tsx 'Never writes to /media'
+need src/components/settings-fix.tsx 'Not checked yet'
+need src/components/settings-fix.tsx 'Finished. Check Movies'
+need src/components/settings-view.tsx 'FixSection'
+need src/lib/repairs.ts 'One poster per movie'
 need scripts/reelos-lookup-plugin.mjs '/api/intent'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
@@ -308,6 +321,7 @@ need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'ROOT.prev/docker-compose.yml'
 need daemon/reelos-update.sh 'compose recreated — remount FUSE before hops'
+need daemon/reelos-update.sh 'HostConfig.Dns=1.1.1.1 — recreate'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
@@ -341,6 +355,18 @@ need daemon/wire-engines.parts/08.part 'collapse_season_named_dumps'
 need daemon/wire-engines.parts/08.part 'collapse_movie_named_dumps'
 need daemon/wire-engines.parts/08.part 'heal_movie_dump_items'
 need daemon/wire-engines.parts/08.part 'heal_merge_movie_versions'
+need daemon/wire-engines.parts/08.part 'heal_merge_movie_posters'
+need daemon/wire-engines.parts/08.part 'label_jellyfin_movie_versions'
+need daemon/wire-engines.parts/08.part 'park_extra_movie_files'
+need daemon/wire-engines.parts/08.part 'restore_hybrid_movie_versions'
+need daemon/wire-engines.parts/09.part 'ensure_hybrid_recycle_bin'
+need daemon/stuck-downloads.py 'search_hybrid_cutoff_movies'
+need daemon/stuck-downloads.py 'grab_hybrid_1080_companions'
+need daemon/stuck-downloads.py '.reel-recycle'
+need daemon/wire-engines.parts/08.part 'heal_hybrid_1080_companions'
+need daemon/wire-engines.parts/09.part 'merge-movies'
+need daemon/wire-engines.parts/00.part 'except OSError'
+need daemon/lock-download-clients.py 'merge-movies'
 need daemon/wire-engines.parts/08.part 'jellyfin keep extra library'
 need scripts/reelos-library.mjs 'dedupeLibraryTitles'
 need scripts/reelos-library.mjs 'titleYear'
@@ -900,6 +926,19 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
       cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
       log "compose yml from tarball"
     fi
+  fi
+  # Yml can already lack dns: while *arr still have HostConfig.Dns=1.1.1.1 from
+  # the 1.2.50.13 create (house radarr/sonarr/prowlarr/decypharr, Sept 8–9).
+  if [ "$COMPOSE_CHANGED" != "1" ]; then
+    for id in $(docker ps -q 2>/dev/null); do
+      case "$(docker inspect -f '{{json .HostConfig.Dns}}' "$id" 2>/dev/null || true)" in
+        *1.1.1.1*)
+          COMPOSE_CHANGED=1
+          log "containers still have HostConfig.Dns=1.1.1.1 — recreate"
+          break
+          ;;
+      esac
+    done
   fi
   if [ "$COMPOSE_CHANGED" = "1" ]; then
     (cd "$ROOT/compose" && docker compose \

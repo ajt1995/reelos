@@ -57,6 +57,15 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /movie_dump_keys/);
     assert.match(code, /heal_movie_dump_items/);
     assert.match(code, /heal_merge_movie_versions/);
+    assert.match(code, /heal_merge_movie_posters/);
+    assert.match(code, /label_jellyfin_movie_versions/);
+    assert.match(code, /park_extra_movie_files/);
+    assert.match(code, /movie_files_same_resolution/);
+    assert.match(code, /heal_hybrid_1080_companions/);
+    assert.match(code, /restore_hybrid_movie_versions/);
+    assert.match(code, /ensure_hybrid_recycle_bin/);
+    assert.match(code, /movie_dump_merge_key/);
+    assert.match(code, /merge-movies/);
     assert.match(code, /Videos\/MergeVersions/);
     assert.match(code, /plan_movie_dump_item/);
     assert.match(code, /heal_season_folder_items/);
@@ -387,6 +396,87 @@ assert (radarr / "Dune (2021)" / "yts-partone.mkv").is_file()
 assert not (radarr / "Dune Part One (2021) [2160p]").exists()
 assert (radarr / "Dune Part Two (2024)" / "two.mkv").is_file()
 assert (radarr / "Dune (1984)").is_dir()
+# Hybrid keeps 1080p + 4K as Jellyfin versions, not two posters.
+for p in (radarr / "Interstellar (2014)").glob("*.mkv"):
+    p.write_bytes(p.name.encode())
+(radarr / "Interstellar (2014)" / "yts.1080p.mkv").write_bytes(b"y" * 50)
+(radarr / "Interstellar (2014)" / "remux.2160p.mkv").write_bytes(b"R" * 200)
+assert g["movie_version_label"]("yts.1080p.mkv") == "1080p"
+assert g["movie_version_label"]("remux.2160p.mkv") == "2160p remux"
+g["park_extra_movie_files"](str(radarr), allow=[str(radarr)])
+assert (radarr / "Interstellar (2014)" / "yts.1080p.mkv").is_file()
+assert (radarr / "Interstellar (2014)" / "remux.2160p.mkv").is_file()
+nlab = g["label_jellyfin_movie_versions"](str(radarr), allow=[str(radarr)])
+assert nlab >= 2, nlab
+names = sorted(p.name for p in (radarr / "Interstellar (2014)").glob("*.mkv"))
+assert "Interstellar (2014) - 1080p.mkv" in names
+assert "Interstellar (2014) - 2160p remux.mkv" in names
+# Identical clone (same size) still parks. 1080+4K do not.
+jw = radarr / "John Wick (2014)"
+(jw / "John.Wick.2014.2160p.mkv").write_bytes(b"xx")
+(jw / "John.Wick.2014.2160p[TGx].mkv").write_bytes(b"xx")
+npark = g["park_extra_movie_files"](str(jw.parent), allow=[str(jw.parent)])
+assert npark >= 1, npark
+assert (jw / "John.Wick.2014.2160p.mkv").is_file() or any("2160p" in p.name and "[TGx]" not in p.name for p in jw.glob("*.mkv"))
+assert not (jw / "John.Wick.2014.2160p[TGx].mkv").exists()
+# Extra 4K of a different size parks; 1080 next to 4K does not.
+br = radarr / "Blade Runner (1982)"
+br.mkdir()
+(br / "br.2160p.yts.mkv").write_bytes(b"y" * 50)
+(br / "br.2160p.remux.mkv").write_bytes(b"R" * 200)
+npark4k = g["park_extra_movie_files"](str(radarr), allow=[str(radarr)])
+assert npark4k >= 1, npark4k
+assert (br / "br.2160p.remux.mkv").is_file()
+assert not (br / "br.2160p.yts.mkv").exists()
+assert g["movie_files_same_resolution"](br / "br.2160p.remux.mkv", Path("x.1080p.mkv")) is False
+media_movies = Path(td) / "media" / "movies"
+(media_movies / "Interstellar (2014)" / "a.mkv").write_bytes(b"a")
+(media_movies / "Interstellar (2014)" / "b.mkv").write_bytes(b"bb")
+assert g["park_extra_movie_files"](str(media_movies), allow=[str(media_movies)]) == 0
+assert g["label_jellyfin_movie_versions"](str(media_movies), allow=[str(media_movies)]) == 0
+assert (media_movies / "Interstellar (2014)" / "a.mkv").is_file()
+assert (media_movies / "Interstellar (2014)" / "b.mkv").is_file()
+# Hybrid: recycled 1080 comes back next to the 4K. Second 4K stays in recycle.
+g["answers"] = lambda: {"quality": "hybrid"}
+recycle = Path(td) / ".reel-recycle"
+recycle.mkdir()
+treasure = radarr / "National Treasure (2004)"
+treasure.mkdir()
+(treasure / "National.Treasure.2004.2160p.mkv").write_bytes(b"U" * 200)
+(recycle / "National.Treasure.2004.1080p.BluRay.mkv").write_bytes(b"h" * 40)
+(recycle / "Night.At.The.Museum.2006.2160p.mkv").write_bytes(b"k" * 80)
+museum = radarr / "Night at the Museum (2006)"
+museum.mkdir()
+(museum / "Night.At.The.Museum.2006.2160p.REMUX.mkv").write_bytes(b"K" * 200)
+nrest = g["restore_hybrid_movie_versions"](str(radarr), str(recycle), allow=[str(radarr), str(recycle)])
+assert nrest == 1, nrest
+assert (treasure / "National.Treasure.2004.1080p.BluRay.mkv").is_file()
+assert not (recycle / "National.Treasure.2004.1080p.BluRay.mkv").exists()
+assert (recycle / "Night.At.The.Museum.2006.2160p.mkv").is_file()
+g["answers"] = lambda: {"quality": "4k"}
+(recycle / "National.Treasure.2004.720p.mkv").write_bytes(b"s" * 10)
+assert g["restore_hybrid_movie_versions"](str(radarr), str(recycle), allow=[str(radarr), str(recycle)]) == 0
+assert (recycle / "National.Treasure.2004.720p.mkv").is_file()
+g["answers"] = lambda: {"quality": "hybrid"}
+assert g["restore_hybrid_movie_versions"](str(media_movies), str(recycle), allow=[str(media_movies), str(recycle)]) == 0
+puts = []
+def fake_mm(url, key=None, method="GET", body=None, headers=None):
+    puts.append((method, url, body))
+    if "mediamanagement" in str(url) and method != "PUT":
+        return {"id": 1, "recycleBin": "", "recycleBinCleanupDays": 7}
+    return {}
+g["call"] = fake_mm
+g["answers"] = lambda: {"quality": "hybrid"}
+assert g["ensure_hybrid_recycle_bin"]("k") is True
+assert any(
+    m == "PUT" and b and b.get("recycleBin") == "/mnt/symlinks/.reel-recycle" and b.get("recycleBinCleanupDays") == 0
+    for m, _u, b in puts
+), puts
+puts.clear()
+g["answers"] = lambda: {"quality": "4k"}
+assert g["ensure_hybrid_recycle_bin"]("k") is False
+assert puts == []
+g["answers"] = lambda: {"quality": "hybrid"}
 jf_canon = {
     "Id": "jf-int",
     "Name": "Interstellar",
@@ -445,6 +535,20 @@ assert "MergeVersions" in merged[0][1]
 assert "jf-int-a" in merged[0][1] and "jf-int-b" in merged[0][1]
 assert "jf-int-disk" not in merged[0][1]
 
+# Same TMDB across a leftover dump folder + Title (Year) is still one poster.
+v1t = dict(v1, ProviderIds={"Tmdb": "157336"})
+v2t = dict(v2, ProviderIds={"Tmdb": "157336"})
+v_yts = {
+    "Id": "jf-int-ytsfile",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014) [YTS.MX]/yts.mkv",
+    "ProviderIds": {"Tmdb": "157336"},
+}
+tmdb_groups = g["movie_version_merge_groups"]([v1t, v2t, v_yts, v_media])
+assert len(tmdb_groups) == 1, tmdb_groups
+assert {x["Id"] for x in tmdb_groups[0]} == {"jf-int-a", "jf-int-b", "jf-int-ytsfile"}
+assert g["movie_dump_merge_key"](v_media) == ""
+
 # A leftover library is deleted only once every path it holds is safe to lose.
 CANON = {
     "Name": "Movies",
@@ -501,6 +605,7 @@ print("ok")
   assert.match(hop, /collapse_dumps=False/);
   assert.match(hop, /jellyfin libraries one dump path each/);
   assert.match(hop, /widen_radarr_hybrid/);
+  assert.match(hop, /ensure_hybrid_recycle_bin/);
   const one = read("daemon/wire-engines.parts/01.part");
   assert.ok(one.indexOf("relink_from_debrid") < one.lastIndexOf("heal_after_import"));
   assert.ok(one.indexOf("DownloadedMoviesScan") < one.lastIndexOf("return heal_after_import()"));
@@ -513,6 +618,26 @@ print("ok")
   assert.match(eight, /heal_movie_dump_items/);
   assert.match(eight, /heal_season_folder_items/);
   assert.match(eight, /drop_extra_jellyfin_libraries/);
+  assert.match(eight, /heal_merge_movie_posters/);
+  assert.match(eight, /label_jellyfin_movie_versions/);
+  assert.match(eight, /park_extra_movie_files/);
+  assert.match(eight, /heal_hybrid_1080_companions/);
+  assert.match(eight, /restore_hybrid_movie_versions/);
+  assert.match(eight, /\.reel-parked/);
+  assert.match(eight, /\.reel-recycle/);
+  assert.match(eight, /Merge LAST/);
+  assert.ok(
+    eight.indexOf("jellyfin refresh after post-import heal") < eight.indexOf("Merge LAST"),
+    "merge must run after Library/Refresh so a scan cannot split the poster",
+  );
+  const nine = read("daemon/wire-engines.parts/09.part");
+  assert.match(nine, /merge-movies/);
+  assert.match(nine, /heal_hybrid_1080_companions/);
+  const mergeAt = nine.lastIndexOf('if "merge-movies"');
+  assert.ok(nine.indexOf("ensure_hybrid_recycle_bin()", mergeAt) > mergeAt);
+  const lock = read("daemon/lock-download-clients.py");
+  assert.match(lock, /merge-movies/);
+  assert.match(lock, /MERGE_SEC/);
 });
 
 test("install and daemon wire-engines bodies stay twins", () => {

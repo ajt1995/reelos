@@ -177,6 +177,251 @@ def collapse_movie_named_dumps(root: str = "/mnt/symlinks/radarr", allow=None) -
     return dropped
 
 
+MOVIE_VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".m2ts", ".ts", ".iso"}
+PARKED_MOVIE_VERSIONS = Path("/mnt/symlinks/.reel-parked")
+HYBRID_RECYCLE = Path("/mnt/symlinks/.reel-recycle")
+
+
+def movie_video_files(folder: Path) -> list:
+    out = []
+    try:
+        for x in folder.iterdir():
+            if x.name.startswith("."):
+                continue
+            if x.suffix.lower() in MOVIE_VIDEO_EXT and (x.is_file() or x.is_symlink()):
+                out.append(x)
+    except OSError:
+        return []
+    return out
+
+
+def pick_keeper_movie_file(files: list) -> Path:
+    """Largest file wins. Same size: a [TGx] duplicate is the extra."""
+
+    def key(p: Path):
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        dirty = 1 if re.search(r"\[(?:tgx)\]", p.name, re.I) else 0
+        return (-size, dirty, p.name)
+
+    return sorted(files, key=key)[0]
+
+
+def radarr_dump_root(root: str, allow=None) -> Path | None:
+    """Allowlisted *arr movie dumps only. Never /media."""
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/radarr", "/symlinks/radarr"}
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
+    if resolved not in allowed:
+        return None
+    if "/media/" in resolved or resolved == "/media":
+        return None
+    if not base.is_dir():
+        return None
+    return base
+
+
+def movie_version_label(name: str) -> str:
+    """Jellyfin version tag. Hybrid keeps 1080p and 4K as two labels, not two posters."""
+    n = str(name or "").lower()
+    if re.search(r"2160|\buhd\b|\b4k\b", n):
+        if "remux" in n:
+            return "2160p remux"
+        return "2160p"
+    if "1080" in n:
+        return "1080p"
+    if "720" in n:
+        return "720p"
+    return "other"
+
+
+def movie_files_same_resolution(a: Path, b: Path) -> bool:
+    """Two 4K encodes are extras (keep the largest). 1080p next to 4K is hybrid."""
+    ra = movie_version_label(a.name).split()[0]
+    rb = movie_version_label(b.name).split()[0]
+    if not ra or ra != rb or ra == "other":
+        return False
+    return True
+
+
+def movie_files_are_clones(a: Path, b: Path) -> bool:
+    """Same encode twice (John Wick + [TGx] copy). 1080p next to 4K is not a clone."""
+    if not movie_files_same_resolution(a, b):
+        return False
+    try:
+        sa, sb = a.stat().st_size, b.stat().st_size
+    except OSError:
+        return False
+    if sa <= 0 or sb <= 0:
+        return False
+    if sa == sb:
+        return True
+    return False
+
+
+def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """One file per resolution. Extra 4Ks park; 1080p + 4K stay.
+
+    Never /media. Never delete. Real extras go to /mnt/symlinks/.reel-parked.
+    """
+    base = radarr_dump_root(root, allow)
+    if base is None:
+        return 0
+    parked_root = PARKED_MOVIE_VERSIONS
+    if allow:
+        parked_root = base.parent / ".reel-parked"
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    n = 0
+    for folder in kids:
+        files = movie_video_files(folder)
+        if len(files) < 2:
+            continue
+        keeper = pick_keeper_movie_file(files)
+        dest = parked_root / folder.name
+        for extra in files:
+            if extra == keeper or not movie_files_same_resolution(keeper, extra):
+                continue
+            try:
+                dest.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                log_wire(f"jellyfin park movie versions {folder.name} {e}")
+                break
+            target = dest / extra.name
+            if target.exists():
+                target = dest / f"{extra.stem}.dup{extra.suffix}"
+            try:
+                shutil.move(str(extra), str(target))
+                n += 1
+                log_wire(f"jellyfin park extra movie file {folder.name}/{extra.name}")
+            except OSError as e:
+                log_wire(f"jellyfin park extra movie file {folder.name} {e}")
+    return n
+
+
+def hybrid_recycle_root(root: str, allow=None) -> Path | None:
+    """Allowlisted Radarr recycle only. Never /media."""
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/.reel-recycle", "/symlinks/.reel-recycle"}
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
+    if resolved not in allowed:
+        return None
+    if "/media/" in resolved or resolved == "/media":
+        return None
+    if not base.is_dir():
+        return None
+    return base
+
+
+def folder_version_labels(folder: Path) -> set[str]:
+    return {movie_version_label(p.name).split()[0] for p in movie_video_files(folder)}
+
+
+def restore_hybrid_movie_versions(
+    root: str = "/mnt/symlinks/radarr",
+    recycle: str = "/mnt/symlinks/.reel-recycle",
+    allow=None,
+) -> int:
+    """Put recycled 1080 back next to the 4K Radarr kept. Hybrid only. Never /media.
+
+    Radarr has one movieFile — upgrade moves the old file into recycle. This walks
+    `.reel-recycle` and returns a complementary resolution into Title (Year).
+    Same-resolution extras stay parked; we do not restore a second 4K.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return 0
+    base = radarr_dump_root(root, allow)
+    rec = hybrid_recycle_root(recycle, allow)
+    if base is None or rec is None:
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    canons: dict[str, Path] = {}
+    for p in kids:
+        for key in movie_dump_keys(p.name):
+            canons.setdefault(key, p)
+    try:
+        files = [x for x in rec.rglob("*") if x.is_file() and x.suffix.lower() in MOVIE_VIDEO_EXT]
+    except OSError:
+        return 0
+    n = 0
+    for src in files:
+        keys = movie_dump_keys(src.name) or movie_dump_keys(src.parent.name)
+        dest_folder = None
+        for key in keys:
+            dest_folder = canons.get(key)
+            if dest_folder is not None:
+                break
+        if dest_folder is None:
+            continue
+        res = movie_version_label(src.name).split()[0]
+        if res == "other" or res in folder_version_labels(dest_folder):
+            continue
+        dest = dest_folder / src.name
+        i = 2
+        while dest.exists():
+            dest = dest_folder / f"{src.stem}-{i}{src.suffix}"
+            i += 1
+        try:
+            shutil.move(str(src), str(dest))
+            n += 1
+            log_wire(f"hybrid restore recycled version {dest_folder.name}/{dest.name}")
+        except OSError as e:
+            log_wire(f"hybrid restore recycled version {src.name} {e}")
+    return n
+
+
+def label_jellyfin_movie_versions(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """Rename dump files to Jellyfin's native version names so a scan is one poster.
+
+    Interstellar (2014)/Interstellar (2014) - 1080p.mkv
+    Interstellar (2014)/Interstellar (2014) - 2160p.mkv
+    Prefix must match the folder. Hyphen label is required. Never /media.
+    """
+    base = radarr_dump_root(root, allow)
+    if base is None:
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    n = 0
+    for folder in kids:
+        files = movie_video_files(folder)
+        used = {p.name for p in files}
+        for src in files:
+            if src.name.startswith(folder.name + " - "):
+                continue
+            label = movie_version_label(src.name)
+            cand = label
+            i = 2
+            dest_name = f"{folder.name} - {cand}{src.suffix}"
+            while dest_name in used or (folder / dest_name).exists():
+                cand = f"{label} {i}"
+                dest_name = f"{folder.name} - {cand}{src.suffix}"
+                i += 1
+            dest = folder / dest_name
+            if dest == src:
+                continue
+            try:
+                src.rename(dest)
+                used.discard(src.name)
+                used.add(dest.name)
+                n += 1
+                log_wire(f"jellyfin label movie version {folder.name}/{dest.name}")
+            except OSError as e:
+                log_wire(f"jellyfin label movie version {folder.name} {e}")
+    return n
+
+
 def fetch_jellyfin_series(token: str) -> list:
     q = urllib.parse.urlencode(
         {
@@ -300,18 +545,46 @@ def movie_version_parent(path: str) -> str:
     return ""
 
 
+def movie_dump_merge_key(item: dict) -> str:
+    """Group leftover JF Movie rows that are the same title, never /media.
+
+    Prefer TMDB so a YTS dump folder and the Title (Year) folder become one poster.
+    Same-folder files without ids still merge. Remakes keep the year.
+    """
+    path = str(item.get("Path") or "")
+    if not path or local_disk_path(path) or not dump_view_path(path):
+        return ""
+    pids = item.get("ProviderIds") or {}
+    if not isinstance(pids, dict):
+        pids = {}
+    tmdb = str(pids.get("Tmdb") or pids.get("tmdb") or "").strip()
+    if tmdb:
+        return "tmdb:" + tmdb
+    parent = movie_version_parent(path)
+    if parent:
+        return "dir:" + parent
+    name = str(item.get("Name") or "").strip().lower()
+    try:
+        year = int(item.get("ProductionYear") or 0)
+    except (TypeError, ValueError):
+        year = 0
+    if name and year:
+        return f"title:{name}|{year}"
+    return ""
+
+
 def movie_version_merge_groups(items: list) -> list[list[dict]]:
-    """Two+ Movie rows in the same Title (Year) dump folder are versions, not posters."""
+    """Two+ dump Movie rows for the same title are versions, not posters."""
     groups: dict[str, list[dict]] = {}
     for item in items or []:
         if not isinstance(item, dict):
             continue
-        parent = movie_version_parent(str(item.get("Path") or ""))
-        if not parent:
-            continue
         if not (item.get("Id") or item.get("id")):
             continue
-        groups.setdefault(parent, []).append(item)
+        key = movie_dump_merge_key(item)
+        if not key:
+            continue
+        groups.setdefault(key, []).append(item)
     return [rows for rows in groups.values() if len(rows) >= 2]
 
 
@@ -341,6 +614,54 @@ def heal_merge_movie_versions(token: str, items=None, call_fn=None) -> int:
         except NET_ERR as e:
             log_wire(f"jellyfin merge movie versions {name} {e}")
     return n
+
+
+def jf_merge_wait_sec() -> float:
+    try:
+        return max(0.0, float(os.environ.get("REELOS_JF_MERGE_WAIT_SEC", "5")))
+    except ValueError:
+        return 5.0
+
+
+def heal_merge_movie_posters() -> bool:
+    """Timer path: drop dump Movie rows and MergeVersions. Never Library/Refresh.
+
+    A scan after merge splits one poster back into two. lock-clients re-runs this
+    every minute so Jellyfin Movies stays one Interstellar even after a rescan.
+    """
+    token = jellyfin_token()
+    if not token:
+        log_wire("jellyfin merge movie posters — no token")
+        return True
+    try:
+        restored = int(restore_hybrid_movie_versions() or 0)
+        parked = int(park_extra_movie_files() or 0)
+        labeled = int(label_jellyfin_movie_versions() or 0)
+        if restored:
+            log_wire(f"hybrid restore recycled versions {restored}")
+        if parked:
+            log_wire(f"jellyfin park extra movie files {parked}")
+        if labeled:
+            log_wire(f"jellyfin label movie versions {labeled}")
+        items = fetch_jellyfin_movies(token)
+        heal_movie_dump_items(token, items=items)
+        if restored or parked or labeled:
+            try:
+                call(
+                    "http://127.0.0.1:8096/Library/Refresh",
+                    method="POST",
+                    headers=jellyfin_headers(token),
+                )
+                log_wire("jellyfin refresh after parking extra movie files")
+            except NET_ERR as e:
+                log_wire(f"jellyfin refresh {e}")
+            time.sleep(jf_merge_wait_sec())
+        items = fetch_jellyfin_movies(token)
+        heal_merge_movie_versions(token, items=items)
+    except Exception as e:
+        log_wire(f"jellyfin merge movie posters {e}")
+        return False
+    return True
 
 
 def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
@@ -424,6 +745,9 @@ def heal_after_import() -> bool:
     """
     dropped = collapse_season_named_dumps()
     dropped += collapse_movie_named_dumps()
+    dropped += restore_hybrid_movie_versions()
+    dropped += park_extra_movie_files()
+    dropped += label_jellyfin_movie_versions()
     log_wire("import collapse season-folder dumps before jellyfin refresh")
     log_wire("import collapse movie dumps before jellyfin refresh")
     token = jellyfin_token()
@@ -437,10 +761,6 @@ def heal_after_import() -> bool:
             healed += int(heal_movie_dump_items(token) or 0)
         except Exception as e:
             log_wire(f"jellyfin movie dump item {e}")
-        try:
-            healed += int(heal_merge_movie_versions(token) or 0)
-        except Exception as e:
-            log_wire(f"jellyfin merge movie versions {e}")
     ready = True
     if token:
         want = jellyfin_want_libraries()
@@ -455,25 +775,56 @@ def heal_after_import() -> bool:
                 log_wire("jellyfin refresh after post-import heal")
             except NET_ERR as e:
                 log_wire(f"jellyfin refresh {e}")
-            try:
-                healed += int(heal_merge_movie_versions(token) or 0)
-            except Exception as e:
-                log_wire(f"jellyfin merge movie versions {e}")
+            time.sleep(jf_merge_wait_sec())
+        # Merge LAST. Library/Refresh after MergeVersions splits one poster into two.
+        try:
+            healed += int(heal_merge_movie_versions(token) or 0)
+        except Exception as e:
+            log_wire(f"jellyfin merge movie versions {e}")
     elif dropped:
         log_wire("import collapse season-folder dumps (no jellyfin token)")
     frontend = str((answers() or {}).get("frontend") or "jellyfin")
     if not token and frontend in ("jellyfin", "both"):
         log_wire("jellyfin heal red — no token")
         return False
+    heal_hybrid_1080_companions()
     return ready
+
+
+def heal_hybrid_1080_companions() -> None:
+    """Existing 4K-only titles: grab a 1080 if indexers have one. Hybrid only.
+
+    Radarr MoviesSearch will not search below cutoff. Interactive /release grab will.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return
+    sweep = ROOT / "bin" / "stuck-downloads.py"
+    if not sweep.is_file():
+        here = globals().get("__file__")
+        if here:
+            sweep = Path(here).resolve().with_name("stuck-downloads.py")
+    if not sweep.is_file():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(sweep), "--hybrid-1080"],
+            check=False,
+            timeout=90,
+        )
+        log_wire("hybrid 1080 companion grab")
+    except Exception as e:
+        log_wire(f"hybrid 1080 {e}")
 
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collapse_dumps: bool = True) -> bool:
     dropped = collapse_season_named_dumps() if collapse_dumps else 0
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
+    dropped += restore_hybrid_movie_versions() if collapse_dumps else 0
+    dropped += park_extra_movie_files() if collapse_dumps else 0
+    dropped += label_jellyfin_movie_versions() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
         heal_movie_dump_items(token) if collapse_dumps else 0
-    ) + (heal_merge_movie_versions(token) if collapse_dumps else 0)
+    )
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
@@ -488,6 +839,8 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
                     log_wire("jellyfin refresh after season-folder dump collapse")
                 except NET_ERR as e:
                     log_wire(f"jellyfin refresh {e}")
+                time.sleep(jf_merge_wait_sec())
+            if collapse_dumps:
                 try:
                     heal_merge_movie_versions(token)
                 except Exception as e:
@@ -515,6 +868,11 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
             except NET_ERR as e:
                 log_wire(f"jellyfin library {name} {e}")
         time.sleep(3)
+    if collapse_dumps:
+        try:
+            heal_merge_movie_versions(token)
+        except Exception as e:
+            log_wire(f"jellyfin merge movie versions {e}")
     return libraries_ready(jellyfin_folders(token), want)
 
 

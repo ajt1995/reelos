@@ -63,7 +63,7 @@ test("mapJellyfinItem drops Overview and keeps real ids", () => {
   assert.equal(t.title, "Night Harbor");
   assert.equal(t.overview, "");
   assert.equal(t.jellyfinId, "jf-1");
-  assert.equal(t.poster, "http://10.0.0.5:8096/Items/jf-1/Images/Primary");
+  assert.equal(t.poster, "/api/jf/Items/jf-1/Images/Primary?maxWidth=240&quality=70");
 });
 
 test("Home shelf collapses duplicate Interstellar / Expanse / Museum rows", () => {
@@ -470,12 +470,14 @@ test("mergeShelf limited fetch does not shrink a larger shelf", () => {
   assert.equal(applyLibraryLimit([a, b], 1).length, 1);
 });
 
-test("full request waits on refresh when only a Home slice is cached", async () => {
+test("full request serves a Home slice immediately and refreshes in the background", async () => {
   const cache = createLibraryCache();
   const slice = titleFrom(sampleItem);
   const extra = titleFrom({ ...sampleItem, Id: "jf-2", ProviderIds: { Tmdb: "551" }, Name: "Other" });
   cache.write([slice], { now: 1, complete: false });
   let fetches = 0;
+  let refreshed = 0;
+  const t0 = Date.now();
   const out = await serveLibrary({
     url: "/api/library",
     host: "10.0.0.5",
@@ -487,15 +489,16 @@ test("full request waits on refresh when only a Home slice is cached", async () 
       return { Items: [sampleItem] };
     },
     refresh: async () => {
+      refreshed += 1;
       cache.write([slice, extra], { now: 3, complete: true });
     },
   });
+  const elapsed = Date.now() - t0;
   assert.equal(fetches, 0);
   assert.equal(out.fromCache, true);
-  assert.deepEqual(
-    out.titles.map((t) => t.id),
-    ["tmdb-550", "tmdb-551"],
-  );
+  assert.deepEqual(out.titles.map((t) => t.id), ["tmdb-550"]);
+  assert.equal(refreshed, 1);
+  assert.ok(elapsed < 20, `stale serve took ${elapsed}ms`);
 });
 
 test("plugin and Home wire the lean /api/library path", () => {
@@ -505,9 +508,18 @@ test("plugin and Home wire the lean /api/library path", () => {
   const store = readFileSync(join(root, "src/lib/store.ts"), "utf8");
   assert.match(plugin, /serveLibrary/);
   assert.match(plugin, /libraryItemsUrl/);
+  assert.match(plugin, /handleJellyfinImage/);
+  assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
   assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
+  assert.doesNotMatch(home, /\/api\/box/);
   assert.match(store, /shelf: s\.shelf/);
+  const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");
+  assert.match(rootFile, /setHydrated\(\);/);
+  assert.ok(
+    rootFile.indexOf("setHydrated();") < rootFile.indexOf('fetch("/api/box"'),
+    "Splash must not wait on /api/box",
+  );
   assert.doesNotMatch(store, /if \(get\(\)\.shelf\.length\) return/);
 });
 

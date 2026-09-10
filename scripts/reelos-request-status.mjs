@@ -594,7 +594,7 @@ export function resetPresenceFactsCache() {
 
 export async function loadPresenceFacts({
   now = Date.now(),
-  ttlMs = 5000,
+  ttlMs = 30_000,
   force = false,
   libraryFile = LIBRARY_CACHE_FILE,
   fetchArr = arrJson,
@@ -638,7 +638,7 @@ export async function loadPresenceFacts({
       sonarr: listDirNames("/mnt/symlinks/sonarr"),
       radarr: listDirNames("/mnt/symlinks/radarr"),
     },
-    catalog: listDirNames("/mnt/debrid/__all__"),
+    catalog: [],
   };
   cache = { at: now, facts };
   return facts;

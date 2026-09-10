@@ -30,11 +30,60 @@ import { PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panel
 import { SourcePanel } from "@/components/settings-source";
 import { UpdatesRow } from "@/components/settings-updates";
 import { LogsRow } from "@/components/settings-logs";
-import { Doctor } from "@/components/settings-doctor";
+import { FixSection } from "@/components/settings-fix";
 import { TerminalRow } from "@/components/settings-terminal";
-import { Row } from "@/components/settings-ui";
+import { Row, Section } from "@/components/settings-ui";
 
 export { TerminalRow };
+
+function FactoryResetRow() {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const run = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/reset", { method: "POST" });
+      const j = (await r.json()) as { ok?: boolean; error?: string };
+      if (!j.ok) {
+        setMsg(j.error || "Reset refused");
+        setBusy(false);
+        return;
+      }
+      useReelStore.getState().factoryReset();
+      setMsg("Resetting. Wizard, then Connect.");
+      window.setTimeout(() => window.location.reload(), 4000);
+    } catch (e) {
+      setMsg(String(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <p className="font-display font-medium">Factory reset</p>
+      <p className="mt-1 text-sm text-muted">
+        First-run again. Keeps media on disk. Wipes wizard answers and engine configs. Will not run during an update.
+        Prefer a named Fix above when Movies or Requests are merely weird.
+      </p>
+      {!open ? (
+        <Button className="mt-3" variant="danger" size="sm" onClick={() => setOpen(true)}>
+          Factory reset
+        </Button>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="danger" size="sm" disabled={busy} onClick={() => void run()}>
+            {busy ? "Resetting…" : "Yes, reset"}
+          </Button>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
+      {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
+    </div>
+  );
+}
 
 export function SettingsView() {
   const [lan, setLan] = useState("");
@@ -48,6 +97,7 @@ export function SettingsView() {
   const users = useReelStore((s) => s.users);
   const settings = useReelStore((s) => s.settings);
   const adapter = useReelStore((s) => s.adapter);
+  const hideAdvanced = settings.hideAdvanced;
   const [panel, setPanel] = useState<string | null>(null);
   const profile = adapterProfile(answers.source, answers.frontend);
 
@@ -55,12 +105,14 @@ export function SettingsView() {
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-1.5 max-w-xl text-sm text-muted">
-        House identity, daily knobs, updates. Engines stay under Advanced.
+        House identity, daily knobs, and named Fix scripts when Movies or Requests go weird.
       </p>
 
       <HouseCard />
 
-      <div className="mt-6 grid gap-2.5">
+      <FixSection />
+
+      <Section title="This house" hint="Library, quality, who can request, how you reach the box.">
         <Link
           to="/connect"
           className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
@@ -80,8 +132,6 @@ export function SettingsView() {
         >
           <LibraryPanel />
         </Row>
-        <PwaRow />
-        <PerformanceRow />
         <Row
           icon={KeyRound}
           title="Source"
@@ -128,41 +178,49 @@ export function SettingsView() {
         >
           <NotesPanel />
         </Row>
+      </Section>
+
+      <Section title="Box" hint="Updates, performance, logs. Apply still lives here.">
         <UpdatesRow
           open={panel === "updates"}
           onClick={() => setPanel(panel === "updates" ? null : "updates")}
         />
+        <PerformanceRow />
+        <PwaRow />
         <LogsRow
           open={panel === "logs"}
           onClick={() => setPanel(panel === "logs" ? null : "logs")}
         />
+      </Section>
+
+      <Section title="More" hint="Engines, a shell, and the two nuclear options.">
+        {hideAdvanced ? null : (
+          <Link
+            to="/settings/advanced"
+            className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
+          >
+            <div>
+              <p className="font-display font-medium">Advanced apps</p>
+              <p className="mt-1 text-sm text-muted">Radarr, Sonarr, Jellyfin by their house names. Daily use does not need these.</p>
+            </div>
+            <ChevronRight className="size-4 text-faint" />
+          </Link>
+        )}
         <TerminalRow
           open={panel === "term"}
           onClick={() => setPanel(panel === "term" ? null : "term")}
         />
-      </div>
-
-      <Link
-        to="/settings/advanced"
-        className="mt-4 flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
-      >
-        <div>
-          <p className="font-display font-medium">Advanced apps</p>
-          <p className="mt-1 text-sm text-muted">Engines. You do not need these for daily use.</p>
+        <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+          <p className="font-display font-medium">Repair wizard</p>
+          <p className="mt-1 text-sm text-muted">
+            Walk the setup questions again (source, disks, quality). Does not Apply an update and does not delete /media.
+          </p>
+          <Button className="mt-3" variant="ghost" size="sm" onClick={() => useReelStore.getState().startRepair()}>
+            Start wizard
+          </Button>
         </div>
-        <ChevronRight className="size-4 text-faint" />
-      </Link>
-
-      <Doctor />
-
-      <div className="mt-8 flex flex-wrap gap-3">
-        <Button variant="ghost" onClick={() => useReelStore.getState().startRepair()}>
-          Repair wizard
-        </Button>
-        <Button variant="danger" onClick={() => useReelStore.getState().factoryReset()}>
-          Factory reset
-        </Button>
-      </div>
+        <FactoryResetRow />
+      </Section>
     </div>
   );
 }

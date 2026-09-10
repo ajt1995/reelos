@@ -28,6 +28,9 @@ test("relink_dumps and wire-engines import stay twins and category-only", () => 
   assert.match(updater, /wire-engines\.py" import/);
   assert.match(updater, /need daemon\/relink_dumps\.py 'relink created'/);
   assert.match(updater, /need daemon\/stuck-downloads\.py 'recover_missing_movies'/);
+  assert.match(updater, /need daemon\/stuck-downloads\.py 'search_hybrid_cutoff_movies'/);
+  assert.match(updater, /need daemon\/stuck-downloads\.py 'grab_hybrid_1080_companions'/);
+  assert.match(updater, /need daemon\/wire-engines.parts\/08.part 'restore_hybrid_movie_versions'/);
   assert.match(updater, /need scripts\/reelos-lookup-plugin\.mjs 'kickArrRecover'/);
   assert.match(updater, /need daemon\/public_indexers\.py 'ReelOS-eztv'/);
   assert.match(updater, /need daemon\/reelos-update\.sh 'wire-engines.py" indexers'/);

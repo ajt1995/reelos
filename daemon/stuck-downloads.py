@@ -507,7 +507,7 @@ def api_key(xml_path: Path) -> str | None:
     return node.text.strip()
 
 
-def call(url: str, key: str | None = None, method: str = "GET", body=None, form: str | None = None):
+def call(url: str, key: str | None = None, method: str = "GET", body=None, form: str | None = None, timeout: float = 12):
     data = None
     headers = {}
     if form is not None:
@@ -519,7 +519,7 @@ def call(url: str, key: str | None = None, method: str = "GET", body=None, form:
     if key:
         headers["X-Api-Key"] = key
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
-    with urllib.request.urlopen(req, timeout=12) as resp:
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
         raw = resp.read()
         if not raw:
             return None
@@ -822,8 +822,414 @@ def _should_search_missing(searched: dict, sk: str, now: float) -> bool:
 def clear_missing_search_cooldown(state: dict) -> dict:
     """After EZTV/ShowRSS land, 0-file seasons must search again immediately."""
     searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
-    state["searched"] = {k: v for k, v in searched.items() if not str(k).startswith("missing:")}
+    state["searched"] = {
+        k: v
+        for k, v in searched.items()
+        if not str(k).startswith("missing:")
+        and not str(k).startswith("cutoff:")
+        and not str(k).startswith("companion:")
+    }
     return state
+
+
+def _quality_choice() -> str:
+    p = STATE / "answers.json"
+    try:
+        return str(json.loads(p.read_text()).get("quality") or "hybrid")
+    except (OSError, json.JSONDecodeError, TypeError, AttributeError):
+        return "hybrid"
+
+
+def _file_res_label(name: str) -> str:
+    n = str(name or "").lower()
+    if re.search(r"2160|\buhd\b|\b4k\b", n):
+        return "2160p"
+    if "1080" in n:
+        return "1080p"
+    if "720" in n:
+        return "720p"
+    return "other"
+
+
+def _folder_res_labels(folder: Path) -> set[str]:
+    out: set[str] = set()
+    try:
+        for p in folder.iterdir():
+            if p.name.startswith("."):
+                continue
+            if p.suffix.lower() in MEDIA_EXT and (p.is_file() or p.is_symlink()):
+                out.add(_file_res_label(p.name))
+    except OSError:
+        return set()
+    return out
+
+
+def _years_in(name: str) -> set[str]:
+    return set(re.findall(r"(?:19|20)\d{2}", str(name or "")))
+
+
+def ensure_radarr_hybrid_recycle(app: dict, key: str, quality: str | None = None) -> bool:
+    """Radarr upgrade deletes the 1080. Recycle keeps it for restore. Hybrid only."""
+    if app.get("name") != "radarr":
+        return False
+    if (quality if quality is not None else _quality_choice()) != "hybrid":
+        return False
+    rec = "/mnt/symlinks/.reel-recycle"
+    try:
+        Path(rec).mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    try:
+        cfg = call(f"{app['base']}/config/mediamanagement", key)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        log(f"radarr hybrid recycle {type(e).__name__} {e}")
+        return False
+    if not isinstance(cfg, dict) or not cfg.get("id"):
+        return False
+    if str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/") and int(cfg.get("recycleBinCleanupDays") or -1) == 0:
+        return True
+    body = dict(cfg)
+    body["recycleBin"] = rec
+    body["recycleBinCleanupDays"] = 0
+    try:
+        call(f"{app['base']}/config/mediamanagement/{cfg['id']}", key, method="PUT", body=body)
+        log("radarr hybrid recycle keeps upgraded 1080")
+        return True
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        log(f"radarr hybrid recycle put {type(e).__name__} {e}")
+        return False
+
+
+def search_hybrid_cutoff_movies(app: dict, key: str, state: dict, quality: str | None = None) -> bool:
+    """1080 in, cutoff 2160: MoviesSearch for 4K. Hybrid only. Does not hunt a downgrade."""
+    if app.get("name") != "radarr":
+        return False
+    if (quality if quality is not None else _quality_choice()) != "hybrid":
+        return False
+    ensure_radarr_hybrid_recycle(app, key, quality="hybrid")
+    searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
+    now = time.time()
+    kicked = False
+    try:
+        wanted = call(
+            f"{app['base']}/wanted/cutoff?{urllib.parse.urlencode({'pageSize': 50, 'sortKey': 'title', 'sortDirection': 'ascending'})}",
+            key,
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+        log(f"radarr hybrid cutoff {type(e).__name__} {e}")
+        state["searched"] = searched
+        return False
+    records = wanted.get("records") if isinstance(wanted, dict) else wanted
+    if not isinstance(records, list):
+        state["searched"] = searched
+        return False
+    for rec in records[:20]:
+        if not isinstance(rec, dict) or not rec.get("id"):
+            continue
+        sk = f"cutoff:movie:{rec['id']}"
+        if not _should_search_missing(searched, sk, now):
+            continue
+        title = str(rec.get("title") or rec["id"])
+        try:
+            call(
+                f"{app['base']}/command",
+                key,
+                method="POST",
+                body={"name": "MoviesSearch", "movieIds": [int(rec["id"])]},
+            )
+            log(f"radarr MoviesSearch {title} — hybrid cutoff 4K")
+            searched[sk] = now
+            kicked = True
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"radarr MoviesSearch {title} {type(e).__name__} {e}")
+    state["searched"] = searched
+    return kicked
+
+
+def _symlink_hybrid_companion(dest_folder: Path, src: Path, want_res: str) -> int:
+    n = 0
+    candidates = []
+    try:
+        if src.is_file():
+            candidates = [src]
+        elif src.is_dir():
+            candidates = [
+                p
+                for p in src.iterdir()
+                if p.is_file() and p.suffix.lower() in MEDIA_EXT
+            ]
+    except OSError:
+        return 0
+    for cand in candidates:
+        if _file_res_label(cand.name) != want_res:
+            continue
+        dest = dest_folder / cand.name
+        if dest.exists():
+            continue
+        try:
+            os.symlink(cand, dest)
+            n += 1
+        except OSError:
+            continue
+    return n
+
+
+def relink_hybrid_companions(
+    catalog: dict | None = None,
+    movies_root: str | None = None,
+    quality: str | None = None,
+) -> int:
+    """If 4K is in and FUSE still has 1080, symlink it in. Hybrid only.
+
+    Pass catalog so the sweep does not list /mnt/debrid/__all__ twice.
+    Does not MoviesSearch a downgrade.
+    """
+    if (quality if quality is not None else _quality_choice()) != "hybrid":
+        return 0
+    root = Path(movies_root or "/mnt/symlinks/radarr")
+    resolved = str(root).rstrip("/")
+    if resolved == "/media" or "/media/" in resolved + "/":
+        return 0
+    if not root.is_dir():
+        return 0
+    if catalog is None:
+        catalog = _catalog_paths()
+    if not catalog:
+        return 0
+    mod = _load_relink_mod()
+    n = 0
+    try:
+        folders = [p for p in root.iterdir() if p.is_dir() and not p.name.startswith(".")]
+    except OSError:
+        return 0
+    for folder in folders:
+        if not re.fullmatch(r".+ \(\d{4}\)", folder.name):
+            continue
+        have = _folder_res_labels(folder)
+        want: list[str] = []
+        if "2160p" in have and "1080p" not in have:
+            want.append("1080p")
+        elif "1080p" in have and "2160p" not in have:
+            want.append("2160p")
+        else:
+            continue
+        folder_years = _years_in(folder.name)
+        want_stem = mod.relink_stem(folder.name) if mod else ""
+        for name, src in catalog.items():
+            src_name = getattr(src, "name", name)
+            src_years = _years_in(str(src_name)) | _years_in(str(name))
+            if folder_years and src_years and folder_years.isdisjoint(src_years):
+                continue
+            if mod and want_stem:
+                if not mod.stems_equal(mod.relink_stem(str(src_name)), want_stem):
+                    continue
+            else:
+                continue
+            for res in want:
+                added = _symlink_hybrid_companion(folder, src, res)
+                if added:
+                    n += added
+                    log(f"radarr hybrid companion {folder.name} <- {src_name} ({res})")
+    return n
+
+
+HYBRID_1080_GRAB_CAP = 3
+HYBRID_1080_MIN_BYTES = 200_000_000
+HYBRID_1080_MAX_BYTES = 25_000_000_000
+
+
+def pick_hybrid_1080_release(releases) -> dict | None:
+    """Interactive 1080 only. Never grab another 4K. Skip CAM junk."""
+    cands = []
+    for rel in releases or []:
+        if not isinstance(rel, dict):
+            continue
+        if not rel.get("guid") or rel.get("indexerId") in (None, ""):
+            continue
+        title = str(rel.get("title") or "")
+        q = rel.get("quality") if isinstance(rel.get("quality"), dict) else {}
+        qn = str((q.get("quality") or {}).get("name") or q.get("name") or "")
+        blob = f"{title} {qn}".lower()
+        if re.search(r"2160|\buhd\b|\b4k\b", blob):
+            continue
+        if "1080" not in blob:
+            continue
+        if re.search(r"\bcam\b|hdcam|tsrip|telesync|\bts\b", blob):
+            continue
+        try:
+            size = int(rel.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        if size and (size < HYBRID_1080_MIN_BYTES or size > HYBRID_1080_MAX_BYTES):
+            continue
+        cands.append(rel)
+    if not cands:
+        return None
+
+    def sort_key(r):
+        rejected = 1 if r.get("rejected") or r.get("rejections") else 0
+        try:
+            size = int(r.get("size") or 0)
+        except (TypeError, ValueError):
+            size = 0
+        return (rejected, abs(size - 3_000_000_000) if size else 10_000_000_000)
+
+    return sorted(cands, key=sort_key)[0]
+
+
+def _radarr_movie_folder(m: dict, movies_root: str | None = None) -> Path | None:
+    path = str(m.get("path") or "").replace("\\", "/").rstrip("/")
+    name = path.split("/")[-1] if path else ""
+    if not name or not re.fullmatch(r".+ \(\d{4}\)", name):
+        return None
+    roots = []
+    if movies_root:
+        roots.append(Path(movies_root))
+    else:
+        roots.extend((Path("/mnt/symlinks/radarr"), Path("/symlinks/radarr")))
+    for root in roots:
+        folder = root / name
+        resolved = str(folder).rstrip("/")
+        if resolved == "/media" or "/media/" in resolved + "/":
+            continue
+        if folder.is_dir():
+            return folder
+    return None
+
+
+def _queue_has_res(records: list, movie_id: int, res: str) -> bool:
+    for item in records or []:
+        if not isinstance(item, dict):
+            continue
+        if movie_id_of(item) != movie_id:
+            continue
+        title = str(item.get("title") or "")
+        if _file_res_label(title) == res:
+            return True
+    return False
+
+
+def grab_hybrid_1080_companions(
+    app: dict,
+    key: str,
+    state: dict,
+    quality: str | None = None,
+    *,
+    cap: int = HYBRID_1080_GRAB_CAP,
+    movies=None,
+    queue=None,
+    call_fn=None,
+    movies_root: str | None = None,
+) -> bool:
+    """4K on disk, no 1080: force-grab a 1080. MoviesSearch will not search down."""
+    if app.get("name") != "radarr":
+        return False
+    if (quality if quality is not None else _quality_choice()) != "hybrid":
+        return False
+    do = call_fn or call
+    searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
+    now = time.time()
+    if movies is None:
+        try:
+            movies = do(f"{app['base']}/movie", key) or []
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, TypeError) as e:
+            log(f"radarr hybrid 1080 movies {type(e).__name__} {e}")
+            state["searched"] = searched
+            return False
+    if not isinstance(movies, list):
+        state["searched"] = searched
+        return False
+    if queue is None:
+        queue = queue_records(app, key) if call_fn is None else []
+        if call_fn is not None:
+            try:
+                raw = do(f"{app['base']}/queue", key)
+                if isinstance(raw, dict):
+                    queue = raw.get("records") or []
+                elif isinstance(raw, list):
+                    queue = raw
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, TypeError):
+                queue = []
+    kicked = False
+    grabbed = 0
+    for m in movies:
+        if grabbed >= cap:
+            break
+        if not isinstance(m, dict) or not m.get("id"):
+            continue
+        folder = _radarr_movie_folder(m, movies_root)
+        if folder is None:
+            continue
+        have = _folder_res_labels(folder)
+        if "1080p" in have or "2160p" not in have:
+            continue
+        mid = int(m["id"])
+        if _queue_has_res(queue if isinstance(queue, list) else [], mid, "1080p"):
+            continue
+        sk = f"companion:1080:movie:{mid}"
+        if not _should_search_missing(searched, sk, now):
+            continue
+        title = str(m.get("title") or folder.name)
+        try:
+            releases = do(
+                f"{app['base']}/release?{urllib.parse.urlencode({'movieId': mid})}",
+                key,
+                timeout=25,
+            )
+        except TypeError:
+            try:
+                releases = do(
+                    f"{app['base']}/release?{urllib.parse.urlencode({'movieId': mid})}",
+                    key,
+                )
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+                log(f"radarr hybrid 1080 {title} {type(e).__name__} {e}")
+                searched[sk] = now
+                continue
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"radarr hybrid 1080 {title} {type(e).__name__} {e}")
+            searched[sk] = now
+            continue
+        pick = pick_hybrid_1080_release(releases if isinstance(releases, list) else [])
+        if not pick:
+            searched[sk] = now
+            log(f"radarr hybrid 1080 {title} — no 1080 release")
+            continue
+        try:
+            do(
+                f"{app['base']}/release",
+                key,
+                method="POST",
+                body={"guid": pick.get("guid"), "indexerId": pick.get("indexerId")},
+            )
+            log(f"radarr grab 1080 {title} — {pick.get('title') or pick.get('guid')}")
+            searched[sk] = now
+            grabbed += 1
+            kicked = True
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, TypeError) as e:
+            log(f"radarr grab 1080 {title} {type(e).__name__} {e}")
+            searched[sk] = now
+    state["searched"] = searched
+    return kicked
+
+
+def run_hybrid_1080_grabs() -> int:
+    """Apply/heal path: fill 1080 next to existing 4K. Hybrid only."""
+    if _quality_choice() != "hybrid":
+        return 0
+    for app in APPS:
+        if app["name"] != "radarr":
+            continue
+        key = api_key(app["xml"])
+        if not key:
+            return 0
+        state = load_json(STATE / "stuck-downloads.json", {})
+        if not isinstance(state, dict):
+            state = {}
+        grab_hybrid_1080_companions(app, key, state, quality="hybrid")
+        save_json(STATE / "stuck-downloads.json", state)
+        return 0
+    return 0
 
 
 def _load_public_mod():
@@ -1036,6 +1442,12 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
                 searched[sk] = now
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
                 log(f"radarr MoviesSearch {title} {type(e).__name__} {e}")
+    if _quality_choice() == "hybrid":
+        ensure_radarr_hybrid_recycle(app, key, quality="hybrid")
+        added = relink_hybrid_companions(catalog, quality="hybrid")
+        if added:
+            log(f"radarr hybrid companion relink {added}")
+            kicked = True
     state["searched"] = searched
     return kicked
 
@@ -1295,6 +1707,8 @@ def sweep() -> int:
         if recover_missing_series(app, key, torrents, state):
             recover = True
         if recover_missing_movies(app, key, torrents, state):
+            recover = True
+        if search_hybrid_cutoff_movies(app, key, state):
             recover = True
 
     if recover:
@@ -1788,14 +2202,226 @@ def _self_test() -> int:
                 "searched": {
                     "missing:9:s1": 50.0,
                     "missing:movie:1": 50.0,
+                    "cutoff:movie:3": 50.0,
+                    "companion:1080:movie:9": 50.0,
                     "other": 1,
                 }
             }
             out = clear_missing_search_cooldown(state)
             self.assertNotIn("missing:9:s1", out["searched"])
             self.assertNotIn("missing:movie:1", out["searched"])
+            self.assertNotIn("cutoff:movie:3", out["searched"])
+            self.assertNotIn("companion:1080:movie:9", out["searched"])
             self.assertEqual(out["searched"]["other"], 1)
             self.assertTrue(_should_search_missing(out["searched"], "missing:9:s1", 100.0))
+
+        def test_hybrid_cutoff_searches_when_1080_below_4k(self):
+            posts = []
+
+            def fake_call(url, key=None, method="GET", body=None, form=None):
+                if "wanted/cutoff" in str(url):
+                    return {"records": [{"id": 3, "title": "National Treasure"}]}
+                if "mediamanagement" in str(url) and method != "PUT":
+                    return {"id": 1, "recycleBin": "", "recycleBinCleanupDays": 7}
+                posts.append({"url": url, "method": method, "body": body})
+                return {}
+
+            orig = call
+            try:
+                globals()["call"] = fake_call
+                app = {"name": "radarr", "base": "http://127.0.0.1:7878/api/v3"}
+                state = {"searched": {}}
+                kicked = search_hybrid_cutoff_movies(app, "k", state, quality="hybrid")
+            finally:
+                globals()["call"] = orig
+            self.assertTrue(kicked)
+            self.assertIn("cutoff:movie:3", state["searched"])
+            self.assertTrue(
+                any(
+                    p["method"] == "POST"
+                    and p["body"]
+                    and p["body"].get("name") == "MoviesSearch"
+                    and p["body"].get("movieIds") == [3]
+                    for p in posts
+                )
+            )
+            self.assertTrue(
+                any(
+                    p["method"] == "PUT"
+                    and p["body"]
+                    and p["body"].get("recycleBin") == "/mnt/symlinks/.reel-recycle"
+                    and p["body"].get("recycleBinCleanupDays") == 0
+                    for p in posts
+                )
+            )
+            posts.clear()
+            self.assertFalse(search_hybrid_cutoff_movies(app, "k", {"searched": {}}, quality="4k"))
+            self.assertEqual(posts, [])
+            self.assertFalse(search_hybrid_cutoff_movies(app, "k", {"searched": {}}, quality="1080p"))
+            self.assertFalse(
+                search_hybrid_cutoff_movies(
+                    {"name": "sonarr", "base": "http://127.0.0.1:8989/api/v3"},
+                    "k",
+                    {"searched": {}},
+                    quality="hybrid",
+                )
+            )
+
+        def test_relink_hybrid_companions_1080_next_to_4k(self):
+            import tempfile
+
+            td = Path(tempfile.mkdtemp())
+            movies = td / "radarr"
+            folder = movies / "Interstellar (2014)"
+            folder.mkdir(parents=True)
+            (folder / "Interstellar.2014.2160p.mkv").write_bytes(b"4k")
+            src = td / "Interstellar.2014.1080p.BluRay.mkv"
+            src.write_bytes(b"hd")
+            catalog = {src.name.lower(): src}
+            n = relink_hybrid_companions(catalog, str(movies), quality="hybrid")
+            self.assertEqual(n, 1)
+            dest = folder / src.name
+            self.assertTrue(dest.is_symlink())
+            self.assertEqual(relink_hybrid_companions(catalog, str(movies), quality="hybrid"), 0)
+            self.assertEqual(relink_hybrid_companions(catalog, str(movies), quality="4k"), 0)
+            media = td / "media" / "movies"
+            (media / "Interstellar (2014)").mkdir(parents=True)
+            (media / "Interstellar (2014)" / "Interstellar.2014.2160p.mkv").write_bytes(b"4k")
+            self.assertEqual(relink_hybrid_companions(catalog, str(media), quality="hybrid"), 0)
+
+        def test_pick_hybrid_1080_release_skips_4k_and_cam(self):
+            picked = pick_hybrid_1080_release(
+                [
+                    {
+                        "guid": "a",
+                        "indexerId": 1,
+                        "title": "Interstellar.2014.2160p",
+                        "quality": {"quality": {"name": "Bluray-2160p"}},
+                        "size": 8_000_000_000,
+                    },
+                    {
+                        "guid": "b",
+                        "indexerId": 2,
+                        "title": "Interstellar.2014.1080p.BluRay",
+                        "quality": {"quality": {"name": "Bluray-1080p"}},
+                        "size": 2_000_000_000,
+                    },
+                    {
+                        "guid": "c",
+                        "indexerId": 2,
+                        "title": "Interstellar.2014.1080p.CAM",
+                        "quality": {"quality": {"name": "WEBDL-1080p"}},
+                        "size": 2_000_000_000,
+                    },
+                ]
+            )
+            self.assertIsNotNone(picked)
+            self.assertEqual(picked["guid"], "b")
+
+        def test_grab_hybrid_1080_posts_release_not_movies_search(self):
+            import tempfile
+
+            td = Path(tempfile.mkdtemp())
+            movies = td / "radarr"
+            folder = movies / "Interstellar (2014)"
+            folder.mkdir(parents=True)
+            (folder / "Interstellar.2014.2160p.mkv").write_bytes(b"4k")
+            posts = []
+
+            def fake_call(url, key=None, method="GET", body=None, form=None, **_kw):
+                if "/release" in str(url) and method == "POST":
+                    posts.append(body)
+                    return {}
+                if "/release" in str(url):
+                    return [
+                        {
+                            "guid": "g-1080",
+                            "indexerId": 7,
+                            "title": "Interstellar.2014.1080p.BluRay",
+                            "quality": {"quality": {"name": "Bluray-1080p"}},
+                            "size": 2_000_000_000,
+                        }
+                    ]
+                return {}
+
+            app = {"name": "radarr", "base": "http://127.0.0.1:7878/api/v3"}
+            movie = {
+                "id": 9,
+                "title": "Interstellar",
+                "hasFile": True,
+                "path": str(folder),
+            }
+            state = {"searched": {}}
+            kicked = grab_hybrid_1080_companions(
+                app,
+                "k",
+                state,
+                quality="hybrid",
+                movies=[movie],
+                queue=[],
+                call_fn=fake_call,
+                movies_root=str(movies),
+            )
+            self.assertTrue(kicked)
+            self.assertEqual(posts, [{"guid": "g-1080", "indexerId": 7}])
+            self.assertIn("companion:1080:movie:9", state["searched"])
+            posts.clear()
+            self.assertFalse(
+                grab_hybrid_1080_companions(
+                    app,
+                    "k",
+                    {"searched": {}},
+                    quality="4k",
+                    movies=[movie],
+                    queue=[],
+                    call_fn=fake_call,
+                    movies_root=str(movies),
+                )
+            )
+            self.assertEqual(posts, [])
+            (folder / "Interstellar.2014.1080p.mkv").write_bytes(b"hd")
+            self.assertFalse(
+                grab_hybrid_1080_companions(
+                    app,
+                    "k",
+                    {"searched": {}},
+                    quality="hybrid",
+                    movies=[movie],
+                    queue=[],
+                    call_fn=fake_call,
+                    movies_root=str(movies),
+                )
+            )
+            media = td / "media" / "movies"
+            (media / "Interstellar (2014)").mkdir(parents=True)
+            (media / "Interstellar (2014)" / "Interstellar.2014.2160p.mkv").write_bytes(b"4k")
+            self.assertFalse(
+                grab_hybrid_1080_companions(
+                    app,
+                    "k",
+                    {"searched": {}},
+                    quality="hybrid",
+                    movies=[dict(movie, path=str(media / "Interstellar (2014)"))],
+                    queue=[],
+                    call_fn=fake_call,
+                    movies_root=str(media),
+                )
+            )
+
+        def test_hybrid_keep_both_is_wired(self):
+            src = Path(__file__).read_text()
+            self.assertIn("search_hybrid_cutoff_movies", src)
+            self.assertIn("relink_hybrid_companions", src)
+            self.assertIn("grab_hybrid_1080_companions", src)
+            self.assertIn("ensure_radarr_hybrid_recycle", src)
+            self.assertIn(".reel-recycle", src)
+            self.assertIn("hybrid cutoff 4K", src)
+            self.assertIn("--hybrid-1080", src)
+            movies_fn = src[src.find("def recover_missing_movies") : src.find("def movie_id_of")]
+            self.assertIn("relink_hybrid_companions", movies_fn)
+            sweep_fn = src[src.find("def sweep()") : src.find("def _self_test()")]
+            self.assertIn("search_hybrid_cutoff_movies", sweep_fn)
+            self.assertNotIn("grab_hybrid_1080_companions(app, key, state)", sweep_fn)
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Guards)
     result = unittest.TextTestRunner(verbosity=2).run(suite)
@@ -1805,6 +2431,8 @@ def _self_test() -> int:
 if __name__ == "__main__":
     if "--self-test" in sys.argv:
         raise SystemExit(_self_test())
+    if "--hybrid-1080" in sys.argv:
+        raise SystemExit(run_hybrid_1080_grabs())
     if "--research-missing" in sys.argv:
         state = load_json(STATE / "stuck-downloads.json", {"seen": {}, "searched": {}})
         if not isinstance(state, dict):

@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 export const HOME_SHELF_LIMIT = 24;
-export const LIBRARY_CACHE_TTL_MS = 30_000;
+export const LIBRARY_CACHE_TTL_MS = 120_000;
 export const JELLYFIN_TOKEN_TTL_MS = 10 * 60_000;
 export const JELLYFIN_ITEMS_TIMEOUT_MS = 12_000;
 export const LIBRARY_CACHE_FILE = "/var/lib/reelos/library-shelf.json";
@@ -30,9 +30,11 @@ export function libraryItemsUrl({ limit } = {}) {
   return `http://127.0.0.1:8096/Items?${q}`;
 }
 
-export function jellyfinPosterUrl(host, jellyfinId) {
+export function jellyfinPosterUrl(_host, jellyfinId, { maxWidth = 240 } = {}) {
   if (!jellyfinId) return "";
-  return `http://${host}:8096/Items/${jellyfinId}/Images/Primary`;
+  const id = encodeURIComponent(String(jellyfinId));
+  const w = Number(maxWidth) > 0 ? Math.min(Math.floor(Number(maxWidth)), 720) : 240;
+  return `/api/jf/Items/${id}/Images/Primary?maxWidth=${w}&quality=70`;
 }
 
 export function mapJellyfinItem(it, host) {
@@ -278,19 +280,12 @@ export async function serveLibrary({
     fromCache: Boolean(extra.fromCache),
   });
 
-  const staleCoversRequest = canServeStale(stale) && (stale.complete || limit);
+  const staleCoversRequest = canServeStale(stale);
   if (!wantFresh && staleCoversRequest) {
     if ((!stale.complete || !cacheIsFresh(stale, now, ttlMs)) && typeof refresh === "function") {
       void refresh();
     }
     return serve(stale.titles, { fromCache: true });
-  }
-
-  // Home may have cached a Limit=24 slice; Library waits on the in-flight full refresh.
-  if (!wantFresh && canServeStale(stale) && !stale.complete && !limit && typeof refresh === "function") {
-    await refresh();
-    const next = cache.read();
-    if (canServeStale(next) && next.complete) return serve(next.titles, { fromCache: true });
   }
 
   const auth = await getAuth();

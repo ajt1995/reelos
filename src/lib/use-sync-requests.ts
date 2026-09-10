@@ -34,10 +34,11 @@ export function useSyncRequests() {
         /* Seerr down — keep local rows */
       }
     };
-    void tick();
-    const id = window.setInterval(() => void tick(), 8000);
+    const start = window.setTimeout(() => void tick(), 1500);
+    const id = window.setInterval(() => void tick(), 15000);
     return () => {
       stop = true;
+      window.clearTimeout(start);
       window.clearInterval(id);
     };
   }, []);

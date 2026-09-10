@@ -65,27 +65,28 @@ function RootDocument() {
 
 function Runtime({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-    const finish = () => useReelStore.getState().setHydrated();
     void Promise.resolve(useReelStore.persist.rehydrate())
-      .then(async () => {
-        try {
-          const r = await fetch("/api/box", { cache: "no-store" });
-          const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
-          if (box.provisioned) {
-            const s = useReelStore.getState();
-            if (box.answers && typeof box.answers === "object") {
-              s.patchAnswers(box.answers as Parameters<typeof s.patchAnswers>[0]);
+      .catch(() => {})
+      .then(() => {
+        useReelStore.getState().setHydrated();
+        return fetch("/api/box", { cache: "no-store" })
+          .then(async (r) => {
+            const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
+            if (box.provisioned) {
+              const s = useReelStore.getState();
+              if (box.answers && typeof box.answers === "object") {
+                s.patchAnswers(box.answers as Parameters<typeof s.patchAnswers>[0]);
+              }
+              if (!s.provisioned || s.phase === "wizard") s.openReelOS();
+            } else {
+              const s = useReelStore.getState();
+              if (s.provisioned || s.phase !== "wizard") s.factoryReset();
             }
-            if (!s.provisioned || s.phase === "wizard") s.openReelOS();
-          } else {
-            const s = useReelStore.getState();
-            if (s.provisioned || s.phase !== "wizard") s.factoryReset();
-          }
-        } catch {
-          /* preview / no box */
-        }
-      })
-      .then(finish, finish);
+          })
+          .catch(() => {
+            /* preview / no box */
+          });
+      });
   }, []);
 
   useEffect(() => {
