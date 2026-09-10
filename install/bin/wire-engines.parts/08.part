@@ -177,6 +177,88 @@ def collapse_movie_named_dumps(root: str = "/mnt/symlinks/radarr", allow=None) -
     return dropped
 
 
+MOVIE_VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".m2ts", ".ts", ".iso"}
+PARKED_MOVIE_VERSIONS = Path("/mnt/symlinks/.reel-parked")
+
+
+def movie_video_files(folder: Path) -> list:
+    out = []
+    try:
+        for x in folder.iterdir():
+            if x.name.startswith("."):
+                continue
+            if x.suffix.lower() in MOVIE_VIDEO_EXT and (x.is_file() or x.is_symlink()):
+                out.append(x)
+    except OSError:
+        return []
+    return out
+
+
+def pick_keeper_movie_file(files: list) -> Path:
+    """Largest file wins. Same size: a [TGx]/[YTS] duplicate is the extra."""
+
+    def key(p: Path):
+        try:
+            size = p.stat().st_size
+        except OSError:
+            size = 0
+        dirty = 1 if re.search(r"\[(?:tgx|yts)", p.name, re.I) else 0
+        return (-size, dirty, p.name)
+
+    return sorted(files, key=key)[0]
+
+
+def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """One video file per Title (Year) so Jellyfin Movies is not two version posters.
+
+    MergeVersions still leaves two MediaSources; some clients show two cards.
+    Keep the largest; move extras to /mnt/symlinks/.reel-parked (not /media,
+    not the Movies library path). Never delete.
+    """
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/radarr", "/symlinks/radarr"}
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
+    if resolved not in allowed:
+        return 0
+    if "/media/" in resolved or resolved == "/media":
+        return 0
+    if not base.is_dir():
+        return 0
+    parked_root = PARKED_MOVIE_VERSIONS
+    if allow:
+        parked_root = base.parent / ".reel-parked"
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    n = 0
+    for folder in kids:
+        files = movie_video_files(folder)
+        if len(files) < 2:
+            continue
+        keeper = pick_keeper_movie_file(files)
+        dest = parked_root / folder.name
+        try:
+            dest.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log_wire(f"jellyfin park movie versions {folder.name} {e}")
+            continue
+        for extra in files:
+            if extra == keeper:
+                continue
+            target = dest / extra.name
+            if target.exists():
+                target = dest / f"{extra.stem}.dup{extra.suffix}"
+            try:
+                shutil.move(str(extra), str(target))
+                n += 1
+                log_wire(f"jellyfin park extra movie file {folder.name}/{extra.name}")
+            except OSError as e:
+                log_wire(f"jellyfin park extra movie file {folder.name} {e}")
+    return n
+
+
 def fetch_jellyfin_series(token: str) -> list:
     q = urllib.parse.urlencode(
         {
@@ -389,8 +471,22 @@ def heal_merge_movie_posters() -> bool:
         log_wire("jellyfin merge movie posters — no token")
         return True
     try:
+        parked = int(park_extra_movie_files() or 0)
+        if parked:
+            log_wire(f"jellyfin park extra movie files {parked}")
         items = fetch_jellyfin_movies(token)
         heal_movie_dump_items(token, items=items)
+        if parked:
+            try:
+                call(
+                    "http://127.0.0.1:8096/Library/Refresh",
+                    method="POST",
+                    headers=jellyfin_headers(token),
+                )
+                log_wire("jellyfin refresh after parking extra movie files")
+            except NET_ERR as e:
+                log_wire(f"jellyfin refresh {e}")
+            time.sleep(jf_merge_wait_sec())
         items = fetch_jellyfin_movies(token)
         heal_merge_movie_versions(token, items=items)
     except Exception as e:
@@ -480,6 +576,7 @@ def heal_after_import() -> bool:
     """
     dropped = collapse_season_named_dumps()
     dropped += collapse_movie_named_dumps()
+    dropped += park_extra_movie_files()
     log_wire("import collapse season-folder dumps before jellyfin refresh")
     log_wire("import collapse movie dumps before jellyfin refresh")
     token = jellyfin_token()
@@ -525,6 +622,7 @@ def heal_after_import() -> bool:
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collapse_dumps: bool = True) -> bool:
     dropped = collapse_season_named_dumps() if collapse_dumps else 0
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
+    dropped += park_extra_movie_files() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
         heal_movie_dump_items(token) if collapse_dumps else 0
     )

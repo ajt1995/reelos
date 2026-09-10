@@ -58,7 +58,7 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /heal_movie_dump_items/);
     assert.match(code, /heal_merge_movie_versions/);
     assert.match(code, /heal_merge_movie_posters/);
-    assert.match(code, /movie_dump_merge_key/);
+    assert.match(code, /park_extra_movie_files/);
     assert.match(code, /merge-movies/);
     assert.match(code, /Videos\/MergeVersions/);
     assert.match(code, /plan_movie_dump_item/);
@@ -390,6 +390,21 @@ assert (radarr / "Dune (2021)" / "yts-partone.mkv").is_file()
 assert not (radarr / "Dune Part One (2021) [2160p]").exists()
 assert (radarr / "Dune Part Two (2024)" / "two.mkv").is_file()
 assert (radarr / "Dune (1984)").is_dir()
+# Two files in Title (Year): keep the largest, park the extra off the Movies path.
+(radarr / "Interstellar (2014)" / "yts.mkv").write_bytes(b"y")
+(radarr / "Interstellar (2014)" / "remux.mkv").write_bytes(b"R" * 200)
+npark = g["park_extra_movie_files"](str(radarr), allow=[str(radarr)])
+assert npark >= 1, npark
+assert (radarr / "Interstellar (2014)" / "remux.mkv").is_file()
+assert not (radarr / "Interstellar (2014)" / "yts.mkv").exists()
+assert len(list((radarr / "Interstellar (2014)").glob("*.mkv"))) == 1
+assert (Path(td) / ".reel-parked" / "Interstellar (2014)" / "yts.mkv").is_file()
+media_movies = Path(td) / "media" / "movies"
+(media_movies / "Interstellar (2014)" / "a.mkv").write_bytes(b"a")
+(media_movies / "Interstellar (2014)" / "b.mkv").write_bytes(b"bb")
+assert g["park_extra_movie_files"](str(media_movies), allow=[str(media_movies)]) == 0
+assert (media_movies / "Interstellar (2014)" / "a.mkv").is_file()
+assert (media_movies / "Interstellar (2014)" / "b.mkv").is_file()
 jf_canon = {
     "Id": "jf-int",
     "Name": "Interstellar",
@@ -531,7 +546,8 @@ print("ok")
   assert.match(eight, /heal_season_folder_items/);
   assert.match(eight, /drop_extra_jellyfin_libraries/);
   assert.match(eight, /heal_merge_movie_posters/);
-  assert.match(eight, /movie_dump_merge_key/);
+  assert.match(eight, /park_extra_movie_files/);
+  assert.match(eight, /\.reel-parked/);
   assert.match(eight, /Merge LAST/);
   assert.ok(
     eight.indexOf("jellyfin refresh after post-import heal") < eight.indexOf("Merge LAST"),

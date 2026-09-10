@@ -7,7 +7,7 @@
 - **VERSION / channel:** `1.2.50.21`
 - **Base:** current `main` (1.2.50.20 / #72)
 - Did **not** take Tron chrome from #52 / #70
-- **What it is:** MergeVersions runs **after** the Jellyfin scan, never before. `lock-clients` calls `wire-engines.py merge-movies` every minute (no Library/Refresh). Same-TMDB dump rows merge across folders. Splash hydrates from localStorage; `/api/box` continues in the background. `/api/library` serves a stale shelf immediately. Posters are `/api/jf/Items/{id}/Images/Primary?maxWidth=240` (not full-size LAN :8096). Never `/media`.
+- **What it is:** MergeVersions runs **after** the Jellyfin scan, never before. Extra video files in `Title (Year)` park to `/mnt/symlinks/.reel-parked` (keep the largest; never delete; never `/media`). `lock-clients` calls `wire-engines.py merge-movies` every minute. Splash hydrates from localStorage; `/api/box` continues in the background. `/api/library` serves a stale shelf immediately. Posters are `/api/jf/Items/{id}/Images/Primary?maxWidth=240`. Never `/media`.
 
 ## Proof
 
@@ -22,7 +22,7 @@ node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/
 
 1. Merge this to **main**. Phone Check→Apply **once**, or CLI mailman from `main`.
 2. `cat /opt/reelos/VERSION` → `1.2.50.21`.
-3. Jellyfin Movies is one Interstellar / John Wick / Night at the Museum — the same titles the phone Library already showed.
+3. Jellyfin Movies is one Interstellar / John Wick / Night at the Museum (one file each; extras in `/mnt/symlinks/.reel-parked`). The phone Library already showed one of each.
 4. Phone Home should paint the chrome before doctor/Tailscale finish.
 
 ## Do not
