@@ -78,7 +78,8 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
     assert.match(code, /def jellyfin_debrid_library_flags/);
-    assert.match(code, /def jellyfin_debrid_encoding_patch/);
+    assert.match(code, /def jellyfin_encoding_for_box/);
+    assert.match(code, /EncodingThreadCount/);
     assert.match(code, /def jellyfin_task_hammers_debrid/);
     assert.match(code, /EnableSubtitleExtraction/);
     assert.match(code, /AllowEmbeddedSubtitles/);
@@ -118,12 +119,41 @@ assert hammers({"Key": "TaskExtractMediaSegments", "Name": "Media Segment Scan"}
 assert hammers({"Key": "RefreshTrickplayImages", "Name": "Generate Trickplay Images"}) is True
 assert hammers({"Key": "DownloadSubtitles", "Name": "Download missing subtitles"}) is False
 assert hammers({"Key": "RefreshLibrary", "Name": "Scan Media Library"}) is False
+low = g["jellyfin_encoding_for_box"](
+    {
+        "HardwareAccelerationType": "none",
+        "EncodingThreadCount": -1,
+        "EnableThrottling": False,
+        "EnableSegmentDeletion": False,
+        "HardwareDecodingCodecs": ["h264", "vc1"],
+        "EnableSubtitleExtraction": True,
+        "VaapiDevice": "/dev/dri/renderD128",
+    },
+    low=True,
+    has_dri=True,
+)
+assert low["HardwareAccelerationType"] == "vaapi"
+assert low["EncodingThreadCount"] == 1
+assert low["EnableThrottling"] is True
+assert low["EnableSegmentDeletion"] is True
+assert low["SegmentKeepSeconds"] == 60
+assert low["EncoderPreset"] == "veryfast"
+assert low["EnableSubtitleExtraction"] is False
+assert "hevc" in low["HardwareDecodingCodecs"]
+off = g["jellyfin_encoding_for_box"](low, low=False, has_dri=True)
+assert off["EncodingThreadCount"] == -1
+assert off["HardwareAccelerationType"] == "vaapi"
+assert off["EnableSubtitleExtraction"] is False
+nodri = g["jellyfin_encoding_for_box"]({"HardwareAccelerationType": "none"}, low=True, has_dri=False)
+assert nodri["HardwareAccelerationType"] == "none"
+assert nodri["EncodingThreadCount"] == 1
 `,
     ],
     { input: code, encoding: "utf8" },
   );
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(read("src/components/settings-panels.tsx"), /does not read TorBox dumps/);
+  assert.match(read("src/components/settings-panels.tsx"), /one thread/);
 });
 
 test("Movies/Shows keep only /symlinks/radarr|sonarr — extra paths are dropped", () => {

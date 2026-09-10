@@ -91,7 +91,7 @@ export function PerformanceRow() {
         <div>
           <p className="font-display font-medium">Low performance mode</p>
           <p className="mt-1 text-sm text-muted">
-            Trickplay, chapter images, subtitle extraction, and intro scans stay off so Jellyfin does not read TorBox dumps. Default on for this box.
+            Caps transcode to one thread, throttles ffmpeg, and uses the GPU when present. Scene previews and subtitle extraction stay off so Jellyfin does not read TorBox dumps. Default on for a 4GB box.
           </p>
         </div>
       </div>

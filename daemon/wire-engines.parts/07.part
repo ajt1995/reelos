@@ -31,6 +31,36 @@ def jellyfin_debrid_encoding_patch(enc) -> dict:
     return out
 
 
+def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
+    """4GB boxes die on software 4K. Use VAAPI when /dev/dri exists; cap threads when low."""
+    out = jellyfin_debrid_encoding_patch(enc)
+    if has_dri:
+        out["HardwareAccelerationType"] = "vaapi"
+        out["EnableHardwareEncoding"] = True
+        if not out.get("VaapiDevice"):
+            out["VaapiDevice"] = "/dev/dri/renderD128"
+        codecs = [str(c) for c in (out.get("HardwareDecodingCodecs") or []) if c]
+        for c in ("h264", "hevc", "vp9", "av1", "vc1", "mpeg2video"):
+            if c not in codecs:
+                codecs.append(c)
+        out["HardwareDecodingCodecs"] = codecs
+        out["EnableIntelLowPowerH264HwEncoder"] = True
+        out["EnableIntelLowPowerHevcHwEncoder"] = True
+    if low:
+        out["EncodingThreadCount"] = 1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 60
+        out["EncoderPreset"] = "veryfast"
+    else:
+        out["EncodingThreadCount"] = -1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 180
+        out["EncoderPreset"] = "auto"
+    return out
+
+
 def jellyfin_task_hammers_debrid(task: dict) -> bool:
     key = str(task.get("Key") or "")
     if key in {
@@ -78,14 +108,22 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
             log_wire(f"performance library {folder.get('Name')} {e}")
     try:
         enc = call("http://127.0.0.1:8096/System/Configuration/encoding", headers=hdr) or {}
-        patched = jellyfin_debrid_encoding_patch(enc if isinstance(enc, dict) else {})
+        has_dri = Path("/dev/dri").exists()
+        patched = jellyfin_encoding_for_box(
+            enc if isinstance(enc, dict) else {},
+            low=low,
+            has_dri=has_dri,
+        )
         call(
             "http://127.0.0.1:8096/System/Configuration/encoding",
             method="POST",
             body=patched,
             headers=hdr,
         )
-        log_wire("performance encoding subtitle/keyframe extraction off")
+        log_wire(
+            f"performance encoding low={low} dri={has_dri} "
+            f"accel={patched.get('HardwareAccelerationType')} threads={patched.get('EncodingThreadCount')}"
+        )
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
         log_wire(f"performance encoding {e}")
     try:
