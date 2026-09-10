@@ -2,7 +2,7 @@
 
 A spare PC that boots, asks a few questions, and becomes the house movie box. Request on the phone. Watch on the TV.
 
-*This page is for humans. Builders use `HAL.md`.*
+*This page is for humans. Builders use `RULES.md`.*
 
 ---
 

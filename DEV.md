@@ -1,8 +1,8 @@
 # DEV.md
 
-Hal. **2026-09-07 21:18 CDT.** Learned from an independent audit of `main`. Do not bump VERSION because this file exists.
+Learned from an independent audit of `main`. Do not bump VERSION because this file exists.
 
-Apply rules live in [`OTA.md`](OTA.md). This file is product law. That file is the mailman.
+Governance lives in [`RULES.md`](RULES.md). Apply rules live in [`OTA.md`](OTA.md). This file is product law. That file is the mailman.
 
 ## Done
 
@@ -24,7 +24,7 @@ Green means the *service*, not the file.
 
 ## Branches
 
-One issue → one `feature/*` → PR → merge only when HAL names a stamp.
+One issue → one `feature/*` → PR → merge only when the owner names a stamp.
 `main` is the house channel.
 
 ## Logs

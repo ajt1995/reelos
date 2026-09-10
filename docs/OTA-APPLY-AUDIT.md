@@ -106,4 +106,4 @@ Do this on the HP. Do not stamp VERSION by hand.
 8. If “Also pull Jellyfin / engine images” is on: pull happens **after** `applied.` and the oneshot may stay `activating` up to 10 minutes. Home must stay up during that pull.
 9. Negative (optional): `systemctl is-active reelos-ota` is `inactive` after Apply, not stuck `activating`.
 
-Do not: Apply a feature-branch tarball, or run Finish/provision during Apply. Stamp is **1.2.50** (HAL.md).
+Do not: Apply a feature-branch tarball, or run Finish/provision during Apply. Stamp is **1.2.50** (STATUS.md).

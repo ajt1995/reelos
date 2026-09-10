@@ -31,8 +31,8 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | `firstboot/` | Live-USB helpers (wifi, console). |
 | `ui/` | Pointer. Not a second app. Real UI is `src/`. |
 | `channel.json` + `VERSION` | OTA. Tarball is the git tag `vX.Y.Z`. |
-| `HAL.md` | Hal → xorriso. Do not edit. |
-| `STATUS.md` | xorriso → Hal. |
+| `RULES.md` | Project rules and governance. Read first. |
+| `STATUS.md` | Current ship state — what is on the tree and the box. |
 | `docs/OTA-APPLY-AUDIT.md` | Whether Phone Check→Apply is trustworthy. House verify checklist. |
 | `docs/STACK-RISK.md` | Stacked `#45`–`#51` go/no-go + merge order for house Apply. |
 

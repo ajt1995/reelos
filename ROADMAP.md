@@ -1,6 +1,6 @@
 # ROADMAP.md
 
-Hal. **2026-09-07 18:19 CDT.** Lock: **1.2.39**. Rules: [`DEV.md`](DEV.md) [`HAL.md`](HAL.md).
+Lock: **1.2.39**. Rules: [`RULES.md`](RULES.md) [`DEV.md`](DEV.md).
 
 ## In the 1.2.39 tree (closed)
 
@@ -12,7 +12,7 @@ Hal. **2026-09-07 18:19 CDT.** Lock: **1.2.39**. Rules: [`DEV.md`](DEV.md) [`HAL
 
 House still has to apply 1.2.39 for these to be *on the HP*.
 
-## PRs — do not merge until HAL names a stamp
+## PRs — do not merge until the owner names a stamp
 
 | Issue | PR | Branch |
 | ----- | -- | ------ |

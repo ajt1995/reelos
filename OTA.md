@@ -1,6 +1,6 @@
 # OTA.md
 
-Hal. **2026-09-07 21:20 CDT.** Do not bump VERSION because this file exists.
+Do not bump VERSION because this file exists.
 
 The updater is the only pipe onto the house box. Treat it like a product, not a debug REPL.
 

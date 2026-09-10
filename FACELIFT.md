@@ -1,6 +1,6 @@
 # FACELIFT.md
 
-Parked. Hal. Updated **2026-09-06 19:02 CDT**.
+Parked. Updated **2026-09-06 19:02 CDT**.
 
 **Not an OTA. Not tonight.** No version until the owner assigns one.
 

@@ -69,7 +69,7 @@ None of `#47`–`#51` touch `package.json` / `package-lock.json`. `#45` lock + `
 2. `scripts/stack-smoke.test.mjs` — lockfile gate + JF12 `Authorization` + cache + no `spawnSync` pull + advisory search hop + importPending retry + rshared unit + parts twins.
 3. `check-ota.py` / `reelos-update.test.mjs` contracts for the overlay.
 4. Retargeted three stale mailman `need()` canaries (`title-view-live.tsx`, `settings-terminal.tsx`, plugin `serveLibrary`) so push-time `check-ota.py` is green.
-5. Named stamp **1.2.50** (`VERSION`, `channel.json`, `version-stamp.ts`, `store.ts`, HAL.md, STATUS.md).
+5. Named stamp **1.2.50** (`VERSION`, `channel.json`, `version-stamp.ts`, `store.ts`, STATUS.md).
 
 ## Residual (do not block Apply)
 

@@ -1,6 +1,6 @@
 # OWNED.md
 
-The product is the house box. Ignore the rest unless HAL names it.
+The product is the house box. Ignore the rest unless the owner names it.
 
 ## This is ReelOS
 
@@ -10,7 +10,7 @@ The product is the house box. Ignore the rest unless HAL names it.
 - `src/routes/` appliance routes
 - `scripts/reelos-lookup-plugin.mjs` — `/api/*` on the box
 - `iso/` — image bake (no new ISO unless asked)
-- `HAL.md` `STATUS.md` `ROADMAP.md` `FACELIFT.md` `DEV.md`
+- `RULES.md` `STATUS.md` `ROADMAP.md` `FACELIFT.md` `DEV.md` `OTA.md`
 
 ## This is leftover Grok/TanStack scaffold — do not “improve”
 
