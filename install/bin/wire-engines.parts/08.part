@@ -806,10 +806,13 @@ def heal_hybrid_1080_companions() -> None:
     if not sweep.is_file():
         return
     try:
+        # Up to cap=3 movies, each doing a ~90s interactive indexer search, so
+        # the sweep needs more than 90s or it is killed mid-search before any
+        # 1080 is grabbed.
         subprocess.run(
             [sys.executable, str(sweep), "--hybrid-1080"],
             check=False,
-            timeout=90,
+            timeout=300,
         )
         log_wire("hybrid 1080 companion grab")
     except Exception as e:
