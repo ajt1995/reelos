@@ -129,19 +129,156 @@ def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
     return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
 
 
-_SEASON_FOLDER = re.compile(r"[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$", re.I)
+_SEASON_FOLDER = re.compile(
+    r"[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|"
+    r"s\d{1,2}(?!\d)(?![eE]\d))(?![eE]\d).*$",
+    re.I,
+)
+_YEAR_TAIL = re.compile(r"\s+\((?:19|20)\d{2}\)\s*$")
 
 
 def strip_season_folder_suffix(name: str) -> str:
-    """Brooklyn Nine-Nine S01 / The Walking Dead - Season 1 → the series name."""
+    """B99 S01 / TWD - Season 1 / B99 (2013) Season 1 S01 (1080p…) → the series name."""
     raw = str(name or "").strip()
     stripped = _SEASON_FOLDER.sub("", raw).strip()
-    return stripped or raw
+    if not stripped or stripped == raw:
+        return raw
+    bare = _YEAR_TAIL.sub("", stripped).strip()
+    return bare or stripped
 
 
 def looks_like_season_folder_title(name: str) -> bool:
     raw = str(name or "").strip()
     return bool(raw) and strip_season_folder_suffix(raw) != raw
+
+
+_CANON_MOVIE = re.compile(r"^(.+?)\s+\((\d{4})\)$")
+_CANON_MOVIE_PLUS = re.compile(r"^(.+?)\s+\((\d{4})\)\s+.+$")
+_MOVIE_MEDIA_TAIL = re.compile(r"\.(mkv|mp4|m4v|avi|ts|m2ts)$", re.I)
+_MOVIE_QUALITY = re.compile(
+    r"(?:2160p|1080p|720p|480p|web-?dl|webrip|bluray|blu-?ray|bdremux|remux|"
+    r"uhd|hdr|dovi|x265|x264|hevc|yts|amzn|multi|proper|imax|hybrid)",
+    re.I,
+)
+
+
+def is_canonical_movie_folder(name: str) -> bool:
+    """Radarr title folder: Interstellar (2014). Not Interstellar (2014) [YTS.MX]."""
+    return bool(_CANON_MOVIE.fullmatch(str(name or "").strip()))
+
+
+def movie_title_year(name: str) -> tuple[str, str] | None:
+    """Title + year from a Radarr dump name. Remakes keep the year (Dune 1984 ≠ 2021)."""
+    raw = _MOVIE_MEDIA_TAIL.sub("", str(name or "").strip()).strip()
+    if not raw:
+        return None
+    m = _CANON_MOVIE.fullmatch(raw) or _CANON_MOVIE_PLUS.match(raw)
+    if m:
+        title = m.group(1).strip()
+        year = m.group(2)
+        if title:
+            return title, year
+    pick = None
+    for hit in re.finditer(r"((?:19|20)\d{2})", raw):
+        rest = raw[hit.end() :]
+        if _MOVIE_QUALITY.search(rest):
+            pick = hit
+            break
+    if not pick:
+        return None
+    title = raw[: pick.start()].strip(" ._-\t()[]")
+    title = re.sub(r"[._]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip(" -")
+    if len(re.sub(r"[^a-z0-9]", "", title.lower())) < 4:
+        return None
+    return title, pick.group(1)
+
+
+_PART_ONE = re.compile(r"[\s:.\-_]+(?:part|pt)[\s.\-_]*(?:one|1|i)\s*$", re.I)
+
+
+def movie_stem(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(title or "").lower())
+
+
+def movie_dump_keys(name: str) -> list[str]:
+    """Primary Title:Year plus Part One/Part 1 alias. Never Part Two (Dune 2021 ≠ Part Two)."""
+    parsed = movie_title_year(name)
+    if not parsed:
+        return []
+    title, year = parsed
+    keys: list[str] = []
+    seen: set[str] = set()
+    for t in (title, _PART_ONE.sub("", title).strip(" :-._")):
+        stem = movie_stem(t)
+        if len(stem) < 4:
+            continue
+        key = f"{stem}:{year}"
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def movie_dump_key(name: str) -> str | None:
+    keys = movie_dump_keys(name)
+    return keys[0] if keys else None
+
+
+def looks_like_movie_dump_folder(name: str) -> bool:
+    raw = str(name or "").strip()
+    if is_canonical_movie_folder(raw):
+        return False
+    return movie_dump_key(raw) is not None
+
+
+def movie_dump_item_path(path: str) -> bool:
+    """DELETE /Items removes files — only a release-named dir under radarr dumps."""
+    p = str(path or "").rstrip("/")
+    if not p or local_disk_path(p) or not dump_view_path(p):
+        return False
+    parts = [x for x in p.split("/") if x]
+    if parts[:2] == ["symlinks", "radarr"] and len(parts) == 3:
+        return looks_like_movie_dump_folder(parts[-1])
+    if parts[:3] == ["mnt", "symlinks", "radarr"] and len(parts) == 4:
+        return looks_like_movie_dump_folder(parts[-1])
+    return False
+
+
+def plan_movie_dump_item(item: dict, siblings: list) -> dict | None:
+    """jf-only release-folder Movie: delete when Title (Year) already exists."""
+    if not isinstance(item, dict):
+        return None
+    path = str(item.get("Path") or "")
+    if not movie_dump_item_path(path):
+        return None
+    folder = path.rstrip("/").split("/")[-1]
+    keys = set(movie_dump_keys(folder))
+    if not keys:
+        return None
+    item_id = item.get("Id") or item.get("id")
+    if not item_id:
+        return None
+    own = jellyfin_provider_id(item)
+    canons: list[dict] = []
+    for sib in siblings or []:
+        if sib is item or not isinstance(sib, dict):
+            continue
+        sp = str(sib.get("Path") or "").rstrip("/")
+        sfolder = sp.split("/")[-1] if sp else ""
+        if not is_canonical_movie_folder(sfolder):
+            continue
+        if not keys.intersection(movie_dump_keys(sfolder)):
+            continue
+        canons.append(sib)
+    if not canons:
+        return None
+    if own:
+        for canon in canons:
+            if jellyfin_provider_id(canon) == own:
+                return {"action": "delete", "id": str(item_id), "name": folder}
+        return None
+    return {"action": "delete", "id": str(item_id), "name": folder}
 
 
 def jellyfin_provider_id(item: dict) -> str:
@@ -186,14 +323,18 @@ def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
     if not isinstance(item, dict):
         return None
     name = str(item.get("Name") or "")
-    if not looks_like_season_folder_title(name):
+    path = str(item.get("Path") or "")
+    folder = path.rstrip("/").split("/")[-1] if path else ""
+    # JF often names a dump "The Expanse" after metadata while Path is still the S01 pack.
+    season_label = name if looks_like_season_folder_title(name) else folder
+    if not looks_like_season_folder_title(season_label):
         return None
-    if not season_folder_item_path(item.get("Path")):
+    if not season_folder_item_path(path):
         return None
     item_id = item.get("Id") or item.get("id")
     if not item_id:
         return None
-    key = series_title_key(name)
+    key = series_title_key(season_label)
     if not key:
         return None
     own = jellyfin_provider_id(item)
@@ -202,12 +343,16 @@ def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
         if sib is item or not isinstance(sib, dict):
             continue
         sib_name = str(sib.get("Name") or "")
-        if series_title_key(sib_name) != key:
+        sib_path = str(sib.get("Path") or "")
+        sib_folder = sib_path.rstrip("/").split("/")[-1] if sib_path else ""
+        if series_title_key(sib_name) != key and series_title_key(sib_folder) != key:
             continue
-        if looks_like_season_folder_title(sib_name):
+        if looks_like_season_folder_title(sib_name) or looks_like_season_folder_title(sib_folder):
             continue
         canons.append(sib)
-    series_name = strip_season_folder_suffix(name)
+    series_name = strip_season_folder_suffix(season_label)
+    series_name = re.sub(r"[._]+", " ", series_name)
+    series_name = re.sub(r"\s+", " ", series_name).strip() or series_name
     if own:
         for canon in canons:
             if jellyfin_provider_id(canon) == own:

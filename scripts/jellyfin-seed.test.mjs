@@ -53,6 +53,12 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /jellyfin drop extra path/);
     assert.match(code, /delete_jellyfin_library/);
     assert.match(code, /collapse_season_named_dumps/);
+    assert.match(code, /collapse_movie_named_dumps/);
+    assert.match(code, /movie_dump_keys/);
+    assert.match(code, /heal_movie_dump_items/);
+    assert.match(code, /heal_merge_movie_versions/);
+    assert.match(code, /Videos\/MergeVersions/);
+    assert.match(code, /plan_movie_dump_item/);
     assert.match(code, /heal_season_folder_items/);
     assert.match(code, /plan_season_folder_item/);
     assert.match(code, /season_folder_item_path/);
@@ -148,8 +154,21 @@ assert {f["Name"] for f in extras} == {"TV", "Movies 2"}, extras
 assert g["strip_season_folder_suffix"]("Brooklyn Nine-Nine S01") == "Brooklyn Nine-Nine"
 assert g["strip_season_folder_suffix"]("The Walking Dead - Season 1") == "The Walking Dead"
 assert g["strip_season_folder_suffix"]("- Season 1") == "- Season 1"
+assert g["strip_season_folder_suffix"](
+    "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+) == "Brooklyn Nine-Nine"
+assert g["looks_like_season_folder_title"](
+    "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+) is True
 assert g["looks_like_season_folder_title"]("The Walking Dead - Season 1") is True
 assert g["looks_like_season_folder_title"]("The Walking Dead") is False
+assert g["looks_like_season_folder_title"]("Show S01E01") is False
+assert g["strip_season_folder_suffix"](
+    "The.Expanse.S01.2160p.AMZN.WEB-DL.x265.10bit.HDR.DTS-HD.MA.5.1-SAFETY[rartv]"
+) == "The.Expanse"
+assert g["strip_season_folder_suffix"](
+    "Brooklyn Nine-Nine S01 Season 1 1080p 5.1Ch Web-DL ReEnc-DeeJayAhmed"
+) == "Brooklyn Nine-Nine"
 import tempfile, os
 from pathlib import Path
 td = tempfile.mkdtemp()
@@ -184,6 +203,34 @@ assert (dump / "Brooklyn Nine-Nine").is_dir()
 assert not (dump / "Brooklyn Nine-Nine S01").exists()
 assert (dump / "The Walking Dead").is_dir()
 assert not (dump / "The Walking Dead - Season 1").exists()
+# Live box: quality after S01, series folder has no year, Season 1 already has the files.
+live_tv = Path(td) / "sonarr-live"
+live_tv.mkdir()
+(live_tv / "Brooklyn Nine-Nine").mkdir()
+s01 = live_tv / "Brooklyn Nine-Nine" / "Season 1"
+s01.mkdir()
+(s01 / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").write_bytes(b"e")
+pack = live_tv / "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+pack.mkdir()
+(pack / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").write_bytes(b"e")
+assert g["collapse_season_named_dumps"](str(live_tv), allow=[str(live_tv)]) == 1
+assert (live_tv / "Brooklyn Nine-Nine" / "Season 1").is_dir()
+assert not pack.exists()
+# do not duplicate the episode next to Season 1
+assert not (live_tv / "Brooklyn Nine-Nine" / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").exists()
+# House: dotted S01.2160p pack next to The Expanse, and S01 Season 1 1080p without parens.
+(live_tv / "The Expanse").mkdir()
+(live_tv / "The Expanse" / "keep.mkv").write_bytes(b"k")
+exp = live_tv / "The.Expanse.S01.2160p.AMZN.WEB-DL.x265.10bit.HDR.DTS-HD.MA.5.1-SAFETY[rartv]"
+exp.mkdir()
+(exp / "E01.mkv").write_bytes(b"e")
+dj = live_tv / "Brooklyn Nine-Nine S01 Season 1 1080p 5.1Ch Web-DL ReEnc-DeeJayAhmed"
+dj.mkdir()
+(dj / "other.mkv").write_bytes(b"o")
+assert g["collapse_season_named_dumps"](str(live_tv), allow=[str(live_tv)]) == 2
+assert not exp.exists()
+assert not dj.exists()
+assert (live_tv / "The Expanse" / "E01.mkv").is_file()
 # empty series stub + Season 1 dump: move media, then drop the season-named dir
 empty = Path(td) / "sonarr-empty"
 empty.mkdir()
@@ -234,6 +281,21 @@ assert g["plan_season_folder_item"](orphan, [orphan]) == {
     "as": "Brooklyn Nine-Nine",
 }
 assert g["plan_season_folder_item"](dict(orphan, Path="/media/tv/Brooklyn Nine-Nine S01"), [orphan]) is None
+# JF named the dump after metadata; Path is still the S01 pack.
+exp_canon = {
+    "Id": "jf-exp",
+    "Name": "The Expanse",
+    "Path": "/symlinks/sonarr/The Expanse",
+    "ProviderIds": {"Tvdb": "280619"},
+}
+exp_dump = {
+    "Id": "jf-exp-s01",
+    "Name": "The Expanse",
+    "Path": "/symlinks/sonarr/The.Expanse.S01.2160p.AMZN.WEB-DL.x265",
+    "ProviderIds": {},
+}
+assert g["plan_season_folder_item"](exp_dump, [exp_canon, exp_dump])["action"] == "delete"
+assert g["plan_season_folder_item"](exp_canon, [exp_canon, exp_dump]) is None
 vs1 = {"Id": "jf-vs1", "Name": "Vinland Saga", "Path": "/symlinks/sonarr/Vinland Saga", "ProviderIds": {"Tvdb": "359274"}}
 vs2 = {
     "Id": "jf-vs2",
@@ -251,6 +313,137 @@ assert "jf-twd-s1" in healed[0][1]
 kept = []
 assert g["heal_season_folder_items"]("tok", items=[twd, disk_s1], call_fn=lambda url, **kw: kept.append(url)) == 0
 assert kept == []
+
+# Movie release dumps collapse into Title (Year) — Interstellar×3 / John Wick×2.
+assert g["is_canonical_movie_folder"]("Interstellar (2014)") is True
+assert g["is_canonical_movie_folder"]("Interstellar (2014) [2160p] [YTS.MX]") is False
+assert g["movie_dump_key"]("Interstellar (2014)") == g["movie_dump_key"](
+    "Interstellar.2014.2160p.PROPER.IMAX.REMUX.mkv"
+)
+assert g["movie_dump_key"]("John Wick (2014)") == g["movie_dump_key"](
+    "John Wick.2014.2160p.UHD.BluRay.HDR.DoVi.TrueHD 7.1.Atmos.x265-SPHD[TGx]"
+)
+assert g["movie_dump_key"]("Night at the Museum (2006)") == g["movie_dump_key"](
+    "Night at the Museum 2006. 2160P.AI Upscaled.BluRay.60FPS.H265"
+)
+assert g["movie_dump_key"]("Dune (1984)") != g["movie_dump_key"]("Dune (2021)")
+assert g["movie_dump_key"]("Dune.2021.2160p.BluRay") != g["movie_dump_key"]("Dune (1984)")
+assert "dune:2021" in g["movie_dump_keys"]("Dune Part One (2021) [2160p]")
+assert "dune:2021" in g["movie_dump_keys"]("Dune: Part One (2021)")
+assert "dune:2021" not in g["movie_dump_keys"]("Dune Part Two (2024)")
+assert g["movie_dump_key"]("Dune (2021)") in g["movie_dump_keys"]("Dune Part One (2021) [2160p]")
+assert g["looks_like_movie_dump_folder"]("Interstellar.2014.2160p.REMUX") is True
+assert g["looks_like_movie_dump_folder"]("Interstellar (2014)") is False
+assert g["movie_dump_item_path"]("/symlinks/radarr/Interstellar.2014.2160p.YTS") is True
+assert g["movie_dump_item_path"]("/mnt/symlinks/radarr/Interstellar (2014) [YTS.MX]") is True
+assert g["movie_dump_item_path"]("/symlinks/radarr/Interstellar (2014)") is False
+assert g["movie_dump_item_path"]("/media/movies/Interstellar.2014.2160p") is False
+assert g["movie_dump_item_path"]("/symlinks/radarr") is False
+radarr = Path(td) / "radarr"
+radarr.mkdir()
+(radarr / "Interstellar (2014)").mkdir()
+(radarr / "Interstellar (2014)" / "keep.mkv").write_bytes(b"k")
+(radarr / "Interstellar (2014) [2160p] [4K] [BluRay] [5.1] [YTS.MX]").mkdir()
+(radarr / "Interstellar (2014) [2160p] [4K] [BluRay] [5.1] [YTS.MX]" / "yts.mkv").write_bytes(b"y")
+(radarr / "Interstellar.2014.2160p.PROPER.IMAX.REMUX.mkv").mkdir()
+(radarr / "Interstellar.2014.2160p.PROPER.IMAX.REMUX.mkv" / "remux.mkv").write_bytes(b"r")
+(radarr / "John Wick (2014)").mkdir()
+(radarr / "John Wick (2014)" / "jw.mkv").write_bytes(b"j")
+(radarr / "John Wick.2014.2160p.UHD.BluRay").mkdir()
+(radarr / "John Wick.2014.2160p.UHD.BluRay" / "uhd.mkv").write_bytes(b"u")
+(radarr / "Dune (1984)").mkdir()
+(radarr / "Dune (2021)").mkdir()
+(radarr / "Dune.2021.2160p.BluRay").mkdir()
+(radarr / "Dune.2021.2160p.BluRay" / "dune.mkv").write_bytes(b"d")
+# refuse /media and anything that is not the radarr dump root
+media_movies = Path(td) / "media" / "movies"
+media_movies.mkdir(parents=True)
+(media_movies / "Interstellar (2014)").mkdir()
+(media_movies / "Interstellar.2014.2160p").mkdir()
+assert g["collapse_movie_named_dumps"](str(media_movies), allow=[str(media_movies)]) == 0
+assert (media_movies / "Interstellar.2014.2160p").is_dir()
+assert g["collapse_movie_named_dumps"](str(radarr)) == 0
+n = g["collapse_movie_named_dumps"](str(radarr), allow=[str(radarr)])
+assert n == 4, n
+assert (radarr / "Interstellar (2014)").is_dir()
+assert not (radarr / "Interstellar (2014) [2160p] [4K] [BluRay] [5.1] [YTS.MX]").exists()
+assert not (radarr / "Interstellar.2014.2160p.PROPER.IMAX.REMUX.mkv").exists()
+assert (radarr / "Interstellar (2014)" / "keep.mkv").is_file()
+assert (radarr / "Interstellar (2014)" / "yts.mkv").is_file()
+assert (radarr / "Interstellar (2014)" / "remux.mkv").is_file()
+assert (radarr / "John Wick (2014)" / "uhd.mkv").is_file()
+assert not (radarr / "John Wick.2014.2160p.UHD.BluRay").exists()
+assert (radarr / "Dune (1984)").is_dir()
+assert (radarr / "Dune (2021)" / "dune.mkv").is_file()
+assert not (radarr / "Dune.2021.2160p.BluRay").exists()
+# Live box: Dune Part One [2160p] next to Dune (2021); remakes stay split.
+(radarr / "Dune Part One (2021) [2160p]").mkdir()
+(radarr / "Dune Part One (2021) [2160p]" / "yts-partone.mkv").write_bytes(b"p")
+(radarr / "Dune Part Two (2024)").mkdir()
+(radarr / "Dune Part Two (2024)" / "two.mkv").write_bytes(b"t")
+n = g["collapse_movie_named_dumps"](str(radarr), allow=[str(radarr)])
+assert n >= 1, n
+assert (radarr / "Dune (2021)" / "yts-partone.mkv").is_file()
+assert not (radarr / "Dune Part One (2021) [2160p]").exists()
+assert (radarr / "Dune Part Two (2024)" / "two.mkv").is_file()
+assert (radarr / "Dune (1984)").is_dir()
+jf_canon = {
+    "Id": "jf-int",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014)",
+    "ProviderIds": {"Tmdb": "157336"},
+}
+jf_dump = {
+    "Id": "jf-int-yts",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014) [2160p] [YTS.MX]",
+    "ProviderIds": {"Tmdb": "157336"},
+}
+assert g["plan_movie_dump_item"](jf_dump, [jf_canon, jf_dump])["action"] == "delete"
+assert g["plan_movie_dump_item"](jf_canon, [jf_canon, jf_dump]) is None
+jf_disk = dict(jf_dump, Id="jf-disk", Path="/media/movies/Interstellar.2014.2160p")
+assert g["plan_movie_dump_item"](jf_disk, [jf_canon, jf_disk]) is None
+jf_only = {
+    "Id": "jf-only-dump",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar.2014.2160p.YTS",
+    "ProviderIds": {},
+}
+assert g["plan_movie_dump_item"](jf_only, [jf_only]) is None
+movie_healed = []
+assert g["heal_movie_dump_items"](
+    "tok", items=[jf_canon, jf_dump], call_fn=lambda url, **kw: movie_healed.append((kw.get("method"), url))
+) == 1
+assert movie_healed[0][0] == "DELETE"
+assert "jf-int-yts" in movie_healed[0][1]
+
+# Same Title (Year) folder with two files is versions, not two posters. Never /media.
+v1 = {
+    "Id": "jf-int-a",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014)/keep.mkv",
+}
+v2 = {
+    "Id": "jf-int-b",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014)/remux.mkv",
+}
+v_media = {
+    "Id": "jf-int-disk",
+    "Name": "Interstellar",
+    "Path": "/media/movies/Interstellar (2014)/keep.mkv",
+}
+groups = g["movie_version_merge_groups"]([v1, v2, v_media])
+assert len(groups) == 1, groups
+assert {x["Id"] for x in groups[0]} == {"jf-int-a", "jf-int-b"}
+merged = []
+assert g["heal_merge_movie_versions"](
+    "tok", items=[v1, v2, v_media], call_fn=lambda url, **kw: merged.append((kw.get("method"), url))
+) == 1
+assert merged[0][0] == "POST"
+assert "MergeVersions" in merged[0][1]
+assert "jf-int-a" in merged[0][1] and "jf-int-b" in merged[0][1]
+assert "jf-int-disk" not in merged[0][1]
 
 # A leftover library is deleted only once every path it holds is safe to lose.
 CANON = {
@@ -316,6 +509,8 @@ print("ok")
   assert.match(eight, /jellyfin heal red — no token/);
   assert.match(eight, /delete_jellyfin_library/);
   assert.match(eight, /collapse_season_named_dumps/);
+  assert.match(eight, /collapse_movie_named_dumps/);
+  assert.match(eight, /heal_movie_dump_items/);
   assert.match(eight, /heal_season_folder_items/);
   assert.match(eight, /drop_extra_jellyfin_libraries/);
 });

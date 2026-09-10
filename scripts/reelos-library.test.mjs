@@ -145,6 +145,22 @@ test("Home shelf collapses JF season-folder names onto the real series row", () 
   assert.equal(stripSeasonFolderSuffix("Brooklyn Nine-Nine S01"), "Brooklyn Nine-Nine");
   assert.equal(stripSeasonFolderSuffix("The Walking Dead - Season 1"), "The Walking Dead");
   assert.equal(stripSeasonFolderSuffix("The Walking Dead"), "The Walking Dead");
+  assert.equal(
+    stripSeasonFolderSuffix(
+      "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)",
+    ),
+    "Brooklyn Nine-Nine",
+  );
+  assert.equal(
+    stripSeasonFolderSuffix(
+      "The.Expanse.S01.2160p.AMZN.WEB-DL.x265.10bit.HDR.DTS-HD.MA.5.1-SAFETY[rartv]",
+    ).replace(/[._]+/g, " ").replace(/\s+/g, " ").trim(),
+    "The Expanse",
+  );
+  assert.equal(
+    stripSeasonFolderSuffix("Brooklyn Nine-Nine S01 Season 1 1080p 5.1Ch Web-DL ReEnc-DeeJayAhmed"),
+    "Brooklyn Nine-Nine",
+  );
   assert.equal(looksLikeSeasonFolderTitle("Brooklyn Nine-Nine S01"), true);
   const b99 = titleFrom({
     Id: "jf-b99",

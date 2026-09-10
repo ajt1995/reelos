@@ -61,12 +61,20 @@ export function mapJellyfinItem(it, host) {
   };
 }
 
-/** JF season-folder names are the same show: "B99 S01", "TWD - Season 1". Trailing only. */
+/** JF season-folder names are the same show: "B99 S01", "TWD - Season 1". */
 export function stripSeasonFolderSuffix(title) {
   const raw = String(title || "").trim();
   // "- Season 1" is a bare season folder, not a suffix: stripping it to "" would
   // give every such dump the same shelf key and collapse unrelated shows.
-  return raw.replace(/[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$/i, "").trim() || raw;
+  // Quality after S01 (`Season 1 S01 (1080p AMZN…)`) is still a season dump.
+  const stripped = raw
+    .replace(
+      /[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|s\d{1,2}(?!\d)(?![eE]\d))(?![eE]\d).*$/i,
+      "",
+    )
+    .trim();
+  if (!stripped || stripped === raw) return raw;
+  return stripped.replace(/\s+\((?:19|20)\d{2}\)\s*$/, "").trim() || stripped;
 }
 
 export function looksLikeSeasonFolderTitle(title) {
