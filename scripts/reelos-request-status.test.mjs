@@ -9,7 +9,9 @@ import {
   listMissingRecoverTargets,
   listRecoverTargets,
   listSeerrOrphanMovieTargets,
+  listSeerrOrphanSeriesTargets,
   listUnmonitoredMovieRecoverTargets,
+  listUnmonitoredSeasonRecoverTargets,
   loadPresenceFacts,
   planArrPostRecover,
   planTvPostRecover,
@@ -21,6 +23,9 @@ import {
   commandPosted,
   recoverKickOk,
   pickRadarrLookupMovie,
+  pickSonarrLookupSeries,
+  seasonNeedsMonitor,
+  seriesWithMonitoredSeason,
 } from "./reelos-request-status.mjs";
 
 test("presence facts read the JF shelf cache and *arr hasFile index", async () => {
@@ -687,4 +692,182 @@ test("recover never adds a mismatched lookup hit under the requested tmdbId", as
   assert.equal(result.ok, false);
   assert.equal(result.movieId, null);
   assert.equal(result.grabPath?.missing, true);
+});
+
+test("GET recover monitors Seerr-requested unmonitored seasons and skips the rest of Sonarr", () => {
+  const twd = {
+    tmdbId: 1402,
+    title: "The Walking Dead",
+    monitored: true,
+    seasons: [
+      { seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 6 } },
+      { seasonNumber: 2, monitored: false, statistics: { episodeFileCount: 0 } },
+      { seasonNumber: 3, monitored: false, statistics: { episodeFileCount: 0 } },
+    ],
+  };
+  const b99 = {
+    tmdbId: 48891,
+    title: "Brooklyn Nine-Nine",
+    monitored: true,
+    seasons: [{ seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } }],
+  };
+  const seerrRows = [
+    { titleId: "tmdb-tv-1402", mediaType: "tv", tmdb: 1402, season: 2, status: "waiting" },
+    { titleId: "tmdb-tv-1402", mediaType: "tv", tmdb: 1402, season: 3, status: "waiting" },
+  ];
+  assert.deepEqual(
+    listUnmonitoredSeasonRecoverTargets({ seerrRows, series: [twd, b99] }).map(
+      (t) => `${t.tmdb}:${t.season}`,
+    ),
+    ["1402:2", "1402:3"],
+  );
+  const targets = listRecoverTargets({
+    series: [twd, b99],
+    movies: [{ tmdbId: 157336, title: "Interstellar", monitored: true, hasFile: false }],
+    seerrRows,
+  });
+  assert.deepEqual(
+    targets.map((t) => `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`),
+    ["tv:1402:2", "tv:1402:3"],
+  );
+});
+
+test("recover adds a Seerr TV orphan Sonarr never grew (Rick and Morty)", () => {
+  const seerrRows = [
+    { titleId: "tmdb-tv-60625", mediaType: "tv", tmdb: 60625, season: 3, status: "waiting" },
+    { titleId: "tmdb-tv-60625", mediaType: "tv", tmdb: 60625, season: 4, status: "downloading" },
+  ];
+  assert.deepEqual(
+    listSeerrOrphanSeriesTargets({ seerrRows, series: [] }).map((t) => `${t.tmdb}:${t.season}`),
+    ["60625:3", "60625:4"],
+  );
+  assert.deepEqual(
+    listSeerrOrphanSeriesTargets({
+      seerrRows,
+      series: [{ tmdbId: 60625, monitored: true, seasons: [] }],
+    }),
+    [],
+  );
+  const targets = listRecoverTargets({ series: [], movies: [], seerrRows });
+  assert.deepEqual(
+    targets.map((t) => `${t.mediaType}:${t.tmdb}:${t.season}`),
+    ["tv:60625:3", "tv:60625:4"],
+  );
+});
+
+test("kickArrRecover monitors an unmonitored season then SeasonSearchs", async () => {
+  const calls = [];
+  const series = {
+    id: 4,
+    tmdbId: 63639,
+    title: "The Expanse",
+    monitored: true,
+    seasons: [
+      { seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 10 } },
+      { seasonNumber: 2, monitored: false, statistics: { episodeFileCount: 0 } },
+    ],
+  };
+  assert.equal(seasonNeedsMonitor(series, 2), true);
+  assert.equal(seriesWithMonitoredSeason(series, 2).seasons[1].monitored, true);
+  const result = await kickTvSeasonRecover({
+    tmdb: 63639,
+    season: 2,
+    sonarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("/series/lookup")) return [];
+      if (String(url).includes("/series") && method === "GET") return [series];
+      if (String(url).includes("/series/4") && method === "PUT") {
+        return { ...series, seasons: seriesWithMonitoredSeason(series, 2).seasons };
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") {
+        return [
+          {
+            implementation: "QBittorrent",
+            fields: [
+              { name: "host", value: "decypharr" },
+              { name: "port", value: 8282 },
+            ],
+          },
+        ];
+      }
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
+      }
+      if (String(url).includes("/command")) return { id: 1, name: "SeasonSearch" };
+      return { ok: true };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.searched, true);
+  const put = calls.find((c) => String(c.url).includes("/series/4") && c.method === "PUT");
+  assert.equal(put?.body?.monitored, true);
+  assert.equal(put?.body?.seasons?.find((s) => s.seasonNumber === 2)?.monitored, true);
+  const search = calls.find((c) => String(c.url).includes("/command"));
+  assert.equal(search?.body?.name, "SeasonSearch");
+  assert.equal(search?.body?.seasonNumber, 2);
+  assert.ok(calls.indexOf(put) < calls.indexOf(search));
+});
+
+test("kickArrRecover POSTs a missing Sonarr series then SeasonSearchs", async () => {
+  const calls = [];
+  const lookup = {
+    title: "Rick and Morty",
+    tmdbId: 60625,
+    seasons: [
+      { seasonNumber: 1, monitored: false },
+      { seasonNumber: 3, monitored: false },
+    ],
+  };
+  assert.equal(pickSonarrLookupSeries([lookup, { title: "Other", tmdbId: 1 }], 60625)?.title, "Rick and Morty");
+  const result = await kickArrRecover({
+    mediaType: "tv",
+    tmdb: 60625,
+    season: 3,
+    sonarrKey: "test",
+    waitTries: 1,
+    waitMs: 0,
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      calls.push({ method, url, body: opts.body });
+      if (String(url).includes("/series/lookup")) return [lookup];
+      if (String(url).includes("/rootfolder")) return [{ path: "/symlinks/sonarr" }];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [{ id: 1, name: "Any", items: [{ quality: { name: "WEBDL-720p" }, allowed: true }] }];
+      }
+      if (String(url).includes("/downloadclient") && method === "GET") {
+        return [
+          {
+            implementation: "QBittorrent",
+            fields: [
+              { name: "host", value: "decypharr" },
+              { name: "port", value: 8282 },
+            ],
+          },
+        ];
+      }
+      if (String(url).endsWith("/series") && method === "POST") {
+        return { ...lookup, id: 7, tmdbId: 60625, monitored: true };
+      }
+      if (String(url).includes("/series") && method === "GET") return [];
+      if (String(url).includes("/series/7") && method === "PUT") return { id: 7, tmdbId: 60625, monitored: true };
+      if (String(url).includes("/command")) return { id: 1, name: "SeasonSearch" };
+      return { ok: true };
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.seriesId, 7);
+  assert.equal(result.searched, true);
+  const add = calls.find((c) => c.method === "POST" && String(c.url).endsWith("/series"));
+  assert.equal(add?.body?.tmdbId, 60625);
+  assert.equal(add?.body?.rootFolderPath, "/symlinks/sonarr");
+  assert.equal(add?.body?.addOptions?.searchForMissingEpisodes, false);
+  const search = calls.find((c) => String(c.url).includes("/command"));
+  assert.equal(search?.body?.name, "SeasonSearch");
+  assert.equal(search?.body?.seasonNumber, 3);
 });

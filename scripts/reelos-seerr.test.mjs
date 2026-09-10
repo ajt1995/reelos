@@ -12,6 +12,7 @@ import {
   pickSeerrRequestForTitle,
   honestifyRequests,
   assembleRequestPayload,
+  attachRequestTitles,
   ERA_QA_TITLES,
   lookupFailureMessage,
   mapSeerrDiscoverResults,
@@ -588,6 +589,13 @@ test("National Treasure stuck downloading@0 is honest when Radarr never got the 
   assert.equal(assembled.requests[0].engine, "grabbing");
   assert.equal(assembled.pipeline.decypharr, 0);
   assert.deepEqual(
+    attachRequestTitles(
+      [{ titleId: "tmdb-tv-1402", status: "waiting" }],
+      { series: [{ tmdbId: 1402, title: "The Walking Dead" }] },
+    )[0].title,
+    "The Walking Dead",
+  );
+  assert.deepEqual(
     pipelineMovieGaps({
       seerrRows: [row],
       movies: [{ tmdbId: 2059, hasFile: false, monitored: false, statistics: { movieFileCount: 0 } }],
@@ -869,10 +877,16 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   const progress = readFileSync(join(root, "scripts/reelos-request-progress-plugin.mjs"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
   const seerr = readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8");
+  const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
+  const requestsView = readFileSync(join(root, "src/components/requests-view.tsx"), "utf8");
   assert.match(progress, /assembleRequestPayload/);
   assert.match(progress, /loadPresenceFacts/);
   assert.match(progress, /recover/);
   assert.match(progress, /listRecoverTargets/);
+  assert.match(progress, /seerrMediaGhostRows/);
+  assert.match(progress, /deferred: true/);
+  assert.match(sync, /recover=1/);
+  assert.match(requestsView, /requestShowsRetry/);
   assert.match(progress, /reason: honest.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);

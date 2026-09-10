@@ -66,6 +66,7 @@ export interface Title {
 export interface MediaRequest {
   id: string;
   titleId: string;
+  title?: string;
   status: RequestStatus;
   progress: number;
   reason?: string;

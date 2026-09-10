@@ -8,6 +8,7 @@ import {
   honestifyRequests,
   pickSeerrRequestForTitle,
   assembleRequestPayload,
+  seerrMediaGhostRows,
 } from "./reelos-seerr.mjs";
 import {
   kickArrRecover,
@@ -34,6 +35,10 @@ function mediaFromDetail(json) {
   return json?.mediaInfo || json?.media || null;
 }
 
+let recoverInFlight = false;
+let lastRecoverAt = 0;
+const RECOVER_COOLDOWN_MS = 120_000;
+
 async function maybeRecover(u, facts) {
   const flag = String(u.searchParams.get("recover") || "");
   if (flag !== "1" && flag !== "true") return null;
@@ -47,17 +52,39 @@ async function maybeRecover(u, facts) {
     } catch {
       seerrRows = [];
     }
+    try {
+      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 12000 });
+      const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
+      seerrRows = [...seerrRows, ...seerrMediaGhostRows(mediaItems)];
+    } catch {
+      /* request rows still recover movie orphans */
+    }
   }
   const missing = listRecoverTargets({
     series: facts?.series,
     movies: facts?.movies,
     seerrRows,
   });
-  const kicks = [];
-  for (const m of missing) {
-    kicks.push(await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season }));
+  if (!missing.length) return { recover: true, targets: 0, kicks: [] };
+  const now = Date.now();
+  if (recoverInFlight) return { recover: true, targets: missing.length, deferred: true, started: false };
+  if (now - lastRecoverAt < RECOVER_COOLDOWN_MS) {
+    return { recover: true, targets: missing.length, skipped: "cooldown" };
   }
-  return { recover: true, targets: missing.length, kicks };
+  lastRecoverAt = now;
+  recoverInFlight = true;
+  void (async () => {
+    try {
+      for (const m of missing) {
+        await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season });
+      }
+    } catch {
+      /* next Home poll retries */
+    } finally {
+      recoverInFlight = false;
+    }
+  })();
+  return { recover: true, targets: missing.length, deferred: true, started: true };
 }
 
 async function handleList(res, recoverNote = null) {
@@ -107,7 +134,10 @@ async function handleList(res, recoverNote = null) {
     } catch {
       mediaItems = [];
     }
-    const assembled = assembleRequestPayload(requests, { ...facts, seerrMediaByTitleId }, mediaItems);
+    const titleById = new Map(
+      details.map((d) => d?.hit).filter((h) => h?.id && h?.title).map((h) => [h.id, h.title]),
+    );
+    const assembled = assembleRequestPayload(requests, { ...facts, seerrMediaByTitleId, titleById }, mediaItems);
     send(res, 200, {
       requests: assembled.requests,
       titles: details.map((d) => d?.hit).filter(Boolean),

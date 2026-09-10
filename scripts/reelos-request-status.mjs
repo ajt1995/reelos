@@ -189,13 +189,68 @@ export function listUnmonitoredMovieRecoverTargets({ seerrRows = [], movies = []
   return out;
 }
 
+/** Seerr requested TWD S02, Sonarr has the series, that season is unmonitored — search never fires. */
+export function listUnmonitoredSeasonRecoverTargets({ seerrRows = [], series = [] } = {}) {
+  const byTmdb = new Map(
+    (series || []).filter((s) => s && s.tmdbId != null).map((s) => [String(s.tmdbId), s]),
+  );
+  const out = [];
+  const seen = new Set();
+  for (const row of seerrRows || []) {
+    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    const mediaType =
+      row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row?.tmdb ?? row?.tmdbId;
+    if (mediaType !== "tv" || tmdb == null) continue;
+    const n = Number(row.season);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    const hit = byTmdb.get(String(tmdb));
+    if (!hit) continue;
+    const seasonRow = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === n);
+    const files = Number(seasonRow?.statistics?.episodeFileCount || 0);
+    if (files > 0) continue;
+    if (hit.monitored !== false && seasonRow && seasonRow.monitored !== false) continue;
+    const key = `${tmdb}:${n}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ mediaType: "tv", tmdb, season: n });
+  }
+  return out;
+}
+
+/** Seerr requested Rick and Morty S03, Sonarr never grew a row — recover must still add+search. */
+export function listSeerrOrphanSeriesTargets({ seerrRows = [], series = [] } = {}) {
+  const have = new Set(
+    (series || []).map((s) => (s?.tmdbId == null ? "" : String(s.tmdbId))).filter(Boolean),
+  );
+  const out = [];
+  const seen = new Set();
+  for (const row of seerrRows || []) {
+    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    const mediaType =
+      row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
+    const tmdb = row?.tmdb ?? row?.tmdbId;
+    if (mediaType !== "tv" || tmdb == null) continue;
+    if (have.has(String(tmdb))) continue;
+    const n = Number(row.season);
+    const season = Number.isFinite(n) && n > 0 ? n : 1;
+    const key = `${tmdb}:${season}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ mediaType: "tv", tmdb, season });
+  }
+  return out;
+}
+
 export function listRecoverTargets({ series = [], movies = [], seerrRows = [] } = {}) {
   const missing = listMissingRecoverTargets({ series, movies, seerrRows });
-  const orphans = listSeerrOrphanMovieTargets({ seerrRows, movies });
-  const unmonitored = listUnmonitoredMovieRecoverTargets({ seerrRows, movies });
+  const movieOrphans = listSeerrOrphanMovieTargets({ seerrRows, movies });
+  const movieUnmonitored = listUnmonitoredMovieRecoverTargets({ seerrRows, movies });
+  const seasonUnmonitored = listUnmonitoredSeasonRecoverTargets({ seerrRows, series });
+  const seriesOrphans = listSeerrOrphanSeriesTargets({ seerrRows, series });
   const seen = new Set(missing.map((t) => `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`));
   const out = [...missing];
-  for (const t of [...orphans, ...unmonitored]) {
+  for (const t of [...movieOrphans, ...movieUnmonitored, ...seasonUnmonitored, ...seriesOrphans]) {
     const key = `${t.mediaType}:${t.tmdb}:${t.season ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -420,6 +475,81 @@ export function pickRadarrRootPath(roots) {
   return String(prefer?.path || rows[0]?.path || "/symlinks/radarr");
 }
 
+export function pickSonarrRootPath(roots) {
+  const rows = Array.isArray(roots) ? roots : [];
+  const prefer = rows.find((r) => String(r?.path || "").replace(/\/+$/, "") === "/symlinks/sonarr");
+  return String(prefer?.path || rows[0]?.path || "/symlinks/sonarr");
+}
+
+export function sonarrLookupUrls(tmdb) {
+  return [`http://127.0.0.1:8989/api/v3/series/lookup?term=${encodeURIComponent(`tmdb:${tmdb}`)}`];
+}
+
+/** Sonarr lookup can answer with a different show. Adding it under the requested
+ *  tmdbId monitors and SeasonSearchs the wrong title, so an unmatched hit is no hit. */
+export function pickSonarrLookupSeries(hits, tmdb) {
+  const want = String(tmdb);
+  const rows = Array.isArray(hits) ? hits : hits && typeof hits === "object" && !hits.empty ? [hits] : [];
+  return rows.find((s) => s && typeof s === "object" && String(s.tmdbId) === want) || null;
+}
+
+export function seasonNeedsMonitor(series, season) {
+  if (!series) return false;
+  if (series.monitored === false) return true;
+  const n = Number(season);
+  if (!Number.isFinite(n) || n <= 0) return false;
+  const row = (series.seasons || []).find((s) => Number(s?.seasonNumber) === n);
+  return !row || row.monitored === false;
+}
+
+export function seriesWithMonitoredSeason(series, season) {
+  const n = Number(season);
+  const seasons = (Array.isArray(series?.seasons) ? series.seasons : []).map((s) => ({
+    ...s,
+    monitored: Number(s.seasonNumber) === n && n > 0 ? true : s.monitored,
+  }));
+  if (Number.isFinite(n) && n > 0 && !seasons.some((s) => Number(s.seasonNumber) === n)) {
+    seasons.push({ seasonNumber: n, monitored: true });
+  }
+  return { ...series, monitored: true, seasons };
+}
+
+/** Seerr 200 but Sonarr never got the series (Rick and Morty). Lookup + add, then SeasonSearch. */
+export async function addSonarrSeries({ fetchArr = arrJson, sonarrKey, tmdb } = {}) {
+  if (!sonarrKey || tmdb == null) return null;
+  let series = null;
+  for (const url of sonarrLookupUrls(tmdb)) {
+    const hits = await fetchArr(url, sonarrKey);
+    series = pickSonarrLookupSeries(hits, tmdb);
+    if (series) break;
+  }
+  if (!series || typeof series !== "object") return null;
+  const roots = await fetchArr("http://127.0.0.1:8989/api/v3/rootfolder", sonarrKey);
+  const profiles = await fetchArr("http://127.0.0.1:8989/api/v3/qualityprofile", sonarrKey);
+  const rows = Array.isArray(profiles) ? profiles : [];
+  const fb = pickFallbackProfile(rows, series.qualityProfileId);
+  const profileId = fb.id != null ? fb.id : rows[0]?.id;
+  if (profileId == null) return null;
+  const { id: _dropId, ...rest } = series;
+  const body = {
+    ...rest,
+    tmdbId: Number(tmdb),
+    qualityProfileId: profileId,
+    rootFolderPath: pickSonarrRootPath(roots),
+    monitored: true,
+    seasonFolder: true,
+    addOptions: { searchForMissingEpisodes: false, monitor: "none" },
+  };
+  const created = await fetchArr("http://127.0.0.1:8989/api/v3/series", sonarrKey, 15000, {
+    method: "POST",
+    body,
+  });
+  if (created?.id) return created;
+  const again = await fetchArr("http://127.0.0.1:8989/api/v3/series", sonarrKey);
+  const hit = (Array.isArray(again) ? again : []).find((s) => String(s?.tmdbId) === String(tmdb));
+  return hit || created;
+}
+
 export function radarrLookupUrls(tmdb) {
   const id = encodeURIComponent(String(tmdb));
   return [
@@ -493,16 +623,42 @@ export async function kickArrRecover({
   if (type === "tv" && sonarrKey && tmdb) {
     const n = Number(season);
     const wantSeason = Number.isFinite(n) && n > 0 ? n : null;
-    const hit = await waitForArrRow({
+    const matchSeries = (s) => String(s?.tmdbId) === String(tmdb);
+    let hit = await waitForArrRow({
       fetchArr,
       url: "http://127.0.0.1:8989/api/v3/series",
       key: sonarrKey,
-      match: (s) => String(s?.tmdbId) === String(tmdb),
+      match: matchSeries,
       tries: waitTries,
       delayMs: waitMs,
     });
+    let added = false;
+    if (!hit?.id) {
+      const created = await addSonarrSeries({ fetchArr, sonarrKey, tmdb });
+      added = Boolean(created);
+      hit =
+        created?.id && matchSeries(created)
+          ? created
+          : await waitForArrRow({
+              fetchArr,
+              url: "http://127.0.0.1:8989/api/v3/series",
+              key: sonarrKey,
+              match: matchSeries,
+              tries: waitTries,
+              delayMs: waitMs,
+            });
+    }
     if (hit?.id) {
       seriesId = hit.id;
+      if (seasonNeedsMonitor(hit, wantSeason)) {
+        const body = seriesWithMonitoredSeason(hit, wantSeason);
+        const saved = await fetchArr(`http://127.0.0.1:8989/api/v3/series/${hit.id}`, sonarrKey, 12000, {
+          method: "PUT",
+          body,
+        });
+        if (saved) hit = { ...body, ...(saved.id ? saved : {}) };
+        else hit = body;
+      }
       const hasFile = arrHasFile(
         { titleId: `tmdb-tv-${tmdb}`, season: wantSeason },
         buildArrIndex({ series: [hit] }),
@@ -515,13 +671,18 @@ export async function kickArrRecover({
       if (plan.search) {
         wantedSearch = true;
         grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
+        grabPath.added = added;
         const posted = await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
           method: "POST",
           body: { name: "SeasonSearch", seriesId: hit.id, seasonNumber: wantSeason },
         });
         searched = commandPosted(posted);
         command = searched ? "SeasonSearch" : null;
+      } else if (added) {
+        grabPath = { added, clientAdded: false, profileFallback: "ok", profileWidened: false };
       }
+    } else {
+      grabPath = { added, clientAdded: false, profileFallback: "none", missing: true };
     }
   } else if (type === "movie" && radarrKey && tmdb) {
     const matchMovie = (m) => String(m?.tmdbId) === String(tmdb);

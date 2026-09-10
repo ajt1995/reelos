@@ -18,6 +18,7 @@ import {
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
+import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -397,7 +398,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.21"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.26"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -517,17 +518,11 @@ async function jellyfinState(ip) {
   if (!auth?.token) {
     return { state: "red", detail: "Jellyfin has no matching user/PIN", libraries: [] };
   }
-  let names = [];
-  try {
-    const r = await fetch("http://127.0.0.1:8096/Library/VirtualFolders", {
-      headers: jellyfinAuthedHeaders(auth.token),
-      signal: AbortSignal.timeout(2500),
-    });
-    const folders = r.ok ? await r.json() : [];
-    names = (Array.isArray(folders) ? folders : []).map((x) => String(x.Name || ""));
-  } catch {
-    names = [];
+  const folders = await readJellyfinVirtualFolders(auth.token);
+  if (!folders) {
+    return { state: "red", detail: "Cannot read virtual folders", libraries: [] };
   }
+  const names = folders.map((x) => String(x.Name || "")).filter(Boolean);
   const need = [];
   if (intent.movies !== false) need.push("Movies");
   if (intent.tv !== false || intent.anime) need.push("Shows");
@@ -536,6 +531,27 @@ async function jellyfinState(ip) {
     return { state: "red", detail: `Missing library ${missing.join(", ")}`, libraries: names };
   }
   return { state: "green", detail: `Jellyfin on http://${ip}:8096`, libraries: names };
+}
+
+async function readJellyfinVirtualFolders(token) {
+  const urls = [
+    "http://127.0.0.1:8096/Library/VirtualFolders",
+    `http://127.0.0.1:8096/Library/VirtualFolders?api_key=${encodeURIComponent(token)}`,
+  ];
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers: jellyfinAuthedHeaders(token),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) continue;
+      const folders = await r.json();
+      if (Array.isArray(folders)) return folders;
+    } catch {
+      /* timeout / 401 — try api_key next, like doctor */
+    }
+  }
+  return null;
 }
 
 function saveAuthUrl(url) {
@@ -851,8 +867,7 @@ async function handleUpdateApply(req, res) {
     send(res, 405, { ok: false });
     return;
   }
-  const st0 = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
-  if (st0 === "active" || st0 === "activating") {
+  if (applyIsRunning()) {
     send(res, 409, { ok: false, error: "Update already running", already: true });
     return;
   }
@@ -928,10 +943,18 @@ ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
   }
 }
 
-function lastOtaLines(n = 3) {
+function otaLogText() {
   try {
     if (!existsSync("/var/lib/reelos/ota.log")) return "";
-    const lines = readFileSync("/var/lib/reelos/ota.log", "utf8")
+    return readFileSync("/var/lib/reelos/ota.log", "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function lastOtaLines(n = 3) {
+  try {
+    const lines = otaLogText()
       .trim()
       .split("\n")
       .filter((l) => l && !l.includes("channel ") && !l.startsWith("----"));
@@ -942,9 +965,15 @@ function lastOtaLines(n = 3) {
 }
 
 async function handleUpdateStatus(_req, res) {
-  const st = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
-  const running = st === "active" || st === "activating";
-  send(res, 200, { ok: true, local: localVersion(), running, log: lastOtaLines(3) });
+  const running = applyIsRunning();
+  const log = lastOtaLines(3);
+  send(res, 200, {
+    ok: true,
+    local: localVersion(),
+    running,
+    target: running ? applyTargetFromLog(otaLogText()) : null,
+    log,
+  });
 }
 
 async function arrGet(url, key) {
@@ -1051,7 +1080,8 @@ async function handleRequestList(res) {
     } catch {
       mediaItems = [];
     }
-    const assembled = assembleRequestPayload(requests, facts, mediaItems);
+    const titleById = new Map(titles.filter((h) => h?.id && h?.title).map((h) => [h.id, h.title]));
+    const assembled = assembleRequestPayload(requests, { ...facts, titleById }, mediaItems);
     send(res, 200, { requests: assembled.requests, titles, engine: "seerr", pipeline: assembled.pipeline });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
@@ -1558,28 +1588,35 @@ function readUiSettings() {
   }
 }
 
+function writeSystemdFile(path, body) {
+  try {
+    mkdirSync("/etc/systemd/system", { recursive: true });
+    writeFileSync(path, body);
+    return true;
+  } catch (e) {
+    if (e && e.code !== "EACCES") throw e;
+    const r = spawnSync("sudo", ["-n", "tee", path], { input: body, encoding: "utf8" });
+    return r.status === 0;
+  }
+}
+
 function setAutoUpdateTimer(on) {
-  mkdirSync("/etc/systemd/system", { recursive: true });
-  writeFileSync(
-    "/etc/systemd/system/reelos-autoupdate.service",
-    `[Unit]
+  const service = `[Unit]
 Description=ReelOS daily Apply
 [Service]
 Type=oneshot
 ExecStart=/bin/bash /opt/reelos/bin/reelos-update.sh apply
-`,
-  );
-  writeFileSync(
-    "/etc/systemd/system/reelos-autoupdate.timer",
-    `[Unit]
+`;
+  const timer = `[Unit]
 Description=ReelOS daily Apply timer
 [Timer]
 OnCalendar=daily
 Persistent=true
 [Install]
 WantedBy=timers.target
-`,
-  );
+`;
+  if (!writeSystemdFile("/etc/systemd/system/reelos-autoupdate.service", service)) return;
+  if (!writeSystemdFile("/etc/systemd/system/reelos-autoupdate.timer", timer)) return;
   spawnSync("systemctl", ["daemon-reload"], { encoding: "utf8" });
   if (on) {
     spawnSync("systemctl", ["enable", "--now", "reelos-autoupdate.timer"], { encoding: "utf8" });
@@ -1602,7 +1639,11 @@ async function handleSettings(req, res) {
   const next = { ...cur, ...body };
   mkdirSync("/var/lib/reelos", { recursive: true });
   writeFileSync(uiSettingsPath(), JSON.stringify(next, null, 2) + "\n");
-  if ("autoUpdate" in body) setAutoUpdateTimer(Boolean(next.autoUpdate));
+  try {
+    if ("autoUpdate" in body) setAutoUpdateTimer(Boolean(next.autoUpdate));
+  } catch {
+    /* Vite is not root — settings still persist. */
+  }
   if ("stackImages" in body) {
     const flag = "/var/lib/reelos/stack-images";
     if (next.stackImages) writeFileSync(flag, "1\n");
@@ -1673,9 +1714,7 @@ systemctl restart reelos || true
 }
 
 function otaRunning() {
-  if (process.env.REELOS_OTA === "1") return true;
-  const ota = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" });
-  return ota.status === 0;
+  return applyIsRunning();
 }
 
 async function handleWire(req, res) {

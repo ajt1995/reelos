@@ -855,6 +855,26 @@ export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
   });
 }
 
+/** Requests rows often have no Seerr title. Name them from *arr or a title map. */
+export function attachRequestTitles(rows, facts = {}) {
+  const extra = facts.titleById;
+  return (rows || []).map((row) => {
+    if (!row || row.title) return row;
+    const fromMap =
+      extra && typeof extra.get === "function"
+        ? extra.get(row.titleId)
+        : extra && typeof extra === "object"
+          ? extra[row.titleId]
+          : "";
+    if (fromMap) return { ...row, title: fromMap };
+    const parsed = parseTitleId(row.titleId);
+    if (!parsed?.tmdb) return row;
+    const list = parsed.mediaType === "tv" ? facts.series : facts.movies;
+    const hit = (list || []).find((x) => String(x?.tmdbId) === String(parsed.tmdb));
+    return hit?.title ? { ...row, title: hit.title } : row;
+  });
+}
+
 export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
   const extras = [
     ...missingArrRequests(facts.series, facts.movies),
@@ -862,7 +882,7 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
     ...torrentRequests(facts.torrents, { series: facts.series, movies: facts.movies }),
   ];
   return {
-    requests: mergeUnfinishedRows(seerrRows, extras, facts),
+    requests: attachRequestTitles(mergeUnfinishedRows(seerrRows, extras, facts), facts),
     pipeline: buildPipeline({
       seerrRows,
       series: facts.series,

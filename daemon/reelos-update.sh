@@ -310,6 +310,10 @@ need src/components/settings-fix.tsx 'Finished. Check Movies'
 need src/components/settings-view.tsx 'FixSection'
 need src/lib/repairs.ts 'One poster per movie'
 need scripts/reelos-lookup-plugin.mjs '/api/intent'
+need scripts/reelos-lookup-plugin.mjs 'applyIsRunning'
+need scripts/reelos-ota-status.mjs 'lockIsHeld'
+need src/components/applying-bar.tsx 'engines are still configuring'
+need src/routes/__root.tsx 'syncUpdateFromBox'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
 need scripts/reelos-lookup-plugin.mjs '/api/library'
@@ -574,7 +578,7 @@ caddy_updating() {
 }
 :80 {
 	header Content-Type "text/html; charset=utf-8"
-	respond "ReelOS is updating. This page will come back in a minute." 200
+	respond "ReelOS is updating. The shell comes back first; engines may still be configuring." 200
 }
 EOF
   caddy_dropin
@@ -641,6 +645,9 @@ caddy_reelos() {
     mv /etc/caddy/Caddyfile.tmp /etc/caddy/Caddyfile
   fi
   caddy_dropin
+  ufw allow 80/tcp >/dev/null 2>&1 || true
+  ufw allow 8080/tcp >/dev/null 2>&1 || true
+  ufw allow 8096/tcp >/dev/null 2>&1 || true
   systemctl reset-failed caddy >/dev/null 2>&1 || true
   # admin off → reload is a no-op. Restart or the updating page sticks forever.
   caddy_clear

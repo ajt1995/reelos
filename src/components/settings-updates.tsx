@@ -33,7 +33,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         )}
       </p>
       <p className="mt-2 text-sm text-muted">
-        Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put.
+        {update.status === "applying"
+          ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
+          : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
       {update.status === "error" && update.notes[0] ? (
         <p className="mt-2 text-sm text-danger">{update.notes[0].slice(0, 180)}</p>

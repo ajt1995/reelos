@@ -7,6 +7,7 @@ import {
   isInFlightRequest,
   mergeServerRequests,
   overlayLibraryPresence,
+  requestShowsRetry,
   showRequestQueueControls,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
@@ -226,4 +227,25 @@ test("duplicate active rows for the same title+season collapse when one is avail
   assert.equal(collapsed.length, 1);
   assert.equal(collapsed[0]?.status, "available");
   assert.equal(collapsed[0]?.progress, 100);
+});
+
+test("Retry stays on locks that will never search", () => {
+  assert.equal(requestShowsRetry({ status: "failed" }), true);
+  assert.equal(
+    requestShowsRetry({ status: "waiting", reason: "Season unmonitored in Sonarr — search will not run" }),
+    true,
+  );
+  assert.equal(
+    requestShowsRetry({ status: "downloading", reason: "Requested — Radarr has no movie yet" }),
+    true,
+  );
+  assert.equal(
+    requestShowsRetry({ status: "waiting", reason: "Requested — Sonarr has no series yet" }),
+    true,
+  );
+  assert.equal(
+    requestShowsRetry({ status: "downloading", reason: "Searching — no file yet" }),
+    false,
+  );
+  assert.equal(requestShowsRetry({ status: "available" }), false);
 });

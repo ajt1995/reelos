@@ -205,11 +205,14 @@ def download_lock_hop() -> dict:
 def jellyfin_folder_paths(folder: dict) -> list[str]:
     locs = folder.get("Locations") or []
     infos = ((folder.get("LibraryOptions") or {}).get("PathInfos") or [])
-    paths = [str(p) for p in locs if p]
-    for info in infos:
-        if isinstance(info, dict) and info.get("Path"):
-            paths.append(str(info["Path"]))
-    return paths
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in list(locs) + [info.get("Path") for info in infos if isinstance(info, dict)]:
+        n = str(p or "").rstrip("/")
+        if n and n not in seen:
+            seen.add(n)
+            out.append(n)
+    return out
 
 
 def doctor_jellyfin_library_detail(folders, want=("Movies", "Shows")) -> tuple[str, bool]:
@@ -343,7 +346,7 @@ def sonarr_indexers_hop() -> dict:
     return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
 
 
-JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.21"'
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.26"'
 
 
 def jellyfin_api_token() -> str:
@@ -745,6 +748,18 @@ def _self_test() -> int:
             )
             self.assertTrue(ok)
             self.assertIn("Movies:/symlinks/radarr", ok_detail)
+            dup_detail, dup_ok = doctor_jellyfin_library_detail(
+                [
+                    {
+                        "Name": "Movies",
+                        "Locations": ["/symlinks/radarr"],
+                        "LibraryOptions": {"PathInfos": [{"Path": "/symlinks/radarr/"}]},
+                    },
+                    {"Name": "Shows", "Locations": ["/symlinks/sonarr"]},
+                ]
+            )
+            self.assertTrue(dup_ok)
+            self.assertEqual(dup_detail.count("/symlinks/radarr"), 1)
             missing, miss_ok = doctor_jellyfin_library_detail([{"Name": "Movies", "Locations": ["/media/movies"]}])
             self.assertFalse(miss_ok)
             self.assertIn("Shows missing", missing)

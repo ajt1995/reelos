@@ -37,6 +37,14 @@ export function jellyfinPosterUrl(_host, jellyfinId, { maxWidth = 240 } = {}) {
   return `/api/jf/Items/${id}/Images/Primary?maxWidth=${w}&quality=70`;
 }
 
+export function stripMatchingYear(name, year) {
+  const raw = String(name || "").trim();
+  const y = Number(year) || 0;
+  if (!y) return raw;
+  const stripped = raw.replace(new RegExp(`\\s+\\(${y}\\)\\s*$`), "").trim();
+  return stripped || raw;
+}
+
 export function mapJellyfinItem(it, host) {
   const tmdb = it.ProviderIds?.Tmdb;
   const tvdb = it.ProviderIds?.Tvdb;
@@ -48,12 +56,13 @@ export function mapJellyfinItem(it, host) {
   ].filter(Boolean);
   const id =
     kind === "tv" ? (tvdb ? `tvdb-${tvdb}` : ids[0]) : tmdb ? `tmdb-${tmdb}` : ids[0];
+  const year = Number(it.ProductionYear) || 0;
   return {
     id,
     ids,
     kind,
-    title: String(it.Name || "Untitled"),
-    year: Number(it.ProductionYear) || 0,
+    title: stripMatchingYear(it.Name || "Untitled", year),
+    year,
     overview: "",
     poster: jellyfinPosterUrl(host, it.Id),
     jellyfinId: it.Id,

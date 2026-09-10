@@ -9,19 +9,81 @@
         return True
 
 
+def jellyfin_debrid_library_flags() -> dict:
+    """Never generate scene previews or extract image subs from TorBox dumps."""
+    return {
+        "EnableTrickplayImageExtraction": False,
+        "ExtractTrickplayImagesDuringLibraryScan": False,
+        "EnableChapterImageExtraction": False,
+        "ExtractChapterImagesDuringLibraryScan": False,
+        "SaveTrickplayWithMedia": False,
+        "DummyChapterDuration": 0,
+        "EnableLUFSScan": False,
+        "AllowEmbeddedSubtitles": "AllowText",
+    }
+
+
+def jellyfin_debrid_encoding_patch(enc) -> dict:
+    """Do not pre-extract subtitles or mkv keyframes by reading the FUSE file."""
+    out = dict(enc or {})
+    out["EnableSubtitleExtraction"] = False
+    out["AllowOnDemandMetadataBasedKeyframeExtractionForExtensions"] = []
+    return out
+
+
+def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
+    """4GB boxes die on software 4K. Use VAAPI when /dev/dri exists; cap threads when low."""
+    out = jellyfin_debrid_encoding_patch(enc)
+    if has_dri:
+        out["HardwareAccelerationType"] = "vaapi"
+        out["EnableHardwareEncoding"] = True
+        if not out.get("VaapiDevice"):
+            out["VaapiDevice"] = "/dev/dri/renderD128"
+        codecs = [str(c) for c in (out.get("HardwareDecodingCodecs") or []) if c]
+        for c in ("h264", "hevc", "vp9", "av1", "vc1", "mpeg2video"):
+            if c not in codecs:
+                codecs.append(c)
+        out["HardwareDecodingCodecs"] = codecs
+        out["EnableIntelLowPowerH264HwEncoder"] = True
+        out["EnableIntelLowPowerHevcHwEncoder"] = True
+    if low:
+        out["EncodingThreadCount"] = 1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 60
+        out["EncoderPreset"] = "veryfast"
+    else:
+        out["EncodingThreadCount"] = -1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 180
+        out["EncoderPreset"] = "auto"
+    return out
+
+
+def jellyfin_task_hammers_debrid(task: dict) -> bool:
+    key = str(task.get("Key") or "")
+    if key in {
+        "RefreshTrickplayImages",
+        "RefreshChapterImages",
+        "KeyframeExtraction",
+        "TaskExtractMediaSegments",
+    }:
+        return True
+    name = str(task.get("Name") or "").lower()
+    return any(
+        s in name
+        for s in ("trickplay", "chapter image", "keyframe", "media segment")
+    )
+
+
 def apply_jellyfin_performance(token: str | None = None) -> None:
     token = token or jellyfin_token()
     if not token:
         log_wire("performance: jellyfin auth failed")
         return
     low = performance_low()
-    flags = {
-        "EnableTrickplayImageExtraction": not low,
-        "ExtractTrickplayImagesDuringLibraryScan": not low,
-        "EnableChapterImageExtraction": not low,
-        "ExtractChapterImagesDuringLibraryScan": not low,
-        "DummyChapterDuration": 0 if low else 300,
-    }
+    flags = jellyfin_debrid_library_flags()
     hdr = jellyfin_headers(token)
     try:
         folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
@@ -41,32 +103,49 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
                 body={"Id": fid, "LibraryOptions": opts},
                 headers=hdr,
             )
-            log_wire(f"performance library {folder.get('Name')} low={low}")
+            log_wire(f"performance library {folder.get('Name')} low={low} debrid-safe")
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
             log_wire(f"performance library {folder.get('Name')} {e}")
+    try:
+        enc = call("http://127.0.0.1:8096/System/Configuration/encoding", headers=hdr) or {}
+        has_dri = Path("/dev/dri").exists()
+        patched = jellyfin_encoding_for_box(
+            enc if isinstance(enc, dict) else {},
+            low=low,
+            has_dri=has_dri,
+        )
+        call(
+            "http://127.0.0.1:8096/System/Configuration/encoding",
+            method="POST",
+            body=patched,
+            headers=hdr,
+        )
+        log_wire(
+            f"performance encoding low={low} dri={has_dri} "
+            f"accel={patched.get('HardwareAccelerationType')} threads={patched.get('EncodingThreadCount')}"
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance encoding {e}")
     try:
         tasks = call("http://127.0.0.1:8096/ScheduledTasks", headers=hdr) or []
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
         log_wire(f"performance tasks {e}")
         tasks = []
     for task in tasks if isinstance(tasks, list) else []:
-        name = str(task.get("Name") or "")
-        if "Trickplay" not in name and "Chapter Image" not in name and "Chapter Images" not in name:
+        if not jellyfin_task_hammers_debrid(task):
             continue
         tid = task.get("Id")
+        name = str(task.get("Name") or "")
         if not tid:
             continue
         try:
-            if low:
-                call(
-                    f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
-                    method="POST",
-                    body=[],
-                    headers=hdr,
-                )
-                log_wire(f"performance disabled task {name}")
-            else:
-                log_wire(f"performance left task {name} (flags restored)")
+            call(
+                f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
+                method="POST",
+                body=[],
+                headers=hdr,
+            )
+            log_wire(f"performance disabled task {name}")
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
             log_wire(f"performance task {name} {e}")
 
@@ -649,11 +728,7 @@ def create_jellyfin_library(token: str, name: str, ctype: str) -> None:
     body = {
         "LibraryOptions": {
             "EnableRealtimeMonitor": True,
-            "EnableTrickplayImageExtraction": False,
-            "ExtractTrickplayImagesDuringLibraryScan": False,
-            "EnableChapterImageExtraction": False,
-            "ExtractChapterImagesDuringLibraryScan": False,
-            "DummyChapterDuration": 0,
+            **jellyfin_debrid_library_flags(),
             "PathInfos": [{"Path": path}],
         }
     }
