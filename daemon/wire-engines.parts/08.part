@@ -238,9 +238,18 @@ def movie_version_label(name: str) -> str:
     return "other"
 
 
+def movie_files_same_resolution(a: Path, b: Path) -> bool:
+    """Two 4K encodes are extras (keep the largest). 1080p next to 4K is hybrid."""
+    ra = movie_version_label(a.name).split()[0]
+    rb = movie_version_label(b.name).split()[0]
+    if not ra or ra != rb or ra == "other":
+        return False
+    return True
+
+
 def movie_files_are_clones(a: Path, b: Path) -> bool:
     """Same encode twice (John Wick + [TGx] copy). 1080p next to 4K is not a clone."""
-    if movie_version_label(a.name).split()[0] != movie_version_label(b.name).split()[0]:
+    if not movie_files_same_resolution(a, b):
         return False
     try:
         sa, sb = a.stat().st_size, b.stat().st_size
@@ -254,7 +263,7 @@ def movie_files_are_clones(a: Path, b: Path) -> bool:
 
 
 def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
-    """Park identical clones only. 1080p + 4K stay — hybrid is both versions.
+    """One file per resolution. Extra 4Ks park; 1080p + 4K stay.
 
     Never /media. Never delete. Real extras go to /mnt/symlinks/.reel-parked.
     """
@@ -276,7 +285,7 @@ def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> in
         keeper = pick_keeper_movie_file(files)
         dest = parked_root / folder.name
         for extra in files:
-            if extra == keeper or not movie_files_are_clones(keeper, extra):
+            if extra == keeper or not movie_files_same_resolution(keeper, extra):
                 continue
             try:
                 dest.mkdir(parents=True, exist_ok=True)
@@ -778,7 +787,33 @@ def heal_after_import() -> bool:
     if not token and frontend in ("jellyfin", "both"):
         log_wire("jellyfin heal red — no token")
         return False
+    heal_hybrid_1080_companions()
     return ready
+
+
+def heal_hybrid_1080_companions() -> None:
+    """Existing 4K-only titles: grab a 1080 if indexers have one. Hybrid only.
+
+    Radarr MoviesSearch will not search below cutoff. Interactive /release grab will.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return
+    sweep = ROOT / "bin" / "stuck-downloads.py"
+    if not sweep.is_file():
+        here = globals().get("__file__")
+        if here:
+            sweep = Path(here).resolve().with_name("stuck-downloads.py")
+    if not sweep.is_file():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(sweep), "--hybrid-1080"],
+            check=False,
+            timeout=90,
+        )
+        log_wire("hybrid 1080 companion grab")
+    except Exception as e:
+        log_wire(f"hybrid 1080 {e}")
 
 
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collapse_dumps: bool = True) -> bool:

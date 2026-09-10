@@ -60,6 +60,8 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /heal_merge_movie_posters/);
     assert.match(code, /label_jellyfin_movie_versions/);
     assert.match(code, /park_extra_movie_files/);
+    assert.match(code, /movie_files_same_resolution/);
+    assert.match(code, /heal_hybrid_1080_companions/);
     assert.match(code, /restore_hybrid_movie_versions/);
     assert.match(code, /ensure_hybrid_recycle_bin/);
     assert.match(code, /movie_dump_merge_key/);
@@ -417,6 +419,16 @@ npark = g["park_extra_movie_files"](str(jw.parent), allow=[str(jw.parent)])
 assert npark >= 1, npark
 assert (jw / "John.Wick.2014.2160p.mkv").is_file() or any("2160p" in p.name and "[TGx]" not in p.name for p in jw.glob("*.mkv"))
 assert not (jw / "John.Wick.2014.2160p[TGx].mkv").exists()
+# Extra 4K of a different size parks; 1080 next to 4K does not.
+br = radarr / "Blade Runner (1982)"
+br.mkdir()
+(br / "br.2160p.yts.mkv").write_bytes(b"y" * 50)
+(br / "br.2160p.remux.mkv").write_bytes(b"R" * 200)
+npark4k = g["park_extra_movie_files"](str(radarr), allow=[str(radarr)])
+assert npark4k >= 1, npark4k
+assert (br / "br.2160p.remux.mkv").is_file()
+assert not (br / "br.2160p.yts.mkv").exists()
+assert g["movie_files_same_resolution"](br / "br.2160p.remux.mkv", Path("x.1080p.mkv")) is False
 media_movies = Path(td) / "media" / "movies"
 (media_movies / "Interstellar (2014)" / "a.mkv").write_bytes(b"a")
 (media_movies / "Interstellar (2014)" / "b.mkv").write_bytes(b"bb")
@@ -609,6 +621,7 @@ print("ok")
   assert.match(eight, /heal_merge_movie_posters/);
   assert.match(eight, /label_jellyfin_movie_versions/);
   assert.match(eight, /park_extra_movie_files/);
+  assert.match(eight, /heal_hybrid_1080_companions/);
   assert.match(eight, /restore_hybrid_movie_versions/);
   assert.match(eight, /\.reel-parked/);
   assert.match(eight, /\.reel-recycle/);
@@ -619,6 +632,7 @@ print("ok")
   );
   const nine = read("daemon/wire-engines.parts/09.part");
   assert.match(nine, /merge-movies/);
+  assert.match(nine, /heal_hybrid_1080_companions/);
   const mergeAt = nine.lastIndexOf('if "merge-movies"');
   assert.ok(nine.indexOf("ensure_hybrid_recycle_bin()", mergeAt) > mergeAt);
   const lock = read("daemon/lock-download-clients.py");

@@ -359,6 +359,7 @@ def research_missing_after_indexers() -> None:
             timeout=90,
         )
         log_wire("SeasonSearch re-fired after indexer sync")
+        heal_hybrid_1080_companions()
     except Exception as e:
         log_wire(f"research-missing {type(e).__name__} {e}")
 

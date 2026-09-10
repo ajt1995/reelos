@@ -7,7 +7,7 @@
 - **VERSION / channel:** `1.2.50.21`
 - **Base:** current `main` (1.2.50.20 / #72)
 - Did **not** take Tron chrome from #52 / #70
-- **What it is:** Jellyfin already merges 1080p + 4K when files are named `Title (Year) - 1080p.mkv` / `- 2160p.mkv`. Apply labels dump files that way (no third-party plugin; this box is Jellyfin 12). Hybrid Radarr still upgrades to 4K, but recycle (`/mnt/symlinks/.reel-recycle`) keeps the 1080 and restore puts it back; cutoff MoviesSearch hunts 4K after 1080. Identical clones (same-size [TGx] copy) still park to `/mnt/symlinks/.reel-parked`. MergeVersions runs **after** scan. Phone splash does not wait on `/api/box`. Never `/media`.
+- **What it is:** Apply heals the dumps that are already on the box. Extra 4K encodes park to `/mnt/symlinks/.reel-parked` (keep the largest). 1080+4K stay and are named so Jellyfin is one poster. Hybrid Radarr still upgrades to 4K, but recycle (`/mnt/symlinks/.reel-recycle`) keeps the 1080 and restore puts it back; cutoff MoviesSearch hunts 4K after 1080; interactive `/release` grab fills 1080 next to existing 4K-only titles (MoviesSearch will not search down). MergeVersions runs **after** scan. Phone splash does not wait on `/api/box`. Never `/media`.
 
 ## Proof
 
@@ -23,7 +23,7 @@ node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/
 
 1. Merge this to **main**. Phone Check→Apply **once**, or CLI mailman from `main`.
 2. `cat /opt/reelos/VERSION` → `1.2.50.21`.
-3. Jellyfin Movies is one Interstellar with a 1080p/4K version picker, not two posters. Hybrid keeps both files (1080 is not replaced). Identical clones only in `/mnt/symlinks/.reel-parked`.
+3. Jellyfin Movies is one Interstellar with a 1080p/4K version picker, not two posters. Extra 4Ks are in `/mnt/symlinks/.reel-parked`. Hybrid keeps 1080+4K (including titles that already had only 4K, if a 1080 exists to grab).
 4. Phone Home should paint the chrome before doctor/Tailscale finish.
 
 ## Do not
