@@ -179,6 +179,7 @@ def collapse_movie_named_dumps(root: str = "/mnt/symlinks/radarr", allow=None) -
 
 MOVIE_VIDEO_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".m2ts", ".ts", ".iso"}
 PARKED_MOVIE_VERSIONS = Path("/mnt/symlinks/.reel-parked")
+HYBRID_RECYCLE = Path("/mnt/symlinks/.reel-recycle")
 
 
 def movie_video_files(folder: Path) -> list:
@@ -291,6 +292,81 @@ def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> in
                 log_wire(f"jellyfin park extra movie file {folder.name}/{extra.name}")
             except OSError as e:
                 log_wire(f"jellyfin park extra movie file {folder.name} {e}")
+    return n
+
+
+def hybrid_recycle_root(root: str, allow=None) -> Path | None:
+    """Allowlisted Radarr recycle only. Never /media."""
+    base = Path(root)
+    resolved = str(base).rstrip("/")
+    allowed = {"/mnt/symlinks/.reel-recycle", "/symlinks/.reel-recycle"}
+    allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
+    if resolved not in allowed:
+        return None
+    if "/media/" in resolved or resolved == "/media":
+        return None
+    if not base.is_dir():
+        return None
+    return base
+
+
+def folder_version_labels(folder: Path) -> set[str]:
+    return {movie_version_label(p.name).split()[0] for p in movie_video_files(folder)}
+
+
+def restore_hybrid_movie_versions(
+    root: str = "/mnt/symlinks/radarr",
+    recycle: str = "/mnt/symlinks/.reel-recycle",
+    allow=None,
+) -> int:
+    """Put recycled 1080 back next to the 4K Radarr kept. Hybrid only. Never /media.
+
+    Radarr has one movieFile — upgrade moves the old file into recycle. This walks
+    `.reel-recycle` and returns a complementary resolution into Title (Year).
+    Same-resolution extras stay parked; we do not restore a second 4K.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return 0
+    base = radarr_dump_root(root, allow)
+    rec = hybrid_recycle_root(recycle, allow)
+    if base is None or rec is None:
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    canons: dict[str, Path] = {}
+    for p in kids:
+        for key in movie_dump_keys(p.name):
+            canons.setdefault(key, p)
+    try:
+        files = [x for x in rec.rglob("*") if x.is_file() and x.suffix.lower() in MOVIE_VIDEO_EXT]
+    except OSError:
+        return 0
+    n = 0
+    for src in files:
+        keys = movie_dump_keys(src.name) or movie_dump_keys(src.parent.name)
+        dest_folder = None
+        for key in keys:
+            dest_folder = canons.get(key)
+            if dest_folder is not None:
+                break
+        if dest_folder is None:
+            continue
+        res = movie_version_label(src.name).split()[0]
+        if res == "other" or res in folder_version_labels(dest_folder):
+            continue
+        dest = dest_folder / src.name
+        i = 2
+        while dest.exists():
+            dest = dest_folder / f"{src.stem}-{i}{src.suffix}"
+            i += 1
+        try:
+            shutil.move(str(src), str(dest))
+            n += 1
+            log_wire(f"hybrid restore recycled version {dest_folder.name}/{dest.name}")
+        except OSError as e:
+            log_wire(f"hybrid restore recycled version {src.name} {e}")
     return n
 
 
@@ -549,15 +625,18 @@ def heal_merge_movie_posters() -> bool:
         log_wire("jellyfin merge movie posters — no token")
         return True
     try:
+        restored = int(restore_hybrid_movie_versions() or 0)
         parked = int(park_extra_movie_files() or 0)
         labeled = int(label_jellyfin_movie_versions() or 0)
+        if restored:
+            log_wire(f"hybrid restore recycled versions {restored}")
         if parked:
             log_wire(f"jellyfin park extra movie files {parked}")
         if labeled:
             log_wire(f"jellyfin label movie versions {labeled}")
         items = fetch_jellyfin_movies(token)
         heal_movie_dump_items(token, items=items)
-        if parked or labeled:
+        if restored or parked or labeled:
             try:
                 call(
                     "http://127.0.0.1:8096/Library/Refresh",
@@ -657,6 +736,7 @@ def heal_after_import() -> bool:
     """
     dropped = collapse_season_named_dumps()
     dropped += collapse_movie_named_dumps()
+    dropped += restore_hybrid_movie_versions()
     dropped += park_extra_movie_files()
     dropped += label_jellyfin_movie_versions()
     log_wire("import collapse season-folder dumps before jellyfin refresh")
@@ -704,6 +784,7 @@ def heal_after_import() -> bool:
 def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collapse_dumps: bool = True) -> bool:
     dropped = collapse_season_named_dumps() if collapse_dumps else 0
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
+    dropped += restore_hybrid_movie_versions() if collapse_dumps else 0
     dropped += park_extra_movie_files() if collapse_dumps else 0
     dropped += label_jellyfin_movie_versions() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (

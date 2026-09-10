@@ -140,8 +140,54 @@ def widen_sonarr_hybrid() -> None:
         return
 
 
+def ensure_hybrid_recycle_bin(key: str | None = None) -> bool:
+    """Radarr upgrade deletes the 1080. Recycle keeps it so restore can put it back.
+
+    Hybrid only. Never /media. Cleanup days 0 — do not auto-empty the 1080.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return False
+    rec = str(HYBRID_RECYCLE)
+    try:
+        Path(rec).mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        log_wire(f"radarr hybrid recycle mkdir {e}")
+    if not key:
+        xml = COMPOSE / "configs" / "radarr" / "config.xml"
+        key = wait_key(xml, 20)
+    if not key:
+        return False
+    try:
+        cfg = call("http://127.0.0.1:7878/api/v3/config/mediamanagement", key)
+    except NET_ERR as e:
+        log_wire(f"radarr hybrid recycle {e}")
+        return False
+    if not isinstance(cfg, dict) or not cfg.get("id"):
+        return False
+    if str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/") and int(cfg.get("recycleBinCleanupDays") or -1) == 0:
+        return True
+    body = dict(cfg)
+    body["recycleBin"] = rec
+    body["recycleBinCleanupDays"] = 0
+    try:
+        call(
+            f"http://127.0.0.1:7878/api/v3/config/mediamanagement/{cfg['id']}",
+            key,
+            method="PUT",
+            body=body,
+        )
+        log_wire("radarr hybrid recycle keeps upgraded 1080")
+        return True
+    except NET_ERR as e:
+        log_wire(f"radarr hybrid recycle put {e}")
+        return False
+
+
 def widen_radarr_hybrid() -> None:
-    """MoviesSearch against Ultra-HD 2160p-only rejects 1080p National Treasure."""
+    """MoviesSearch against Ultra-HD 2160p-only rejects 1080p National Treasure.
+
+    Upgrade is still allowed so 4K can land; recycle + restore keep the 1080.
+    """
     want_q = answers().get("quality") or "hybrid"
     if want_q != "hybrid":
         return
@@ -149,6 +195,7 @@ def widen_radarr_hybrid() -> None:
     key = wait_key(xml, 20)
     if not key:
         return
+    ensure_hybrid_recycle_bin(key)
     mod = _load_public_indexers()
     if not mod or not getattr(mod, "widen_hybrid_profile_items", None):
         return
@@ -161,7 +208,8 @@ def widen_radarr_hybrid() -> None:
         if p.get("name") != name:
             continue
         items = p.get("items") or []
-        if not mod.widen_hybrid_profile_items(items):
+        widened = bool(mod.widen_hybrid_profile_items(items))
+        if not widened and p.get("upgradeAllowed") is True:
             log_wire(f"radarr {name} already allows HD+UHD")
             return
         body = dict(p)
@@ -710,6 +758,10 @@ if __name__ == "__main__":
     if "fuse" in sys.argv:
         raise SystemExit(0 if ensure_fuse() is None else 0)
     if "merge-movies" in sys.argv:
+        try:
+            ensure_hybrid_recycle_bin()
+        except Exception as e:
+            log_wire(f"radarr hybrid recycle {e}")
         raise SystemExit(0 if heal_merge_movie_posters() else 1)
     if "heal" in sys.argv:
         raise SystemExit(0 if heal_after_import() else 1)
