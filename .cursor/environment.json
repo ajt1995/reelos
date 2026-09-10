@@ -1,0 +1,18 @@
+{
+  "name": "ReelOS",
+  "install": "npm ci",
+  "start": "sudo mkdir -p /var/lib/reelos && sudo chown \"$(id -u):$(id -g)\" /var/lib/reelos && sudo chmod 700 /var/lib/reelos",
+  "terminals": [
+    {
+      "name": "reelos-dev",
+      "command": "npm run dev",
+      "description": "ReelOS web UI dev server (Vite + TanStack Start) on http://localhost:8080. Serves the setup wizard, library, requests, and the /api/* routes backed by the reelos Vite plugins."
+    }
+  ],
+  "ports": [
+    {
+      "name": "reelos-web",
+      "port": 8080
+    }
+  ]
+}
