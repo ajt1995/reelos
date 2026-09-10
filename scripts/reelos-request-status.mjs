@@ -765,12 +765,12 @@ export async function loadPresenceFacts({
   const libraryTitles = entry?.titles || [];
   const radarrKey = arrApiKey("radarr");
   const [movies, series, torrents, radarrClients, radarrQueue, radarrProfiles] = await Promise.all([
-    fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey),
-    fetchArr("http://127.0.0.1:8989/api/v3/series", arrApiKey("sonarr")),
-    fetchArr("http://127.0.0.1:8282/api/v2/torrents/info", null),
-    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/downloadclient", radarrKey) : Promise.resolve(null),
-    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/queue", radarrKey) : Promise.resolve(null),
-    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/qualityprofile", radarrKey) : Promise.resolve(null),
+    fetchArr("http://127.0.0.1:7878/api/v3/movie", radarrKey, 2500),
+    fetchArr("http://127.0.0.1:8989/api/v3/series", arrApiKey("sonarr"), 2500),
+    fetchArr("http://127.0.0.1:8282/api/v2/torrents/info", null, 2500),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/downloadclient", radarrKey, 2500) : Promise.resolve(null),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/queue", radarrKey, 2500) : Promise.resolve(null),
+    radarrKey ? fetchArr("http://127.0.0.1:7878/api/v3/qualityprofile", radarrKey, 2500) : Promise.resolve(null),
   ]);
   const movieRows = Array.isArray(movies) ? movies : [];
   const seriesRows = Array.isArray(series) ? series : [];

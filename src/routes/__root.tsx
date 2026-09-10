@@ -70,7 +70,7 @@ function Runtime({ children }: { children: React.ReactNode }) {
       .then(() => {
         useReelStore.getState().setHydrated();
         useReelStore.getState().syncUpdateFromBox();
-        return fetch("/api/box", { cache: "no-store" })
+        return fetch("/api/box", { cache: "no-store", signal: AbortSignal.timeout(4000) })
           .then(async (r) => {
             const box = (await r.json()) as { provisioned?: boolean; answers?: Record<string, unknown> };
             if (box.provisioned) {
