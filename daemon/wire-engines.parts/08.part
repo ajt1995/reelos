@@ -195,35 +195,70 @@ def movie_video_files(folder: Path) -> list:
 
 
 def pick_keeper_movie_file(files: list) -> Path:
-    """Largest file wins. Same size: a [TGx]/[YTS] duplicate is the extra."""
+    """Largest file wins. Same size: a [TGx] duplicate is the extra."""
 
     def key(p: Path):
         try:
             size = p.stat().st_size
         except OSError:
             size = 0
-        dirty = 1 if re.search(r"\[(?:tgx|yts)", p.name, re.I) else 0
+        dirty = 1 if re.search(r"\[(?:tgx)\]", p.name, re.I) else 0
         return (-size, dirty, p.name)
 
     return sorted(files, key=key)[0]
 
 
-def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
-    """One video file per Title (Year) so Jellyfin Movies is not two version posters.
-
-    MergeVersions still leaves two MediaSources; some clients show two cards.
-    Keep the largest; move extras to /mnt/symlinks/.reel-parked (not /media,
-    not the Movies library path). Never delete.
-    """
+def radarr_dump_root(root: str, allow=None) -> Path | None:
+    """Allowlisted *arr movie dumps only. Never /media."""
     base = Path(root)
     resolved = str(base).rstrip("/")
     allowed = {"/mnt/symlinks/radarr", "/symlinks/radarr"}
     allowed |= {str(p).rstrip("/") for p in (allow or ()) if p}
     if resolved not in allowed:
-        return 0
+        return None
     if "/media/" in resolved or resolved == "/media":
-        return 0
+        return None
     if not base.is_dir():
+        return None
+    return base
+
+
+def movie_version_label(name: str) -> str:
+    """Jellyfin version tag. Hybrid keeps 1080p and 4K as two labels, not two posters."""
+    n = str(name or "").lower()
+    if re.search(r"2160|\buhd\b|\b4k\b", n):
+        if "remux" in n:
+            return "2160p remux"
+        return "2160p"
+    if "1080" in n:
+        return "1080p"
+    if "720" in n:
+        return "720p"
+    return "other"
+
+
+def movie_files_are_clones(a: Path, b: Path) -> bool:
+    """Same encode twice (John Wick + [TGx] copy). 1080p next to 4K is not a clone."""
+    if movie_version_label(a.name).split()[0] != movie_version_label(b.name).split()[0]:
+        return False
+    try:
+        sa, sb = a.stat().st_size, b.stat().st_size
+    except OSError:
+        return False
+    if sa <= 0 or sb <= 0:
+        return False
+    if sa == sb:
+        return True
+    return False
+
+
+def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """Park identical clones only. 1080p + 4K stay — hybrid is both versions.
+
+    Never /media. Never delete. Real extras go to /mnt/symlinks/.reel-parked.
+    """
+    base = radarr_dump_root(root, allow)
+    if base is None:
         return 0
     parked_root = PARKED_MOVIE_VERSIONS
     if allow:
@@ -239,14 +274,14 @@ def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> in
             continue
         keeper = pick_keeper_movie_file(files)
         dest = parked_root / folder.name
-        try:
-            dest.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            log_wire(f"jellyfin park movie versions {folder.name} {e}")
-            continue
         for extra in files:
-            if extra == keeper:
+            if extra == keeper or not movie_files_are_clones(keeper, extra):
                 continue
+            try:
+                dest.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                log_wire(f"jellyfin park movie versions {folder.name} {e}")
+                break
             target = dest / extra.name
             if target.exists():
                 target = dest / f"{extra.stem}.dup{extra.suffix}"
@@ -256,6 +291,49 @@ def park_extra_movie_files(root: str = "/mnt/symlinks/radarr", allow=None) -> in
                 log_wire(f"jellyfin park extra movie file {folder.name}/{extra.name}")
             except OSError as e:
                 log_wire(f"jellyfin park extra movie file {folder.name} {e}")
+    return n
+
+
+def label_jellyfin_movie_versions(root: str = "/mnt/symlinks/radarr", allow=None) -> int:
+    """Rename dump files to Jellyfin's native version names so a scan is one poster.
+
+    Interstellar (2014)/Interstellar (2014) - 1080p.mkv
+    Interstellar (2014)/Interstellar (2014) - 2160p.mkv
+    Prefix must match the folder. Hyphen label is required. Never /media.
+    """
+    base = radarr_dump_root(root, allow)
+    if base is None:
+        return 0
+    try:
+        kids = [p for p in base.iterdir() if p.is_dir() and is_canonical_movie_folder(p.name)]
+    except OSError:
+        return 0
+    n = 0
+    for folder in kids:
+        files = movie_video_files(folder)
+        used = {p.name for p in files}
+        for src in files:
+            if src.name.startswith(folder.name + " - "):
+                continue
+            label = movie_version_label(src.name)
+            cand = label
+            i = 2
+            dest_name = f"{folder.name} - {cand}{src.suffix}"
+            while dest_name in used or (folder / dest_name).exists():
+                cand = f"{label} {i}"
+                dest_name = f"{folder.name} - {cand}{src.suffix}"
+                i += 1
+            dest = folder / dest_name
+            if dest == src:
+                continue
+            try:
+                src.rename(dest)
+                used.discard(src.name)
+                used.add(dest.name)
+                n += 1
+                log_wire(f"jellyfin label movie version {folder.name}/{dest.name}")
+            except OSError as e:
+                log_wire(f"jellyfin label movie version {folder.name} {e}")
     return n
 
 
@@ -472,11 +550,14 @@ def heal_merge_movie_posters() -> bool:
         return True
     try:
         parked = int(park_extra_movie_files() or 0)
+        labeled = int(label_jellyfin_movie_versions() or 0)
         if parked:
             log_wire(f"jellyfin park extra movie files {parked}")
+        if labeled:
+            log_wire(f"jellyfin label movie versions {labeled}")
         items = fetch_jellyfin_movies(token)
         heal_movie_dump_items(token, items=items)
-        if parked:
+        if parked or labeled:
             try:
                 call(
                     "http://127.0.0.1:8096/Library/Refresh",
@@ -577,6 +658,7 @@ def heal_after_import() -> bool:
     dropped = collapse_season_named_dumps()
     dropped += collapse_movie_named_dumps()
     dropped += park_extra_movie_files()
+    dropped += label_jellyfin_movie_versions()
     log_wire("import collapse season-folder dumps before jellyfin refresh")
     log_wire("import collapse movie dumps before jellyfin refresh")
     token = jellyfin_token()
@@ -623,6 +705,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
     dropped = collapse_season_named_dumps() if collapse_dumps else 0
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
     dropped += park_extra_movie_files() if collapse_dumps else 0
+    dropped += label_jellyfin_movie_versions() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
         heal_movie_dump_items(token) if collapse_dumps else 0
     )
