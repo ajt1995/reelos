@@ -35,6 +35,7 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | `STATUS.md` | xorriso → Hal. |
 | `docs/OTA-APPLY-AUDIT.md` | Whether Phone Check→Apply is trustworthy. House verify checklist. |
 | `docs/STACK-RISK.md` | Stacked `#45`–`#51` go/no-go + merge order for house Apply. |
+| `docs/NEON.md` | Arena design decision (2026-09-10). Neon chrome. Not a stamp. Books does not wait. |
 
 ## Rules that belong here, not in README
 
