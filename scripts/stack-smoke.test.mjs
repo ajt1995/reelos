@@ -34,10 +34,17 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   const updater = read("daemon/reelos-update.sh");
   assert.match(updater, /HostConfig.Dns=1\.1\.1\.1 — recreate/);
   const heal = updater.indexOf('if [ "${HEAL_FAIL:-0}" = "1" ]; then');
+  const stampOk = updater.indexOf("STAMP_OK=1");
   const stamp = updater.indexOf('echo "$REMOTE" >"$ROOT/VERSION"');
   const applied = updater.indexOf('log "ReelOS $REMOTE applied."');
+  const door = updater.indexOf("if ! ensure_door");
   assert.ok(heal > 0 && stamp > heal && applied > stamp);
+  assert.ok(door > heal && door < stamp);
+  assert.ok(stampOk > 0 && stampOk < door);
+  assert.equal(updater.slice(stampOk, door).includes("exit 1"), false);
   assert.match(updater, /not printing applied — jellyfin\/indexer heal red/);
+  assert.match(updater, /door restored — still not stamping/);
+  assert.match(updater, /restart hung reelos/);
   assert.equal(read("install/bin/reelos-update.sh"), updater);
   assert.equal(read("install/bin/public_indexers.py"), read("daemon/public_indexers.py"));
   assert.equal(read("install/bin/wire-engines.parts/09.part"), read("daemon/wire-engines.parts/09.part"));
@@ -45,18 +52,18 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.26)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.27)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.26");
-  assert.equal(chan.version, "1.2.50.26");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.26"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.26"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.26"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.26"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.26/);
+  assert.equal(ver, "1.2.50.27");
+  assert.equal(chan.version, "1.2.50.27");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.27"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.27"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.27"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.27"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.27/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
