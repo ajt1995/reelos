@@ -872,6 +872,14 @@ clear_stale_fuse() {
 start_fuse_readers() {
   docker start decypharr 2>/dev/null || true
   docker start reelos-jellyfin-1 reelos-radarr-1 reelos-sonarr-1 2>/dev/null || true
+  # After a recreate/FUSE remount on a low-power box, some compose containers get
+  # left in "Created"/"Exited" instead of "Up" (then the indexer heal sees a down
+  # Sonarr and heal_reds, and the box is left with *arr down). Start every
+  # container in the reelos project; `docker start` on a running one is a no-op.
+  local c
+  for c in $(docker ps -aq --filter "label=com.docker.compose.project=reelos" 2>/dev/null); do
+    docker start "$c" 2>/dev/null || true
+  done
 }
 
 nudge_fuse() {
