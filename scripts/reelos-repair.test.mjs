@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { handleRepair, repairArgv, repairBusy, resolveRepairBin, REPAIR_IDS } from "./reelos-repair.mjs";
+import { handleRepair, openRepairState, repairArgv, repairBusy, resolveRepairBin, REPAIR_IDS } from "./reelos-repair.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -39,6 +39,51 @@ test("repairBusy is false when pid is dead", () => {
     }),
     false,
   );
+});
+
+test("openRepairState falls back when the house dir is not writable", () => {
+  const opened = [];
+  const state = openRepairState({
+    mkdir: () => {},
+    open: (p) => {
+      opened.push(p);
+      if (p.startsWith("/var/lib/reelos")) {
+        const err = new Error("EACCES");
+        err.code = "EACCES";
+        throw err;
+      }
+      return 7;
+    },
+  });
+  assert.equal(state.dir, "/tmp/reelos");
+  assert.equal(state.pidFile, "/tmp/reelos/repair.pid");
+  assert.deepEqual(opened, ["/var/lib/reelos/repair.log", "/tmp/reelos/repair.log"]);
+});
+
+test("handleRepair starts an allowlisted script", async () => {
+  const sent = [];
+  const spawned = [];
+  const send = (_res, status, body) => sent.push({ status, body });
+  await handleRepair(
+    { method: "POST" },
+    {},
+    {
+      send,
+      otaRunning: () => false,
+      repairBusy: () => false,
+      readBody: async () => ({ action: "posters" }),
+      existsSync: (p) => p === "/workspace/daemon/wire-engines.py",
+      openRepairState: () => ({ dir: "/tmp/reelos", log: 3, pidFile: "/tmp/reelos/repair.pid" }),
+      writeFileSync: () => {},
+      spawn: (bin, args) => {
+        spawned.push([bin, args]);
+        return { pid: 4242, unref() {} };
+      },
+    },
+  );
+  assert.equal(sent[0].status, 200);
+  assert.equal(sent[0].body.started, true);
+  assert.deepEqual(spawned[0], ["python3", ["/workspace/daemon/wire-engines.py", "merge-movies"]]);
 });
 
 test("handleRepair refuses unknown actions and OTA", async () => {

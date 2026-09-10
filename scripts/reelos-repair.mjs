@@ -4,6 +4,9 @@ import { spawn } from "node:child_process";
 
 export const REPAIR_IDS = ["posters", "hybrid1080", "import", "downloads", "indexers", "wire", "fuse"];
 
+/** House first. /tmp if the UI is not root (dev preview). */
+export const REPAIR_STATE_DIRS = ["/var/lib/reelos", "/tmp/reelos"];
+
 const BINS = {
   wire: "wire-engines.py",
   stuck: "stuck-downloads.py",
@@ -32,15 +35,37 @@ export function resolveRepairBin(name, { exists = existsSync } = {}) {
   return null;
 }
 
-export function repairBusy({ pidFile = "/var/lib/reelos/repair.pid", killFn = process.kill.bind(process) } = {}) {
-  try {
-    const pid = Number(readFileSync(pidFile, "utf8").trim());
-    if (!Number.isInteger(pid) || pid <= 1) return false;
-    killFn(pid, 0);
-    return true;
-  } catch {
-    return false;
+export function repairPidFiles() {
+  return REPAIR_STATE_DIRS.map((d) => `${d}/repair.pid`);
+}
+
+export function repairBusy({ pidFile, pidFiles, killFn = process.kill.bind(process) } = {}) {
+  const files = pidFiles || (pidFile ? [pidFile] : repairPidFiles());
+  for (const f of files) {
+    try {
+      const pid = Number(readFileSync(f, "utf8").trim());
+      if (!Number.isInteger(pid) || pid <= 1) continue;
+      killFn(pid, 0);
+      return true;
+    } catch {
+      /* dead or unreadable */
+    }
   }
+  return false;
+}
+
+/** First dir we can append a log in. House is /var/lib/reelos. */
+export function openRepairState({ mkdir = mkdirSync, open = openSync } = {}) {
+  for (const dir of REPAIR_STATE_DIRS) {
+    try {
+      mkdir(dir, { recursive: true });
+      const log = open(`${dir}/repair.log`, "a");
+      return { dir, log, pidFile: `${dir}/repair.pid` };
+    } catch {
+      /* EACCES on a root-owned dir — try the next */
+    }
+  }
+  return null;
 }
 
 function otaIsRunning(otaRunning) {
@@ -52,7 +77,7 @@ export async function handleRepair(req, res, deps) {
   const send = deps.send;
   const method = (req.method || "GET").toUpperCase();
   if (method === "GET") {
-    send(res, 200, { ok: true, actions: REPAIR_IDS, busy: repairBusy() });
+    send(res, 200, { ok: true, actions: REPAIR_IDS, busy: (deps.repairBusy || repairBusy)() });
     return;
   }
   if (method !== "POST") {
@@ -84,13 +109,20 @@ export async function handleRepair(req, res, deps) {
   const open = deps.openSync || openSync;
   const write = deps.writeFileSync || writeFileSync;
   const spawnFn = deps.spawn || spawn;
-  mkdir("/var/lib/reelos", { recursive: true });
-  const log = open("/var/lib/reelos/repair.log", "a");
-  const child = spawnFn("python3", [script, ...spec.args], {
-    detached: true,
-    stdio: ["ignore", log, log],
-  });
-  child.unref?.();
-  if (child.pid) write("/var/lib/reelos/repair.pid", `${child.pid}\n`);
-  send(res, 200, { ok: true, started: true, action: body.action });
+  const state = (deps.openRepairState || openRepairState)({ mkdir, open });
+  if (!state) {
+    send(res, 500, { ok: false, error: "Cannot write repair log" });
+    return;
+  }
+  try {
+    const child = spawnFn("python3", [script, ...spec.args], {
+      detached: true,
+      stdio: ["ignore", state.log, state.log],
+    });
+    child.unref?.();
+    if (child.pid) write(state.pidFile, `${child.pid}\n`);
+    send(res, 200, { ok: true, started: true, action: body.action });
+  } catch (e) {
+    send(res, 500, { ok: false, error: e instanceof Error ? e.message : "Repair failed" });
+  }
 }
