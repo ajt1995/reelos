@@ -422,9 +422,47 @@ def select_import_files(
     return files, sample_unmatched
 
 
+def _expand_scan_folders(folders: list[str]) -> list[str]:
+    """Scan each dump/series subfolder on its own instead of the whole tree.
+
+    A single manualimport call on all of /symlinks/sonarr makes Sonarr probe
+    every episode over the FUSE debrid mount and blow past the client timeout
+    ("sonarr manualimport list ... TimeoutError timed out"), so the whole import
+    is skipped. Listing immediate subfolders keeps each call small and bounded,
+    and resolve()-dedupe drops the duplicate mount alias (/symlinks vs
+    /mnt/symlinks) that doubled the work. Falls back to the raw folders when the
+    base path is not present on the host (e.g. FUSE not mounted).
+    """
+    targets: list[str] = []
+    seen: set[str] = set()
+    fallback: list[str] = []
+    for base in folders:
+        b = (base or "").rstrip("/")
+        if not b:
+            continue
+        p = Path(b)
+        try:
+            if not p.is_dir():
+                fallback.append(b)
+                continue
+            real = str(p.resolve())
+        except OSError:
+            fallback.append(b)
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            subs = sorted(str(c) for c in p.iterdir() if c.is_dir())
+        except OSError:
+            subs = []
+        targets.extend(subs if subs else [b])
+    return targets or fallback or [f.rstrip("/") for f in folders if f]
+
+
 def _list_manualimport(sk: str, folders: list[str]) -> list[dict]:
     rows: list = []
-    for folder in folders:
+    for folder in _expand_scan_folders(folders):
         q = urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"})
         url = f"http://127.0.0.1:8989/api/v3/manualimport?{q}"
         hdrs = {"X-Api-Key": sk, "Content-Type": "application/json"}
@@ -544,6 +582,27 @@ def _self_test() -> int:
             self.assertEqual(_series_title_guess(path), "The Walking Dead")
             movie = "/mnt/symlinks/radarr/Night.at.the.Museum.2006.2160p.WEB-DL.DDP5.1/Night.at.the.Museum.2006.mkv"
             self.assertEqual(_series_title_guess(movie), "Night at the Museum")
+
+        def test_expand_scan_folders_per_subfolder_and_dedupe(self):
+            import tempfile
+
+            with tempfile.TemporaryDirectory() as d:
+                base = Path(d) / "sonarr"
+                (base / "Show A").mkdir(parents=True)
+                (base / "The.Expanse.S01.2160p").mkdir()
+                (base / "loose.mkv").write_bytes(b"x")  # a file must not be a target
+                out = _expand_scan_folders([str(base), str(base), "/does/not/exist"])
+                self.assertEqual(
+                    sorted(Path(p).name for p in out),
+                    ["Show A", "The.Expanse.S01.2160p"],
+                )
+                self.assertEqual(len(out), 2)  # duplicate base + missing path dropped
+
+        def test_expand_scan_folders_fallback_when_absent(self):
+            self.assertEqual(
+                _expand_scan_folders(["/no/such/a", "/no/such/b"]),
+                ["/no/such/a", "/no/such/b"],
+            )
 
         def test_skip_museum_under_radarr(self):
             self.assertTrue(
