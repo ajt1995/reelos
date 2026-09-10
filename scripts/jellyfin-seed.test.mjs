@@ -281,6 +281,21 @@ assert g["plan_season_folder_item"](orphan, [orphan]) == {
     "as": "Brooklyn Nine-Nine",
 }
 assert g["plan_season_folder_item"](dict(orphan, Path="/media/tv/Brooklyn Nine-Nine S01"), [orphan]) is None
+# JF named the dump after metadata; Path is still the S01 pack.
+exp_canon = {
+    "Id": "jf-exp",
+    "Name": "The Expanse",
+    "Path": "/symlinks/sonarr/The Expanse",
+    "ProviderIds": {"Tvdb": "280619"},
+}
+exp_dump = {
+    "Id": "jf-exp-s01",
+    "Name": "The Expanse",
+    "Path": "/symlinks/sonarr/The.Expanse.S01.2160p.AMZN.WEB-DL.x265",
+    "ProviderIds": {},
+}
+assert g["plan_season_folder_item"](exp_dump, [exp_canon, exp_dump])["action"] == "delete"
+assert g["plan_season_folder_item"](exp_canon, [exp_canon, exp_dump]) is None
 vs1 = {"Id": "jf-vs1", "Name": "Vinland Saga", "Path": "/symlinks/sonarr/Vinland Saga", "ProviderIds": {"Tvdb": "359274"}}
 vs2 = {
     "Id": "jf-vs2",

@@ -323,14 +323,18 @@ def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
     if not isinstance(item, dict):
         return None
     name = str(item.get("Name") or "")
-    if not looks_like_season_folder_title(name):
+    path = str(item.get("Path") or "")
+    folder = path.rstrip("/").split("/")[-1] if path else ""
+    # JF often names a dump "The Expanse" after metadata while Path is still the S01 pack.
+    season_label = name if looks_like_season_folder_title(name) else folder
+    if not looks_like_season_folder_title(season_label):
         return None
-    if not season_folder_item_path(item.get("Path")):
+    if not season_folder_item_path(path):
         return None
     item_id = item.get("Id") or item.get("id")
     if not item_id:
         return None
-    key = series_title_key(name)
+    key = series_title_key(season_label)
     if not key:
         return None
     own = jellyfin_provider_id(item)
@@ -339,12 +343,16 @@ def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
         if sib is item or not isinstance(sib, dict):
             continue
         sib_name = str(sib.get("Name") or "")
-        if series_title_key(sib_name) != key:
+        sib_path = str(sib.get("Path") or "")
+        sib_folder = sib_path.rstrip("/").split("/")[-1] if sib_path else ""
+        if series_title_key(sib_name) != key and series_title_key(sib_folder) != key:
             continue
-        if looks_like_season_folder_title(sib_name):
+        if looks_like_season_folder_title(sib_name) or looks_like_season_folder_title(sib_folder):
             continue
         canons.append(sib)
-    series_name = strip_season_folder_suffix(name)
+    series_name = strip_season_folder_suffix(season_label)
+    series_name = re.sub(r"[._]+", " ", series_name)
+    series_name = re.sub(r"\s+", " ", series_name).strip() or series_name
     if own:
         for canon in canons:
             if jellyfin_provider_id(canon) == own:
