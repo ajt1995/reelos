@@ -56,6 +56,8 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /collapse_movie_named_dumps/);
     assert.match(code, /movie_dump_keys/);
     assert.match(code, /heal_movie_dump_items/);
+    assert.match(code, /heal_merge_movie_versions/);
+    assert.match(code, /Videos\/MergeVersions/);
     assert.match(code, /plan_movie_dump_item/);
     assert.match(code, /heal_season_folder_items/);
     assert.match(code, /plan_season_folder_item/);
@@ -161,6 +163,12 @@ assert g["looks_like_season_folder_title"](
 assert g["looks_like_season_folder_title"]("The Walking Dead - Season 1") is True
 assert g["looks_like_season_folder_title"]("The Walking Dead") is False
 assert g["looks_like_season_folder_title"]("Show S01E01") is False
+assert g["strip_season_folder_suffix"](
+    "The.Expanse.S01.2160p.AMZN.WEB-DL.x265.10bit.HDR.DTS-HD.MA.5.1-SAFETY[rartv]"
+) == "The.Expanse"
+assert g["strip_season_folder_suffix"](
+    "Brooklyn Nine-Nine S01 Season 1 1080p 5.1Ch Web-DL ReEnc-DeeJayAhmed"
+) == "Brooklyn Nine-Nine"
 import tempfile, os
 from pathlib import Path
 td = tempfile.mkdtemp()
@@ -210,6 +218,19 @@ assert (live_tv / "Brooklyn Nine-Nine" / "Season 1").is_dir()
 assert not pack.exists()
 # do not duplicate the episode next to Season 1
 assert not (live_tv / "Brooklyn Nine-Nine" / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").exists()
+# House: dotted S01.2160p pack next to The Expanse, and S01 Season 1 1080p without parens.
+(live_tv / "The Expanse").mkdir()
+(live_tv / "The Expanse" / "keep.mkv").write_bytes(b"k")
+exp = live_tv / "The.Expanse.S01.2160p.AMZN.WEB-DL.x265.10bit.HDR.DTS-HD.MA.5.1-SAFETY[rartv]"
+exp.mkdir()
+(exp / "E01.mkv").write_bytes(b"e")
+dj = live_tv / "Brooklyn Nine-Nine S01 Season 1 1080p 5.1Ch Web-DL ReEnc-DeeJayAhmed"
+dj.mkdir()
+(dj / "other.mkv").write_bytes(b"o")
+assert g["collapse_season_named_dumps"](str(live_tv), allow=[str(live_tv)]) == 2
+assert not exp.exists()
+assert not dj.exists()
+assert (live_tv / "The Expanse" / "E01.mkv").is_file()
 # empty series stub + Season 1 dump: move media, then drop the season-named dir
 empty = Path(td) / "sonarr-empty"
 empty.mkdir()
@@ -380,6 +401,34 @@ assert g["heal_movie_dump_items"](
 ) == 1
 assert movie_healed[0][0] == "DELETE"
 assert "jf-int-yts" in movie_healed[0][1]
+
+# Same Title (Year) folder with two files is versions, not two posters. Never /media.
+v1 = {
+    "Id": "jf-int-a",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014)/keep.mkv",
+}
+v2 = {
+    "Id": "jf-int-b",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014)/remux.mkv",
+}
+v_media = {
+    "Id": "jf-int-disk",
+    "Name": "Interstellar",
+    "Path": "/media/movies/Interstellar (2014)/keep.mkv",
+}
+groups = g["movie_version_merge_groups"]([v1, v2, v_media])
+assert len(groups) == 1, groups
+assert {x["Id"] for x in groups[0]} == {"jf-int-a", "jf-int-b"}
+merged = []
+assert g["heal_merge_movie_versions"](
+    "tok", items=[v1, v2, v_media], call_fn=lambda url, **kw: merged.append((kw.get("method"), url))
+) == 1
+assert merged[0][0] == "POST"
+assert "MergeVersions" in merged[0][1]
+assert "jf-int-a" in merged[0][1] and "jf-int-b" in merged[0][1]
+assert "jf-int-disk" not in merged[0][1]
 
 # A leftover library is deleted only once every path it holds is safe to lose.
 CANON = {

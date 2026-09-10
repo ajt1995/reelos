@@ -7,7 +7,7 @@
 - **VERSION / channel:** `1.2.50.20`
 - **Base:** current `main` (1.2.50.19 / #71)
 - Did **not** take Tron chrome from #52 / #70
-- **What it is:** `collapse_movie_named_dumps` parks `Title.Year.2160p…` / `Title (Year) [YTS.MX]` / `Dune Part One (Year) [2160p]` into `Title (Year)` under `/mnt/symlinks/radarr` only. Remakes keep the year (Dune 1984 ≠ 2021). Part Two is not Part One. TV collapse now strips `Season 1 S01 (1080p…)` and a trailing `(Year)` so the pack lands on `Brooklyn Nine-Nine`. `heal_movie_dump_items` deletes leftover Jellyfin Movie rows for dump *folders*. Never `/media`. Heal runs in `heal_after_import` after *arr scan.
+- **What it is:** `collapse_movie_named_dumps` parks `Title.Year.2160p…` / `Title (Year) [YTS.MX]` / `Dune Part One (Year) [2160p]` into `Title (Year)` under `/mnt/symlinks/radarr` only. Remakes keep the year (Dune 1984 ≠ 2021). Part Two is not Part One. TV collapse now strips `Season 1 S01 (1080p…)` and a trailing `(Year)` so the pack lands on `Brooklyn Nine-Nine`. After collapse, `heal_merge_movie_versions` POSTs Jellyfin `/Videos/MergeVersions` so two files in one folder are versions, not two posters. Never `/media`. Heal runs in `heal_after_import` after *arr scan.
 
 ## Proof
 

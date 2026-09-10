@@ -131,7 +131,7 @@ def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
 
 _SEASON_FOLDER = re.compile(
     r"[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|"
-    r"s\d{1,2}(?![eE]\d))(?:\s+(?:[\(\[]|-).*)?\s*$",
+    r"s\d{1,2}(?!\d)(?![eE]\d))(?![eE]\d).*$",
     re.I,
 )
 _YEAR_TAIL = re.compile(r"\s+\((?:19|20)\d{2}\)\s*$")

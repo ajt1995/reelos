@@ -69,7 +69,7 @@ export function stripSeasonFolderSuffix(title) {
   // Quality after S01 (`Season 1 S01 (1080p AMZN…)`) is still a season dump.
   const stripped = raw
     .replace(
-      /[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|s\d{1,2}(?![eE]\d))(?:\s+(?:[\(\[]|-).*)?\s*$/i,
+      /[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|s\d{1,2}(?!\d)(?![eE]\d))(?![eE]\d).*$/i,
       "",
     )
     .trim();

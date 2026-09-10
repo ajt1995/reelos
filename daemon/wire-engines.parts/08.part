@@ -105,12 +105,15 @@ def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) 
         series = strip_season_folder_suffix(p.name)
         if not series or series == p.name:
             continue
-        canon = by_name.get(series)
-        if canon is None:
-            # Title (Year) Season 1 S01 (1080p…) → Title, when the series folder has no year.
-            yearless = _YEAR_TAIL.sub("", series).strip()
-            if yearless and yearless != series:
-                canon = by_name.get(yearless)
+        candidates = [series]
+        spaced = re.sub(r"[._]+", " ", series)
+        spaced = re.sub(r"\s+", " ", spaced).strip()
+        if spaced and spaced not in candidates:
+            candidates.append(spaced)
+        yearless = _YEAR_TAIL.sub("", spaced or series).strip()
+        if yearless and yearless not in candidates:
+            candidates.append(yearless)
+        canon = next((by_name[c] for c in candidates if c in by_name and c != p.name), None)
         if canon is None:
             continue
         try:
@@ -281,6 +284,65 @@ def heal_movie_dump_items(token: str, items=None, call_fn=None) -> int:
     return n
 
 
+def movie_version_parent(path: str) -> str:
+    """Folder that holds a Movie file. Empty if this is not a radarr dump Title (Year)."""
+    p = str(path or "").rstrip("/")
+    if not p or local_disk_path(p) or not dump_view_path(p):
+        return ""
+    parent = p.rsplit("/", 1)[0] if "/" in p else ""
+    if not parent or local_disk_path(parent) or not dump_view_path(parent):
+        return ""
+    parts = [x for x in parent.split("/") if x]
+    if parts[:2] == ["symlinks", "radarr"] and len(parts) == 3 and is_canonical_movie_folder(parts[-1]):
+        return parent
+    if parts[:3] == ["mnt", "symlinks", "radarr"] and len(parts) == 4 and is_canonical_movie_folder(parts[-1]):
+        return parent
+    return ""
+
+
+def movie_version_merge_groups(items: list) -> list[list[dict]]:
+    """Two+ Movie rows in the same Title (Year) dump folder are versions, not posters."""
+    groups: dict[str, list[dict]] = {}
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        parent = movie_version_parent(str(item.get("Path") or ""))
+        if not parent:
+            continue
+        if not (item.get("Id") or item.get("id")):
+            continue
+        groups.setdefault(parent, []).append(item)
+    return [rows for rows in groups.values() if len(rows) >= 2]
+
+
+def heal_merge_movie_versions(token: str, items=None, call_fn=None) -> int:
+    """POST /Videos/MergeVersions so Jellyfin Movies is one poster per Title (Year) folder.
+
+    Collapse parks YTS+REMUX into the Radarr folder; JF still makes one Movie per file.
+    Never /media. DELETE is not used — merge keeps every file as a version.
+    """
+    rows = items if items is not None else fetch_jellyfin_movies(token)
+    do = call_fn or call
+    n = 0
+    for group in movie_version_merge_groups(rows):
+        ids = ",".join(str(x.get("Id") or x.get("id")) for x in group)
+        name = str(group[0].get("Name") or group[0].get("Path") or "")
+        try:
+            do(
+                f"http://127.0.0.1:8096/Videos/MergeVersions?{urllib.parse.urlencode({'Ids': ids})}",
+                method="POST",
+                headers=jellyfin_headers(token),
+            )
+            log_wire(f"jellyfin merge movie versions {name} x{len(group)}")
+            n += 1
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"jellyfin merge movie versions {name} {e.code} {err}")
+        except NET_ERR as e:
+            log_wire(f"jellyfin merge movie versions {name} {e}")
+    return n
+
+
 def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
     """Delete leftover Movies/Shows virtual folders once every path they hold is safe to lose."""
     n = 0
@@ -375,6 +437,10 @@ def heal_after_import() -> bool:
             healed += int(heal_movie_dump_items(token) or 0)
         except Exception as e:
             log_wire(f"jellyfin movie dump item {e}")
+        try:
+            healed += int(heal_merge_movie_versions(token) or 0)
+        except Exception as e:
+            log_wire(f"jellyfin merge movie versions {e}")
     ready = True
     if token:
         want = jellyfin_want_libraries()
@@ -389,6 +455,10 @@ def heal_after_import() -> bool:
                 log_wire("jellyfin refresh after post-import heal")
             except NET_ERR as e:
                 log_wire(f"jellyfin refresh {e}")
+            try:
+                healed += int(heal_merge_movie_versions(token) or 0)
+            except Exception as e:
+                log_wire(f"jellyfin merge movie versions {e}")
     elif dropped:
         log_wire("import collapse season-folder dumps (no jellyfin token)")
     frontend = str((answers() or {}).get("frontend") or "jellyfin")
@@ -403,7 +473,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
         heal_movie_dump_items(token) if collapse_dumps else 0
-    )
+    ) + (heal_merge_movie_versions(token) if collapse_dumps else 0)
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
@@ -418,6 +488,10 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
                     log_wire("jellyfin refresh after season-folder dump collapse")
                 except NET_ERR as e:
                     log_wire(f"jellyfin refresh {e}")
+                try:
+                    heal_merge_movie_versions(token)
+                except Exception as e:
+                    log_wire(f"jellyfin merge movie versions {e}")
             return True
         drop_extra_jellyfin_libraries(token, folders, want)
         by_name = {str(f.get("Name") or ""): f for f in folders}
