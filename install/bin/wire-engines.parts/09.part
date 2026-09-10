@@ -150,6 +150,12 @@ def ensure_hybrid_recycle_bin(key: str | None = None) -> bool:
     rec = str(HYBRID_RECYCLE)
     try:
         Path(rec).mkdir(parents=True, exist_ok=True)
+        # Radarr's FolderWritableValidator 400s the mediamanagement PUT unless the
+        # recycle bin is writable by the container user (PUID 1000). OTA runs
+        # wire-engines as root, so a bare mkdir leaves it root-owned and every
+        # Apply logs "radarr hybrid recycle put HTTP Error 400". Hand it back.
+        os.chmod(rec, 0o775)
+        os.chown(rec, 1000, 1000)
     except OSError as e:
         log_wire(f"radarr hybrid recycle mkdir {e}")
     if not key:
