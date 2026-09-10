@@ -87,11 +87,10 @@ function maybeRecover(u) {
   return { recover: true, deferred: true, started: true };
 }
 
-async function handleList(res, recoverNote = null) {
+export async function collectRequestList() {
   const key = seerrApiKey();
   if (!key) {
-    send(res, 200, { requests: [], titles: [], error: "Seerr has no API key yet" });
-    return;
+    return { requests: [], titles: [], error: "Seerr has no API key yet" };
   }
   try {
     const listedP = seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
@@ -107,16 +106,23 @@ async function handleList(res, recoverNote = null) {
     }
     const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
-    send(res, 200, {
+    return {
       requests: assembled.requests,
       titles: [],
       engine: "seerr",
       pipeline: assembled.pipeline,
-      ...(recoverNote ? { recover: recoverNote } : {}),
-    });
+    };
   } catch (e) {
-    send(res, 200, { requests: [], titles: [], error: String(e) });
+    return { requests: [], titles: [], error: String(e) };
   }
+}
+
+async function handleList(res, recoverNote = null) {
+  const listed = await collectRequestList();
+  send(res, 200, {
+    ...listed,
+    ...(recoverNote ? { recover: recoverNote } : {}),
+  });
 }
 
 async function handleGet(req, res) {

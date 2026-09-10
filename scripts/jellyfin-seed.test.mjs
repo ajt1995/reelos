@@ -758,7 +758,7 @@ test("/api/box requires Movies/Shows unless intent turns them off", () => {
   assert.match(chunk, /no matching user\/PIN/);
   assert.match(chunk, /Cannot read virtual folders/);
   assert.match(chunk, /readJellyfinVirtualFolders/);
-  const box = src.slice(src.indexOf("async function handleBox"), src.indexOf("async function handleTailscaleLogin"));
+  const box = src.slice(src.indexOf("function boxSyncSlice"), src.indexOf("async function handleTailscaleLogin"));
   assert.match(box, /scheduleBoxProbe/);
   assert.doesNotMatch(box, /await jellyfinState/);
 });

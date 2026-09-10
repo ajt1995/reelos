@@ -40,7 +40,8 @@ export function useSyncRequests() {
         /* Seerr down — keep local rows */
       }
     };
-    const start = window.setTimeout(() => void tick(), 1500);
+    const seeded = useReelStore.getState().requestsSeeded;
+    const start = window.setTimeout(() => void tick(), seeded ? 0 : 1500);
     const id = window.setInterval(() => void tick(), 15000);
     return () => {
       stop = true;

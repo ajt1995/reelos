@@ -52,18 +52,18 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.28)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.29)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.28");
-  assert.equal(chan.version, "1.2.50.28");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.28"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.28"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.28"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.28"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.28/);
+  assert.equal(ver, "1.2.50.29");
+  assert.equal(chan.version, "1.2.50.29");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.29"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.29"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.29"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.29"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.29/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -108,6 +108,10 @@ test("stack: search hop is advisory; FUSE/Jellyfin fail-close only if compose ym
   assert.match(updater, /hop search red — not blocking UI-only stamp/);
   assert.equal(updater.includes('log "hop search red"\n    HOP_FAIL=1'), false);
   assert.match(updater, /overlay house compose\/configs onto staging/);
+  assert.match(updater, /--exclude 'decypharr\/cache\/'/);
+  assert.match(updater, /\*\*\/cache\/dfs\//);
+  assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs\/\."/);
+  assert.match(updater, /not 200 after 15s/);
   assert.match(updater, /mv "\$ROOT\/app" "\$ROOT\/app\.broken"/);
   assert.match(updater, /need src\/components\/title-view-live\.tsx '\/api\/request'/);
   assert.match(updater, /need src\/components\/settings-terminal\.tsx 'title="Terminal"'/);

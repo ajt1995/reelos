@@ -1,37 +1,43 @@
 # STATUS.md
 
-***1.2.50.28 is the ship.*** 2026-09-10. Phone UI was unusable: `/api/box` waited ~8s on a Jellyfin PIN probe, `/api/request` waited ~13s on a Seerr-per-title fan-out plus recover-before-list. Home could not paint. Does not take Tron (#52 / #70).
+***1.2.50.29 is the ship.*** 2026-09-10. Apply of 28 starved the 4GB box copying FUSE dumps (`decypharr/cache/dfs`) so Vite never bound; the phone saw Begin setup on a provisioned house. This stamp skips those dumps, restarts hung Vite at 15s, and boots through one `/api/ready` fan-in with an honest warming splash. Does not take Tron (#52 / #70).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.28`
-- **Base:** `main` at 1.2.50.27
+- **VERSION / channel:** `1.2.50.29`
+- **Base:** `main` at 1.2.50.28
 - Did **not** take Tron chrome from #52 / #70
 
 ## Changelog
 
-### Phone APIs return first; probes run in the background
+### Apply does not copy FUSE dumps
 
-`/api/box` returns `provisioned` immediately and refreshes Jellyfin in the background. AuthenticateByName / VirtualFolders time out at 1.5s, not 8s.
+`rsync` overlays `compose/configs` excluding `decypharr/cache/`, `**/cache/dfs/`, Jellyfin cache/transcodes, MediaCover, logs, and sqlite sidecars. If `rsync` is missing, copy only top-level app dirs without cache/dfs.
 
-GET `/api/request` lists from one Seerr call + *arr facts (2.5s cap). It does not fan out `/tv/{id}` per row. `?recover=1` starts kicks without delaying the list.
+### probe_home restarts hung Vite at 15s
 
-Client `/api/box` fetch aborts at 4s so splash cannot stick.
+`systemctl start` is a no-op on a hung unit. After ~15s without :8080 200, `systemctl restart reelos` once. `daemon-reload` first if the unit changed.
 
-This is not a rewrite off Vite. It is the first-paint path.
+### GET `/api/ready` — one fan-in
+
+Parallel, short timeouts: provisioned + answers (handleBox sync slice, no await Jellyfin), update status, library shelf (limit 24, prefer cache), request list (progress-plugin assembler, no per-title Seerr fan-out). `start_fuse_readers` equivalent docker-starts *arr in the background and does not block the response. Omits `adminPassword`.
+
+### Warming splash
+
+When persist or the box says provisioned, splash spins the cyan ring and shows Local state / This house / Library / Requests. After `/api/ready` or a 4s abort, Home opens even if library/requests are still filling. Marketing Begin setup only when not provisioned.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-request-status.test.mjs
+node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-request-status.test.mjs scripts/jellyfin-seed.test.mjs scripts/reelos-ready.test.mjs
 ```
 
 ## Owner / house Apply
 
-1. Merge this to **main**. Phone **Check → Apply once**. Apply will pause the UI for a minute; 27 already restores the door.
-2. Home should appear without an 8s Begin setup stall. Requests should return in a few seconds.
-3. Radarr/Sonarr still need to be up for imports. That is separate from this paint fix.
+1. Merge this to **main**. Phone **Check → Apply once**. 27/28 already restore the door; 29 should not 502 from a FUSE config copy.
+2. Splash should show warming steps, then Home — not Begin setup.
+3. Radarr/Sonarr should come back from `/api/ready` without SSH.
 
 ## Do not
 
