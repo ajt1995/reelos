@@ -57,7 +57,9 @@ export function QualityPanel() {
   const patchAnswers = useReelStore((s) => s.patchAnswers);
   return (
     <>
-      <p className="text-sm text-muted">New requests use this floor in Radarr/Sonarr.</p>
+      <p className="text-sm text-muted">
+        New requests use this floor. Hybrid grabs 1080 and 4K and keeps both — it does not replace the 1080.
+      </p>
       <div className="mt-3 flex flex-wrap gap-2">
         {(["1080p", "hybrid", "4k"] as const).map((q) => (
           <button

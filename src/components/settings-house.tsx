@@ -74,7 +74,10 @@ export function HouseCard() {
               <dd className="truncate font-mono text-xs">{jf || ":8096"}</dd>
             </div>
           </dl>
-          <p className="mt-2.5 text-xs text-faint">TV app login is this same user. Source / quality / library live in the rows below.</p>
+          <p className="mt-2.5 text-xs text-faint">
+            TV app login is this same user. Source, quality, and library live under This house. Weird Movies or
+            Requests: use Fix.
+          </p>
         </div>
       </div>
     </div>

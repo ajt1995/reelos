@@ -2,6 +2,24 @@ import type { ComponentType, ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+export function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-8">
+      <h2 className="font-display text-lg font-medium">{title}</h2>
+      {hint ? <p className="mt-1 max-w-xl text-sm text-muted">{hint}</p> : null}
+      <div className="mt-3 grid gap-2.5">{children}</div>
+    </section>
+  );
+}
+
 export function persistUi(p: Record<string, unknown>) {
   void fetch("/api/settings", {
     method: "POST",

@@ -17,6 +17,7 @@ import {
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
+import { handleRepair } from "./reelos-repair.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -2100,6 +2101,9 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/settings") return void (await handleSettings(req, res));
           if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
           if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
+          if (pathOnly === "/api/repair") {
+            return void (await handleRepair(req, res, { send, readBody, otaRunning }));
+          }
           if (pathOnly === "/api/reset") return void (await handleReset(req, res));
           if (pathOnly === "/api/wire") return void (await handleWire(req, res));
           if (pathOnly === "/api/library") return void (await handleLibrary(req, res));

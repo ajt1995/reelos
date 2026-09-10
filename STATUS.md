@@ -7,7 +7,7 @@
 - **VERSION / channel:** `1.2.50.21`
 - **Base:** current `main` (1.2.50.20 / #72)
 - Did **not** take Tron chrome from #52 / #70
-- **What it is:** Apply heals the dumps that are already on the box. Extra 4K encodes park to `/mnt/symlinks/.reel-parked` (keep the largest). 1080+4K stay and are named so Jellyfin is one poster. Hybrid Radarr still upgrades to 4K, but recycle (`/mnt/symlinks/.reel-recycle`) keeps the 1080 and restore puts it back; cutoff MoviesSearch hunts 4K after 1080; interactive `/release` grab fills 1080 next to existing 4K-only titles (MoviesSearch will not search down). MergeVersions runs **after** scan. Phone splash does not wait on `/api/box`. Never `/media`.
+- **What it is:** Apply heals the dumps that are already on the box. Extra 4K encodes park to `/mnt/symlinks/.reel-parked` (keep the largest). 1080+4K stay and are named so Jellyfin is one poster. Hybrid Radarr still upgrades to 4K, but recycle (`/mnt/symlinks/.reel-recycle`) keeps the 1080 and restore puts it back; cutoff MoviesSearch hunts 4K after 1080; interactive `/release` grab fills 1080 next to existing 4K-only titles (MoviesSearch will not search down). Settings **Fix** is named repairs with descriptions (one poster, grab 1080, unstick, remount, rewire). MergeVersions runs **after** scan. Phone splash does not wait on `/api/box`. Never `/media`.
 
 ## Proof
 
@@ -16,7 +16,7 @@ python3 scripts/check-ota.py .
 python3 daemon/reelos-doctor.py --self-test
 python3 daemon/lock-download-clients.py --self-test
 python3 daemon/stuck-downloads.py --self-test
-node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/reelos-library.test.mjs scripts/relink-dumps.test.mjs scripts/stuck-downloads.test.mjs
+node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/reelos-library.test.mjs scripts/relink-dumps.test.mjs scripts/stuck-downloads.test.mjs scripts/reelos-repair.test.mjs
 ```
 
 ## Owner / house Apply
