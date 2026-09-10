@@ -1171,10 +1171,14 @@ def grab_hybrid_1080_companions(
             continue
         title = str(m.get("title") or folder.name)
         try:
+            # Radarr's interactive /release does a live Prowlarr->indexer search;
+            # across the public indexers that routinely takes 30-60s. A 25s cap
+            # made every companion search TimeoutError, so no 1080 was ever
+            # grabbed for a 4K-only title.
             releases = do(
                 f"{app['base']}/release?{urllib.parse.urlencode({'movieId': mid})}",
                 key,
-                timeout=25,
+                timeout=90,
             )
         except TypeError:
             try:

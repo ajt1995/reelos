@@ -929,16 +929,24 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
   fi
   # Yml can already lack dns: while *arr still have HostConfig.Dns=1.1.1.1 from
   # the 1.2.50.13 create (house radarr/sonarr/prowlarr/decypharr, Sept 8–9).
-  if [ "$COMPOSE_CHANGED" != "1" ]; then
-    for id in $(docker ps -q 2>/dev/null); do
-      case "$(docker inspect -f '{{json .HostConfig.Dns}}' "$id" 2>/dev/null || true)" in
-        *1.1.1.1*)
-          COMPOSE_CHANGED=1
-          log "containers still have HostConfig.Dns=1.1.1.1 — recreate"
-          break
-          ;;
-      esac
-    done
+  DNS_IDS=""
+  for id in $(docker ps -q 2>/dev/null); do
+    case "$(docker inspect -f '{{json .HostConfig.Dns}}' "$id" 2>/dev/null || true)" in
+      *1.1.1.1*)
+        COMPOSE_CHANGED=1
+        DNS_IDS="$DNS_IDS $id"
+        ;;
+    esac
+  done
+  if [ -n "$DNS_IDS" ]; then
+    # `up -d` alone will not drop a runtime HostConfig.Dns=1.1.1.1, and services
+    # with a fixed container_name (seerr, decypharr) make it fail with
+    # "container name already in use" — the whole recreate is skipped and the
+    # stale DNS survives. Remove the offending containers first so compose can
+    # recreate them fresh without dns:1.1.1.1.
+    log "containers still have HostConfig.Dns=1.1.1.1 — remove before recreate"
+    # shellcheck disable=SC2086
+    docker rm -f $DNS_IDS 2>/dev/null || true
   fi
   if [ "$COMPOSE_CHANGED" = "1" ]; then
     (cd "$ROOT/compose" && docker compose \
