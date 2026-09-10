@@ -1,51 +1,45 @@
 # STATUS.md
 
-***1.2.50.23 is the ship.*** 2026-09-10. House already stamped **1.2.50.22**. This Apply is honesty: the phone tells the truth during CLI Apply, Settings does not 500, `/api/box` does not call Jellyfin red when VirtualFolders is slow. Does not take Tron (#52 / #70).
+***1.2.50.24 is the ship.*** 2026-09-10. House is still stamped **1.2.50.22**. This Apply stacks 23 (honest Apply bar / box probe / Settings persist) with request recover: unmonitored Seerr seasons and missing *arr rows actually search. Does not take Tron (#52 / #70).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.23`
-- **Base:** `main` at 1.2.50.22 (#79 / #80 / #81)
+- **VERSION / channel:** `1.2.50.24`
+- **Base:** `main` at 1.2.50.22 (#79 / #80 / #81) plus 1.2.50.23 honesty
 - Did **not** take Tron chrome from #52 / #70
 
 ## Changelog
 
-Proven against the live house on Tailscale (`100.100.154.16`). Doctor hops were already green on 1.2.50.22. The phone still lied.
+Proven against the live house on Tailscale (`100.100.154.16`). Doctor hops were already green on 1.2.50.22. Requests were not.
 
-### Phone shows Applying while mailman is still in hops
+### Recover monitors requested seasons and adds a missing series
 
-`/api/update/status` only asked `systemctl is-active reelos-ota`. SSH `curl | bash -s apply` is not that unit, so `running` was false while hops/heal still ran. Home looked finished. Status now uses the **held** `ota.lock` flock (a leftover lock file is not running). Never delete `ota.lock`. Gold bar on every page. Caddy door no longer promises “a minute.”
+House GET `/api/request` sat on 22 **Season unmonitored in Sonarr — search will not run** rows (later seasons of shows already on the shelf), plus **Requested — Radarr has no movie yet** and **Requested — Sonarr has no series yet**. Recover skipped unmonitored seasons, never added a missing Sonarr series, and Home never called `?recover=1`. SeasonSearch on an unmonitored season is a no-op.
 
-### `/api/box` no longer invents missing Movies/Shows
+Recover now monitors the requested season (or adds the series, same as Radarr already added a missing movie), then SeasonSearch. GET recover also reads Seerr media ghosts so per-season rows are in scope. Home's first poll sends `recover=1`; kicks run in the background so the list does not wait on 20 SeasonSearch commands.
 
-Jellyfin VirtualFolders on this HP often takes longer than 2.5s. The box probe aborted, treated `[]` as “no libraries,” and painted Jellyfin red while Doctor and `/api/library` were green. The probe now waits 8s, retries with `?api_key=`, and says **Cannot read virtual folders** when the read fails — **Missing library** only when the read succeeded and the folder is actually absent.
+### Requests Retry is visible on locks
 
-### Settings auto-update no longer 500s
+A downloading row with "search will not run" / "has no movie yet" only offered Cancel. Retry (POST `/api/request`) is the write that monitors and searches. Retry now shows for those locks. Rows take a title from *arr or Seerr so the list is not `tmdb-tv-1402`.
 
-Toggling daily Apply wrote `/etc/systemd/system/reelos-autoupdate.service` as the Vite user and threw `EACCES`. Settings JSON is written first; the systemd unit is best-effort (`sudo -n tee`). The toggle persists even when the unit cannot be installed.
+### 1.2.50.23 honesty (still in this Apply)
 
-### Shelf titles do not double the year
-
-Unmatched Jellyfin movies keep the folder name `John Wick (2014)` plus `ProductionYear` 2014. The shelf now strips a trailing `(Year)` that matches the year field.
-
-### Caddy :80 stays reachable after Apply
-
-Apply now `ufw allow` 80/8080/8096 when Caddy is restored, so the Tailscale door is not a black hole after a firewall reload.
+Phone shows Applying while mailman is still in hops (`ota.lock` flock). `/api/box` no longer calls a slow VirtualFolders timeout Missing library. Settings auto-update no longer 500s. Shelf strips a trailing `(Year)` that matches ProductionYear. Apply `ufw allow`s 80/8080/8096 when Caddy is restored.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/reelos-ota-status.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-library.test.mjs scripts/jellyfin-seed.test.mjs
+node --test scripts/reelos-ota-status.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-library.test.mjs scripts/reelos-request-status.test.mjs scripts/reelos-seerr.test.mjs scripts/jellyfin-seed.test.mjs
 python3 daemon/reelos-doctor.py --self-test
 ```
 
 ## Owner / house Apply
 
 1. Merge this to **main**. Phone **Check → Apply once**, or CLI mailman from `main`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.23`.
-3. Next Apply (phone or CLI) shows the gold bar until mailman prints `ReelOS 1.2.50.23 applied.`
-4. Settings → Updates daily toggle does not error. Home / Settings do not say Movies/Shows are missing while the library shelf has titles.
+2. `cat /opt/reelos/VERSION` → `1.2.50.24`.
+3. Next Apply (phone or CLI) shows the gold bar until mailman prints `ReelOS 1.2.50.24 applied.`
+4. Open Home or Requests once. Unmonitored requested seasons leave "search will not run". Settings → Updates daily toggle does not error.
 
 ## Do not
 

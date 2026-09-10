@@ -4,13 +4,19 @@ import { useReelStore } from "@/lib/store";
 import { mergeServerRequests, overlayLibraryPresence } from "@/lib/sync-requests";
 import type { MediaRequest, Title } from "@/lib/types";
 
-/** Pull GET /api/request (list) into the persisted store. Home + Requests both call this. */
+/** Pull GET /api/request (list) into the persisted store. Home + Requests both call this.
+ *  First poll in this tab sends recover=1 so unmonitored seasons / missing *arr rows get a kick
+ *  without blocking later 15s refreshes. */
+let recoveredOnce = false;
+
 export function useSyncRequests() {
   useEffect(() => {
     let stop = false;
     const tick = async () => {
       try {
-        const j = (await fetch("/api/request", { cache: "no-store" }).then((res) => res.json())) as {
+        const q = recoveredOnce ? "/api/request" : "/api/request?recover=1";
+        recoveredOnce = true;
+        const j = (await fetch(q, { cache: "no-store" }).then((res) => res.json())) as {
           requests?: MediaRequest[];
           titles?: Title[];
         };

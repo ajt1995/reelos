@@ -398,7 +398,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.23"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.24"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -1080,7 +1080,8 @@ async function handleRequestList(res) {
     } catch {
       mediaItems = [];
     }
-    const assembled = assembleRequestPayload(requests, facts, mediaItems);
+    const titleById = new Map(titles.filter((h) => h?.id && h?.title).map((h) => [h.id, h.title]));
+    const assembled = assembleRequestPayload(requests, { ...facts, titleById }, mediaItems);
     send(res, 200, { requests: assembled.requests, titles, engine: "seerr", pipeline: assembled.pipeline });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });

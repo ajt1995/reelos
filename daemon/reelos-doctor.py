@@ -346,7 +346,7 @@ def sonarr_indexers_hop() -> dict:
     return ok("Sonarr indexers", ",".join(str(ix.get("name") or "") for ix in enabled), True)
 
 
-JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.23"'
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.24"'
 
 
 def jellyfin_api_token() -> str:

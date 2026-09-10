@@ -4,6 +4,7 @@ import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
 import { useSyncRequests } from "@/lib/use-sync-requests";
+import { requestShowsRetry } from "@/lib/sync-requests";
 import type { RequestStatus } from "@/lib/types";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ export function RequestsView() {
         {list.map((r) => {
           const t = getTitle(r.titleId);
           const titleId = t?.id || r.titleId;
-          const label = t?.title || r.titleId || "Title";
+          const label = t?.title || r.title || r.titleId || "Title";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
@@ -86,7 +87,7 @@ export function RequestsView() {
                   </p>
                 )}
               </div>
-              {r.status === "failed" ? (
+              {requestShowsRetry(r) ? (
                 <Button size="sm" variant="ghost" onClick={() => retry(r.id)}>
                   Retry
                 </Button>

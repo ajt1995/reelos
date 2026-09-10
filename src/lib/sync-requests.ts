@@ -17,6 +17,13 @@ export function showRequestQueueControls(opts: {
   return !opts.available;
 }
 
+/** Locks that will never progress without a write — Retry must stay visible (Cancel is not enough). */
+export function requestShowsRetry(r: { status: string; reason?: string }): boolean {
+  if (r.status === "failed") return true;
+  if (r.status === "available") return false;
+  return /will not run|has no movie yet|has no series yet|cannot land/i.test(r.reason || "");
+}
+
 function requestMatchKey(r: Pick<MediaRequest, "titleId" | "season">): string {
   return r.season == null ? r.titleId : `${r.titleId}#${r.season}`;
 }
