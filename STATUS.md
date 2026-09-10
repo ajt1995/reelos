@@ -31,6 +31,8 @@ Radarr only tracks one `movieFile`. An upgrade used to replace the 1080.
 
 Existing 4K-only dumps and extra 4Ks are not left for later. Apply parks extras, names versions, and grabs a 1080 companion when one exists. Same rules as new requests.
 
+If *arr still have leftover `HostConfig.Dns=1.1.1.1` from the 1.2.50.13 create (compose yml already dropped that block in 1.2.50.14), Apply recreates them and remounts FUSE before hops. That is not “DNS is still broken” — the yml fix is already on 1.2.50.20; this stamp clears the running containers.
+
 ### Phone paints first
 
 Home no longer waits on `GET /api/box` (Tailscale + VirtualFolders) before first paint. Library can show a stale shelf. Posters go through a same-origin thumbnail.

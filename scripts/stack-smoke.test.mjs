@@ -32,6 +32,7 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.doesNotMatch(dnsHosts, /DNS_HOSTS = """    dns:\n      - 1\.1\.1\.1/);
   assert.doesNotMatch(dnsHosts, /127\.0\.0\.11/);
   const updater = read("daemon/reelos-update.sh");
+  assert.match(updater, /HostConfig.Dns=1\.1\.1\.1 — recreate/);
   const heal = updater.indexOf('if [ "${HEAL_FAIL:-0}" = "1" ]; then');
   const stamp = updater.indexOf('echo "$REMOTE" >"$ROOT/VERSION"');
   const applied = updater.indexOf('log "ReelOS $REMOTE applied."');

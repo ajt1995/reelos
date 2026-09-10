@@ -321,6 +321,7 @@ need daemon/reelos-update.sh 'ListenAddress 0.0.0.0'
 need daemon/reelos-update.sh 'apply already running'
 need daemon/reelos-update.sh 'ROOT.prev/docker-compose.yml'
 need daemon/reelos-update.sh 'compose recreated — remount FUSE before hops'
+need daemon/reelos-update.sh 'HostConfig.Dns=1.1.1.1 — recreate'
 need daemon/reelos-update.sh 'waiting for :8080'
 need daemon/reelos-update.sh 'hop FUSE green'
 need daemon/reelos-update.sh 'hop Jellyfin green'
@@ -925,6 +926,19 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
       cp "$WORK/src/install/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml"
       log "compose yml from tarball"
     fi
+  fi
+  # Yml can already lack dns: while *arr still have HostConfig.Dns=1.1.1.1 from
+  # the 1.2.50.13 create (house radarr/sonarr/prowlarr/decypharr, Sept 8–9).
+  if [ "$COMPOSE_CHANGED" != "1" ]; then
+    for id in $(docker ps -q 2>/dev/null); do
+      case "$(docker inspect -f '{{json .HostConfig.Dns}}' "$id" 2>/dev/null || true)" in
+        *1.1.1.1*)
+          COMPOSE_CHANGED=1
+          log "containers still have HostConfig.Dns=1.1.1.1 — recreate"
+          break
+          ;;
+      esac
+    done
   fi
   if [ "$COMPOSE_CHANGED" = "1" ]; then
     (cd "$ROOT/compose" && docker compose \
