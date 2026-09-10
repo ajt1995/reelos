@@ -398,7 +398,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.26"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.27"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;

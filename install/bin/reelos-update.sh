@@ -407,6 +407,8 @@ need daemon/wire-engines.parts/08.part 'jellyfin heal red — no token'
 need daemon/wire-engines.parts/09.part 'collapse_dumps=False'
 need daemon/wire-engines.parts/01.part 'return heal_after_import()'
 need daemon/reelos-update.sh 'not printing applied — jellyfin/indexer heal red'
+need daemon/reelos-update.sh 'door restored — still not stamping'
+need daemon/reelos-update.sh 'restart hung reelos'
 need daemon/reelos-doctor.py 'doctor_jellyfin_library_detail'
 need daemon/reelos-doctor.py 'request_hop_detail'
 need daemon/reelos-doctor.py 'movie/lookup'
@@ -812,8 +814,18 @@ fi
 step "Door :80"
 
 ensure_door() {
+  # Import/indexer heal can OOM *arr and leave Vite accepting TCP with no HTTP.
+  # systemctl start is a no-op on a hung-but-active unit — restart it.
+  start_fuse_readers
   systemctl start reelos >/dev/null 2>&1 || true
   caddy_reelos
+  code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:8080/ 2>/dev/null || true)
+  if [ "$code" != "200" ]; then
+    log "door :8080 not 200 (got ${code:-000}) — restart hung reelos"
+    timeout 20 systemctl restart reelos >/dev/null 2>&1 || true
+    start_shell
+    sleep 2
+  fi
   if probe_home && probe_port80; then
     log "door :80 is ReelOS"
     return 0
@@ -1178,6 +1190,7 @@ else
   log "indexer canary skipped (compose unchanged — UI-only OTA)"
 fi
 
+STAMP_OK=1
 if [ "${SEARCH_HOP_FAIL:-0}" = "1" ]; then
   log "hop search red — not blocking UI-only stamp"
   bug_snap "search-hop-red"
@@ -1190,24 +1203,28 @@ if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ "${HOP_FAIL:-0}" = "1" ]; then
   log "not printing applied — hops or indexer red"
   bug_snap "hops-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
-  exit 1
+  STAMP_OK=0
 fi
 if [ "$CANARY_FAIL" = "1" ]; then
   log "not printing applied — hops or indexer red"
   bug_snap "hops-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
-  exit 1
+  STAMP_OK=0
 fi
 if [ "${HEAL_FAIL:-0}" = "1" ]; then
   log "not printing applied — jellyfin/indexer heal red"
   bug_snap "heal-red"
   log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
-  exit 1
+  STAMP_OK=0
 fi
 
 if ! ensure_door; then
   log "not printing applied — phone would see connection refused"
   bug_snap "door-dead"
+  exit 1
+fi
+if [ "$STAMP_OK" != "1" ]; then
+  log "door restored — still not stamping"
   exit 1
 fi
 

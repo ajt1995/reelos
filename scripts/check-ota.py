@@ -29,6 +29,8 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "staging missing package.json"),
     ("daemon/reelos-update.sh", "hop search red — not blocking UI-only stamp"),
     ("daemon/reelos-update.sh", "not printing applied — jellyfin/indexer heal red"),
+    ("daemon/reelos-update.sh", "door restored — still not stamping"),
+    ("daemon/reelos-update.sh", "restart hung reelos"),
     ("daemon/reelos-update.sh", "npm ci failed — not swapping"),
     ("daemon/reelos-update.sh", "overlay house compose/configs onto staging"),
     ("daemon/reelos-update.sh", "still copying node_modules"),
@@ -78,6 +80,12 @@ def main() -> int:
         return fail("OTA contract: ensure_door / VERSION stamp / applied. missing")
     if not (door < stamp < applied):
         return fail("OTA contract: stamp/applied must come after ensure_door")
+    stamp_ok = updater.find("STAMP_OK=1")
+    if stamp_ok < 0 or "exit 1" in updater[stamp_ok:door]:
+        return fail("OTA contract: hops/heal-red must not exit before ensure_door")
+    refuse = updater.find('log "door restored — still not stamping"')
+    if refuse < 0 or not (door < refuse < stamp):
+        return fail("OTA contract: heal-red restores door then refuses stamp")
 
     pull = updater.find('stack images — docker compose pull')
     if pull >= 0 and pull < applied:
