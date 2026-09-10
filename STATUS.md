@@ -1,83 +1,42 @@
 # STATUS.md
 
-***1.2.50.21 is the ship.*** 2026-09-10. One Apply from house **1.2.50.20** / #72. Complements #72. Does not take Tron (#52 / #70).
+***1.2.50.22 is the ship.*** 2026-09-10. Honesty for Apply-in-progress. Complements #73 / 1.2.50.21. Does not take Tron (#52 / #70).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.21`
-- **Base:** `main` at 1.2.50.20 (#72)
-- **PR:** https://github.com/ajt1995/reelos/pull/73
+- **VERSION / channel:** `1.2.50.22`
+- **Base:** `main` at 1.2.50.21 (#73)
 - Did **not** take Tron chrome from #52 / #70
 
-## Changelog (everything in this Apply)
+## Changelog
 
-### Movies stay one poster
+### Phone tells you Apply is still running
 
-Jellyfin 12 has no merge-versions plugin. 1080 and 4K next to each other used to become two posters after `Library/Refresh`. ReelOS Library hid that; Jellyfin Movies did not.
+House CLI Apply of 1.2.50.21 left Home looking idle. `/api/update/status` only asked `systemctl is-active reelos-ota`. SSH `curl | bash -s apply` is not that unit, so `running` was false while hops/heal still ran. The Caddy “updating” page only covers the swap; then the live shell looks finished.
 
-- Files are named `Title (Year) - 1080p` / `- 2160p` so Jellyfin treats them as versions of one movie.
-- Extra copies of the **same** resolution park to `/mnt/symlinks/.reel-parked` (keep the largest). Never delete. Never `/media`.
-- 1080 next to 4K stays. MergeVersions runs **last**, after scan, so a refresh cannot split them again.
-
-### Hybrid keeps 1080 when 4K lands
-
-Radarr only tracks one `movieFile`. An upgrade used to replace the 1080.
-
-- Recycle at `/mnt/symlinks/.reel-recycle` (cleanup days 0). Restore puts the 1080 back next to 4K.
-- Cutoff `MoviesSearch` hunts 4K after 1080.
-- Interactive `/release` grab fills a 1080 next to titles that already only have 4K (`MoviesSearch` will not search down). Cap 3, cooldown.
-
-### Apply heals what is already on the box
-
-Existing 4K-only dumps and extra 4Ks are not left for later. Apply parks extras, names versions, and grabs a 1080 companion when one exists. Same rules as new requests.
-
-If *arr still have leftover `HostConfig.Dns=1.1.1.1` from the 1.2.50.13 create (compose yml already dropped that block in 1.2.50.14), Apply recreates them and remounts FUSE before hops. That is not “DNS is still broken” — the yml fix is already on 1.2.50.20; this stamp clears the running containers.
-
-### Phone paints first
-
-Home no longer waits on `GET /api/box` (Tailscale + VirtualFolders) before first paint. Library can show a stale shelf. Posters go through a same-origin thumbnail.
-
-### Settings Fix
-
-Settings is House → **Fix** → This house → Box → More.
-
-Named **Run** scripts with a short description each:
-
-| When | Run |
-|---|---|
-| Library looks wrong | One poster per movie · Grab a 1080 next to 4K · Import what’s already downloaded |
-| A request sits | Unstick grabs · Fix search indexers · Rewire engines |
-| Files vanished | Remount debrid files |
-| Read-only | Check hops (does not guess green until you run doctor) |
-
-Allowlist only. No free-form shell. Not during an update. Overlap is a wait, not a second spawn. Fast success says **Finished**; a crash shows the log — not a fake Started. A stale `/opt` engine that cannot `merge-movies` is skipped so “one poster” cannot silently run full wire `main()`. Factory reset asks a second time.
-
-### Quality copy
-
-Hybrid knob says it grabs 1080 and 4K and **does not replace** the 1080.
+- Status uses the **held** `ota.lock` flock (and the systemd unit). A leftover lock file is not running. Never delete `ota.lock`.
+- Phone polls status on load and every 2.5s. Applying paints a gold bar on every Shell page: *Applying X. Home can open — engines are still configuring.* plus the last mailman line.
+- Settings → Updates says the same and disables Check/Apply.
+- Caddy door copy no longer promises “a minute.”
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-python3 daemon/reelos-doctor.py --self-test
-python3 daemon/lock-download-clients.py --self-test
-python3 daemon/stuck-downloads.py --self-test
-node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/reelos-library.test.mjs scripts/relink-dumps.test.mjs scripts/stuck-downloads.test.mjs scripts/reelos-repair.test.mjs
+node --test scripts/reelos-ota-status.test.mjs scripts/reelos-repair.test.mjs
 ```
 
 ## Owner / house Apply
 
-1. Merge this to **main**. Phone Check→Apply **once**, or CLI mailman from `main`.
-2. `cat /opt/reelos/VERSION` → `1.2.50.21`.
-3. Jellyfin Movies is one Interstellar with a 1080p/4K version picker, not two posters. Extra 4Ks are in `/mnt/symlinks/.reel-parked`. Hybrid keeps 1080+4K (including titles that already had only 4K, if a 1080 exists to grab).
-4. Phone Home paints chrome before doctor/Tailscale finish.
-5. Settings → Fix has named Run buttons. Check hops starts at “Not checked yet.”
+Wait until **1.2.50.21** finishes (one Apply). Then phone **Check → Apply once** for 1.2.50.22. Do not tap Apply while 21 is still in hops.
+
+1. `cat /opt/reelos/VERSION` → `1.2.50.22`
+2. Next Apply (phone or CLI) shows the bar until mailman prints `ReelOS 1.2.50.22 applied.`
 
 ## Do not
 
 - Cut 1.2.51 / Tron #52 / #70 onto this stamp
 - Tap Apply twice
-- Re-add compose `dns: 1.1.1.1`
+- Start a second Apply while 21 is running
 - Delete `ota.lock`
 - Wipe `/media`

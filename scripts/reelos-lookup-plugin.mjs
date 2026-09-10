@@ -18,6 +18,7 @@ import {
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
+import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -851,8 +852,7 @@ async function handleUpdateApply(req, res) {
     send(res, 405, { ok: false });
     return;
   }
-  const st0 = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
-  if (st0 === "active" || st0 === "activating") {
+  if (applyIsRunning()) {
     send(res, 409, { ok: false, error: "Update already running", already: true });
     return;
   }
@@ -928,10 +928,18 @@ ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
   }
 }
 
-function lastOtaLines(n = 3) {
+function otaLogText() {
   try {
     if (!existsSync("/var/lib/reelos/ota.log")) return "";
-    const lines = readFileSync("/var/lib/reelos/ota.log", "utf8")
+    return readFileSync("/var/lib/reelos/ota.log", "utf8");
+  } catch {
+    return "";
+  }
+}
+
+function lastOtaLines(n = 3) {
+  try {
+    const lines = otaLogText()
       .trim()
       .split("\n")
       .filter((l) => l && !l.includes("channel ") && !l.startsWith("----"));
@@ -942,9 +950,15 @@ function lastOtaLines(n = 3) {
 }
 
 async function handleUpdateStatus(_req, res) {
-  const st = spawnSync("systemctl", ["is-active", "reelos-ota"], { encoding: "utf8" }).stdout.trim();
-  const running = st === "active" || st === "activating";
-  send(res, 200, { ok: true, local: localVersion(), running, log: lastOtaLines(3) });
+  const running = applyIsRunning();
+  const log = lastOtaLines(3);
+  send(res, 200, {
+    ok: true,
+    local: localVersion(),
+    running,
+    target: running ? applyTargetFromLog(otaLogText()) : null,
+    log,
+  });
 }
 
 async function arrGet(url, key) {
@@ -1673,9 +1687,7 @@ systemctl restart reelos || true
 }
 
 function otaRunning() {
-  if (process.env.REELOS_OTA === "1") return true;
-  const ota = spawnSync("pgrep", ["-f", "reelos-update.sh"], { encoding: "utf8" });
-  return ota.status === 0;
+  return applyIsRunning();
 }
 
 async function handleWire(req, res) {

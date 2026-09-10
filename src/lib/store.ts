@@ -57,11 +57,12 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.21";
-export const SHIPPED_VERSION = "1.2.50.21";
+export const LATEST_VERSION = "1.2.50.22";
+export const SHIPPED_VERSION = "1.2.50.22";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export const UPDATE_NOTES = [
+  "1.2.50.22: Phone shows Applying while mailman is still in hops. CLI Apply is not reelos-ota.service, so status used to say running:false and Home looked idle. Status uses the ota.lock flock (leftover file is not running). Banner on every page. Caddy door no longer says a minute. Complements #73. Not 1.2.51 (Tron).",
   "1.2.50.21: One poster in Jellyfin Movies after a scan (native `Title (Year) - 1080p` / `- 2160p`; extra 4Ks park; merge LAST). Hybrid grabs 1080 and 4K and keeps both (recycle+restore, cutoff 4K, interactive 1080 for 4K-only titles). Apply heals dumps already on the box and recreates *arr that still carry HostConfig.Dns=1.1.1.1. Settings Fix: named Run scripts with descriptions; hops are not guessed green; Run says Finished or the log. Phone Home paints without waiting on /api/box. Never /media. Complements #72. Not 1.2.51 (Tron).",
   "1.2.50.20: Apply parks release-named movie dumps into Title (Year) so Jellyfin Movies is not Interstellar×3 / Dune×2. Part One aliases Dune (2021); Part Two does not. Same-folder files MergeVersions to one poster. TV season packs with quality after S01 collapse into the series folder. Never /media. Complements #71. Not 1.2.51 (Tron).",
   "1.2.50.19: House Apply of 1.2.50.18 recreated compose, left ENOTCONN FUSE, and SIGKILL'd Decypharr/Jellyfin/Radarr/Sonarr. Mailman treated [ -e __all__ ] as mounted. Lazy-unmount before compose up; hops/wait use ls not -e; docker start exited readers after remount. Complements #69. Not 1.2.51 (Tron).",
@@ -163,6 +164,7 @@ export interface ReelState {
   startRepair: () => void;
   factoryReset: () => void;
   checkForUpdate: () => void;
+  syncUpdateFromBox: () => void;
   startUpdate: () => void;
   pingAdapter: () => void;
   addIndexer: (name: string, url: string, key: string) => void;
@@ -508,6 +510,54 @@ export const useReelStore = create<ReelState>()(
       loadLab: () => set({ ...labState() }),
       startRepair: () => set({ phase: "wizard", wizardStep: 1 }),
       factoryReset: () => set({ ...initial, hydrated: true, shelfReady: true }),
+      syncUpdateFromBox: () => {
+        void fetch("/api/update/status", { cache: "no-store" })
+          .then((r) => r.json())
+          .then((st: { running?: boolean; local?: string; target?: string | null; log?: string }) => {
+            const cur = get();
+            const last = (st.log || "").trim().split("\n").pop() || "";
+            if (st.running) {
+              const steps = (cur.update.steps?.length ? cur.update.steps : updatePlan()).map((x) => ({ ...x }));
+              if (steps[0]) {
+                steps[0].status = "running";
+                steps[0].label = "Configuring this house";
+                steps[0].log = last.slice(0, 160);
+              }
+              set({
+                update: {
+                  ...cur.update,
+                  status: "applying",
+                  current: st.local || cur.update.current,
+                  target: st.target || cur.update.target,
+                  steps,
+                  notes: [],
+                },
+              });
+              return;
+            }
+            if (cur.update.status === "applying") {
+              set({
+                update: {
+                  ...cur.update,
+                  status: "current",
+                  current: st.local || cur.update.current,
+                  target: null,
+                  steps: (cur.update.steps || []).map((x) => ({ ...x, status: "done" as const })),
+                  notes: [],
+                },
+              });
+              return;
+            }
+            if (st.local && st.local !== cur.update.current && cur.update.status !== "checking") {
+              set({
+                update: { ...cur.update, current: st.local },
+              });
+            }
+          })
+          .catch(() => {
+            /* preview / no box */
+          });
+      },
       checkForUpdate: () => {
         const s = get();
         if (s.update.status === "checking" || s.update.status === "applying") return;
