@@ -1,8 +1,8 @@
 {
-  "version": "1.2.50.24",
+  "version": "1.2.50.25",
   "channel": "stable",
   "notes": [
-    "1.2.50.24: Recover monitors unmonitored Seerr seasons and adds a missing Sonarr series before SeasonSearch. Home's first request poll sends recover=1 without blocking the list. Requests shows Retry when search will not run, and names rows from *arr. Complements #82. Not 1.2.51 (Tron).",
+    "1.2.50.25: Jellyfin never extracts subtitles, trickplay, chapter images, or intro segments from TorBox dumps. Turning low-performance off does not re-enable those scans. Complements #82. Not 1.2.51 (Tron).",
     "1.2.50.22: Hybrid 1080+4K reliably lands as one tile. Recycle bin is chowned to the engine user so Radarr stops 400ing the mediamanagement PUT and keeps the 1080 when 4K upgrades. Apply removes leftover HostConfig.Dns=1.1.1.1 containers before recreate, so the fixed-name Seerr/Decypharr clash no longer skips compose up. Sonarr manualimport scans each dump folder instead of the whole FUSE tree so TV imports stop timing out. The 4K-only 1080-companion grab gets a 90s interactive search (sweep 300s) so a 1080 actually grabs. Complements #73. Not 1.2.51 (Tron).",
     "1.2.50.21: One poster in Jellyfin Movies after a scan (native `Title (Year) - 1080p` / `- 2160p`; extra 4Ks park; merge LAST). Hybrid grabs 1080 and 4K and keeps both (recycle+restore, cutoff 4K, interactive 1080 for 4K-only titles). Apply heals dumps already on the box and recreates *arr that still carry HostConfig.Dns=1.1.1.1. Settings Fix: named Run scripts with descriptions; hops are not guessed green; Run says Finished or the log. Phone Home paints without waiting on /api/box. Never /media. Complements #72. Not 1.2.51 (Tron).",
     "1.2.50.20: Apply parks release-named movie dumps into Title (Year) so Jellyfin Movies is not Interstellar×3 / Dune×2. Part One aliases Dune (2021); Part Two does not. Same-folder files MergeVersions to one poster. TV season packs with quality after S01 collapse into the series folder. Never /media. Complements #71. Not 1.2.51 (Tron).",

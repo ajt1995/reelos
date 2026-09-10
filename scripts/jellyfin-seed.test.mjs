@@ -77,7 +77,53 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /extra_jellyfin_libraries/);
     assert.match(code, /wizard_completed/);
     assert.match(code, /Startup\/Configuration/);
+    assert.match(code, /def jellyfin_debrid_library_flags/);
+    assert.match(code, /def jellyfin_debrid_encoding_patch/);
+    assert.match(code, /def jellyfin_task_hammers_debrid/);
+    assert.match(code, /EnableSubtitleExtraction/);
+    assert.match(code, /AllowEmbeddedSubtitles/);
+    assert.match(code, /TaskExtractMediaSegments/);
+    assert.match(code, /\*\*jellyfin_debrid_library_flags\(\)/);
+    assert.doesNotMatch(code, /EnableTrickplayImageExtraction": not low/);
   }
+});
+
+test("Jellyfin debrid-safe flags never extract trickplay, chapters, or subtitles from dumps", () => {
+  const code = joinParts(join(root, "daemon/wire-engines.parts"));
+  const r = spawnSync(
+    "python3",
+    [
+      "-c",
+      `
+import sys
+g = {"__name__": "wire_engines"}
+exec(compile(sys.stdin.read(), "wire-engines.py", "exec"), g)
+flags = g["jellyfin_debrid_library_flags"]()
+assert flags["EnableTrickplayImageExtraction"] is False
+assert flags["ExtractTrickplayImagesDuringLibraryScan"] is False
+assert flags["EnableChapterImageExtraction"] is False
+assert flags["ExtractChapterImagesDuringLibraryScan"] is False
+assert flags["SaveTrickplayWithMedia"] is False
+assert flags["AllowEmbeddedSubtitles"] == "AllowText"
+enc = g["jellyfin_debrid_encoding_patch"]({
+    "EnableSubtitleExtraction": True,
+    "AllowOnDemandMetadataBasedKeyframeExtractionForExtensions": ["mkv"],
+    "VaapiDevice": "/dev/dri/renderD128",
+})
+assert enc["EnableSubtitleExtraction"] is False
+assert enc["AllowOnDemandMetadataBasedKeyframeExtractionForExtensions"] == []
+assert enc["VaapiDevice"] == "/dev/dri/renderD128"
+hammers = g["jellyfin_task_hammers_debrid"]
+assert hammers({"Key": "TaskExtractMediaSegments", "Name": "Media Segment Scan"}) is True
+assert hammers({"Key": "RefreshTrickplayImages", "Name": "Generate Trickplay Images"}) is True
+assert hammers({"Key": "DownloadSubtitles", "Name": "Download missing subtitles"}) is False
+assert hammers({"Key": "RefreshLibrary", "Name": "Scan Media Library"}) is False
+`,
+    ],
+    { input: code, encoding: "utf8" },
+  );
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(read("src/components/settings-panels.tsx"), /does not read TorBox dumps/);
 });
 
 test("Movies/Shows keep only /symlinks/radarr|sonarr — extra paths are dropped", () => {

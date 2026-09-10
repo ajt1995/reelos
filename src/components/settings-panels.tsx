@@ -91,7 +91,7 @@ export function PerformanceRow() {
         <div>
           <p className="font-display font-medium">Low performance mode</p>
           <p className="mt-1 text-sm text-muted">
-            Trickplay and chapter images off. Default on for this box.
+            Trickplay, chapter images, subtitle extraction, and intro scans stay off so Jellyfin does not read TorBox dumps. Default on for this box.
           </p>
         </div>
       </div>
