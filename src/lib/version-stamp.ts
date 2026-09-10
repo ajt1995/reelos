@@ -1,7 +1,7 @@
 export const LATEST_VERSION = "1.2.50.20";
 export const SHIPPED_VERSION = "1.2.50.20";
 export const UPDATE_NOTES = [
-  "1.2.50.20: Apply parks release-named movie dumps (Interstellar.2014.2160p… / YTS folder) into Title (Year) so Jellyfin Movies is not Interstellar×3. Same allowlist as TV season-folder collapse — never /media. Complements #71 FUSE remount. Not 1.2.51 (Tron).",
+  "1.2.50.20: Apply parks release-named movie dumps into Title (Year) so Jellyfin Movies is not Interstellar×3 / Dune×2. Part One aliases Dune (2021); Part Two does not. TV season packs with quality after S01 collapse into the series folder. Never /media. Complements #71. Not 1.2.51 (Tron).",
   "1.2.50.19: House Apply of 1.2.50.18 recreated compose, left ENOTCONN FUSE, and SIGKILL'd Decypharr/Jellyfin/Radarr/Sonarr. Mailman treated [ -e __all__ ] as mounted. Lazy-unmount before compose up; hops/wait use ls not -e; docker start exited readers after remount. Complements #69. Not 1.2.51 (Tron).",
   "1.2.50.18: FUSE dumps named [Bitsearch.to] Show.S01… now relink into the Sonarr series folder, so a requested season can import without a tap. TV Requests say searching / linked / unmonitored instead of silent 0%. Library Items send MediaBrowser Token (JF 12 401 on X-Emby-Token alone). Complements #69 Discover. Not 1.2.51 (Tron #52).",
   "1.2.50.17: Discover browse is Seerr popular movies/shows this box does not have — not the Jellyfin shelf. Search still lookup. TorBox wizard ping sends a named User-Agent. Wait longer for Seerr first-run so Finish can login. Not 1.2.51 (Tron #52).",

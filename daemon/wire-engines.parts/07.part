@@ -129,14 +129,22 @@ def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
     return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
 
 
-_SEASON_FOLDER = re.compile(r"[\s._:-]+(?:s(?:eason)?[\s._-]*\d{1,2})\s*$", re.I)
+_SEASON_FOLDER = re.compile(
+    r"[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|"
+    r"s\d{1,2}(?![eE]\d))(?:\s+(?:[\(\[]|-).*)?\s*$",
+    re.I,
+)
+_YEAR_TAIL = re.compile(r"\s+\((?:19|20)\d{2}\)\s*$")
 
 
 def strip_season_folder_suffix(name: str) -> str:
-    """Brooklyn Nine-Nine S01 / The Walking Dead - Season 1 → the series name."""
+    """B99 S01 / TWD - Season 1 / B99 (2013) Season 1 S01 (1080p…) → the series name."""
     raw = str(name or "").strip()
     stripped = _SEASON_FOLDER.sub("", raw).strip()
-    return stripped or raw
+    if not stripped or stripped == raw:
+        return raw
+    bare = _YEAR_TAIL.sub("", stripped).strip()
+    return bare or stripped
 
 
 def looks_like_season_folder_title(name: str) -> bool:
@@ -186,15 +194,35 @@ def movie_title_year(name: str) -> tuple[str, str] | None:
     return title, pick.group(1)
 
 
-def movie_dump_key(name: str) -> str | None:
+_PART_ONE = re.compile(r"[\s:.\-_]+(?:part|pt)[\s.\-_]*(?:one|1|i)\s*$", re.I)
+
+
+def movie_stem(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(title or "").lower())
+
+
+def movie_dump_keys(name: str) -> list[str]:
+    """Primary Title:Year plus Part One/Part 1 alias. Never Part Two (Dune 2021 ≠ Part Two)."""
     parsed = movie_title_year(name)
     if not parsed:
-        return None
+        return []
     title, year = parsed
-    stem = re.sub(r"[^a-z0-9]+", "", title.lower())
-    if len(stem) < 4:
-        return None
-    return f"{stem}:{year}"
+    keys: list[str] = []
+    seen: set[str] = set()
+    for t in (title, _PART_ONE.sub("", title).strip(" :-._")):
+        stem = movie_stem(t)
+        if len(stem) < 4:
+            continue
+        key = f"{stem}:{year}"
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def movie_dump_key(name: str) -> str | None:
+    keys = movie_dump_keys(name)
+    return keys[0] if keys else None
 
 
 def looks_like_movie_dump_folder(name: str) -> bool:
@@ -225,8 +253,8 @@ def plan_movie_dump_item(item: dict, siblings: list) -> dict | None:
     if not movie_dump_item_path(path):
         return None
     folder = path.rstrip("/").split("/")[-1]
-    key = movie_dump_key(folder)
-    if not key:
+    keys = set(movie_dump_keys(folder))
+    if not keys:
         return None
     item_id = item.get("Id") or item.get("id")
     if not item_id:
@@ -240,7 +268,7 @@ def plan_movie_dump_item(item: dict, siblings: list) -> dict | None:
         sfolder = sp.split("/")[-1] if sp else ""
         if not is_canonical_movie_folder(sfolder):
             continue
-        if movie_dump_key(sfolder) != key:
+        if not keys.intersection(movie_dump_keys(sfolder)):
             continue
         canons.append(sib)
     if not canons:

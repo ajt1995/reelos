@@ -45,14 +45,28 @@ def dump_dir_has_media(path: Path) -> bool:
     return False
 
 
+def dest_media_names(dest: Path) -> set[str]:
+    names: set[str] = set()
+    try:
+        for x in dest.rglob("*"):
+            if x.is_file() or x.is_symlink():
+                names.add(x.name)
+    except OSError:
+        pass
+    return names
+
+
 def move_dump_media(src: Path, dest: Path) -> None:
-    """Park season-folder files onto the series folder without clobbering existing names."""
+    """Park dump files onto the title folder without clobbering existing names."""
     dest.mkdir(parents=True, exist_ok=True)
+    have = dest_media_names(dest)
     try:
         kids = list(src.iterdir())
     except OSError:
         return
     for child in kids:
+        if (child.is_file() or child.is_symlink()) and child.name in have:
+            continue
         target = dest / child.name
         if target.exists():
             continue
@@ -92,6 +106,11 @@ def collapse_season_named_dumps(root: str = "/mnt/symlinks/sonarr", allow=None) 
         if not series or series == p.name:
             continue
         canon = by_name.get(series)
+        if canon is None:
+            # Title (Year) Season 1 S01 (1080p…) → Title, when the series folder has no year.
+            yearless = _YEAR_TAIL.sub("", series).strip()
+            if yearless and yearless != series:
+                canon = by_name.get(yearless)
         if canon is None:
             continue
         try:
@@ -137,10 +156,11 @@ def collapse_movie_named_dumps(root: str = "/mnt/symlinks/radarr", allow=None) -
     for p in kids:
         if is_canonical_movie_folder(p.name):
             continue
-        key = movie_dump_key(p.name)
-        if not key:
-            continue
-        canon = canons.get(key)
+        canon = None
+        for key in movie_dump_keys(p.name):
+            canon = canons.get(key)
+            if canon is not None:
+                break
         if canon is None:
             continue
         try:

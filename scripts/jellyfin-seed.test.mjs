@@ -54,6 +54,7 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /delete_jellyfin_library/);
     assert.match(code, /collapse_season_named_dumps/);
     assert.match(code, /collapse_movie_named_dumps/);
+    assert.match(code, /movie_dump_keys/);
     assert.match(code, /heal_movie_dump_items/);
     assert.match(code, /plan_movie_dump_item/);
     assert.match(code, /heal_season_folder_items/);
@@ -151,8 +152,15 @@ assert {f["Name"] for f in extras} == {"TV", "Movies 2"}, extras
 assert g["strip_season_folder_suffix"]("Brooklyn Nine-Nine S01") == "Brooklyn Nine-Nine"
 assert g["strip_season_folder_suffix"]("The Walking Dead - Season 1") == "The Walking Dead"
 assert g["strip_season_folder_suffix"]("- Season 1") == "- Season 1"
+assert g["strip_season_folder_suffix"](
+    "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+) == "Brooklyn Nine-Nine"
+assert g["looks_like_season_folder_title"](
+    "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+) is True
 assert g["looks_like_season_folder_title"]("The Walking Dead - Season 1") is True
 assert g["looks_like_season_folder_title"]("The Walking Dead") is False
+assert g["looks_like_season_folder_title"]("Show S01E01") is False
 import tempfile, os
 from pathlib import Path
 td = tempfile.mkdtemp()
@@ -187,6 +195,21 @@ assert (dump / "Brooklyn Nine-Nine").is_dir()
 assert not (dump / "Brooklyn Nine-Nine S01").exists()
 assert (dump / "The Walking Dead").is_dir()
 assert not (dump / "The Walking Dead - Season 1").exists()
+# Live box: quality after S01, series folder has no year, Season 1 already has the files.
+live_tv = Path(td) / "sonarr-live"
+live_tv.mkdir()
+(live_tv / "Brooklyn Nine-Nine").mkdir()
+s01 = live_tv / "Brooklyn Nine-Nine" / "Season 1"
+s01.mkdir()
+(s01 / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").write_bytes(b"e")
+pack = live_tv / "Brooklyn Nine-Nine (2013) Season 1 S01 (1080p AMZN WEB-DL x265 HEVC 10bit EAC3 5.1 RZeroX)"
+pack.mkdir()
+(pack / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").write_bytes(b"e")
+assert g["collapse_season_named_dumps"](str(live_tv), allow=[str(live_tv)]) == 1
+assert (live_tv / "Brooklyn Nine-Nine" / "Season 1").is_dir()
+assert not pack.exists()
+# do not duplicate the episode next to Season 1
+assert not (live_tv / "Brooklyn Nine-Nine" / "Brooklyn Nine-Nine (2013) - S01E01 - Pilot (1080p AMZN WEB-DL x265 RZeroX).mkv").exists()
 # empty series stub + Season 1 dump: move media, then drop the season-named dir
 empty = Path(td) / "sonarr-empty"
 empty.mkdir()
@@ -269,6 +292,10 @@ assert g["movie_dump_key"]("Night at the Museum (2006)") == g["movie_dump_key"](
 )
 assert g["movie_dump_key"]("Dune (1984)") != g["movie_dump_key"]("Dune (2021)")
 assert g["movie_dump_key"]("Dune.2021.2160p.BluRay") != g["movie_dump_key"]("Dune (1984)")
+assert "dune:2021" in g["movie_dump_keys"]("Dune Part One (2021) [2160p]")
+assert "dune:2021" in g["movie_dump_keys"]("Dune: Part One (2021)")
+assert "dune:2021" not in g["movie_dump_keys"]("Dune Part Two (2024)")
+assert g["movie_dump_key"]("Dune (2021)") in g["movie_dump_keys"]("Dune Part One (2021) [2160p]")
 assert g["looks_like_movie_dump_folder"]("Interstellar.2014.2160p.REMUX") is True
 assert g["looks_like_movie_dump_folder"]("Interstellar (2014)") is False
 assert g["movie_dump_item_path"]("/symlinks/radarr/Interstellar.2014.2160p.YTS") is True
@@ -313,6 +340,17 @@ assert not (radarr / "John Wick.2014.2160p.UHD.BluRay").exists()
 assert (radarr / "Dune (1984)").is_dir()
 assert (radarr / "Dune (2021)" / "dune.mkv").is_file()
 assert not (radarr / "Dune.2021.2160p.BluRay").exists()
+# Live box: Dune Part One [2160p] next to Dune (2021); remakes stay split.
+(radarr / "Dune Part One (2021) [2160p]").mkdir()
+(radarr / "Dune Part One (2021) [2160p]" / "yts-partone.mkv").write_bytes(b"p")
+(radarr / "Dune Part Two (2024)").mkdir()
+(radarr / "Dune Part Two (2024)" / "two.mkv").write_bytes(b"t")
+n = g["collapse_movie_named_dumps"](str(radarr), allow=[str(radarr)])
+assert n >= 1, n
+assert (radarr / "Dune (2021)" / "yts-partone.mkv").is_file()
+assert not (radarr / "Dune Part One (2021) [2160p]").exists()
+assert (radarr / "Dune Part Two (2024)" / "two.mkv").is_file()
+assert (radarr / "Dune (1984)").is_dir()
 jf_canon = {
     "Id": "jf-int",
     "Name": "Interstellar",
