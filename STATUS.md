@@ -1,13 +1,58 @@
 # STATUS.md
 
-***Jellyfin Movies stays one poster; hybrid keeps 1080 and 4K; the phone UI paints without waiting on the box probe.*** 2026-09-10. 1.2.50.20 collapsed dumps and merged versions, then `Library/Refresh` split them again. ReelOS Library still hid dupes; Jellyfin Movies did not. Radarr upgrade used to replace the 1080 when 4K landed. Phone Home blocked on `GET /api/box` (Tailscale spawn + VirtualFolders) before first paint. Stamp **1.2.50.21**. Complements #72. Does not take Tron.
+***1.2.50.21 is the ship.*** 2026-09-10. One Apply from house **1.2.50.20** / #72. Complements #72. Does not take Tron (#52 / #70).
 
 ## Stamp
 
 - **VERSION / channel:** `1.2.50.21`
-- **Base:** current `main` (1.2.50.20 / #72)
+- **Base:** `main` at 1.2.50.20 (#72)
+- **PR:** https://github.com/ajt1995/reelos/pull/73
 - Did **not** take Tron chrome from #52 / #70
-- **What it is:** Apply heals the dumps that are already on the box. Extra 4K encodes park to `/mnt/symlinks/.reel-parked` (keep the largest). 1080+4K stay and are named so Jellyfin is one poster. Hybrid Radarr still upgrades to 4K, but recycle (`/mnt/symlinks/.reel-recycle`) keeps the 1080 and restore puts it back; cutoff MoviesSearch hunts 4K after 1080; interactive `/release` grab fills 1080 next to existing 4K-only titles (MoviesSearch will not search down). Settings **Fix** is named repairs with descriptions (one poster, grab 1080, unstick, remount, rewire). MergeVersions runs **after** scan. Phone splash does not wait on `/api/box`. Never `/media`.
+
+## Changelog (everything in this Apply)
+
+### Movies stay one poster
+
+Jellyfin 12 has no merge-versions plugin. 1080 and 4K next to each other used to become two posters after `Library/Refresh`. ReelOS Library hid that; Jellyfin Movies did not.
+
+- Files are named `Title (Year) - 1080p` / `- 2160p` so Jellyfin treats them as versions of one movie.
+- Extra copies of the **same** resolution park to `/mnt/symlinks/.reel-parked` (keep the largest). Never delete. Never `/media`.
+- 1080 next to 4K stays. MergeVersions runs **last**, after scan, so a refresh cannot split them again.
+
+### Hybrid keeps 1080 when 4K lands
+
+Radarr only tracks one `movieFile`. An upgrade used to replace the 1080.
+
+- Recycle at `/mnt/symlinks/.reel-recycle` (cleanup days 0). Restore puts the 1080 back next to 4K.
+- Cutoff `MoviesSearch` hunts 4K after 1080.
+- Interactive `/release` grab fills a 1080 next to titles that already only have 4K (`MoviesSearch` will not search down). Cap 3, cooldown.
+
+### Apply heals what is already on the box
+
+Existing 4K-only dumps and extra 4Ks are not left for later. Apply parks extras, names versions, and grabs a 1080 companion when one exists. Same rules as new requests.
+
+### Phone paints first
+
+Home no longer waits on `GET /api/box` (Tailscale + VirtualFolders) before first paint. Library can show a stale shelf. Posters go through a same-origin thumbnail.
+
+### Settings Fix
+
+Settings is House → **Fix** → This house → Box → More.
+
+Named **Run** scripts with a short description each:
+
+| When | Run |
+|---|---|
+| Library looks wrong | One poster per movie · Grab a 1080 next to 4K · Import what’s already downloaded |
+| A request sits | Unstick grabs · Fix search indexers · Rewire engines |
+| Files vanished | Remount debrid files |
+| Read-only | Check hops (does not guess green until you run doctor) |
+
+Allowlist only. No free-form shell. Not during an update. Overlap is a wait, not a second spawn. Fast success says **Finished**; a crash shows the log — not a fake Started. A stale `/opt` engine that cannot `merge-movies` is skipped so “one poster” cannot silently run full wire `main()`. Factory reset asks a second time.
+
+### Quality copy
+
+Hybrid knob says it grabs 1080 and 4K and **does not replace** the 1080.
 
 ## Proof
 
@@ -24,7 +69,8 @@ node --test scripts/jellyfin-seed.test.mjs scripts/stack-smoke.test.mjs scripts/
 1. Merge this to **main**. Phone Check→Apply **once**, or CLI mailman from `main`.
 2. `cat /opt/reelos/VERSION` → `1.2.50.21`.
 3. Jellyfin Movies is one Interstellar with a 1080p/4K version picker, not two posters. Extra 4Ks are in `/mnt/symlinks/.reel-parked`. Hybrid keeps 1080+4K (including titles that already had only 4K, if a 1080 exists to grab).
-4. Phone Home should paint the chrome before doctor/Tailscale finish.
+4. Phone Home paints chrome before doctor/Tailscale finish.
+5. Settings → Fix has named Run buttons. Check hops starts at “Not checked yet.”
 
 ## Do not
 
