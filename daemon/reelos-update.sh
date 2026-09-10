@@ -298,6 +298,8 @@ need daemon/wire-engines.py Startup/Configuration
 need scripts/reelos-lookup-plugin.mjs 'serveLibrary'
 need daemon/reelos-update.sh 'overlay house compose/configs onto staging'
 need scripts/reelos-lookup-plugin.mjs '/api/request'
+need scripts/reelos-lookup-plugin.mjs 'scheduleBoxProbe'
+need scripts/reelos-request-progress-plugin.mjs 'const recoverNote = maybeRecover'
 need scripts/reelos-lookup-plugin.mjs 'update-apply.sh'
 need scripts/reelos-lookup-plugin.mjs '/api/activity'
 need scripts/reelos-lookup-plugin.mjs '/api/doctor'

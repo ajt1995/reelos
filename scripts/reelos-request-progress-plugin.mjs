@@ -39,42 +39,42 @@ let recoverInFlight = false;
 let lastRecoverAt = 0;
 const RECOVER_COOLDOWN_MS = 120_000;
 
-async function maybeRecover(u, facts) {
+function maybeRecover(u) {
   const flag = String(u.searchParams.get("recover") || "");
   if (flag !== "1" && flag !== "true") return null;
-  let seerrRows = [];
-  const key = seerrApiKey();
-  if (key) {
-    try {
-      const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 15000 });
-      const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
-      seerrRows = rows.map((row) => seerrRequestRow(row)).filter((rec) => rec?.titleId);
-    } catch {
-      seerrRows = [];
-    }
-    try {
-      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 12000 });
-      const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
-      seerrRows = [...seerrRows, ...seerrMediaGhostRows(mediaItems)];
-    } catch {
-      /* request rows still recover movie orphans */
-    }
-  }
-  const missing = listRecoverTargets({
-    series: facts?.series,
-    movies: facts?.movies,
-    seerrRows,
-  });
-  if (!missing.length) return { recover: true, targets: 0, kicks: [] };
   const now = Date.now();
-  if (recoverInFlight) return { recover: true, targets: missing.length, deferred: true, started: false };
+  if (recoverInFlight) return { recover: true, deferred: true, started: false };
   if (now - lastRecoverAt < RECOVER_COOLDOWN_MS) {
-    return { recover: true, targets: missing.length, skipped: "cooldown" };
+    return { recover: true, skipped: "cooldown" };
   }
   lastRecoverAt = now;
   recoverInFlight = true;
   void (async () => {
     try {
+      const facts = await loadPresenceFacts();
+      let seerrRows = [];
+      const key = seerrApiKey();
+      if (key) {
+        try {
+          const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
+          const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
+          seerrRows = rows.map((row) => seerrRequestRow(row)).filter((rec) => rec?.titleId);
+        } catch {
+          seerrRows = [];
+        }
+        try {
+          const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 });
+          const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
+          seerrRows = [...seerrRows, ...seerrMediaGhostRows(mediaItems)];
+        } catch {
+          /* request rows still recover movie orphans */
+        }
+      }
+      const missing = listRecoverTargets({
+        series: facts?.series,
+        movies: facts?.movies,
+        seerrRows,
+      });
       for (const m of missing) {
         await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season });
       }
@@ -84,7 +84,7 @@ async function maybeRecover(u, facts) {
       recoverInFlight = false;
     }
   })();
-  return { recover: true, targets: missing.length, deferred: true, started: true };
+  return { recover: true, deferred: true, started: true };
 }
 
 async function handleList(res, recoverNote = null) {
@@ -94,53 +94,22 @@ async function handleList(res, recoverNote = null) {
     return;
   }
   try {
-    const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 20000 });
-    const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
+    const listedP = seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
+    const factsP = loadPresenceFacts();
+    const mediaP = seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 }).catch(() => ({ json: null }));
+    const [listed, facts, media] = await Promise.all([listedP, factsP, mediaP]);
+    const rows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
     const requests = [];
-    const need = [];
     for (const row of rows) {
       const rec = seerrRequestRow(row);
       if (!rec.titleId) continue;
       requests.push(rec);
-      const parsed = parseTitleId(rec.titleId);
-      if (parsed?.tmdb) need.push(parsed);
     }
-    const details = await Promise.all(
-      need.map(async (parsed) => {
-        const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
-        const d = await seerrFetch(path, { key, ms: 12000 });
-        if (!d.ok || !d.json) return null;
-        return {
-          parsed,
-          json: d.json,
-          hit: seerrSearchHit({ ...d.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
-        };
-      }),
-    );
-    const seerrMediaByTitleId = new Map();
-    for (const d of details) {
-      if (!d?.parsed?.tmdb) continue;
-      const media = mediaFromDetail(d.json);
-      if (media) {
-        const titleId = d.parsed.mediaType === "tv" ? `tmdb-tv-${d.parsed.tmdb}` : `tmdb-${d.parsed.tmdb}`;
-        seerrMediaByTitleId.set(titleId, media);
-      }
-    }
-    const facts = await loadPresenceFacts();
-    let mediaItems = [];
-    try {
-      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 12000 });
-      mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
-    } catch {
-      mediaItems = [];
-    }
-    const titleById = new Map(
-      details.map((d) => d?.hit).filter((h) => h?.id && h?.title).map((h) => [h.id, h.title]),
-    );
-    const assembled = assembleRequestPayload(requests, { ...facts, seerrMediaByTitleId, titleById }, mediaItems);
+    const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
+    const assembled = assembleRequestPayload(requests, facts, mediaItems);
     send(res, 200, {
       requests: assembled.requests,
-      titles: details.map((d) => d?.hit).filter(Boolean),
+      titles: [],
       engine: "seerr",
       pipeline: assembled.pipeline,
       ...(recoverNote ? { recover: recoverNote } : {}),
@@ -154,9 +123,7 @@ async function handleGet(req, res) {
   const u = new URL(req.url || "/", "http://reelos.local");
   const id = requestIdFromQuery(u);
   if (!id) {
-    const facts = await loadPresenceFacts();
-    const recoverNote = await maybeRecover(u, facts);
-    if (recoverNote) await loadPresenceFacts({ force: true });
+    const recoverNote = maybeRecover(u);
     return handleList(res, recoverNote);
   }
   const key = seerrApiKey();
@@ -171,7 +138,7 @@ async function handleGet(req, res) {
   }
   try {
     const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
-    const r = await seerrFetch(path, { key, ms: 15000 });
+    const r = await seerrFetch(path, { key, ms: 5000 });
     const media = mediaFromDetail(r.json) || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
     const seasonRaw = u.searchParams.get("season");

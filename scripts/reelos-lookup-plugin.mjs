@@ -398,7 +398,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.27"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.28"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -489,7 +489,7 @@ async function jellyfinToken(user, password) {
         "X-Emby-Authorization": JF_AUTH,
       },
       body: JSON.stringify({ Username: user, Pw: password }),
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(1500),
     });
     if (!r.ok) return null;
     const j = await r.json();
@@ -542,7 +542,7 @@ async function readJellyfinVirtualFolders(token) {
     try {
       const r = await fetch(url, {
         headers: jellyfinAuthedHeaders(token),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(1500),
       });
       if (!r.ok) continue;
       const folders = await r.json();
@@ -590,21 +590,37 @@ function tailscaleAuthUrl() {
 
 let boxProbeCache = { at: 0, jf: null, ts: null };
 const BOX_PROBE_CACHE_MS = 15_000;
+let boxProbeInflight = false;
+
+function scheduleBoxProbe(ip) {
+  if (boxProbeInflight) return;
+  boxProbeInflight = true;
+  void jellyfinState(ip)
+    .then((jf) => {
+      boxProbeCache = { at: Date.now(), jf, ts: tailscaleState() };
+    })
+    .catch(() => {})
+    .finally(() => {
+      boxProbeInflight = false;
+    });
+}
 
 async function handleBox(_req, res) {
   const a = answers();
   const ip = ipv4();
   const now = Date.now();
-  let jellyfin;
-  let ts;
-  if (boxProbeCache.jf && now - boxProbeCache.at < BOX_PROBE_CACHE_MS) {
-    jellyfin = boxProbeCache.jf;
-    ts = boxProbeCache.ts;
-  } else {
-    jellyfin = await jellyfinState(ip);
-    ts = tailscaleState();
-    boxProbeCache = { at: now, jf: jellyfin, ts };
-  }
+  const fresh = Boolean(boxProbeCache.jf) && now - boxProbeCache.at < BOX_PROBE_CACHE_MS;
+  if (!fresh) scheduleBoxProbe(ip);
+  const jellyfin = boxProbeCache.jf || { state: "unknown", detail: "", libraries: [] };
+  const ts = boxProbeCache.ts || tailscaleCache.val || {
+    installed: a.access === "tailscale",
+    up: a.access === "tailscale",
+    state: "unknown",
+    auth: null,
+    ip: null,
+    dns: null,
+    tailnet: null,
+  };
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     provisioning: existsSync("/var/lib/reelos/provisioning"),
@@ -1059,30 +1075,24 @@ async function handleRequestList(res) {
     return;
   }
   try {
-    const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 20000 });
+    const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
     const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
     const requests = [];
-    const need = [];
     for (const row of rows) {
       const rec = seerrRequestRow(row);
       if (!rec.titleId) continue;
       requests.push(rec);
-      const parsed = parseTitleId(rec.titleId);
-      if (parsed) need.push(parsed);
     }
-    const details = await Promise.all(need.map((p) => seerrTitleDetail(p).catch(() => null)));
-    const titles = details.filter(Boolean);
     const facts = await loadPresenceFacts();
     let mediaItems = [];
     try {
-      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 12000 });
+      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 });
       mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
     } catch {
       mediaItems = [];
     }
-    const titleById = new Map(titles.filter((h) => h?.id && h?.title).map((h) => [h.id, h.title]));
-    const assembled = assembleRequestPayload(requests, { ...facts, titleById }, mediaItems);
-    send(res, 200, { requests: assembled.requests, titles, engine: "seerr", pipeline: assembled.pipeline });
+    const assembled = assembleRequestPayload(requests, facts, mediaItems);
+    send(res, 200, { requests: assembled.requests, titles: [], engine: "seerr", pipeline: assembled.pipeline });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }

@@ -5,8 +5,8 @@ import { mergeServerRequests, overlayLibraryPresence } from "@/lib/sync-requests
 import type { MediaRequest, Title } from "@/lib/types";
 
 /** Pull GET /api/request (list) into the persisted store. Home + Requests both call this.
- *  First poll in this tab sends recover=1 so unmonitored seasons / missing *arr rows get a kick
- *  without blocking later 15s refreshes. */
+ *  First poll in this tab sends recover=1 so unmonitored seasons / missing *arr rows get a kick.
+ *  Recover must not block the list — mailman returns the rows first. */
 let recoveredOnce = false;
 
 export function useSyncRequests() {

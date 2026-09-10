@@ -885,6 +885,11 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /listRecoverTargets/);
   assert.match(progress, /seerrMediaGhostRows/);
   assert.match(progress, /deferred: true/);
+  assert.match(progress, /const recoverNote = maybeRecover/);
+  assert.doesNotMatch(progress, /await maybeRecover/);
+  assert.doesNotMatch(progress, /force: true/);
+  assert.match(progress, /ms: 4000/);
+  assert.match(lookup, /scheduleBoxProbe/);
   assert.match(sync, /recover=1/);
   assert.match(requestsView, /requestShowsRetry/);
   assert.match(progress, /reason: honest.reason/);

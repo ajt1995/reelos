@@ -24,7 +24,7 @@ test("jellyfinState does not call a timed-out VirtualFolders empty list Missing 
   const idx = src.indexOf("async function jellyfinState");
   assert.ok(idx >= 0);
   const chunk = src.slice(idx, src.indexOf("function saveAuthUrl", idx));
-  assert.match(chunk, /AbortSignal\.timeout\(8000\)/);
+  assert.match(chunk, /AbortSignal\.timeout\(1500\)/);
   assert.match(chunk, /api_key=/);
   assert.match(chunk, /Cannot read virtual folders/);
   assert.match(chunk, /Missing library/);

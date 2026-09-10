@@ -1,7 +1,8 @@
 {
-  "version": "1.2.50.27",
+  "version": "1.2.50.28",
   "channel": "stable",
   "notes": [
+    "1.2.50.28: Phone Home does not wait on Jellyfin or a Seerr title fan-out. /api/box returns provisioned immediately; Requests lists in one Seerr call. Recover still kicks in the background. Complements #83. Not 1.2.51 (Tron).",
     "1.2.50.27: Heal-red Apply still brings :80/:8080 back before exiting. Restart hung Vite instead of a no-op systemctl start. Still no stamp on indexer/import red. Complements #82. Not 1.2.51 (Tron).",
     "1.2.50.26: Low performance mode actually caps the 4GB box: VAAPI when /dev/dri exists (HEVC decode), one ffmpeg thread, throttle + delete transcode segments. Scene previews stay off either way. Complements #82. Not 1.2.51 (Tron).",
     "1.2.50.22: Hybrid 1080+4K reliably lands as one tile. Recycle bin is chowned to the engine user so Radarr stops 400ing the mediamanagement PUT and keeps the 1080 when 4K upgrades. Apply removes leftover HostConfig.Dns=1.1.1.1 containers before recreate, so the fixed-name Seerr/Decypharr clash no longer skips compose up. Sonarr manualimport scans each dump folder instead of the whole FUSE tree so TV imports stop timing out. The 4K-only 1080-companion grab gets a 90s interactive search (sweep 300s) so a 1080 actually grabs. Complements #73. Not 1.2.51 (Tron).",
