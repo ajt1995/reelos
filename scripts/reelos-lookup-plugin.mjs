@@ -92,7 +92,12 @@ function tailscaleBin() {
   return null;
 }
 
+let tailscaleCache = { at: 0, val: null };
+const TAILSCALE_CACHE_MS = 15_000;
+
 function tailscaleState() {
+  const now = Date.now();
+  if (tailscaleCache.val && now - tailscaleCache.at < TAILSCALE_CACHE_MS) return tailscaleCache.val;
   const bin = tailscaleBin();
   const empty = {
     installed: false,
@@ -111,6 +116,7 @@ function tailscaleState() {
     } catch {
       /* */
     }
+    tailscaleCache = { at: now, val: empty };
     return empty;
   }
   const r = spawnSync(bin, ["status", "--json"], { encoding: "utf8", timeout: 8000 });
@@ -136,7 +142,9 @@ function tailscaleState() {
     }
   }
   const up = backend === "Running" && Boolean(ip);
-  return { installed: true, up, state: backend || "NeedsLogin", auth: up ? null : auth, ip, dns, tailnet };
+  const val = { installed: true, up, state: backend || "NeedsLogin", auth: up ? null : auth, ip, dns, tailnet };
+  tailscaleCache = { at: now, val };
+  return val;
 }
 
 function tailnetName() {
@@ -388,7 +396,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.20"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.21"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -512,6 +520,7 @@ async function jellyfinState(ip) {
   try {
     const r = await fetch("http://127.0.0.1:8096/Library/VirtualFolders", {
       headers: jellyfinAuthedHeaders(auth.token),
+      signal: AbortSignal.timeout(2500),
     });
     const folders = r.ok ? await r.json() : [];
     names = (Array.isArray(folders) ? folders : []).map((x) => String(x.Name || ""));
@@ -562,11 +571,23 @@ function tailscaleAuthUrl() {
   return tailscaleState().auth;
 }
 
+let boxProbeCache = { at: 0, jf: null, ts: null };
+const BOX_PROBE_CACHE_MS = 15_000;
+
 async function handleBox(_req, res) {
   const a = answers();
   const ip = ipv4();
-  const jellyfin = await jellyfinState(ip);
-  const ts = tailscaleState();
+  const now = Date.now();
+  let jellyfin;
+  let ts;
+  if (boxProbeCache.jf && now - boxProbeCache.at < BOX_PROBE_CACHE_MS) {
+    jellyfin = boxProbeCache.jf;
+    ts = boxProbeCache.ts;
+  } else {
+    jellyfin = await jellyfinState(ip);
+    ts = tailscaleState();
+    boxProbeCache = { at: now, jf: jellyfin, ts };
+  }
   send(res, 200, {
     provisioned: existsSync("/var/lib/reelos/provisioned"),
     provisioning: existsSync("/var/lib/reelos/provisioning"),
@@ -1678,6 +1699,49 @@ async function handleWire(req, res) {
   send(res, 200, { ok: true, started: true });
 }
 
+async function handleJellyfinImage(req, res) {
+  const raw = req.url || "";
+  const pathOnly = raw.split("?", 1)[0] || "";
+  const m = /^\/api\/jf\/Items\/([^/]+)\/Images\/Primary$/.exec(pathOnly);
+  if (!m) return false;
+  const id = decodeURIComponent(m[1]).replace(/[^a-zA-Z0-9_-]/g, "");
+  if (!id) {
+    res.statusCode = 404;
+    res.end();
+    return true;
+  }
+  const u = new URL(raw, "http://reelos.local");
+  const maxWidth = Math.min(Math.max(Number(u.searchParams.get("maxWidth") || 240) || 240, 32), 720);
+  const quality = Math.min(Math.max(Number(u.searchParams.get("quality") || 70) || 70, 40), 90);
+  const a = answers();
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (!auth?.token) {
+    res.statusCode = 404;
+    res.end();
+    return true;
+  }
+  try {
+    const r = await fetch(
+      `http://127.0.0.1:8096/Items/${encodeURIComponent(id)}/Images/Primary?maxWidth=${maxWidth}&quality=${quality}&format=Jpg`,
+      { headers: jellyfinAuthedHeaders(auth.token), signal: AbortSignal.timeout(8000) },
+    );
+    if (!r.ok) {
+      res.statusCode = r.status === 404 ? 404 : 502;
+      res.end();
+      return true;
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.statusCode = 200;
+    res.setHeader("Content-Type", r.headers.get("content-type") || "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.end(buf);
+  } catch {
+    res.statusCode = 502;
+    res.end();
+  }
+  return true;
+}
+
 async function handleLibrary(req, res) {
   const host =
     String(req.headers.host || "")
@@ -2039,6 +2103,9 @@ export function reelosLookupPlugin() {
           if (pathOnly === "/api/reset") return void (await handleReset(req, res));
           if (pathOnly === "/api/wire") return void (await handleWire(req, res));
           if (pathOnly === "/api/library") return void (await handleLibrary(req, res));
+          if (pathOnly.startsWith("/api/jf/Items/") && pathOnly.endsWith("/Images/Primary")) {
+            return void (await handleJellyfinImage(req, res));
+          }
           if (pathOnly === "/api/disks") return void (await handleDisks(req, res));
           if (pathOnly === "/api/storage") return void (await handleStorage(req, res));
           if (pathOnly === "/api/transcode") return void (await handleTranscode(req, res));

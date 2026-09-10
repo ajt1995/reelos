@@ -709,6 +709,8 @@ if __name__ == "__main__":
         raise SystemExit(0)
     if "fuse" in sys.argv:
         raise SystemExit(0 if ensure_fuse() is None else 0)
+    if "merge-movies" in sys.argv:
+        raise SystemExit(0 if heal_merge_movie_posters() else 1)
     if "heal" in sys.argv:
         raise SystemExit(0 if heal_after_import() else 1)
     if "import" in sys.argv:

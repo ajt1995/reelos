@@ -57,6 +57,9 @@ test("wire-engines.parts concatenate and compile (install + daemon)", () => {
     assert.match(code, /movie_dump_keys/);
     assert.match(code, /heal_movie_dump_items/);
     assert.match(code, /heal_merge_movie_versions/);
+    assert.match(code, /heal_merge_movie_posters/);
+    assert.match(code, /movie_dump_merge_key/);
+    assert.match(code, /merge-movies/);
     assert.match(code, /Videos\/MergeVersions/);
     assert.match(code, /plan_movie_dump_item/);
     assert.match(code, /heal_season_folder_items/);
@@ -445,6 +448,20 @@ assert "MergeVersions" in merged[0][1]
 assert "jf-int-a" in merged[0][1] and "jf-int-b" in merged[0][1]
 assert "jf-int-disk" not in merged[0][1]
 
+# Same TMDB across a leftover dump folder + Title (Year) is still one poster.
+v1t = dict(v1, ProviderIds={"Tmdb": "157336"})
+v2t = dict(v2, ProviderIds={"Tmdb": "157336"})
+v_yts = {
+    "Id": "jf-int-ytsfile",
+    "Name": "Interstellar",
+    "Path": "/symlinks/radarr/Interstellar (2014) [YTS.MX]/yts.mkv",
+    "ProviderIds": {"Tmdb": "157336"},
+}
+tmdb_groups = g["movie_version_merge_groups"]([v1t, v2t, v_yts, v_media])
+assert len(tmdb_groups) == 1, tmdb_groups
+assert {x["Id"] for x in tmdb_groups[0]} == {"jf-int-a", "jf-int-b", "jf-int-ytsfile"}
+assert g["movie_dump_merge_key"](v_media) == ""
+
 # A leftover library is deleted only once every path it holds is safe to lose.
 CANON = {
     "Name": "Movies",
@@ -513,6 +530,18 @@ print("ok")
   assert.match(eight, /heal_movie_dump_items/);
   assert.match(eight, /heal_season_folder_items/);
   assert.match(eight, /drop_extra_jellyfin_libraries/);
+  assert.match(eight, /heal_merge_movie_posters/);
+  assert.match(eight, /movie_dump_merge_key/);
+  assert.match(eight, /Merge LAST/);
+  assert.ok(
+    eight.indexOf("jellyfin refresh after post-import heal") < eight.indexOf("Merge LAST"),
+    "merge must run after Library/Refresh so a scan cannot split the poster",
+  );
+  const nine = read("daemon/wire-engines.parts/09.part");
+  assert.match(nine, /merge-movies/);
+  const lock = read("daemon/lock-download-clients.py");
+  assert.match(lock, /merge-movies/);
+  assert.match(lock, /MERGE_SEC/);
 });
 
 test("install and daemon wire-engines bodies stay twins", () => {

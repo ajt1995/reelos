@@ -272,7 +272,11 @@ need() {
   fi
   log "canary warn $f ~ $pat (copy drift, not fatal)"
 }
+need src/routes/__root.tsx 'setHydrated();'
 need src/components/home-view.tsx '/api/lookup'
+need scripts/reelos-lookup-plugin.mjs '/api/jf/Items/'
+need scripts/reelos-lookup-plugin.mjs 'handleJellyfinImage'
+need scripts/reelos-library.mjs '/api/jf/Items/'
 need src/components/title-view-live.tsx '/api/request'
 need src/components/connect-view.tsx 'Watch on the TV'
 need src/components/connect-view.tsx 'Get Tailscale login'
@@ -341,6 +345,10 @@ need daemon/wire-engines.parts/08.part 'collapse_season_named_dumps'
 need daemon/wire-engines.parts/08.part 'collapse_movie_named_dumps'
 need daemon/wire-engines.parts/08.part 'heal_movie_dump_items'
 need daemon/wire-engines.parts/08.part 'heal_merge_movie_versions'
+need daemon/wire-engines.parts/08.part 'heal_merge_movie_posters'
+need daemon/wire-engines.parts/08.part 'movie_dump_merge_key'
+need daemon/wire-engines.parts/09.part 'merge-movies'
+need daemon/lock-download-clients.py 'merge-movies'
 need daemon/wire-engines.parts/08.part 'jellyfin keep extra library'
 need scripts/reelos-library.mjs 'dedupeLibraryTitles'
 need scripts/reelos-library.mjs 'titleYear'

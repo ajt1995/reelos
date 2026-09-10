@@ -300,18 +300,46 @@ def movie_version_parent(path: str) -> str:
     return ""
 
 
+def movie_dump_merge_key(item: dict) -> str:
+    """Group leftover JF Movie rows that are the same title, never /media.
+
+    Prefer TMDB so a YTS dump folder and the Title (Year) folder become one poster.
+    Same-folder files without ids still merge. Remakes keep the year.
+    """
+    path = str(item.get("Path") or "")
+    if not path or local_disk_path(path) or not dump_view_path(path):
+        return ""
+    pids = item.get("ProviderIds") or {}
+    if not isinstance(pids, dict):
+        pids = {}
+    tmdb = str(pids.get("Tmdb") or pids.get("tmdb") or "").strip()
+    if tmdb:
+        return "tmdb:" + tmdb
+    parent = movie_version_parent(path)
+    if parent:
+        return "dir:" + parent
+    name = str(item.get("Name") or "").strip().lower()
+    try:
+        year = int(item.get("ProductionYear") or 0)
+    except (TypeError, ValueError):
+        year = 0
+    if name and year:
+        return f"title:{name}|{year}"
+    return ""
+
+
 def movie_version_merge_groups(items: list) -> list[list[dict]]:
-    """Two+ Movie rows in the same Title (Year) dump folder are versions, not posters."""
+    """Two+ dump Movie rows for the same title are versions, not posters."""
     groups: dict[str, list[dict]] = {}
     for item in items or []:
         if not isinstance(item, dict):
             continue
-        parent = movie_version_parent(str(item.get("Path") or ""))
-        if not parent:
-            continue
         if not (item.get("Id") or item.get("id")):
             continue
-        groups.setdefault(parent, []).append(item)
+        key = movie_dump_merge_key(item)
+        if not key:
+            continue
+        groups.setdefault(key, []).append(item)
     return [rows for rows in groups.values() if len(rows) >= 2]
 
 
@@ -341,6 +369,34 @@ def heal_merge_movie_versions(token: str, items=None, call_fn=None) -> int:
         except NET_ERR as e:
             log_wire(f"jellyfin merge movie versions {name} {e}")
     return n
+
+
+def jf_merge_wait_sec() -> float:
+    try:
+        return max(0.0, float(os.environ.get("REELOS_JF_MERGE_WAIT_SEC", "5")))
+    except ValueError:
+        return 5.0
+
+
+def heal_merge_movie_posters() -> bool:
+    """Timer path: drop dump Movie rows and MergeVersions. Never Library/Refresh.
+
+    A scan after merge splits one poster back into two. lock-clients re-runs this
+    every minute so Jellyfin Movies stays one Interstellar even after a rescan.
+    """
+    token = jellyfin_token()
+    if not token:
+        log_wire("jellyfin merge movie posters — no token")
+        return True
+    try:
+        items = fetch_jellyfin_movies(token)
+        heal_movie_dump_items(token, items=items)
+        items = fetch_jellyfin_movies(token)
+        heal_merge_movie_versions(token, items=items)
+    except Exception as e:
+        log_wire(f"jellyfin merge movie posters {e}")
+        return False
+    return True
 
 
 def drop_extra_jellyfin_libraries(token: str, folders: list, want: list[tuple[str, str]]) -> int:
@@ -437,10 +493,6 @@ def heal_after_import() -> bool:
             healed += int(heal_movie_dump_items(token) or 0)
         except Exception as e:
             log_wire(f"jellyfin movie dump item {e}")
-        try:
-            healed += int(heal_merge_movie_versions(token) or 0)
-        except Exception as e:
-            log_wire(f"jellyfin merge movie versions {e}")
     ready = True
     if token:
         want = jellyfin_want_libraries()
@@ -455,10 +507,12 @@ def heal_after_import() -> bool:
                 log_wire("jellyfin refresh after post-import heal")
             except NET_ERR as e:
                 log_wire(f"jellyfin refresh {e}")
-            try:
-                healed += int(heal_merge_movie_versions(token) or 0)
-            except Exception as e:
-                log_wire(f"jellyfin merge movie versions {e}")
+            time.sleep(jf_merge_wait_sec())
+        # Merge LAST. Library/Refresh after MergeVersions splits one poster into two.
+        try:
+            healed += int(heal_merge_movie_versions(token) or 0)
+        except Exception as e:
+            log_wire(f"jellyfin merge movie versions {e}")
     elif dropped:
         log_wire("import collapse season-folder dumps (no jellyfin token)")
     frontend = str((answers() or {}).get("frontend") or "jellyfin")
@@ -473,7 +527,7 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
     dropped += collapse_movie_named_dumps() if collapse_dumps else 0
     healed = (heal_season_folder_items(token) if collapse_dumps else 0) + (
         heal_movie_dump_items(token) if collapse_dumps else 0
-    ) + (heal_merge_movie_versions(token) if collapse_dumps else 0)
+    )
     deadline = time.time() + 60
     while time.time() < deadline:
         folders = jellyfin_folders(token)
@@ -488,6 +542,8 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
                     log_wire("jellyfin refresh after season-folder dump collapse")
                 except NET_ERR as e:
                     log_wire(f"jellyfin refresh {e}")
+                time.sleep(jf_merge_wait_sec())
+            if collapse_dumps:
                 try:
                     heal_merge_movie_versions(token)
                 except Exception as e:
@@ -515,6 +571,11 @@ def ensure_jellyfin_libraries(token: str, want: list[tuple[str, str]], *, collap
             except NET_ERR as e:
                 log_wire(f"jellyfin library {name} {e}")
         time.sleep(3)
+    if collapse_dumps:
+        try:
+            heal_merge_movie_versions(token)
+        except Exception as e:
+            log_wire(f"jellyfin merge movie versions {e}")
     return libraries_ready(jellyfin_folders(token), want)
 
 

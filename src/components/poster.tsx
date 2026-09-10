@@ -24,6 +24,8 @@ export function Poster({
         <img
           src={title.poster}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="poster absolute inset-0 size-full object-cover"
           onError={() => setOk(false)}
         />

@@ -14,17 +14,7 @@ export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
-  const [watchUrl, setWatchUrl] = useState(
-    typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "",
-  );
-  useEffect(() => {
-    void fetch("/api/box", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((b: { watch?: string }) => {
-        if (b.watch) setWatchUrl(b.watch);
-      })
-      .catch(() => {});
-  }, []);
+  const watchUrl = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);

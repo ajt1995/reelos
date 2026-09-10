@@ -28,7 +28,9 @@ ALLOWED_IMPL = "QBittorrent"
 # Lidarr key → wait never breaks → unit FAILED before stuck-downloads SeasonSearch.
 WAIT_SEC = 12
 SWEEP_SEC = 45
+MERGE_SEC = 40
 ONESHOT_DEFAULT_SEC = 90
+TIMEOUT_START_SEC = 180
 
 APPS = [
     {
@@ -251,6 +253,18 @@ def main() -> int:
             subprocess.run([sys.executable, str(sweep)], check=False, timeout=SWEEP_SEC)
         except Exception:
             pass
+    # Re-merge JF movie versions after a library scan splits one poster into two.
+    # Never Library/Refresh here — that is what undoes MergeVersions.
+    wire = Path(__file__).resolve().with_name("wire-engines.py")
+    if wire.is_file():
+        try:
+            subprocess.run(
+                [sys.executable, str(wire), "merge-movies"],
+                check=False,
+                timeout=MERGE_SEC,
+            )
+        except Exception:
+            pass
     return 0
 
 
@@ -423,7 +437,8 @@ def _self_test() -> int:
         def test_house_without_lidarr_does_not_block_the_unit(self):
             apps = wanted_apps(False, xml_exists=lambda p: "lidarr" not in str(p))
             self.assertEqual([a["name"] for a in apps], ["radarr", "sonarr"])
-            self.assertLess(WAIT_SEC + SWEEP_SEC, ONESHOT_DEFAULT_SEC)
+            self.assertLess(WAIT_SEC + SWEEP_SEC + MERGE_SEC, TIMEOUT_START_SEC)
+            self.assertIn("merge-movies", Path(__file__).read_text())
 
         def test_v12506_wait_all_apps_exceeded_oneshot_default(self):
             """1.2.50.6: wait 90s for lidarr + sweep 90s vs default TimeoutStartSec=90."""
