@@ -1,1 +1,0 @@
-import{V as e}from"./store-CT0xsnsp.js";import{t}from"./gate-DCCyoYAP.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};
