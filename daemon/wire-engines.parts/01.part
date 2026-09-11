@@ -193,7 +193,13 @@ def kick_imports(*, catch_up: bool = False) -> bool:
             n = fuse_host_mount_count()
             log_wire(f"import catch-up — fuse listed ({n}), do not remount if listed")
         d_state = ffprobe_d_state_count()
-        limit = 4 if box_is_small() else 8
+        limit = 1
+        try:
+            m = hw()
+            if m is not None:
+                limit = int(m.d_backoff_limit())
+        except Exception:
+            limit = 1
         if d_state >= limit:
             log_wire(f"import catch-up backoff — ffprobe D-state {d_state} (not piling more)")
             write_library_progress(

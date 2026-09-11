@@ -1,4 +1,4 @@
-version=1.2.50.40
+version=1.2.50.41
 mode=nitro+api
 css=/assets/styles-C0rJ8hlz.css
 js=/assets/index-BSKY6NQy.js

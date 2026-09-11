@@ -81,7 +81,7 @@ test("library worker backs off on ffprobe D-state and does not remount FUSE", ()
   assert.match(one, /import catch-up backoff/);
   assert.doesNotMatch(one.slice(one.indexOf("def kick_imports")), /ensure_fuse\(/);
   assert.match(harden, /import catch-up backoff/);
-  assert.match(harden, /FFPROBE_D_BACKOFF_SMALL = 4/);
+  assert.match(harden, /FFPROBE_D_BACKOFF_LIMIT = 1/);
   assert.match(harden, /Library catching up/);
 });
 

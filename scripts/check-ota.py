@@ -66,6 +66,11 @@ CONTRACTS = (
     ("daemon/wire-engines.parts/07.part", "enableMediaInfo"),
     ("daemon/wire-engines.parts/07.part", "rescanAfterRefresh"),
     ("daemon/wire-engines.parts/06.part", "box_is_small"),
+    ("daemon/reelos_hardware.py", "ram_gb"),
+    ("daemon/reelos_hardware.py", "disk_kind"),
+    ("daemon/reelos_hardware.py", "catchup_memory_max"),
+    ("daemon/reelos-update.sh", "hardware profile"),
+    ("daemon/sonarr_manual_import.py", "concurrency 0"),
     ("daemon/wire-engines.parts/02.part", "do not remount if listed"),
     ("daemon/reelos-selfheal.sh", "idle load"),
     ("scripts/reelos-box.mjs", "nitro+api"),
@@ -226,6 +231,10 @@ def main() -> int:
     install_catch = root / "install/bin/reelos-library-catchup.sh"
     if catch_sh.is_file() and install_catch.is_file() and catch_sh.read_text() != install_catch.read_text():
         return fail("OTA contract: install/bin/reelos-library-catchup.sh must match daemon/")
+    hw = root / "daemon/reelos_hardware.py"
+    install_hw = root / "install/bin/reelos_hardware.py"
+    if hw.is_file() and install_hw.is_file() and hw.read_text() != install_hw.read_text():
+        return fail("OTA contract: install/bin/reelos_hardware.py must match daemon/")
     unit = (root / "install/systemd/reelos-library-catchup.service").read_text()
     boot = (root / "firstboot/reelos-library-catchup.service").read_text() if (root / "firstboot/reelos-library-catchup.service").is_file() else ""
     if unit != boot:

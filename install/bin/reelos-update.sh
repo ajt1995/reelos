@@ -511,6 +511,10 @@ need install/systemd/reelos-selfheal.service 'KillMode=process'
 need install/systemd/reelos-library-catchup.service 'TimeoutStartSec=infinity'
 need install/systemd/reelos-library-catchup.service 'KillMode=process'
 need install/systemd/reelos-library-catchup.service 'MemoryMax'
+need daemon/reelos_hardware.py 'ram_gb'
+need daemon/reelos_hardware.py 'disk_kind'
+need daemon/reelos_hardware.py 'catchup_memory_max'
+need daemon/reelos-update.sh 'hardware profile'
 need daemon/reelos-library-catchup.sh 'do not remount if listed'
 need daemon/reelos-library-catchup.sh 'ffprobe D-state'
 need daemon/reelos-library-catchup.sh 'import --catch-up'
@@ -761,6 +765,11 @@ if [ -f "$NEXT/app/package.json" ]; then
     fi
   }
   stage_prebuilt_client "$NEXT/app"
+  if [ -f "$NEXT/bin/reelos_hardware.py" ]; then
+    python3 "$NEXT/bin/reelos_hardware.py" --log 2>/dev/null | while read -r line; do
+      [ -n "$line" ] && log "$line"
+    done || true
+  fi
 fi
 
 if [ -f "$NEXT/app/package.json" ] && [ -d "$NEXT/app/node_modules" ]; then
@@ -990,6 +999,12 @@ fi
 if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
   cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
   chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
+fi
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
+  python3 "$ROOT/bin/reelos_hardware.py" --log 2>/dev/null | while read -r line; do
+    [ -n "$line" ] && log "$line"
+  done || true
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell
@@ -1519,6 +1534,9 @@ mkdir -p "$STATE"
 echo 1 >"$STATE/library-catchup" 2>/dev/null || true
 if [ -f /etc/systemd/system/reelos-library-catchup.service ] || [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
   [ -f "$ROOT/systemd/reelos-library-catchup.service" ] && cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
+  if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+    python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
+  fi
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl reset-failed reelos-library-catchup.service >/dev/null 2>&1 || true
   systemctl start --no-block reelos-library-catchup.service >/dev/null 2>&1 || true

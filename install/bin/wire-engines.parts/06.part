@@ -213,10 +213,52 @@ def log_wire(msg: str) -> None:
         pass
 
 
-SMALL_MEM_KB = 4_718_592  # 4.5 Gi
+SMALL_MEM_KB = 4_718_592  # 4.5 Gi — tiny fixture; limits come from reelos_hardware
+
+
+def _load_reelos_hardware():
+    import importlib.util
+
+    candidates = []
+    try:
+        candidates.append(Path(__file__).resolve().parent / "reelos_hardware.py")
+    except Exception:
+        pass
+    candidates.append(Path("/opt/reelos/bin/reelos_hardware.py"))
+    for cand in candidates:
+        if not cand.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_hardware", cand)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+_HW = None
+
+
+def hw():
+    global _HW
+    if _HW is None:
+        _HW = _load_reelos_hardware()
+    return _HW
+
+
+def hardware_profile() -> dict:
+    mod = hw()
+    if mod is None:
+        n = mem_total_kb()
+        return {"ram_kb": n, "ram_gb": round(n / 1024 / 1024, 2), "cpus": 1, "disk_kind": "unknown", "tiny": 0 < n <= SMALL_MEM_KB, "box_is_small": 0 < n <= SMALL_MEM_KB}
+    return mod.measure()
 
 
 def mem_total_kb(text: str | None = None) -> int:
+    mod = hw()
+    if mod is not None:
+        return int(mod.mem_total_kb(text))
     raw = text
     if raw is None:
         try:
@@ -246,8 +288,13 @@ def loadavg_1(text: str | None = None) -> float:
 
 
 def box_is_small(mem_kb: int | None = None) -> bool:
-    """≤4.5Gi MemTotal is small even if the low-perf toggle is off/weird."""
-    n = mem_total_kb() if mem_kb is None else mem_kb
+    """Tiny (≤4.5Gi) fixture. Laptops use hardware_profile() limits, not this gate."""
+    if mem_kb is not None:
+        return 0 < mem_kb <= SMALL_MEM_KB
+    mod = hw()
+    if mod is not None:
+        return bool(mod.measure().get("tiny"))
+    n = mem_total_kb()
     return 0 < n <= SMALL_MEM_KB
 
 

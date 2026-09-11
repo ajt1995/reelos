@@ -48,13 +48,7 @@ ffprobe_d_state() {
   ps -eo state,comm 2>/dev/null | awk '$1 ~ /D/ && $2 ~ /ffprobe/ { n++ } END { print n+0 }'
 }
 
-SMALL_MEM_KB=4718592
-
-box_is_small() {
-  local mem_kb
-  mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-  [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le "$SMALL_MEM_KB" ]
-}
+# D-state is I/O backpressure (any hardware). Tiny-RAM detect lives in reelos_hardware.py.
 
 load_high() {
   awk '{ exit !($1+0 >= 2) }' /proc/loadavg 2>/dev/null
@@ -112,6 +106,9 @@ ensure_door
 # still queues the worker; the worker backs off when D-state is high.
 start_library_catchup() {
   log "library catch-up in background"
+  if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+    python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
+  fi
   if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
     cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service 2>/dev/null || true
     chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true

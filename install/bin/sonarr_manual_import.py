@@ -22,10 +22,10 @@ SONARR_FOLDERS = ("/symlinks/sonarr",)
 FOREIGN_PATH_MARKERS = ("/radarr/", "/lidarr/", "/music/", "\\radarr\\", "\\lidarr\\", "\\music\\")
 SMALL_MEM_KB = 4_718_592
 LIST_TIMEOUT_SEC = 20  # was 120; skip folder on timeout and continue
-FFPROBE_D_BACKOFF_SMALL = 4
-FFPROBE_D_BACKOFF_OTHER = 8
+FFPROBE_D_BACKOFF_LIMIT = 1  # I/O backpressure — not a Pi vs laptop gate
 PROGRESS_PATH = Path("/var/lib/reelos/library-progress.json")
 LIBRARY_LOG = Path("/var/lib/reelos/library.log")
+_HW = None
 
 # Cut scene junk so "The.Walking.Dead.2010.2160p.WEB-DL.DDP5.1" → "The Walking Dead"
 _QUALITY_CUT = re.compile(
@@ -445,14 +445,52 @@ def folder_already_imported(folder: str, series_rows: list[dict]) -> bool:
     return series_episode_file_count(hit) > 0
 
 
-def box_is_small() -> bool:
+def _hw():
+    global _HW
+    if _HW is not None:
+        return _HW
+    import importlib.util
+
+    here = Path(__file__).resolve().parent
+    for cand in (here / "reelos_hardware.py", Path("/opt/reelos/bin/reelos_hardware.py")):
+        if not cand.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_hardware", cand)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _HW = mod
+        return _HW
+    return None
+
+
+def hardware_profile() -> dict:
+    mod = _hw()
+    if mod is not None:
+        return mod.measure()
     try:
+        ram_kb = 0
         for line in Path("/proc/meminfo").read_text().splitlines():
             if line.startswith("MemTotal:"):
-                return 0 < int(line.split()[1]) <= SMALL_MEM_KB
+                ram_kb = int(line.split()[1])
+                break
     except (OSError, ValueError, IndexError):
-        return False
-    return False
+        ram_kb = 0
+    tiny = 0 < ram_kb <= SMALL_MEM_KB
+    return {
+        "ram_kb": ram_kb,
+        "ram_gb": round(ram_kb / 1024 / 1024, 2),
+        "cpus": 1,
+        "disk_kind": "unknown",
+        "tiny": tiny,
+        "box_is_small": tiny,
+    }
+
+
+def box_is_small() -> bool:
+    """Tiny (≤4.5Gi) fixture only. Import caps use hardware_profile()."""
+    return bool(hardware_profile().get("tiny"))
 
 
 def ffprobe_d_state_count(text: str | None = None) -> int:
@@ -474,15 +512,22 @@ def ffprobe_d_state_count(text: str | None = None) -> int:
 
 
 def ffprobe_d_backoff_limit(*, small: bool | None = None) -> int:
-    if small is None:
-        small = box_is_small()
-    return FFPROBE_D_BACKOFF_SMALL if small else FFPROBE_D_BACKOFF_OTHER
+    """Any ffprobe D-state is I/O backpressure. Hardware size does not change this."""
+    mod = _hw()
+    if mod is not None:
+        return int(mod.d_backoff_limit())
+    return FFPROBE_D_BACKOFF_LIMIT
 
 
-def catchup_chunk_size(*, catch_up: bool, d_state: int = 0) -> int:
-    if d_state > 0:
-        return 4
-    if catch_up or box_is_small():
+def catchup_chunk_size(*, catch_up: bool, d_state: int = 0, profile: dict | None = None) -> int:
+    """High D-state → 0 on any hardware. Healthy FUSE + many cores → don't walk like a Pi."""
+    prof = profile if profile is not None else hardware_profile()
+    mod = _hw()
+    if mod is not None:
+        return int(mod.import_chunk_size(prof, catch_up=catch_up, d_state=d_state))
+    if int(d_state or 0) > 0:
+        return 0
+    if catch_up or bool(prof.get("tiny")):
         return 8 if catch_up else 20
     return 40
 
@@ -544,8 +589,12 @@ def write_library_progress(**fields):
     return prev
 
 
-def import_folder_cap(*, catch_up: bool) -> int:
-    small = box_is_small()
+def import_folder_cap(*, catch_up: bool, profile: dict | None = None) -> int:
+    prof = profile if profile is not None else hardware_profile()
+    mod = _hw()
+    if mod is not None:
+        return int(mod.import_folder_cap(prof, catch_up=catch_up))
+    small = bool(prof.get("tiny"))
     if catch_up:
         return 6 if small else 16
     return 12 if small else 48
@@ -579,7 +628,7 @@ def _expand_scan_folders(
 
     A single manualimport call on all of /symlinks/sonarr makes Sonarr probe
     every episode over the FUSE debrid mount and blow past the client timeout.
-    Skip folders Sonarr already has files for. Cap so a 4GB box does not melt.
+    Skip folders Sonarr already has files for. Folder cap follows hardware_profile().
     """
     roots: list[str] = []
     seen_roots: set[str] = set()
@@ -711,6 +760,9 @@ def _queue_manualimport(sk: str, files: list[dict], *, catch_up: bool = False) -
     for sid in {f["seriesId"] for f in files}:
         before[sid] = _series_file_count(sk, int(sid))
     chunk_size = catchup_chunk_size(catch_up=catch_up, d_state=ffprobe_d_state_count())
+    if chunk_size <= 0:
+        log_wire("sonarr manualimport skip queue — ffprobe D-state (concurrency 0)")
+        return
     try:
         for i in range(0, len(files), chunk_size):
             chunk = files[i : i + chunk_size]
@@ -725,7 +777,7 @@ def _queue_manualimport(sk: str, files: list[dict], *, catch_up: bool = False) -
     except Exception as e:
         log_wire(f"sonarr manualimport {type(e).__name__} {e}")
         return
-    deadline = time.time() + (20 if catch_up or box_is_small() else 90)
+    deadline = time.time() + (20 if catch_up or bool(hardware_profile().get("tiny")) else 90)
     while time.time() < deadline:
         moved = False
         for sid, prev in before.items():
@@ -956,9 +1008,15 @@ def _self_test() -> int:
             sample = "D ffprobe\nD ffprobe\nS bash\nR ffmpeg\n"
             self.assertEqual(ffprobe_d_state_count(sample), 2)
             self.assertEqual(ffprobe_d_state_count(""), 0)
-            self.assertEqual(ffprobe_d_backoff_limit(small=True), 4)
-            self.assertEqual(ffprobe_d_backoff_limit(small=False), 8)
-            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12), 4)
+            self.assertEqual(ffprobe_d_backoff_limit(small=True), 1)
+            self.assertEqual(ffprobe_d_backoff_limit(small=False), 1)
+            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12), 0)
+            tiny = {"ram_kb": 3_383_440, "ram_gb": 3.23, "cpus": 4, "disk_kind": "rotational", "tiny": True}
+            laptop = {"ram_kb": 16 * 1024 * 1024, "ram_gb": 16.0, "cpus": 8, "disk_kind": "ssd", "tiny": False}
+            self.assertEqual(import_folder_cap(catch_up=True, profile=tiny), 6)
+            self.assertGreater(import_folder_cap(catch_up=True, profile=laptop), 16)
+            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=0, profile=tiny), 8)
+            self.assertGreater(catchup_chunk_size(catch_up=True, d_state=0, profile=laptop), 8)
             msg = format_catchup_message(folder=3, total=16, skipped=4, timeouts=1, status="running")
             self.assertIn("folder 3 of 16", msg)
             self.assertIn("4 skipped", msg)
