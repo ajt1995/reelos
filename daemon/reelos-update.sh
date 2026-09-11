@@ -479,6 +479,14 @@ need daemon/reelos-selfheal.sh 'ffprobe D-state'
 need daemon/reelos-update.sh 'vite build for production door'
 need daemon/reelos-update.sh 'vite build skipped — 4GB box'
 need daemon/reelos-update.sh 'package-lock.json unchanged — reused node_modules'
+need daemon/wire-engines.parts/00.part 'fuse stacked'
+need daemon/wire-engines.parts/00.part 'not restarting'
+need daemon/wire-engines.parts/07.part 'enableMediaInfo'
+need daemon/wire-engines.parts/09.part 'no-ffprobe'
+need daemon/reelos-update.sh 'no-ffprobe'
+need daemon/reelos-update.sh 'fuse stacked'
+need install/compose/configs/sonarr/reelos-debrid.json 'enableMediaInfo'
+need install/compose/configs/radarr/reelos-debrid.json 'enableMediaInfo'
 need scripts/reelos-box.mjs 'production preview'
 need scripts/reelos-box.mjs 'serving built UI'
 need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
@@ -570,6 +578,17 @@ if [ -d "$ROOT/compose/configs" ]; then
   log "overlay house compose/configs onto staging"
   [ -f "$ROOT/compose/.env" ] && cp -a "$ROOT/compose/.env" "$NEXT/compose/.env"
 fi
+seed_arr_debrid_json() {
+  # Tarball flags win over house overlay so Apply cannot re-enable ffprobe.
+  local dest="$1" app src
+  for app in sonarr radarr lidarr; do
+    src="$WORK/src/install/compose/configs/$app/reelos-debrid.json"
+    [ -f "$src" ] || continue
+    mkdir -p "$dest/compose/configs/$app"
+    cp "$src" "$dest/compose/configs/$app/reelos-debrid.json"
+  done
+}
+seed_arr_debrid_json "$NEXT"
 if [ -f "$WORK/src/install/compose/docker-compose.yml" ]; then
   mkdir -p "$NEXT/compose"
   cp "$WORK/src/install/compose/docker-compose.yml" "$NEXT/compose/docker-compose.yml"
@@ -808,6 +827,7 @@ cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
 cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
+seed_arr_debrid_json "$ROOT"
 # firstboot ExecStart=/opt/reelos/install.sh — refresh so a re-enabled unit
 # gets the HERE==ROOT / already-provisioned no-op, not the ISO copy.
 if [ -f "$WORK/src/install/reelos-install.sh" ]; then
@@ -976,15 +996,34 @@ fuse_live() {
   ls /mnt/debrid/version.txt >/dev/null 2>&1
 }
 
+fuse_count() {
+  local n=0
+  if [ -r /proc/self/mountinfo ]; then
+    n=$(grep -c ' /mnt/debrid .* - fuse.decypharr' /proc/self/mountinfo 2>/dev/null || true)
+  fi
+  if [ "${n:-0}" -eq 0 ]; then
+    n=$(mount 2>/dev/null | grep -c ' on /mnt/debrid type fuse.decypharr' || true)
+  fi
+  echo "${n:-0}"
+}
+
 clear_stale_fuse() {
   if fuse_live; then
+    local n
+    n=$(fuse_count)
+    if [ "${n:-0}" -gt 1 ]; then
+      log "fuse stacked $n — live, not unmounting"
+    fi
     return 0
   fi
   if [ -e /mnt/debrid ] || [ -L /mnt/debrid ] || mount | grep -q ' on /mnt/debrid '; then
     log "stale /mnt/debrid FUSE — lazy unmount"
     local i
-    for i in $(seq 1 8); do
-      if ls /mnt/debrid >/dev/null 2>&1 && ! mount | grep -q 'fuse.decypharr on /mnt/debrid'; then
+    for i in $(seq 1 12); do
+      if fuse_live; then
+        break
+      fi
+      if ! mount | grep -q ' on /mnt/debrid '; then
         break
       fi
       fusermount -uz /mnt/debrid 2>/dev/null || umount -l /mnt/debrid 2>/dev/null || true
@@ -1008,11 +1047,15 @@ start_fuse_readers() {
 
 nudge_fuse() {
   # Stale FUSE (ENOTCONN) makes mkdir -p fail with "Already exists" under set -e.
+  # A live mount — even stacked — is not remounted. Unmount extras only when stale.
+  # Never umount /media.
   clear_stale_fuse
   mkdir -p /mnt /mnt/debrid /mnt/symlinks
   mount --make-rshared /mnt 2>/dev/null || log "rshared /mnt skipped"
+  local n
+  n=$(fuse_count)
   if fuse_live; then
-    log "fuse already on host — not bind-mounting /mnt"
+    log "fuse already on host ($n mount(s)) — not remounting"
   elif [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "fuse not on host — remount decypharr"
     python3 "$ROOT/bin/wire-engines.py" fuse || log "fuse remount non-fatal"
@@ -1036,6 +1079,9 @@ wait_fuse() {
 }
 nudge_fuse
 step "FUSE"
+if [ -x "$ROOT/bin/wire-engines.py" ]; then
+  python3 "$ROOT/bin/wire-engines.py" no-ffprobe || log "no-ffprobe non-fatal"
+fi
 
 load_env() {
   if [ -f "$ROOT/compose/.env" ]; then
@@ -1267,6 +1313,7 @@ if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
   if [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
+    python3 "$ROOT/bin/wire-engines.py" no-ffprobe || log "no-ffprobe non-fatal"
     if ! python3 "$ROOT/bin/wire-engines.py" indexers; then
       log "indexers heal red"
       if [ -f /var/lib/reelos/wire.log ]; then

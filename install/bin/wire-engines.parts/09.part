@@ -170,9 +170,13 @@ def ensure_hybrid_recycle_bin(key: str | None = None) -> bool:
         return False
     if not isinstance(cfg, dict) or not cfg.get("id"):
         return False
-    if str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/") and int(cfg.get("recycleBinCleanupDays") or -1) == 0:
+    if (
+        str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/")
+        and int(cfg.get("recycleBinCleanupDays") or -1) == 0
+        and cfg.get("enableMediaInfo") is False
+    ):
         return True
-    body = dict(cfg)
+    body = arr_debrid_media_patch(cfg)
     body["recycleBin"] = rec
     body["recycleBinCleanupDays"] = 0
     try:
@@ -740,6 +744,7 @@ def main() -> int:
                 )
         if prow_key:
             sync_prowlarr_apps(prow_key)
+        apply_arr_debrid_media_info()
         widen_sonarr_hybrid()
         widen_radarr_hybrid()
     except Exception as e:
@@ -773,8 +778,10 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    if "--performance" in sys.argv:
+    if "--performance" in sys.argv or "no-ffprobe" in sys.argv:
         apply_jellyfin_performance()
+        apply_arr_debrid_media_info()
+        fuse_unstack_stale()
         raise SystemExit(0)
     if "fuse" in sys.argv:
         raise SystemExit(0 if ensure_fuse() is None else 0)

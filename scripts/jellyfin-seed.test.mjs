@@ -545,7 +545,11 @@ g["call"] = fake_mm
 g["answers"] = lambda: {"quality": "hybrid"}
 assert g["ensure_hybrid_recycle_bin"]("k") is True
 assert any(
-    m == "PUT" and b and b.get("recycleBin") == "/mnt/symlinks/.reel-recycle" and b.get("recycleBinCleanupDays") == 0
+    m == "PUT"
+    and b
+    and b.get("recycleBin") == "/mnt/symlinks/.reel-recycle"
+    and b.get("recycleBinCleanupDays") == 0
+    and b.get("enableMediaInfo") is False
     for m, _u, b in puts
 ), puts
 puts.clear()

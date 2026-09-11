@@ -1,13 +1,17 @@
 ef ensure_fuse() -> None:
     persist_mnt_shared()
     share_mnt()
+    n = fuse_host_mount_count()
     if fuse_on_host():
-        log_wire("fuse already on host")
-        kick_imports()
+        if n > 1:
+            log_wire(f"fuse already on host — stacked {n}, not remounting")
+        else:
+            log_wire("fuse already on host")
         subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
         log_wire("door caddy/reelos started after fuse")
         return
     log_wire("fuse missing on host — recreate decypharr")
+    fuse_unstack_stale()
     subprocess.run(
         ["docker", "compose", "--profile", "debrid", "up", "-d", "--force-recreate", "decypharr"],
         cwd=str(COMPOSE),
@@ -23,7 +27,6 @@ ef ensure_fuse() -> None:
             if not fuse_on_host():
                 log_wire("fuse vanished after reader restart")
                 continue
-            kick_imports()
             subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
             log_wire("door caddy/reelos started after fuse")
             return

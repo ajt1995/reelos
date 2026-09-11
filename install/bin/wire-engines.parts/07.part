@@ -23,6 +23,79 @@ def jellyfin_debrid_library_flags() -> dict:
     }
 
 
+def arr_debrid_media_flags() -> dict:
+    """Never ffprobe/MediaInfo library files on debrid/FUSE. Import/grab still use filenames."""
+    return {"enableMediaInfo": False}
+
+
+def arr_debrid_media_patch(cfg: dict) -> dict:
+    body = dict(cfg or {})
+    body.update(arr_debrid_media_flags())
+    return body
+
+
+ARR_DEBRID_APPS = (
+    ("sonarr", "http://127.0.0.1:8989/api/v3"),
+    ("radarr", "http://127.0.0.1:7878/api/v3"),
+    ("lidarr", "http://127.0.0.1:8686/api/v1"),
+)
+
+
+def persist_arr_debrid_config_files() -> None:
+    """Ship + keep compose/configs/*arr/reelos-debrid.json so Apply cannot re-enable ffprobe."""
+    text = json.dumps(
+        {
+            "enableMediaInfo": False,
+            "ffprobeLibrary": False,
+            "note": "Debrid/FUSE dumps. Import and grab still use filenames. Apply must not turn this back on.",
+        },
+        indent=2,
+    ) + "\n"
+    for name, _base in ARR_DEBRID_APPS:
+        dest = COMPOSE / "configs" / name / "reelos-debrid.json"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists() and dest.read_text() == text:
+                continue
+            dest.write_text(text)
+        except OSError as e:
+            log_wire(f"{name} reelos-debrid.json {e}")
+
+
+def apply_arr_debrid_media_info() -> None:
+    persist_arr_debrid_config_files()
+    for name, base in ARR_DEBRID_APPS:
+        xml = COMPOSE / "configs" / name / "config.xml"
+        if not xml.exists():
+            log_wire(f"{name} enableMediaInfo skip — no config")
+            continue
+        key = api_key(xml) or wait_key(xml, 8)
+        if not key:
+            log_wire(f"{name} enableMediaInfo skip — no key")
+            continue
+        try:
+            cfg = call(f"{base}/config/mediamanagement", key)
+        except NET_ERR as e:
+            log_wire(f"{name} media-info get {e}")
+            continue
+        if not isinstance(cfg, dict) or not cfg.get("id"):
+            continue
+        if cfg.get("enableMediaInfo") is False:
+            log_wire(f"{name} enableMediaInfo already off")
+            continue
+        body = arr_debrid_media_patch(cfg)
+        try:
+            call(
+                f"{base}/config/mediamanagement/{cfg['id']}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"{name} enableMediaInfo off — no ffprobe on FUSE")
+        except NET_ERR as e:
+            log_wire(f"{name} media-info put {e}")
+
+
 def jellyfin_debrid_encoding_patch(enc) -> dict:
     """Do not pre-extract subtitles or mkv keyframes by reading the FUSE file."""
     out = dict(enc or {})

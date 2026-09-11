@@ -58,6 +58,10 @@ CONTRACTS = (
     ("src/components/settings-view.tsx", "Show Advanced"),
     ("src/components/settings-updates.tsx", "Beta channel"),
     ("scripts/reelos-lookup-plugin.mjs", "CHANNEL_BETA_URL"),
+    ("daemon/reelos-update.sh", "no-ffprobe"),
+    ("daemon/reelos-update.sh", "fuse stacked"),
+    ("daemon/wire-engines.parts/07.part", "enableMediaInfo"),
+    ("install/compose/configs/sonarr/reelos-debrid.json", "enableMediaInfo"),
 )
 
 

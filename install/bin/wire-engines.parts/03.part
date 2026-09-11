@@ -107,8 +107,12 @@ def recreate_arrs() -> None:
         "prowlarr",
         "radarr",
         "sonarr",
-        "decypharr",
     ]
+    if fuse_on_host():
+        log_wire("fuse live — recreate *arr without decypharr")
+    else:
+        fuse_unstack_stale()
+        cmd.append("decypharr")
     r = subprocess.run(
         cmd,
         cwd=str(COMPOSE),
