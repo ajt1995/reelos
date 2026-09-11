@@ -21,7 +21,7 @@ import type {
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
-import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence, applyRemovedTitles, titleMatchesRemoved, libraryDropKeys, forgetRemovedLibraryIds } from "./sync-requests";
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -58,8 +58,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.33";
-export const SHIPPED_VERSION = "1.2.50.33";
+export const LATEST_VERSION = "1.2.50.34";
+export const SHIPPED_VERSION = "1.2.50.34";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export type BootStepId = "local" | "house" | "library" | "requests";
@@ -83,11 +83,13 @@ export type ReadyPayload = {
   update?: { running?: boolean; local?: string; target?: string | null; log?: string };
   titles?: Title[];
   requests?: MediaRequest[];
+  removedIds?: string[];
   pipeline?: unknown;
   timings?: Record<string, number>;
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.34: Phone Remove from this box sticks. Request polls and recover skip hidden titles; overlay ids ride /api/ready and /api/library; title page Remove is on the box, not only Play. Complements #95. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.33: Requests is in-flight only. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update. Complements #94. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.32: Search→request→play: recover keeps kicking, overlay does not sticky-available, Home cards match the transferring chip, GET-by-id imports when available, dump list cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -181,6 +183,7 @@ export interface ReelState {
   remoteTitles: Title[];
   bootSteps: Record<BootStepId, BootStepStatus>;
   requestsSeeded: boolean;
+  removedLibraryIds: string[];
   setHydrated: () => void;
   setBootStep: (id: BootStepId, status: BootStepStatus) => void;
   applyReadyPayload: (ready: ReadyPayload) => void;
@@ -441,6 +444,7 @@ const initial = {
   remoteTitles: [] as Title[],
   bootSteps: idleBootSteps(),
   requestsSeeded: false,
+  removedLibraryIds: [] as string[],
 };
 
 export const useReelStore = create<ReelState>()(
@@ -461,10 +465,14 @@ export const useReelStore = create<ReelState>()(
           };
           void _omitPassword;
           const answers = incoming ? { ...s.answers, ...safeIncoming, adminPassword: s.answers.adminPassword } : s.answers;
-          const shelf = titles.length ? mergeShelf(s.shelf, titles, true) : s.shelf;
+          const removedLibraryIds = [
+            ...new Set([...(s.removedLibraryIds || []), ...(Array.isArray(ready?.removedIds) ? ready.removedIds : [])]),
+          ];
+          const mergedShelf = titles.length ? mergeShelf(s.shelf, titles, true) : s.shelf;
+          const shelf = applyRemovedTitles(mergedShelf, removedLibraryIds);
           const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
             titles: shelf,
-          });
+          }).filter((r) => !titleMatchesRemoved({ id: r.titleId, titleId: r.titleId }, removedLibraryIds));
           const library = [...new Set(shelf.map((t) => t.id))];
           const libraryOk = Array.isArray(ready?.titles);
           const requestsOk = Array.isArray(ready?.requests);
@@ -475,6 +483,7 @@ export const useReelStore = create<ReelState>()(
             shelfReady: libraryOk || s.shelfReady || Boolean(shelf.length),
             library,
             requests,
+            removedLibraryIds,
             requestsSeeded: requestsOk || s.requestsSeeded,
             bootSteps: {
               ...s.bootSteps,
@@ -544,12 +553,19 @@ export const useReelStore = create<ReelState>()(
         }),
       requestTitle: (titleId, season) => {
         const s = get();
+        const removedLibraryIds = forgetRemovedLibraryIds(s.removedLibraryIds, libraryDropKeys(titleId));
         const existing = s.requests.find(
           (r) => r.titleId === titleId && (season == null || r.season === season) && r.status !== "failed",
         );
-        if (existing) return;
+        if (existing) {
+          set({ removedLibraryIds });
+          return;
+        }
         const title = getTitle(titleId) ?? get().remoteTitles.find((t) => t.id === titleId);
-        if (!title) return;
+        if (!title) {
+          set({ removedLibraryIds });
+          return;
+        }
         const fail = s.answers.quality === "4k" && title.maxQuality !== "4k";
         const requester = s.users.find((u) => u.role === "admin")?.name ?? "Ada";
         const local = s.answers.source === "local-vpn";
@@ -577,7 +593,7 @@ export const useReelStore = create<ReelState>()(
                 ...s.activity,
               ]
             : [event("request", `${requester} requested ${title.title}`, titleId), ...s.activity];
-        set({ requests: [rec, ...s.requests], activity: activity.slice(0, 40) });
+        set({ requests: [rec, ...s.requests], activity: activity.slice(0, 40), removedLibraryIds });
       },
       cancelRequest: (id) => set({ requests: get().requests.filter((r) => r.id !== id) }),
       retryRequest: (id) => {
@@ -866,7 +882,12 @@ export const useReelStore = create<ReelState>()(
           titleId,
           extraIds,
         );
-        set({ shelf: overlay.shelf, library: overlay.library, requests: overlay.requests });
+        set({
+          shelf: overlay.shelf,
+          library: overlay.library,
+          requests: overlay.requests,
+          removedLibraryIds: [...new Set([...(s.removedLibraryIds || []), ...overlay.keys])],
+        });
       },
       hydrateShelf: (opts) => {
         if (get().shelfReady) return;
@@ -875,22 +896,26 @@ export const useReelStore = create<ReelState>()(
         if (shelfFetches.has(key)) return;
         const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
         const p = fetch(`/api/library${qs}`, { cache: "no-store" })
-          .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
+          .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null; removedIds?: string[] }>)
           .then((j) => {
             const titles = Array.isArray(j.titles) ? j.titles : [];
             rememberCatalogTitles(titles);
             const cur = get();
-            const shelf = mergeShelf(cur.shelf, titles, Boolean(limit));
+            const removedLibraryIds = [
+              ...new Set([...(cur.removedLibraryIds || []), ...(Array.isArray(j.removedIds) ? j.removedIds : [])]),
+            ];
+            const shelf = applyRemovedTitles(mergeShelf(cur.shelf, titles, Boolean(limit)), removedLibraryIds);
             const library = [...new Set(shelf.map((t) => t.id))];
             const requests = overlayLibraryPresence(cur.requests, {
               titles: shelf,
-            });
+            }).filter((r) => !titleMatchesRemoved({ id: r.titleId, titleId: r.titleId }, removedLibraryIds));
             set({
               shelf,
               shelfError: j.error || null,
               shelfReady: true,
               library,
               requests,
+              removedLibraryIds,
             });
           })
           .catch((e) => set({ shelfError: String(e), shelfReady: true }))
@@ -921,6 +946,7 @@ export const useReelStore = create<ReelState>()(
         adapter: s.adapter,
         indexers: s.indexers,
         remoteTitles: s.remoteTitles,
+        removedLibraryIds: s.removedLibraryIds,
       }),
       onRehydrateStorage: () => (state) => {
         if (!state) return;

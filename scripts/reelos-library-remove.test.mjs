@@ -14,6 +14,7 @@ import {
   expandDropKeys,
   forgetRemovedIds,
   forgetRemovedTitleIds,
+  filterRemovedRequests,
   fuseWholesalePath,
   jellyfinItemDeleteAllowed,
   libraryDropKeys,
@@ -233,25 +234,42 @@ test("removed-id overlay persists across serve filter and forgets on re-request"
   });
   assert.equal(left.includes("tmdb-1593"), false);
   assert.ok(existsSync(file));
+  const kept = filterRemovedRequests(
+    [
+      { id: "a", titleId: "tmdb-tv-1402" },
+      { id: "b", titleId: "tmdb-550" },
+    ],
+    ids,
+  );
+  assert.deepEqual(kept.map((r) => r.id), ["b"]);
 });
 
 test("plugin, phone UI, and mailman wire DELETE /api/library", () => {
   const plugin = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  const progress = readFileSync(join(root, "scripts/reelos-request-progress-plugin.mjs"), "utf8");
   const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
   const library = readFileSync(join(root, "src/components/library-view.tsx"), "utf8");
   const home = readFileSync(join(root, "src/components/home-view.tsx"), "utf8");
+  const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
   const updater = readFileSync(join(root, "daemon/reelos-update.sh"), "utf8");
   assert.match(plugin, /handleLibraryRemove/);
   assert.match(plugin, /removeLibraryTitle/);
   assert.match(plugin, /method === "DELETE"/);
   assert.match(plugin, /forgetRemovedTitleIds/);
+  assert.match(plugin, /resetPresenceFactsCache/);
+  assert.match(plugin, /removedIds: readRemovedTitleIds/);
   assert.doesNotMatch(plugin, /rm -rf \/media/);
   assert.doesNotMatch(plugin, /__all__.*unlink/);
+  assert.match(progress, /filterRemovedRequests/);
+  assert.match(progress, /removed: true/);
+  assert.match(sync, /titleMatchesRemoved/);
   assert.match(title, /RemoveFromBox/);
+  assert.match(title, /onBox/);
   assert.match(library, /RemoveFromBox/);
   assert.match(home, /RemoveFromBox/);
   assert.match(updater, /reelos-library-remove\.mjs/);
   assert.match(updater, /Remove from this box/);
+  assert.match(updater, /filterRemovedRequests/);
 });
 
 test("resolveRemoveTarget maps tvdb shelf rows onto tmdb-tv for Seerr", () => {

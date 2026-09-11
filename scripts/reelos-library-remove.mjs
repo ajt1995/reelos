@@ -108,6 +108,16 @@ export function applyRemovedTitles(titles, removedIds) {
   return (titles || []).filter((t) => !titleInDropSet(t, keys));
 }
 
+export function filterRemovedRequests(requests, removedIds) {
+  const keys = new Set(removedIds || []);
+  if (!keys.size) return requests || [];
+  return (requests || []).filter((r) => {
+    if (!r?.titleId) return true;
+    if (keys.has(r.titleId)) return false;
+    return !libraryDropKeys(r.titleId).some((k) => keys.has(k));
+  });
+}
+
 export function mergeRemovedIds(prev, next) {
   return [...new Set([...(prev || []), ...(next || [])].map((id) => String(id).trim()).filter(Boolean))];
 }

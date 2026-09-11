@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import { mergeServerRequests, overlayLibraryPresence } from "@/lib/sync-requests";
+import { mergeServerRequests, overlayLibraryPresence, titleMatchesRemoved } from "@/lib/sync-requests";
 import type { MediaRequest, Title } from "@/lib/types";
 
 /** Pull GET /api/request (list) into the persisted store. Home + Requests both call this.
@@ -22,9 +22,11 @@ export function useSyncRequests() {
         useReelStore.getState().rememberTitles?.(titles);
         const live = Array.isArray(j.requests) ? j.requests : [];
         useReelStore.setState((s) => {
-          const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
+          const removed = s.removedLibraryIds || [];
+          const kept = live.filter((r) => !titleMatchesRemoved({ id: r.titleId, titleId: r.titleId }, removed));
+          const requests = overlayLibraryPresence(mergeServerRequests(s.requests, kept), {
             titles: s.shelf,
-          });
+          }).filter((r) => !titleMatchesRemoved({ id: r.titleId, titleId: r.titleId }, removed));
           return { requests };
         });
       } catch {

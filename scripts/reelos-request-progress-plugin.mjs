@@ -16,6 +16,7 @@ import {
   loadPresenceFacts,
   spawnWireImport,
 } from "./reelos-request-status.mjs";
+import { filterRemovedRequests, readRemovedTitleIds, titleInDropSet } from "./reelos-library-remove.mjs";
 
 const importedOnce = new Set();
 function maybeImportAvailable(data) {
@@ -85,7 +86,7 @@ function maybeRecover(u) {
       const missing = listRecoverTargets({
         series: facts?.series,
         movies: facts?.movies,
-        seerrRows,
+        seerrRows: filterRemovedRequests(seerrRows, readRemovedTitleIds()),
       });
       for (const m of missing) {
         await kickArrRecover({ mediaType: m.mediaType, tmdb: m.tmdb, season: m.season });
@@ -119,7 +120,7 @@ export async function collectRequestList() {
     const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
     return {
-      requests: assembled.requests,
+      requests: filterRemovedRequests(assembled.requests, readRemovedTitleIds()),
       titles: [],
       engine: "seerr",
       pipeline: assembled.pipeline,
@@ -143,6 +144,10 @@ async function handleGet(req, res) {
   if (!id) {
     const recoverNote = maybeRecover(u);
     return handleList(res, recoverNote);
+  }
+  if (titleInDropSet({ id, titleId: id }, readRemovedTitleIds())) {
+    send(res, 200, { status: "unknown", engine: "seerr", titleId: id, removed: true });
+    return;
   }
   const key = seerrApiKey();
   if (!key) {

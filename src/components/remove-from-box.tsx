@@ -84,16 +84,40 @@ export function RemoveFromBox({
     return (
       <div className={cn("mt-1", className)}>
         {step === "idle" ? (
-          <button type="button" className="text-xs text-danger" onClick={() => setStep("confirm")}>
+          <button
+            type="button"
+            className="text-xs text-danger"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setStep("confirm");
+            }}
+          >
             Remove
           </button>
         ) : null}
         {step === "confirm" ? (
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className="text-xs text-danger" onClick={run}>
+            <button
+              type="button"
+              className="text-xs text-danger"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                run();
+              }}
+            >
               Confirm remove?
             </button>
-            <button type="button" className="text-xs text-muted" onClick={() => setStep("idle")}>
+            <button
+              type="button"
+              className="text-xs text-muted"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setStep("idle");
+              }}
+            >
               Keep
             </button>
           </div>

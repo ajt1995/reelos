@@ -3,16 +3,19 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   applyTitleRequestPoll,
+  applyRemovedTitles,
   collapseDuplicateRequests,
   dropLibraryOverlay,
   inFlightRequests,
   isInFlightRequest,
+  libraryDropKeys,
   mergeServerRequests,
   overlayLibraryPresence,
   requestShowsRetry,
   showRequestQueueControls,
   titleForRequest,
   titleMatchesId,
+  titleMatchesRemoved,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
 
@@ -195,6 +198,9 @@ test("dropLibraryOverlay removes a movie and every TV season row", () => {
   assert.deepEqual(movie.shelf.map((t) => t.id), ["tmdb-550"]);
   assert.deepEqual(movie.library, ["tmdb-550"]);
   assert.deepEqual(movie.requests.map((r) => r.id), ["seerr-2"]);
+  assert.equal(titleMatchesRemoved({ id: "tmdb-1593" }, ["tmdb-1593"]), true);
+  assert.deepEqual(applyRemovedTitles([{ id: "tmdb-1593" }, { id: "tmdb-550" }], ["tmdb-1593"]).map((t) => t.id), ["tmdb-550"]);
+  assert.ok(libraryDropKeys("tmdb-tv-1402").includes("tmdb-1402"));
 });
 
 test("server available upgrades a stale local downloading row for the same titleId", () => {

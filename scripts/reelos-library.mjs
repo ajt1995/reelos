@@ -310,6 +310,7 @@ export async function serveLibrary({
     titles: withPosterHost(applyLibraryLimit(dedupeLibraryTitles(withoutRemoved(titles)), limit), host),
     error: extra.error ?? null,
     fromCache: Boolean(extra.fromCache),
+    removedIds: [...hide],
   });
 
   const staleCoversRequest = canServeStale(stale);
@@ -325,7 +326,7 @@ export async function serveLibrary({
     if (canServeStale(stale)) {
       return serve(stale.titles, { fromCache: true, error: "Jellyfin has no matching user/PIN" });
     }
-    return { titles: [], error: "Jellyfin has no matching user/PIN", fromCache: false };
+    return { titles: [], error: "Jellyfin has no matching user/PIN", fromCache: false, removedIds: [...hide] };
   }
 
   try {
@@ -337,6 +338,6 @@ export async function serveLibrary({
     return serve(titles);
   } catch (e) {
     if (canServeStale(stale)) return serve(stale.titles, { fromCache: true, error: String(e) });
-    return { titles: [], error: String(e), fromCache: false };
+    return { titles: [], error: String(e), fromCache: false, removedIds: [...hide] };
   }
 }

@@ -545,6 +545,31 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(store, /if \(get\(\)\.shelfReady\) return/);
 });
 
+test("serveLibrary hides removedIds without wiping the cache", async () => {
+  const cache = createLibraryCache();
+  cache.write(
+    [
+      titleFrom(sampleItem),
+      titleFrom({ ...sampleItem, Id: "jf-2", ProviderIds: { Tmdb: "551" }, Name: "Other" }),
+    ],
+    { now: 1, complete: true },
+  );
+  const out = await serveLibrary({
+    url: "/api/library",
+    host: "box.local",
+    now: 2,
+    cache,
+    removedIds: ["tmdb-550"],
+    getAuth: async () => {
+      throw new Error("auth should not run on stale hit");
+    },
+    fetchItems: async () => ({ Items: [] }),
+  });
+  assert.deepEqual(out.titles.map((t) => t.id), ["tmdb-551"]);
+  assert.deepEqual(out.removedIds, ["tmdb-550"]);
+  assert.equal(cache.read().titles.length, 2);
+});
+
 test("cache freshness helper", () => {
   assert.equal(canServeStale({ titles: [] }), false);
   assert.equal(canServeStale({ titles: [titleFrom(sampleItem)] }), true);

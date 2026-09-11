@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
+import { RemoveFromBox } from "@/components/remove-from-box";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
 import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
@@ -10,7 +11,6 @@ import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
 import { showRequestQueueControls, requestShowsRetry } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
-import { RemoveFromBox } from "@/components/remove-from-box";
 
 export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
@@ -28,6 +28,7 @@ export function TitleView({ id }: { id: string }) {
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
+  const [removedHere, setRemovedHere] = useState(false);
   const request = useReelStore((s) =>
     s.requests.find(
       (r) =>
@@ -40,12 +41,19 @@ export function TitleView({ id }: { id: string }) {
     s.requests.find((r) => r.titleId === id && r.status === "failed"),
   );
   const inLibrary = useReelStore((s) => s.library.includes(id));
+  const onShelf = useReelStore((s) =>
+    s.shelf.some((t) => t.id === id || (t.ids || []).includes(id) || t.jellyfinId === id),
+  );
   const intent = useReelStore((s) => s.answers.intent);
   const source = useReelStore((s) => s.answers.source);
   const requestTitle = useReelStore((s) => s.requestTitle);
   const retryRequest = useReelStore((s) => s.retryRequest);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
   const { inJellyfin, engineStatus } = useEngineRequest(id, season);
+
+  useEffect(() => {
+    setRemovedHere(false);
+  }, [id]);
 
   useEffect(() => {
     let stop = false;
@@ -108,10 +116,9 @@ export function TitleView({ id }: { id: string }) {
 
   const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const series = resolved.kind === "tv" || resolved.kind === "anime";
-  const seasonReady = request?.status === "available" || engineStatus === "downloaded";
-  const available = series
-    ? seasonReady
-    : inJellyfin || inLibrary || seasonReady;
+  const seasonReady = !removedHere && (request?.status === "available" || engineStatus === "downloaded");
+  const onBox = !removedHere && (inLibrary || inJellyfin || onShelf);
+  const available = series ? seasonReady : onBox || seasonReady;
   const blocked =
     (resolved.kind === "music" && !intent.music) ||
     (resolved.kind === "anime" && !intent.anime) ||
@@ -191,7 +198,6 @@ export function TitleView({ id }: { id: string }) {
                 In library
               </span>
             ) : null}
-            {available ? <RemoveFromBox title={resolved} /> : null}
             {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
@@ -250,6 +256,11 @@ export function TitleView({ id }: { id: string }) {
               </Button>
             ) : null}
           </div>
+          {onBox ? (
+            <div className="mt-4">
+              <RemoveFromBox title={resolved} onRemoved={() => setRemovedHere(true)} />
+            </div>
+          ) : null}
           {failed ? (
             <p className="mt-4 text-sm text-danger">{failed.reason}</p>
           ) : null}

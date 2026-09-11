@@ -160,6 +160,38 @@ export function titleMatchesId(
   return titlePresenceKeys(id).some((k) => keys.has(k));
 }
 
+export function libraryDropKeys(titleId: string, extra: string[] = []): string[] {
+  return titlePresenceKeys(titleId, extra);
+}
+
+export function titleMatchesRemoved(
+  title: { id?: string; titleId?: string; ids?: string[]; jellyfinId?: string },
+  removedIds: string[] | undefined,
+): boolean {
+  if (!removedIds?.length) return false;
+  const set = new Set(removedIds);
+  const keys = new Set(titlePresenceKeys(String(title.id || title.titleId || ""), title.ids || []));
+  if (title.titleId) for (const k of titlePresenceKeys(title.titleId)) keys.add(k);
+  if (title.jellyfinId) {
+    keys.add(String(title.jellyfinId));
+    keys.add(`jf-${title.jellyfinId}`);
+  }
+  return [...keys].some((k) => set.has(k));
+}
+
+export function applyRemovedTitles<T extends { id?: string; ids?: string[]; jellyfinId?: string }>(
+  titles: T[],
+  removedIds: string[] | undefined,
+): T[] {
+  if (!removedIds?.length) return titles;
+  return titles.filter((t) => !titleMatchesRemoved(t, removedIds));
+}
+
+export function forgetRemovedLibraryIds(prev: string[] | undefined, dropKeys: string[]): string[] {
+  const keys = new Set(dropKeys || []);
+  return (prev || []).filter((id) => !keys.has(id));
+}
+
 /** Home cards: shelf / remembered titles / the request's own name. Always a Title so chip and cards match. */
 export function titleForRequest(
   r: Pick<MediaRequest, "titleId" | "title">,

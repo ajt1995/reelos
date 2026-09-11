@@ -16,16 +16,18 @@ import {
   lookupFailureMessage,
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
-import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
+import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey, resetPresenceFactsCache } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
 import { notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
+  filterRemovedRequests,
   forgetRemovedTitleIds,
   readRemovedTitleIds,
   rememberRemovedTitleIds,
   removeLibraryTitle,
+  titleInDropSet,
 } from "./reelos-library-remove.mjs";
 import {
   createLibraryCache,
@@ -418,7 +420,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.33"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.34"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -1132,7 +1134,12 @@ async function handleRequestList(res) {
       mediaItems = [];
     }
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
-    send(res, 200, { requests: assembled.requests, titles: [], engine: "seerr", pipeline: assembled.pipeline });
+    send(res, 200, {
+      requests: filterRemovedRequests(assembled.requests, readRemovedTitleIds()),
+      titles: [],
+      engine: "seerr",
+      pipeline: assembled.pipeline,
+    });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -1867,14 +1874,14 @@ async function handleLibrary(req, res) {
     refresh: () => refreshLibraryFull(host),
   });
   persistLibraryCache();
-  send(res, 200, { titles: result.titles, error: result.error });
+  send(res, 200, { titles: result.titles, error: result.error, removedIds: result.removedIds || readRemovedTitleIds() });
 }
 
 async function jellyfinGetItem(id) {
   const a = answers();
   const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
   if (!auth?.token) return null;
-  const r = await fetch(`http://127.0.0.1:8096/Items/${encodeURIComponent(id)}`, {
+  const r = await fetch(`http://127.0.0.1:8096/Items/${encodeURIComponent(id)}?Fields=Path,ProviderIds`, {
     headers: jellyfinAuthedHeaders(auth.token),
     signal: AbortSignal.timeout(8000),
   });
@@ -1919,6 +1926,7 @@ async function handleLibraryRemove(req, res) {
       rememberRemovedTitleIds(keys);
       libraryCache.drop(keys);
       persistLibraryCache();
+      resetPresenceFactsCache();
     },
   });
   send(res, result.ok ? 200 : 400, result);
@@ -2055,7 +2063,11 @@ async function handleReady(req, res) {
     jellyfin: slice.jellyfin,
     update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
     titles: Array.isArray(library?.titles) ? library.titles : [],
-    requests: Array.isArray(requests?.requests) ? requests.requests : [],
+    requests: filterRemovedRequests(
+      Array.isArray(requests?.requests) ? requests.requests : [],
+      readRemovedTitleIds(),
+    ),
+    removedIds: readRemovedTitleIds(),
     pipeline: requests?.pipeline || null,
     timings: { ...timings, total: Date.now() - started },
   });

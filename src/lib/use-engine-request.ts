@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { applyTitleRequestPoll } from "@/lib/sync-requests";
+import { applyTitleRequestPoll, titleMatchesRemoved } from "@/lib/sync-requests";
 import { useReelStore } from "@/lib/store";
 
 /** Poll GET /api/request; sync status + progress into the matching title+season row. */
@@ -9,8 +9,17 @@ export function useEngineRequest(id: string, season?: number) {
 
   useEffect(() => {
     void fetch("/api/library", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[] }[] }>)
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[] }[]; removedIds?: string[] }>)
       .then((j) => {
+        const removed = [
+          ...(useReelStore.getState().removedLibraryIds || []),
+          ...(Array.isArray(j.removedIds) ? j.removedIds : []),
+        ];
+        if (titleMatchesRemoved({ id, titleId: id }, removed)) {
+          setInJellyfin(false);
+          setEngineStatus(null);
+          return;
+        }
         const hit = (j.titles || []).some((t) => {
           const ids = [t.id, ...(t.ids || [])];
           if (ids.includes(id)) return true;
@@ -19,13 +28,16 @@ export function useEngineRequest(id: string, season?: number) {
         });
         setInJellyfin(hit);
         if (!hit || id.startsWith("tmdb-tv-")) return;
-        useReelStore.setState((s) => ({
-          requests: s.requests.map((x) =>
-            x.titleId === id && x.status !== "available" && x.season == null
-              ? { ...x, status: "available", progress: 100, updatedAt: Date.now() }
-              : x,
-          ),
-        }));
+        useReelStore.setState((s) => {
+          if (titleMatchesRemoved({ id, titleId: id }, s.removedLibraryIds)) return s;
+          return {
+            requests: s.requests.map((x) =>
+              x.titleId === id && x.status !== "available" && x.season == null
+                ? { ...x, status: "available", progress: 100, updatedAt: Date.now() }
+                : x,
+            ),
+          };
+        });
       })
       .catch(() => {});
     const q = new URLSearchParams({ id });
@@ -33,9 +45,13 @@ export function useEngineRequest(id: string, season?: number) {
     let stop = false;
     const poll = () => {
       void fetch(`/api/request?${q}`, { cache: "no-store" })
-        .then((r) => r.json() as Promise<{ status?: string; progress?: number; percent?: number; reason?: string }>)
+        .then((r) => r.json() as Promise<{ status?: string; progress?: number; percent?: number; reason?: string; removed?: boolean }>)
         .then((j) => {
           if (stop) return;
+          if (titleMatchesRemoved({ id, titleId: id }, useReelStore.getState().removedLibraryIds) || j.removed) {
+            setEngineStatus(null);
+            return;
+          }
           setEngineStatus(j.status || null);
           const apiProg =
             typeof j.progress === "number"
@@ -43,15 +59,18 @@ export function useEngineRequest(id: string, season?: number) {
               : typeof j.percent === "number"
                 ? j.percent
                 : undefined;
-          useReelStore.setState((s) => ({
-            requests: applyTitleRequestPoll(s.requests, {
-              titleId: id,
-              season,
-              status: j.status,
-              progress: apiProg,
-              reason: j.reason,
-            }),
-          }));
+          useReelStore.setState((s) => {
+            if (titleMatchesRemoved({ id, titleId: id }, s.removedLibraryIds)) return s;
+            return {
+              requests: applyTitleRequestPoll(s.requests, {
+                titleId: id,
+                season,
+                status: j.status,
+                progress: apiProg,
+                reason: j.reason,
+              }),
+            };
+          });
         })
         .catch(() => {});
     };
