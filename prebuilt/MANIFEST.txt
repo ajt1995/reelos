@@ -1,5 +1,5 @@
-version=1.2.50.38
+version=1.2.50.39
 mode=nitro+api
-css=/assets/styles-B9wTVPSN.css
-js=/assets/index-BAEI8zu3.js
+css=/assets/styles-C0rJ8hlz.css
+js=/assets/index-CdVejjtd.js
 note=hashed client; posters stay in public/; 4GB box never compiles
