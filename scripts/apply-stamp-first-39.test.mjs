@@ -57,6 +57,25 @@ test("recover timer job runs capped catch-up import; first provision still walks
   assert.match(read("scripts/reelos-request-status.mjs"), /import", "--catch-up"/);
 });
 
+test("catch-up escapes selfheal TimeoutStartSec cgroup and flock", () => {
+  const heal = read("daemon/reelos-selfheal.sh");
+  const unit = read("install/systemd/reelos-selfheal.service");
+  assert.equal(heal, read("install/bin/reelos-selfheal.sh"));
+  assert.equal(unit, read("firstboot/reelos-selfheal.service"));
+  assert.match(unit, /TimeoutStartSec=90/);
+  assert.match(unit, /KillMode=process/);
+  assert.match(heal, /systemd-run/);
+  assert.match(heal, /reelos-library-catchup/);
+  assert.match(heal, /9>&-/);
+  const catchup = heal.indexOf("import --catch-up");
+  const idle = heal.indexOf('log "skip engines — idle load');
+  const dState = heal.indexOf('log "skip engines — ffprobe D-state');
+  assert.ok(catchup >= 0 && catchup < idle, "catch-up must start before idle skip");
+  assert.ok(catchup < dState, "catch-up must start before ffprobe D-state skip");
+  assert.doesNotMatch(heal, /umount -l \/media/);
+  assert.doesNotMatch(heal, /ota\.lock/);
+});
+
 test("catch-up import skips FUSE dfs, all-show RescanSeries, hybrid 1080, and duplicate paths", () => {
   const one = read("daemon/wire-engines.parts/01.part");
   const eight = read("daemon/wire-engines.parts/08.part");
