@@ -13,6 +13,9 @@ import {
   honestifyRequests,
   assembleRequestPayload,
   attachRequestTitles,
+  attachSeerrDetailTitles,
+  clearRequestTitleCache,
+  needsRequestTitle,
   ERA_QA_TITLES,
   lookupFailureMessage,
   mapSeerrDiscoverResults,
@@ -898,6 +901,8 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
   const requestsView = readFileSync(join(root, "src/components/requests-view.tsx"), "utf8");
   assert.match(progress, /assembleRequestPayload/);
+  assert.match(progress, /attachSeerrDetailTitles/);
+  assert.match(lookup, /attachSeerrDetailTitles/);
   assert.match(progress, /loadPresenceFacts/);
   assert.match(progress, /recover/);
   assert.match(progress, /listRecoverTargets/);
@@ -1144,3 +1149,39 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(caddy, /handle \/seerr\*/);
   assert.match(caddy, /127\.0\.0\.1:5055/);
 });
+
+test("needsRequestTitle treats tmdb-2059 as unnamed", () => {
+  assert.equal(needsRequestTitle({ titleId: "tmdb-2059" }), true);
+  assert.equal(needsRequestTitle({ titleId: "tmdb-2059", title: "tmdb-2059" }), true);
+  assert.equal(needsRequestTitle({ titleId: "tmdb-2059", title: "National Treasure" }), false);
+});
+
+test("attachSeerrDetailTitles names National Treasure from Seerr movie detail", async () => {
+  clearRequestTitleCache();
+  const calls = [];
+  const seerrFetch = async (path) => {
+    calls.push(path);
+    return {
+      ok: true,
+      json: {
+        id: 2059,
+        title: "National Treasure",
+        releaseDate: "2004-11-19",
+        posterPath: "/nt.jpg",
+        mediaType: "movie",
+      },
+    };
+  };
+  const { rows, titles } = await attachSeerrDetailTitles(
+    [{ id: "seerr-9", titleId: "tmdb-2059", status: "downloading", progress: 0 }],
+    { seerrFetch, key: "x", now: 1_000 },
+  );
+  assert.equal(rows[0].title, "National Treasure");
+  assert.equal(titles[0].title, "National Treasure");
+  assert.equal(titles[0].id, "tmdb-2059");
+  assert.equal(calls[0], "/api/v1/movie/2059");
+  const again = await attachSeerrDetailTitles(rows, { seerrFetch, key: "x", now: 2_000 });
+  assert.equal(calls.length, 1);
+  assert.equal(again.rows[0].title, "National Treasure");
+});
+

@@ -5,7 +5,6 @@ import {
   Compass,
   Home,
   Library,
-  Search,
   Settings,
 } from "lucide-react";
 import { ApplyingBar } from "@/components/applying-bar";
@@ -101,20 +100,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
           >
             Watch
           </a>
-          <Link
-            to="/discover"
-            className="flex size-11 items-center justify-center rounded-xl text-muted"
-            aria-label="Search"
-          >
-            <Search className="size-5" />
-          </Link>
-          <Link
-            to="/settings"
-            className="flex size-11 items-center justify-center rounded-xl text-muted"
-            aria-label="Settings"
-          >
-            <Settings className="size-5" />
-          </Link>
         </header>
         <main className="min-w-0 flex-1">{children}</main>
       </div>

@@ -8,6 +8,7 @@ import {
   honestifyRequests,
   pickSeerrRequestForTitle,
   assembleRequestPayload,
+  attachSeerrDetailTitles,
   seerrMediaGhostRows,
 } from "./reelos-seerr.mjs";
 import {
@@ -118,9 +119,10 @@ export async function collectRequestList() {
     }
     const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
+    const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
     return {
-      requests: assembled.requests,
-      titles: [],
+      requests: filled.rows,
+      titles: filled.titles,
       engine: "seerr",
       pipeline: assembled.pipeline,
     };

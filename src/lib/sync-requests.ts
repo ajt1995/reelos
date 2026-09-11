@@ -2,6 +2,23 @@ import type { Kind, MediaRequest, RequestStatus, Title } from "./types.ts";
 
 const IN_FLIGHT = new Set<RequestStatus>(["downloading", "waiting"]);
 
+/** Fresh local POST that Seerr has not echoed yet. Older unmatched inflight is stale persist. */
+export const OPTIMISTIC_LOCAL_MS = 90_000;
+
+/** Raw TMDB ids are not a title — National Treasure must not paint as tmdb-2059. */
+export function isGhostRequestLabel(title?: string, titleId?: string): boolean {
+  const name = String(title || "").trim();
+  const id = String(titleId || "").trim();
+  if (!name) return true;
+  if (id && name === id) return true;
+  return /^tmdb(-tv)?-\d+$/i.test(name);
+}
+
+function isOptimisticLocal(row: Pick<MediaRequest, "createdAt" | "updatedAt">, now = Date.now()): boolean {
+  const at = Math.max(row.updatedAt || 0, row.createdAt || 0);
+  return now - at < OPTIMISTIC_LOCAL_MS;
+}
+
 /** Searching / grabbing / linked waiting for import. Available, failed, and engine-downloaded are not. */
 export function isInFlightRequest(r: { status: string; engine?: string }): boolean {
   if (r.engine === "downloaded") return false;
@@ -105,6 +122,18 @@ export function mergeServerRequests(local: MediaRequest[], server: MediaRequest[
         out.push(preferServerRow(loc, available));
         continue;
       }
+      // Seerr listed another season for this title — keep this season row.
+      if (server.some((s) => s.titleId === loc.titleId)) {
+        out.push(loc);
+        continue;
+      }
+      // Non-empty server list is source of truth. Drop phone persist Seerr dropped,
+      // except a just-tapped Request that has not echoed yet.
+      if (isOptimisticLocal(loc)) {
+        out.push(loc);
+        continue;
+      }
+      continue;
     }
 
     out.push(loc);
@@ -125,6 +154,32 @@ export function mergeServerRequests(local: MediaRequest[], server: MediaRequest[
 }
 
 const STATUS_RANK: Record<string, number> = { available: 4, downloading: 3, waiting: 2, failed: 1 };
+
+/** Home Your requests: one card per title, not every season row (two Expanse Waitings). */
+export function collapseHomeRequestCards(rows: MediaRequest[]): MediaRequest[] {
+  const groups = new Map<string, MediaRequest[]>();
+  for (const row of rows) {
+    if (!row?.titleId) continue;
+    const list = groups.get(row.titleId) || [];
+    list.push(row);
+    groups.set(row.titleId, list);
+  }
+  const out: MediaRequest[] = [];
+  for (const list of groups.values()) {
+    out.push(
+      list.reduce((best, row) => {
+        const br = STATUS_RANK[best.status] || 0;
+        const rr = STATUS_RANK[row.status] || 0;
+        if (rr !== br) return rr > br ? row : best;
+        if ((row.progress || 0) !== (best.progress || 0)) {
+          return (row.progress || 0) > (best.progress || 0) ? row : best;
+        }
+        return (row.updatedAt || 0) >= (best.updatedAt || 0) ? row : best;
+      }),
+    );
+  }
+  return out;
+}
 
 function markAvailable(row: MediaRequest): MediaRequest {
   return { ...row, status: "available", progress: 100, reason: undefined };

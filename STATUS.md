@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.42**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.43**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,18 +21,22 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.42 is the ship.*** 41 measured the HP but did not make the library faster: catch-up was masked, and Sonarr still spawned ffprobe on FUSE dumps with `enableMediaInfo` already false. Extra `fuse.decypharr` rows were rshared `/mnt` self-binds of **one** device. 42 stubs *arr/Jellyfin ffprobe, peels extra `/mnt` binds without lazy-umounting live FUSE or `/media`, and runs catch-up skip-existing (splash idle unless actually importing). Hardware profile from 41 stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. **One house Apply of 42 after merge** so the stub survives compose recreate. Never twice.
+***1.2.50.43 is the ship.*** Home honesty on gold chrome: ghost `tmdb-2059` is National Treasure with a poster, stale phone persist is dropped so transferring matches live Seerr in-flight, one Expanse card, one Watch (header, not a second “Watch in this browser”). 42 ffprobe stub / one-FUSE stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. **One house Apply of 43 after merge.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.42`
+- **VERSION / channel:** `1.2.50.43`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.41 ([#124](https://github.com/ajt1995/reelos/pull/124)); 1.2.50.40 Apply/library split ([#122](https://github.com/ajt1995/reelos/pull/122)) stays. 1.2.50.38 wizard honesty + DirectPlay and 1.2.50.37 4GB detect stay.
-- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; 41 is installed and live-patched (one FUSE, ffprobe stubbed, catch-up unmasked); firstboot disabled
+- **Base:** `main` at 1.2.50.42 ([#125](https://github.com/ajt1995/reelos/pull/125)); Home honesty [#127](https://github.com/ajt1995/reelos/pull/127). 1.2.50.41 hardware profile, 1.2.50.40 Apply/library split, 1.2.50.38 wizard honesty + DirectPlay, and 1.2.50.37 4GB detect stay.
+- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; 42 is installed (one FUSE, ffprobe stubbed); firstboot disabled
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
+
+### Home honesty (ghost tmdb-2059, stale transferring, one Expanse, one Watch)
+
+Phone persist kept 24 waiting rows after Seerr had one grabbing movie (`tmdb-2059` / National Treasure) and The Expanse available. Ghost ids painted blank posters; two Expanse seasons looked like duplicate Waiting cards; header Watch sat next to Watch in this browser. GET `/api/request` fills inflight titles from Seerr detail. Client merge drops unmatched stale inflight. Home collapses to one card per title. Lookup-by-id names leftovers. Transferring chip matches live Seerr in-flight. Complements #127.
 
 ### Stub dump ffprobe + one FUSE (the library actually progress)
 
@@ -48,7 +52,7 @@ Check → Apply stamps after hops and the door. Indexers, dump import, heal, hyb
 
 ### Beta sidecar (Check+beta fetches 2.0.0)
 
-Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.42` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 42 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
+Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.43` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 43 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
 
 ### Stamp first, library catch-up in the background
 
@@ -89,7 +93,7 @@ Seven-step wizard is unchanged. Default source is TorBox. Continue on the source
 ## Proof
 
 ```
-python3 scripts/check-ota.py .   # ok version=1.2.50.42
+python3 scripts/check-ota.py .   # ok version=1.2.50.43
 node --test scripts/stack-smoke.test.mjs scripts/apply-stamp-first-39.test.mjs scripts/apply-library-split-40.test.mjs scripts/scale-hardware-41.test.mjs scripts/fuse-no-ffprobe-42.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs scripts/sonarr-manual-import.test.mjs scripts/relink-dumps.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box
@@ -99,18 +103,18 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House is **1.2.50.41** live-patched (one FUSE, ffprobe stub, catch-up unmasked). **One Apply of 42 after merge** so the stub/unstack survive compose recreate. Never twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Do not `docker restart reelos-sonarr-1` while ffprobe is D-state. Jellyfin images off. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
+House is **1.2.50.42**. **One Apply of 43 after merge.** Never twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Do not `docker restart reelos-sonarr-1` while ffprobe is D-state. Jellyfin images off. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
 
 ## Do not
 
 - Merge #52 / #70 / #59 onto the 1.2.50.x repair line
 - Merge [#119](https://github.com/ajt1995/reelos/pull/119) Arena+Books onto main (SHA-drift onto `main.tar.gz`)
 - Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
-- Implement Arena UI on this 1.2.50.42 tarball
+- Implement Arena UI on this 1.2.50.43 tarball
 - Glue Books/Kavita to Tron chrome or burn it as 1.2.51
 - Ship Arena CSS onto `main.tar.gz`
 - Tap Apply 39 again
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
-- Apply 42 twice, or Apply while ffprobe is D-state
+- Apply 43 twice, or Apply while ffprobe is D-state
 - Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`

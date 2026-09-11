@@ -864,11 +864,72 @@ export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
   });
 }
 
+/** True when the row would paint as tmdb-2059 instead of National Treasure. */
+export function needsRequestTitle(row) {
+  const name = String(row?.title || "").trim();
+  const id = String(row?.titleId || "").trim();
+  if (!name) return true;
+  if (id && name === id) return true;
+  return /^tmdb(-tv)?-\d+$/i.test(name);
+}
+
+const requestTitleCache = new Map();
+
+export function clearRequestTitleCache() {
+  requestTitleCache.clear();
+}
+
+/** Name inflight rows from Seerr movie/TV detail. Cached so Home polls do not fan out. */
+export async function attachSeerrDetailTitles(rows, { seerrFetch, key, now = Date.now(), ttlMs = 10 * 60 * 1000, limit = 8 } = {}) {
+  const out = (rows || []).map((row) => ({ ...row }));
+  const titles = [];
+  const jobs = [];
+  const seen = new Set();
+  for (const row of out) {
+    if (row.status !== "waiting" && row.status !== "downloading") continue;
+    if (!needsRequestTitle(row)) continue;
+    const cached = requestTitleCache.get(row.titleId);
+    if (cached && now - cached.at < ttlMs) {
+      row.title = cached.title;
+      if (cached.hit) titles.push(cached.hit);
+      continue;
+    }
+    if (!row.titleId || seen.has(row.titleId) || jobs.length >= limit) continue;
+    seen.add(row.titleId);
+    jobs.push(row);
+  }
+  if (typeof seerrFetch === "function") {
+    await Promise.all(
+      jobs.map(async (row) => {
+        const parsed = parseTitleId(row.titleId);
+        if (!parsed?.tmdb) return;
+        const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+        try {
+          const r = await seerrFetch(path, { key, ms: 4000 });
+          const hit = seerrSearchHit({ ...(r.json || {}), id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+          if (!hit?.title) return;
+          requestTitleCache.set(row.titleId, { at: now, title: hit.title, hit });
+        } catch {
+          /* next poll */
+        }
+      }),
+    );
+  }
+  for (const row of out) {
+    const cached = requestTitleCache.get(row.titleId);
+    if (cached?.title && needsRequestTitle(row)) {
+      row.title = cached.title;
+      if (cached.hit && !titles.some((t) => t.id === cached.hit.id)) titles.push(cached.hit);
+    }
+  }
+  return { rows: out, titles };
+}
+
 /** Requests rows often have no Seerr title. Name them from *arr or a title map. */
 export function attachRequestTitles(rows, facts = {}) {
   const extra = facts.titleById;
   return (rows || []).map((row) => {
-    if (!row || row.title) return row;
+    if (!row || !needsRequestTitle(row)) return row;
     const fromMap =
       extra && typeof extra.get === "function"
         ? extra.get(row.titleId)
@@ -1051,9 +1112,12 @@ export function seerrRequestRow(r, notes) {
         : engine === "failed"
           ? "failed"
           : "waiting";
+  const info = media.mediaInfo || r?.mediaInfo || {};
+  const title = String(info.title || info.originalTitle || r?.title || "").trim() || undefined;
   const row = {
     id: `seerr-${r?.id}`,
     titleId,
+    title,
     status,
     progress: status === "available" ? 100 : 0,
     season,

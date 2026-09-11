@@ -1,0 +1,1 @@
+import{U as e}from"./store-PXFz_WAY.js";import{t}from"./gate-C7lfSy9m.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};

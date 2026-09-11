@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/router-DstgBgqY.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/router-BQRDW39d.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -282,6 +282,19 @@ function mergeShelf(prev, next, limited) {
 	return [...next, ...prev.filter((t) => !have.has(t.id))];
 }
 var IN_FLIGHT = /* @__PURE__ */ new Set(["downloading", "waiting"]);
+/** Fresh local POST that Seerr has not echoed yet. Older unmatched inflight is stale persist. */
+var OPTIMISTIC_LOCAL_MS = 9e4;
+/** Raw TMDB ids are not a title — National Treasure must not paint as tmdb-2059. */
+function isGhostRequestLabel(title, titleId) {
+	const name = String(title || "").trim();
+	const id = String(titleId || "").trim();
+	if (!name) return true;
+	if (id && name === id) return true;
+	return /^tmdb(-tv)?-\d+$/i.test(name);
+}
+function isOptimisticLocal(row, now = Date.now()) {
+	return now - Math.max(row.updatedAt || 0, row.createdAt || 0) < OPTIMISTIC_LOCAL_MS;
+}
 /** Searching / grabbing / linked waiting for import. Available, failed, and engine-downloaded are not. */
 function isInFlightRequest(r) {
 	if (r.engine === "downloaded") return false;
@@ -352,6 +365,15 @@ function mergeServerRequests(local, server) {
 				out.push(preferServerRow(loc, available));
 				continue;
 			}
+			if (server.some((s) => s.titleId === loc.titleId)) {
+				out.push(loc);
+				continue;
+			}
+			if (isOptimisticLocal(loc)) {
+				out.push(loc);
+				continue;
+			}
+			continue;
 		}
 		out.push(loc);
 	}
@@ -372,6 +394,25 @@ var STATUS_RANK = {
 	waiting: 2,
 	failed: 1
 };
+/** Home Your requests: one card per title, not every season row (two Expanse Waitings). */
+function collapseHomeRequestCards(rows) {
+	const groups = /* @__PURE__ */ new Map();
+	for (const row of rows) {
+		if (!row?.titleId) continue;
+		const list = groups.get(row.titleId) || [];
+		list.push(row);
+		groups.set(row.titleId, list);
+	}
+	const out = [];
+	for (const list of groups.values()) out.push(list.reduce((best, row) => {
+		const br = STATUS_RANK[best.status] || 0;
+		const rr = STATUS_RANK[row.status] || 0;
+		if (rr !== br) return rr > br ? row : best;
+		if ((row.progress || 0) !== (best.progress || 0)) return (row.progress || 0) > (best.progress || 0) ? row : best;
+		return (row.updatedAt || 0) >= (best.updatedAt || 0) ? row : best;
+	}));
+	return out;
+}
 function markAvailable(row) {
 	return {
 		...row,
@@ -542,7 +583,7 @@ var defaultAnswers = {
 	tunnelToken: ""
 };
 var CHANNEL = "stable";
-var SHIPPED_VERSION = "1.2.50.42";
+var SHIPPED_VERSION = "1.2.50.43";
 function idleBootSteps() {
 	return {
 		local: "pending",
@@ -552,6 +593,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
+	"1.2.50.43: Home names the ghost tmdb-2059 card (National Treasure) with a poster. Stale phone persist is dropped so transferring matches live Seerr in-flight, not 24 Waitings. One Expanse card, not two. Header Watch stays; Watch in this browser is gone. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.42: enableMediaInfo was already false; Sonarr still spawned ffprobe on FUSE dumps. no-ffprobe stubs *arr/Jellyfin ffprobe (rename busy ELF). Extra fuse.decypharr rows were rshared /mnt self-binds of one device — peel extras without lazy-umounting the live FUSE or /media. Catch-up imports skip-existing dumps; D-state concurrency 0; splash idle unless actually importing. Complements #124. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.41: Measure CPU (nproc), RAM (MemTotal + DirectMap vs cgroup so hidden DIMMs are not treated as 4GB), and disk (SSD vs HDD). HP 15-bs0xx is a 4GB DIMM (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi (catch-up MemoryMax 768M). CPU/SSD can raise import caps; HDD stays throttled. Catch-up does not wedge FUSE: no-ffprobe on dumps, D-state concurrency 0, one fuse.decypharr. Selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. Complements #122. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.40: Check/Apply only swaps the product (tarball, restart, splash, stamp). Library catch-up is its own worker with its own phone clock — folder N, skips, timeouts — not buried in wire.log while Apply looks frozen. Indexers/import/heal never block stamp. Catch-up is a persistent oneshot (not killed when selfheal exits); backs off when ffprobe is D-state; does not stack another FUSE. Splash-locks Home only while dumps still need import. Settings Beta ON then Check fetches 2.0.0 Arena+Books as a separate tarball (not this stamp); OFF stays 1.2.50.x. 4GB prebuilt UI. Complements #120. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -1609,27 +1651,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-Bap-Luhs.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-Ka0nPLb-.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BmbWruEG.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-CTj4pVvK.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-DESqByI9.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-BHc96-G3.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-BSSWm7TV.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-GHBldSwB.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-D-UMjvMu.mjs");
+var $$splitComponentImporter$6 = () => import("./library-CSPPJ9WO.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-DOvmakdc.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-DZOj5Jl0.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-CGJM0Xa6.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-CAIVf_w6.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-BZx0ZBX9.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-DJ9I09Np.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-Bh_pKGbY.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-CK6cqo47.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-iTOwOyu9.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-BdX9pJhq.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-11awAuLr.mjs");
+var $$splitComponentImporter = () => import("./title._id-C0MsbXtY.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
@@ -1708,4 +1750,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { overlayLibraryPresence as _, CHANNEL as a, titleForRequest as b, accessLabel as c, sourceLabel as d, storageLabel as f, mergeServerRequests as g, inFlightRequests as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, requestShowsRetry as v, titleMatchesId as x, showRequestQueueControls as y };
+export { titleMatchesId as C, titleForRequest as S, isGhostRequestLabel as _, CHANNEL as a, requestShowsRetry as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as x, overlayLibraryPresence as y };

@@ -52,14 +52,14 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.42)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.43)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.42");
-  assert.equal(chan.version, "1.2.50.42");
+  assert.equal(ver, "1.2.50.43");
+  assert.equal(chan.version, "1.2.50.43");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
   assert.equal(beta.version, "2.0.0");
@@ -67,10 +67,11 @@ test("stack: VERSION / channel / stamps agree (1.2.50.42)", () => {
   assert.match(beta.tarball, /beta-arena-books-5ba6/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
   assert.match(beta.notes[0], /separate beta tarball|Not inside main/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.42"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.42"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.42"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.42"/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.43"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.43"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.43"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.43"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.43/);
   assert.match(read("STATUS.md"), /1\.2\.50\.42/);
   assert.match(read("STATUS.md"), /1\.2\.50\.41/);
   assert.match(read("STATUS.md"), /1\.2\.50\.40/);
@@ -88,14 +89,15 @@ test("stack: VERSION / channel / stamps agree (1.2.50.42)", () => {
   assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
-  assert.match(chan.notes[0], /ffprobe|stub|FUSE dumps|concurrency/);
-  assert.match(chan.notes[1], /hardware|MemoryMax|concurrency/);
-  assert.match(chan.notes[2], /own phone clock|Library catching up|product/);
-  assert.match(chan.notes[3], /library catch-up|import after hops/);
-  assert.match(chan.notes[4], /TorBox/);
-  assert.match(chan.notes[4], /DirectPlay/);
-  assert.match(chan.notes[4], /prebuilt hashed UI/);
-  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(chan.notes[0], /tmdb-2059|National Treasure|transferring|Expanse/);
+  assert.match(chan.notes[1], /ffprobe|stub|FUSE dumps|concurrency/);
+  assert.match(chan.notes[2], /hardware|MemoryMax|concurrency/);
+  assert.match(chan.notes[3], /own phone clock|Library catching up|product/);
+  assert.match(chan.notes[4], /library catch-up|import after hops/);
+  assert.match(chan.notes[5], /TorBox/);
+  assert.match(chan.notes[5], /DirectPlay/);
+  assert.match(chan.notes[5], /prebuilt hashed UI/);
+  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: catalog \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
 });
