@@ -7,6 +7,7 @@ so The Walking Dead S01 stayed unmatched. TV retry never posted ManualImport.
 from __future__ import annotations
 
 import json
+import subprocess
 import re
 import time
 import urllib.parse
@@ -554,7 +555,16 @@ def catchup_chunk_size(*, catch_up: bool, d_state: int = 0, profile: dict | None
 def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0, timeouts: int = 0, status: str = "running") -> str:
     if status in ("backoff", "idle"):
         return ""
+    if status == "stopped":
+        status = "done"
     bits = []
+    if status == "done":
+        if skipped:
+            bits.append(f"{skipped} skipped")
+        if timeouts:
+            bits.append(f"{timeouts} timeouts")
+        detail = ", ".join(bits)
+        return "Library catch-up done" + (f" — {detail}" if detail else "")
     if total:
         bits.append(f"folder {folder} of {total}")
     if skipped:
@@ -562,11 +572,39 @@ def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0,
     if timeouts:
         bits.append(f"{timeouts} timeouts")
     detail = ", ".join(bits)
-    if status == "done":
-        return f"Library catch-up done" + (f" — {detail}" if detail else "")
     if detail:
         return f"Library catching up — {detail}"
     return "Library catching up"
+
+
+def catchup_is_live() -> bool | None:
+    """None on tests (temp progress path). False when the oneshot/flock is idle."""
+    if str(PROGRESS_PATH) != "/var/lib/reelos/library-progress.json":
+        return None
+    try:
+        r = subprocess.run(
+            ["systemctl", "is-active", "reelos-library-catchup.service"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        if (r.stdout or "").strip() in ("active", "activating"):
+            return True
+    except OSError:
+        pass
+    try:
+        r = subprocess.run(
+            ["flock", "-n", "/var/lib/reelos/library-catchup.lock", "-c", "true"],
+            capture_output=True,
+            timeout=2,
+            check=False,
+        )
+        if r.returncode is None:
+            return False
+        return r.returncode != 0
+    except OSError:
+        return False
 
 
 def write_library_progress(**fields):
@@ -584,24 +622,33 @@ def write_library_progress(**fields):
         status = "idle"
         prev["status"] = "idle"
         prev["needsImport"] = False
+    if status in ("done", "stopped", "idle"):
+        prev["needsImport"] = False
     needs = bool(prev.get("needsImport"))
-    prev["splashLock"] = status == "running" and needs
+    live = catchup_is_live()
+    prev["splashLock"] = status == "running" and needs and live is not False
+    skipped = int(prev.get("skipped") or 0)
+    timeouts = int(prev.get("timeouts") or 0)
+    folder = int(prev.get("folder") or 0)
+    total = int(prev.get("total") or 0)
+    skip_only_done = status == "running" and not needs and skipped
+    msg_status = "done" if status in ("done", "stopped") or skip_only_done else status
+    if skip_only_done:
+        prev["status"] = "done"
+        status = "done"
     if "message" in fields:
         prev["message"] = fields.get("message") or format_catchup_message(
-            folder=int(prev.get("folder") or 0),
-            total=int(prev.get("total") or 0),
-            skipped=int(prev.get("skipped") or 0),
-            timeouts=int(prev.get("timeouts") or 0),
-            status=status,
+            folder=folder, total=total, skipped=skipped, timeouts=timeouts, status=msg_status
         )
     else:
         prev["message"] = format_catchup_message(
-        folder=int(prev.get("folder") or 0),
-        total=int(prev.get("total") or 0),
-        skipped=int(prev.get("skipped") or 0),
-        timeouts=int(prev.get("timeouts") or 0),
-        status=status,
-    )
+            folder=folder, total=total, skipped=skipped, timeouts=timeouts, status=msg_status
+        )
+    catching = str(prev.get("message") or "").startswith("Library catching up") or "backing off" in str(prev.get("message") or "")
+    if not prev["splashLock"] and catching and (status in ("done", "stopped", "idle") or skip_only_done):
+        prev["message"] = format_catchup_message(
+            folder=0, total=0, skipped=skipped, timeouts=timeouts, status="done" if status != "idle" else "idle"
+        )
     prev["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -785,7 +832,16 @@ def _list_manualimport(
             if is_foreign_media_path(row["path"]):
                 continue
             by_path[row["path"]] = row
-    return list(by_path.values())
+    rows_out = list(by_path.values())
+    if catch_up:
+        write_library_progress(
+            status="done" if not rows_out else "running",
+            folder=len(scan),
+            total=len(scan),
+            timeouts=timeouts,
+            needsImport=bool(rows_out),
+        )
+    return rows_out
 
 
 def _queue_manualimport(sk: str, files: list[dict], *, catch_up: bool = False) -> None:
@@ -1070,6 +1126,10 @@ def _self_test() -> int:
             back = format_catchup_message(status="backoff")
             self.assertEqual(back, "")
             self.assertEqual(format_catchup_message(status="idle"), "")
+            done = format_catchup_message(folder=1, total=1, skipped=14, timeouts=0, status="done")
+            self.assertEqual(done, "Library catch-up done — 14 skipped")
+            self.assertNotIn("catching up", done.lower())
+            self.assertEqual(format_catchup_message(skipped=14, status="stopped"), "Library catch-up done — 14 skipped")
 
         def test_splash_lock_only_when_running_and_needs_import(self):
             import tempfile
@@ -1091,6 +1151,22 @@ def _self_test() -> int:
                 self.assertEqual(row.get("message") or "", "")
                 row = write_library_progress(status="done", needsImport=False)
                 self.assertEqual(row["splashLock"], False)
+                self.assertTrue(str(row.get("message") or "").startswith("Library catch-up done") or row.get("message") in ("", None))
+                row = write_library_progress(status="running", needsImport=False, skipped=14, total=1, folder=1)
+                self.assertEqual(row["splashLock"], False)
+                self.assertNotIn("catching up", str(row.get("message") or "").lower())
+                row = write_library_progress(status="stopped", needsImport=True, skipped=14)
+                self.assertEqual(row["splashLock"], False)
+                leftover = write_library_progress(
+                    status="running",
+                    needsImport=True,
+                    skipped=14,
+                    folder=1,
+                    total=1,
+                    message="Library catching up — folder 1 of 1, 14 skipped",
+                )
+                # tests use a temp path so live is None — running+needs still locks
+                self.assertEqual(leftover["splashLock"], True)
             finally:
                 PROGRESS_PATH, LIBRARY_LOG = old_p, old_l
                 td.cleanup()

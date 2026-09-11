@@ -22,6 +22,7 @@ import type {
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
+import { normalizeLibraryCatchup } from "./library-catchup";
 import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 export const defaultAnswers: WizardAnswers = {
@@ -60,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.43";
-export const SHIPPED_VERSION = "1.2.50.43";
+export const LATEST_VERSION = "1.2.50.44";
+export const SHIPPED_VERSION = "1.2.50.44";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -92,6 +93,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.44: Splash-lock Home only while library catch-up is actually running and dumps still need import. Status done / idle / stopped and skip-only (14 skipped) do not freeze the phone on catching up. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
   "1.2.50.43: Home names the ghost tmdb-2059 card (National Treasure) with a poster. Stale phone persist is dropped so transferring matches live Seerr in-flight, not 24 Waitings. One Expanse card, not two. Header Watch stays; Watch in this browser is gone. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.42: enableMediaInfo was already false; Sonarr still spawned ffprobe on FUSE dumps. no-ffprobe stubs *arr/Jellyfin ffprobe (rename busy ELF). Extra fuse.decypharr rows were rshared /mnt self-binds of one device — peel extras without lazy-umounting the live FUSE or /media. Catch-up imports skip-existing dumps; D-state concurrency 0; splash idle unless actually importing. Complements #124. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.41: Measure CPU (nproc), RAM (MemTotal + DirectMap vs cgroup so hidden DIMMs are not treated as 4GB), and disk (SSD vs HDD). HP 15-bs0xx is a 4GB DIMM (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi (catch-up MemoryMax 768M). CPU/SSD can raise import caps; HDD stays throttled. Catch-up does not wedge FUSE: no-ffprobe on dumps, D-state concurrency 0, one fuse.decypharr. Selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. Complements #122. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -528,16 +530,7 @@ export const useReelStore = create<ReelState>()(
         const lib = ready?.libraryCatchup || ready?.update?.library;
         if (lib && typeof lib === "object") {
           set({
-            libraryCatchup: {
-              status: (lib.status as LibraryCatchupState["status"]) || "idle",
-              message: String(lib.message || ""),
-              folder: Number(lib.folder || 0) || 0,
-              total: Number(lib.total || 0) || 0,
-              skipped: Number(lib.skipped || 0) || 0,
-              timeouts: Number(lib.timeouts || 0) || 0,
-              needsImport: Boolean(lib.needsImport),
-              splashLock: Boolean(lib.splashLock),
-            },
+            libraryCatchup: normalizeLibraryCatchup(lib),
           });
         }
         if (st) {
@@ -674,16 +667,7 @@ export const useReelStore = create<ReelState>()(
             const last = (st.log || "").trim().split("\n").pop() || "";
             if (st.library && typeof st.library === "object") {
               set({
-                libraryCatchup: {
-                  status: (st.library.status as LibraryCatchupState["status"]) || "idle",
-                  message: String(st.library.message || ""),
-                  folder: Number(st.library.folder || 0) || 0,
-                  total: Number(st.library.total || 0) || 0,
-                  skipped: Number(st.library.skipped || 0) || 0,
-                  timeouts: Number(st.library.timeouts || 0) || 0,
-                  needsImport: Boolean(st.library.needsImport),
-                  splashLock: Boolean(st.library.splashLock),
-                },
+                libraryCatchup: normalizeLibraryCatchup(st.library),
               });
             }
             if (st.running) {
@@ -810,16 +794,7 @@ export const useReelStore = create<ReelState>()(
                   const last = (st.log || "").trim().split("\n").pop() || "";
                   if (st.library && typeof st.library === "object") {
                     set({
-                      libraryCatchup: {
-                        status: (st.library.status as LibraryCatchupState["status"]) || "idle",
-                        message: String(st.library.message || ""),
-                        folder: Number(st.library.folder || 0) || 0,
-                        total: Number(st.library.total || 0) || 0,
-                        skipped: Number(st.library.skipped || 0) || 0,
-                        timeouts: Number(st.library.timeouts || 0) || 0,
-                        needsImport: Boolean(st.library.needsImport),
-                        splashLock: Boolean(st.library.splashLock),
-                      },
+                      libraryCatchup: normalizeLibraryCatchup(st.library),
                     });
                   }
                   if (steps2[0]) {

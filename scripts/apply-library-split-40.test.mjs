@@ -64,6 +64,8 @@ test("phone has two clocks: Applying vs Library catching up", () => {
   assert.match(read("src/components/shell.tsx"), /LibraryCatchupBar/);
   assert.match(read("src/components/settings-updates.tsx"), /Library catching up/);
   assert.match(read("src/components/gate.tsx"), /splashLock/);
+  assert.match(read("src/components/gate.tsx"), /catchupLocksHome/);
+  assert.match(read("src/lib/library-catchup.ts"), /catchupLocksHome/);
   assert.match(read("src/components/splash.tsx"), /Library catching up/);
   const ota = read("scripts/reelos-ota-status.mjs");
   assert.match(ota, /applyProductRunning/);

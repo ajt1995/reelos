@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "channel": "beta",
   "notes": [
-    "2.0.0: Arena chrome and Books on a separate beta tarball (cursor/beta-arena-books-5ba6.tar.gz). Not inside main.tar.gz. Check with Beta on, then Apply. Leave Beta and Check to roll back to last stable 1.2.50.x (43). Stable Check stays 1.2.50.43 on main.tar.gz. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse)."
+    "2.0.0: Arena chrome and Books on a separate beta tarball (cursor/beta-arena-books-5ba6.tar.gz). Not inside main.tar.gz. Check with Beta on, then Apply. Leave Beta and Check to roll back to last stable 1.2.50.x (43). Stable Check stays 1.2.50.44 on main.tar.gz. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse)."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/cursor/beta-arena-books-5ba6.tar.gz"
 }
