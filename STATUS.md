@@ -26,7 +26,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 ## Stamp
 
 - **VERSION / channel:** `1.2.50.40`
-- **channel tarball:** `main.tar.gz`
+- **channel tarball:** `main.tar.gz` (keeps 1.2.50.37 prebuilt hashed UI, rebuilt for this stamp)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
 - **Base:** `main` at 1.2.50.39 ([#120](https://github.com/ajt1995/reelos/pull/120)); folds mailman sidecar from [#123](https://github.com/ajt1995/reelos/pull/123)
 - **House snapshot:** 1.2.50.39; firstboot disabled; `stack-installed` latched; Apply **40 once** (skip a second 39)
@@ -37,6 +37,10 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 ### Apply vs library catch-up (the law)
 
 Check → Apply stamps after hops and the door. Indexers, dump import, heal, hybrid 1080, ffprobe, and FUSE remount never block `ReelOS $REMOTE applied.` The phone has two clocks: **Applying 1.2.50.x** (ota.log / product swap) vs **Library catching up** (library-progress.json — folder N, skips, timeouts). Splash-lock Home only while dumps still need import. Catch-up is `reelos-library-catchup.service` (`TimeoutStartSec=infinity`, `KillMode=process`, `MemoryMax=768M`); systemd-run + nohup `9>&-` remain the fallback. Worker backs off when ffprobe D-state is high. Do not stack another `fuse.decypharr`.
+
+### Beta sidecar (Check+beta fetches 2.0.0)
+
+Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.40` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 40 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
 
 ### Stamp first, library catch-up in the background
 
@@ -87,19 +91,18 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House is still **1.2.50.38**. Apply is not in progress last we saw; ffprobe D-state storm was the blocker. **Do not Apply from the agent.** 40 is a strict superset of 39 — Check→Apply **1.2.50.40 once** when D-state cools. Do not tap 39 then 40. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
+House is **1.2.50.39**. Settings shows up to date until this 40 PR merges. **Do not Apply from the agent.** Check→Apply **1.2.50.40 once**. Do not tap 39 again. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books. Jellyfin image toggle off.
 
 ## Do not
 
 - Merge #52 / #70 / #59 onto the 1.2.50.x repair line
+- Merge [#119](https://github.com/ajt1995/reelos/pull/119) Arena+Books onto main (SHA-drift onto `main.tar.gz`)
 - Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
-- Implement Arena UI until the owner names that pass
+- Implement Arena UI on this 1.2.50.40 tarball
 - Glue Books/Kavita to Tron chrome or burn it as 1.2.51
-- Ship Arena chrome or Books in this stamp (different agent)
-- Interrupt `reelos-ota` / Apply 38 on the house
-- Tap Apply twice
+- Ship Arena CSS onto `main.tar.gz`
+- Tap Apply 39 again
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
 - Post house Apply from the agent
 - Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`
-- Apply 36 or 37 from the agent (38 supersedes)
