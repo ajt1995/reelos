@@ -1115,6 +1115,7 @@ test("AbortError / timeout is a retryable lookup error, not an empty shelf", () 
 test("Discover stays free of In progress; POST never sends seasons=all", () => {
   const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  const ping = readFileSync(join(root, "scripts/wizard-honesty.mjs"), "utf8");
   const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
   assert.doesNotMatch(discover, /In progress/i);
   assert.doesNotMatch(discover, /request=\{/);
@@ -1125,7 +1126,7 @@ test("Discover stays free of In progress; POST never sends seasons=all", () => {
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
   assert.match(lookup, /\/api\/discover/);
-  assert.match(lookup, /"User-Agent": "ReelOS"/);
+  assert.match(ping, /"User-Agent": "ReelOS"/);
   assert.match(lookup, /buildSeerrAddPayload/);
   assert.match(lookup, /lookupFailureMessage/);
   assert.match(lookup, /ms: 45000/);

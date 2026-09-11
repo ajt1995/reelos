@@ -9,5 +9,7 @@ export type PingResult =
 export const pingSource = createServerFn({ method: "POST" })
   .validator((data: { source: SourceId; key: string }) => data)
   .handler(async ({ data }): Promise<PingResult> => {
-    return pingWizardSource(data.source, data.key);
+    const result = await pingWizardSource(data.source, data.key);
+    if (result.ok) return { ok: true, message: result.message };
+    return { ok: false, error: result.error };
   });
