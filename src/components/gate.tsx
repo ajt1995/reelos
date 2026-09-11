@@ -4,6 +4,7 @@ import { Provision } from "@/components/provision";
 import { Shell } from "@/components/shell";
 import { Splash } from "@/components/splash";
 import { Wizard } from "@/components/wizard";
+import { catchupLocksHome } from "@/lib/library-catchup";
 import { useReelStore } from "@/lib/store";
 
 export function Gate({
@@ -29,8 +30,9 @@ export function Boot() {
   const hydrated = useReelStore((s) => s.hydrated);
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
-  const splashLock = useReelStore((s) => s.libraryCatchup.splashLock);
+  const catchup = useReelStore((s) => s.libraryCatchup);
   const applying = useReelStore((s) => s.update.status === "applying");
+  const splashLock = catchupLocksHome(catchup);
 
   if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;

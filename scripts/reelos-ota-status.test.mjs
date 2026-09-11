@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyIsRunning, applyProductRunning, applyTargetFromLog, lockIsHeld, parseLibraryProgress, productSwapDone } from "./reelos-ota-status.mjs";
+import { applyIsRunning, applyProductRunning, applyTargetFromLog, lockIsHeld, parseLibraryProgress, productSwapDone, shouldSplashLock } from "./reelos-ota-status.mjs";
 
 test("leftover ota.lock file is not running", () => {
   const dir = mkdtempSync(join(tmpdir(), "reelos-ota-"));
@@ -73,3 +73,37 @@ test("library progress splash-locks only when running and dumps need import", ()
   assert.equal(back.splashLock, false);
 });
 
+
+test("done / idle / stopped / skip-only do not splash-lock even if JSON still says catching up", () => {
+  const leftover = parseLibraryProgress(
+    JSON.stringify({
+      status: "running",
+      needsImport: true,
+      splashLock: true,
+      skipped: 14,
+      folder: 1,
+      total: 1,
+      timeouts: 0,
+      message: "Library catching up — folder 1 of 1, 14 skipped",
+    }),
+    { actuallyRunning: false },
+  );
+  assert.equal(leftover.splashLock, false);
+  assert.equal(leftover.status, "done");
+  assert.match(leftover.message, /catch-up done/);
+  assert.doesNotMatch(leftover.message, /catching up/i);
+
+  for (const status of ["done", "idle", "stopped"]) {
+    const row = parseLibraryProgress(
+      JSON.stringify({ status, needsImport: true, splashLock: true, message: "Library catching up — 14 skipped" }),
+    );
+    assert.equal(row.splashLock, false, status);
+    assert.doesNotMatch(row.message, /catching up/i, status);
+  }
+
+  const skipOnly = parseLibraryProgress(JSON.stringify({ status: "running", needsImport: false, skipped: 14, message: "Library catching up — 14 skipped" }));
+  assert.equal(skipOnly.splashLock, false);
+  assert.doesNotMatch(skipOnly.message, /catching up/i);
+  assert.equal(shouldSplashLock({ status: "running", needsImport: true }, { actuallyRunning: true }), true);
+  assert.equal(shouldSplashLock({ status: "running", needsImport: true }, { actuallyRunning: false }), false);
+});

@@ -163,10 +163,37 @@ def write_library_progress(**fields):
         status = "idle"
         prev["status"] = "idle"
         prev["needsImport"] = False
+    if status in ("done", "stopped", "idle"):
+        prev["needsImport"] = False
     needs = bool(prev.get("needsImport"))
-    prev["splashLock"] = status == "running" and needs
+    live = None
+    try:
+        from pathlib import Path as _P
+        import sonarr_manual_import as _smi
+    except Exception:
+        _smi = None
+    if _smi is not None:
+        try:
+            live = _smi.catchup_is_live()
+        except Exception:
+            live = None
+    prev["splashLock"] = status == "running" and needs and live is not False
     if "message" not in fields and not prev.get("message"):
-        prev["message"] = "Library catching up" if status == "running" else ""
+        prev["message"] = "Library catching up" if (status == "running" and needs) else ""
+    if status in ("done", "stopped") or (status == "running" and not needs):
+        msg = str(prev.get("message") or "")
+        if (not msg) or msg.startswith("Library catching up") or "backing off" in msg:
+            skipped = int(prev.get("skipped") or 0)
+            timeouts = int(prev.get("timeouts") or 0)
+            if status in ("done", "stopped") or skipped:
+                prev["message"] = (
+                    f"Library catch-up done — {skipped} skipped, {timeouts} timeouts"
+                    if skipped or timeouts
+                    else "Library catch-up done"
+                )
+                if status == "running" and skipped and not needs:
+                    prev["status"] = "done"
+                    status = "done"
     prev["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         STATE.mkdir(parents=True, exist_ok=True)
@@ -195,7 +222,7 @@ def ffprobe_d_state_count() -> int:
 def kick_imports(*, catch_up: bool = False) -> bool:
     ping_wait = 20 if catch_up else 90
     if catch_up:
-        write_library_progress(status="running", message="Library catching up")
+        write_library_progress(status="running", message="Library catching up", needsImport=False)
         if fuse_on_host():
             n = fuse_host_mount_count()
             log_wire(f"import catch-up — fuse listed ({n}), do not remount if listed")
@@ -269,7 +296,10 @@ def kick_imports(*, catch_up: bool = False) -> bool:
     # this Apply cannot re-ingest the duplicate dumps it just healed.
     # Never RescanSeries with no id (all shows) on Apply.
     log_wire("import collapse season-folder dumps before jellyfin refresh")
-    return heal_after_import(catch_up=catch_up)
+    ok = heal_after_import(catch_up=catch_up)
+    if catch_up:
+        write_library_progress(status="done", needsImport=False, splashLock=False)
+    return ok
 
 
 d

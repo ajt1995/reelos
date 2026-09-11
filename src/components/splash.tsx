@@ -1,5 +1,6 @@
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { catchupLocksHome } from "@/lib/library-catchup";
 import { useReelStore, type BootStepId, type BootStepStatus } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -22,7 +23,8 @@ export function Splash({ compact = false, warming = false }: { compact?: boolean
   const bootSteps = useReelStore((s) => s.bootSteps);
   const catchup = useReelStore((s) => s.libraryCatchup);
   const showWarming = warming || provisioned;
-  const libraryWorking = catchup.splashLock || bootSteps.library === "running";
+  const libraryLock = catchupLocksHome(catchup);
+  const libraryWorking = libraryLock || bootSteps.library === "running";
   const begin = () => {
     useReelStore.getState().setPhase("wizard");
     useReelStore.getState().setWizardStep(1);
@@ -63,7 +65,7 @@ export function Splash({ compact = false, warming = false }: { compact?: boolean
                   {step.label}
                 </span>
                 <span className="text-xs text-muted">
-                  {step.id === "library" && catchup.splashLock
+                  {step.id === "library" && libraryLock
                     ? catchup.message || "Library catching up"
                     : stepLabel(status)}
                 </span>

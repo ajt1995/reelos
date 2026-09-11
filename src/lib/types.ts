@@ -16,7 +16,7 @@ export type AdapterKind = "decypharr" | "torbox" | "qbittorrent";
 export type AdapterHealth = "offline" | "healthy" | "degraded";
 export type BuildStatus = "pending" | "running" | "done" | "error";
 export type UpdateStatus = "idle" | "checking" | "available" | "applying" | "current" | "error";
-export type LibraryCatchupStatus = "idle" | "running" | "backoff" | "done";
+export type LibraryCatchupStatus = "idle" | "running" | "backoff" | "done" | "stopped";
 
 export interface LibraryCatchupState {
   status: LibraryCatchupStatus;

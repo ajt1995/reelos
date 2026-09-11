@@ -1,5 +1,6 @@
 import { Check, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { catchupLocksHome } from "@/lib/library-catchup";
 import { CHANNEL, SHIPPED_VERSION, UPDATE_NOTES, useReelStore } from "@/lib/store";
 import { displayVersion, notesForVersion, stripVersionPrefix } from "@/lib/update-notes";
 import { Row, Toggle, persistUi } from "@/components/settings-ui";
@@ -38,7 +39,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
   const hint =
     update.status === "applying"
       ? `Applying ${update.target ?? ""}`
-      : libraryCatchup.status === "running" || libraryCatchup.status === "backoff"
+      : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
         ? libraryCatchup.message || "Library catching up"
         : update.status === "available"
         ? `${update.target} is ready`
@@ -63,11 +64,11 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       <p className="mt-2 text-sm text-muted">
         {update.status === "applying"
           ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
-          : libraryCatchup.status === "running" || libraryCatchup.status === "backoff"
+          : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
             ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply."
             : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
-      {libraryCatchup.status === "running" || libraryCatchup.status === "backoff" ? (
+      {catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? (
         <p className="mt-2 text-sm">
           {libraryCatchup.message || "Library catching up"}
           {libraryCatchup.folder && libraryCatchup.total
