@@ -688,8 +688,8 @@ print("ok")
   assert.match(hop, /ensure_hybrid_recycle_bin/);
   const one = read("daemon/wire-engines.parts/01.part");
   assert.ok(one.indexOf("relink_from_debrid") < one.lastIndexOf("heal_after_import"));
-  assert.ok(one.indexOf("DownloadedMoviesScan") < one.lastIndexOf("return heal_after_import()"));
-  assert.match(one, /return heal_after_import\(\)/);
+  assert.ok(one.indexOf("DownloadedMoviesScan") < one.lastIndexOf("return heal_after_import"));
+  assert.match(one, /return heal_after_import\(catch_up=catch_up\)/);
   const eight = read("daemon/wire-engines.parts/08.part");
   assert.match(eight, /jellyfin heal red — no token/);
   assert.match(eight, /delete_jellyfin_library/);

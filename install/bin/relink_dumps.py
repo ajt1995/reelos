@@ -70,8 +70,9 @@ def classify_pack(pack_name: str, wanted: dict | None) -> str | None:
 
 
 def dump_has_media(dump: Path) -> bool:
+    """True when a dump already has a playable file. One-level only — never FUSE dfs."""
     try:
-        for x in dump.rglob("*"):
+        for x in dump.iterdir():
             if x.is_file() or x.is_symlink():
                 return True
     except OSError:
@@ -497,6 +498,23 @@ def _self_test() -> int:
                 n = fill_dump_from_pack(dump, pack)
                 self.assertEqual(n, 1)
                 self.assertTrue((dump / pack.name).is_symlink())
+
+        def test_dump_has_media_does_not_walk_fuse_dfs(self):
+            src = Path(__file__).read_text()
+            fn = src[src.find("def dump_has_media") : src.find("def fill_dump_from_pack")]
+            self.assertIn("iterdir", fn)
+            self.assertNotIn("rglob", fn)
+            self.assertNotIn("os.walk", fn)
+            with tempfile.TemporaryDirectory() as tmp:
+                dump = Path(tmp) / "show"
+                dump.mkdir()
+                self.assertFalse(dump_has_media(dump))
+                nested = dump / "S01"
+                nested.mkdir()
+                (nested / "E02.mkv").write_bytes(b"x")
+                self.assertFalse(dump_has_media(dump))
+                (dump / "E01.mkv").write_bytes(b"x")
+                self.assertTrue(dump_has_media(dump))
 
         def test_decide_missing_empty_symlink_relinks_then_searches(self):
             self.assertEqual(

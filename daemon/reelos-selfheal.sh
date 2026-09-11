@@ -105,6 +105,15 @@ ensure_compose() {
 # not talking to TorBox
 
 ensure_door
+# Apply stamps first, then this recover job dumps/heals in the background.
+# Detach so TimeoutStartSec=90 cannot kill a capped import. Do not walk FUSE dfs.
+if [ -f "$STATE/library-catchup" ]; then
+  rm -f "$STATE/library-catchup"
+  log "library catch-up in background"
+  if [ -x "$ROOT/bin/wire-engines.py" ]; then
+    nohup python3 "$ROOT/bin/wire-engines.py" import --catch-up >>"$STATE/wire.log" 2>&1 &
+  fi
+fi
 d=$(ffprobe_d_state)
 if [ "${d:-0}" -gt 0 ]; then
   log "skip compose up — ffprobe D-state $d"

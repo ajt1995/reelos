@@ -22,9 +22,15 @@ test("install and daemon sonarr_manual_import stay twins", () => {
 
 test("kick_imports scans only category dumps, not /mnt/symlinks parent", () => {
   const part = readFileSync(join(root, "install/bin/wire-engines.parts/01.part"), "utf8");
-  assert.match(part, /\/mnt\/symlinks\/sonarr".*\/symlinks\/sonarr/s);
-  assert.match(part, /\/mnt\/symlinks\/radarr".*\/symlinks\/radarr/s);
+  const daemon = readFileSync(join(root, "daemon/wire-engines.parts/01.part"), "utf8");
+  assert.equal(part, daemon);
+  assert.match(part, /skip FUSE relink/);
+  assert.match(part, /"path": "\/symlinks\/sonarr"/);
+  assert.match(part, /"path": "\/symlinks\/radarr"/);
+  assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/symlinks\/sonarr"\)/);
+  assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/radarr", "\/symlinks\/radarr"\)/);
   assert.doesNotMatch(part, /for path in \("\/mnt\/symlinks\/sonarr", "\/mnt\/symlinks"\)/);
+  assert.doesNotMatch(part, /body=\{"name": "RescanSeries"\}/);
   assert.doesNotMatch(part, /for dump_root in \(Path\("\/mnt\/symlinks\/sonarr"\), Path\("\/mnt\/symlinks\/radarr"\), Path\("\/mnt\/symlinks"\)\)/);
   assert.match(part, /_relink_stem/);
 });

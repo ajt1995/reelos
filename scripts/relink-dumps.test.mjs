@@ -24,8 +24,9 @@ test("relink_dumps and wire-engines import stay twins and category-only", () => 
   assert.match(a, /relink created/);
   assert.doesNotMatch(part, /for dump_root in \(Path\("\/mnt\/symlinks\/sonarr"\), Path\("\/mnt\/symlinks\/radarr"\), Path\("\/mnt\/symlinks"\)\)/);
   const updater = readFileSync(join(root, "daemon/reelos-update.sh"), "utf8");
-  assert.match(updater, /import after hops \(TV\/movies into the library\)/);
-  assert.match(updater, /wire-engines\.py" import/);
+  const heal = readFileSync(join(root, "daemon/reelos-selfheal.sh"), "utf8");
+  assert.match(updater, /library catch-up in background/);
+  assert.match(heal, /import --catch-up/);
   assert.match(updater, /need daemon\/relink_dumps\.py 'relink created'/);
   assert.match(updater, /need daemon\/stuck-downloads\.py 'recover_missing_movies'/);
   assert.match(updater, /need daemon\/stuck-downloads\.py 'search_hybrid_cutoff_movies'/);

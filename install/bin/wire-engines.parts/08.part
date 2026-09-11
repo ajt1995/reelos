@@ -737,11 +737,12 @@ def wait_jellyfin(seconds: int = 90, *, wizard_completed: bool | None = None) ->
     return last
 
 
-def heal_after_import() -> bool:
+def heal_after_import(*, catch_up: bool = False) -> bool:
     """Collapse leftover dumps AFTER *arr scan, then heal JF. Never scan again.
 
     Same Apply must not Library/Refresh the season-named dumps we just collapsed.
     If #62's heal_season_folder_items is present, call it.
+    Catch-up (Apply after stamp) must not bolt a hybrid 1080 grab onto the path.
     """
     dropped = collapse_season_named_dumps()
     dropped += collapse_movie_named_dumps()
@@ -787,7 +788,10 @@ def heal_after_import() -> bool:
     if not token and frontend in ("jellyfin", "both"):
         log_wire("jellyfin heal red — no token")
         return False
-    heal_hybrid_1080_companions()
+    if catch_up:
+        log_wire("import catch-up — skip hybrid 1080 grab")
+    else:
+        heal_hybrid_1080_companions()
     return ready
 
 
