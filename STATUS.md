@@ -27,7 +27,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 - **VERSION / channel:** `1.2.50.39`
 - **channel tarball:** `main.tar.gz`
-- **Base:** `main` at 1.2.50.38 ([#117](https://github.com/ajt1995/reelos/pull/117))
+- **Base:** `main` at 1.2.50.38 ([#117](https://github.com/ajt1995/reelos/pull/117)); keeps 1.2.50.37 prebuilt hashed UI
 - **House snapshot:** 1.2.50.31; firstboot disabled; `stack-installed` latched; **endure 38**; then Check→Apply 39 once
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 

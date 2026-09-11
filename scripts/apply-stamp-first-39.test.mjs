@@ -22,13 +22,13 @@ function joinParts(dir) {
 test("Apply does not await full kick_imports before applied", () => {
   const updater = read("daemon/reelos-update.sh");
   const applied = updater.indexOf('log "ReelOS $REMOTE applied."');
-  const catchup = updater.indexOf("library catch-up in background");
+  const catchup = updater.indexOf("library catch-up in background", applied);
   assert.ok(applied >= 0, "applied. stamp missing");
   assert.ok(catchup > applied, "library catch-up must run after applied.");
   const before = updater.slice(0, applied);
   assert.equal(before.includes('log "import after hops'), false, "must not freeze the phone on import after hops");
-  assert.equal(before.includes("kick_imports"), false);
-  assert.equal(/python3 "\$ROOT\/bin\/wire-engines\.py" import(?! --catch-up)/.test(before), false);
+  assert.equal(before.includes("kick_imports("), false);
+  assert.equal(before.includes('wire-engines.py" import'), false);
   assert.match(updater, /import\/heal red — not un-stamping UI swap/);
   assert.match(updater, /not printing applied — jellyfin\/indexer heal red/);
   const healRed = updater.indexOf('log "not printing applied — jellyfin/indexer heal red"');

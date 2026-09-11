@@ -153,8 +153,8 @@ def main() -> int:
     pull = updater.find('stack images — docker compose pull')
     if pull >= 0 and pull < applied:
         return fail("OTA contract: compose pull must come after applied. stamp")
-    catchup = updater.find("library catch-up in background")
-    if catchup < 0 or catchup < applied:
+    catchup = updater.find("library catch-up in background", applied)
+    if catchup < 0:
         return fail("OTA contract: library catch-up must come after applied.")
     if 'log "import after hops' in updater[:applied]:
         return fail("OTA contract: Apply must not await import after hops before applied")

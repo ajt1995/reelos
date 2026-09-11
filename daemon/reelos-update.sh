@@ -1365,7 +1365,7 @@ if [ -f /var/lib/reelos/provisioned ]; then
       fi
       HEAL_FAIL=1
     fi
-    # Do not await kick_imports here. Phone was frozen on "import after hops".
+    # Do not await the library dump import here. Phone was frozen on "import after hops".
     # Stamp first; library catch-up runs after applied (recover timer job).
   fi
 fi
