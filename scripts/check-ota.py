@@ -48,6 +48,12 @@ CONTRACTS = (
     ("scripts/update-notes.mjs", "ownerEnglish"),
     ("scripts/reelos-library-remove.mjs", "deleteFilesAllowed"),
     ("src/components/remove-from-box.tsx", "Remove from this box"),
+    ("daemon/reelos-selfheal.sh", "not walking FUSE"),
+    ("daemon/reelos-selfheal.sh", "not enabling firstboot"),
+    ("scripts/reelos-box.mjs", "serving built UI"),
+    ("src/components/settings-view.tsx", "Show Advanced"),
+    ("src/components/settings-updates.tsx", "Beta channel"),
+    ("scripts/reelos-lookup-plugin.mjs", "CHANNEL_BETA_URL"),
 )
 
 

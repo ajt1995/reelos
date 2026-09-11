@@ -19,6 +19,8 @@ const appCopies = [
   "src",
   "scripts",
   "server",
+  "channel.json",
+  "channel-beta.json",
 ];
 for (const rel of appCopies) {
   const from = join(root, rel);
@@ -46,6 +48,7 @@ for (const sh of [
   "reelos-doctor.py",
   "reelos-access.sh",
   "reelos-update.sh",
+  "reelos-selfheal.sh",
   "live-wifi.sh",
 ]) {
   const p = join(staging, "reelos", "bin", sh);

@@ -64,7 +64,6 @@ function FactoryResetRow() {
       <p className="font-display font-medium">Factory reset</p>
       <p className="mt-1 text-sm text-muted">
         First-run again. Keeps media on disk. Wipes wizard answers and engine configs. Will not run during an update.
-        Prefer a named Fix above when Movies or Requests are merely weird.
       </p>
       {!open ? (
         <Button className="mt-3" variant="danger" size="sm" onClick={() => setOpen(true)}>
@@ -87,6 +86,7 @@ function FactoryResetRow() {
 
 export function SettingsView() {
   const [lan, setLan] = useState("");
+  const [advanced, setAdvanced] = useState(false);
   useEffect(() => {
     void fetch("/api/box", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ ipv4?: string | null }>)
@@ -105,12 +105,10 @@ export function SettingsView() {
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-1.5 max-w-xl text-sm text-muted">
-        House identity, daily knobs, and named Fix scripts when Movies or Requests go weird.
+        House identity, daily knobs, and updates. The box heals itself — you should not need Heal.
       </p>
 
       <HouseCard />
-
-      <FixSection />
 
       <Section title="This house" hint="Library, quality, who can request, how you reach the box.">
         <Link
@@ -193,33 +191,51 @@ export function SettingsView() {
         />
       </Section>
 
-      <Section title="More" hint="Engines, a shell, and the two nuclear options.">
-        {hideAdvanced ? null : (
-          <Link
-            to="/settings/advanced"
-            className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
-          >
-            <div>
-              <p className="font-display font-medium">Advanced apps</p>
-              <p className="mt-1 text-sm text-muted">Radarr, Sonarr, Jellyfin by their house names. Daily use does not need these.</p>
+      <Section title="Advanced" hint="Heal, hops, doctor, and nerd tools. Daily use does not need these.">
+        <button
+          type="button"
+          className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 text-left shadow-[var(--shadow-border)]"
+          onClick={() => setAdvanced((v) => !v)}
+        >
+          <div>
+            <p className="font-display font-medium">{advanced ? "Hide Advanced" : "Show Advanced"}</p>
+            <p className="mt-1 text-sm text-muted">
+              Named Fix scripts, hops, a shell, engines, factory reset. The box already self-heals in the background.
+            </p>
+          </div>
+          <ChevronRight className={`size-4 text-faint transition-transform ${advanced ? "rotate-90" : ""}`} />
+        </button>
+        {advanced ? (
+          <>
+            <FixSection />
+            {hideAdvanced ? null : (
+              <Link
+                to="/settings/advanced"
+                className="flex items-center justify-between rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]"
+              >
+                <div>
+                  <p className="font-display font-medium">Advanced apps</p>
+                  <p className="mt-1 text-sm text-muted">
+                    Radarr, Sonarr, Jellyfin by their house names. Daily use does not need these.
+                  </p>
+                </div>
+                <ChevronRight className="size-4 text-faint" />
+              </Link>
+            )}
+            <TerminalRow open={panel === "term"} onClick={() => setPanel(panel === "term" ? null : "term")} />
+            <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+              <p className="font-display font-medium">Repair wizard</p>
+              <p className="mt-1 text-sm text-muted">
+                Walk the setup questions again (source, disks, quality). Does not Apply an update and does not delete
+                /media.
+              </p>
+              <Button className="mt-3" variant="ghost" size="sm" onClick={() => useReelStore.getState().startRepair()}>
+                Start wizard
+              </Button>
             </div>
-            <ChevronRight className="size-4 text-faint" />
-          </Link>
-        )}
-        <TerminalRow
-          open={panel === "term"}
-          onClick={() => setPanel(panel === "term" ? null : "term")}
-        />
-        <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
-          <p className="font-display font-medium">Repair wizard</p>
-          <p className="mt-1 text-sm text-muted">
-            Walk the setup questions again (source, disks, quality). Does not Apply an update and does not delete /media.
-          </p>
-          <Button className="mt-3" variant="ghost" size="sm" onClick={() => useReelStore.getState().startRepair()}>
-            Start wizard
-          </Button>
-        </div>
-        <FactoryResetRow />
+            <FactoryResetRow />
+          </>
+        ) : null}
       </Section>
     </div>
   );

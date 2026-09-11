@@ -196,20 +196,30 @@ async function handleGet(req, res) {
   }
 }
 
+export async function dispatchRequestGet(req, res) {
+  const pathOnly = (req.url || "").split("?", 1)[0] || "";
+  if (pathOnly !== "/api/request") return false;
+  if ((req.method || "GET").toUpperCase() !== "GET") return false;
+  await handleGet(req, res);
+  return true;
+}
+
+function attachRequestGet(server) {
+  server.middlewares.use(async (req, res, next) => {
+    try {
+      if (await dispatchRequestGet(req, res)) return;
+    } catch (e) {
+      send(res, 500, { status: "unknown", error: String(e) });
+      return;
+    }
+    next();
+  });
+}
+
 export function reelosRequestProgressPlugin() {
   return {
     name: "reelos-request-progress",
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const pathOnly = (req.url || "").split("?", 1)[0] || "";
-        if (pathOnly !== "/api/request") return next();
-        if ((req.method || "GET").toUpperCase() !== "GET") return next();
-        try {
-          await handleGet(req, res);
-        } catch (e) {
-          send(res, 500, { status: "unknown", error: String(e) });
-        }
-      });
-    },
+    configureServer: attachRequestGet,
+    configurePreviewServer: attachRequestGet,
   };
 }

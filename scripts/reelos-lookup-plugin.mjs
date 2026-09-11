@@ -832,12 +832,46 @@ async function fetchGh(url) {
   return r.text();
 }
 
-async function loadChannel() {
+const CHANNEL_BETA_URL =
+  process.env.CHANNEL_BETA_URL ||
+  "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
+
+function channelFileName(name) {
+  return name === "beta" ? "channel-beta.json" : "channel.json";
+}
+
+export function betaChannelStub(local = "0") {
+  return {
+    version: local,
+    channel: "beta",
+    notes: [
+      "Beta is a stub. Arena chrome and Books land here later. This stamp does not ship them. Stable remains the default. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+    ],
+  };
+}
+
+function readLocalChannelFile(file) {
+  for (const dir of [process.cwd(), "/opt/reelos/app", "/opt/reelos"]) {
+    const p = `${dir}/${file}`;
+    try {
+      if (!existsSync(p)) continue;
+      const parsed = JSON.parse(readFileSync(p, "utf8"));
+      if (parsed?.version) return parsed;
+    } catch {
+      /* */
+    }
+  }
+  return null;
+}
+
+async function loadChannel(name = "stable") {
+  const file = channelFileName(name);
   const urls = [
-    "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main",
-    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json",
-    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json",
-  ];
+    name === "beta" ? CHANNEL_BETA_URL : null,
+    `https://api.github.com/repos/ajt1995/reelos/contents/${file}?ref=main`,
+    `https://github.com/ajt1995/reelos/raw/refs/heads/main/${file}`,
+    `https://raw.githubusercontent.com/ajt1995/reelos/main/${file}`,
+  ].filter(Boolean);
   for (const u of urls) {
     try {
       const text = await fetchGh(u);
@@ -859,6 +893,9 @@ async function loadChannel() {
       otaNote(`miss ${u} ${e}`);
     }
   }
+  const localFile = readLocalChannelFile(file);
+  if (localFile) return localFile;
+  if (name === "beta") return betaChannelStub(localVersion());
   return null;
 }
 
@@ -872,7 +909,9 @@ function otaNote(msg) {
 
 async function handleUpdateCheck(_req, res) {
   const local = localVersion();
-  const best = await loadChannel();
+  const beta = readUiSettings().betaChannel === true;
+  const channel = beta ? "beta" : "stable";
+  const best = await loadChannel(channel);
   if (!best) {
     send(res, 200, {
       ok: false,
@@ -882,6 +921,7 @@ async function handleUpdateCheck(_req, res) {
       notes: [],
       currentNotes: [],
       pendingNotes: [],
+      channel,
       error: "channel unreachable",
     });
     return;
@@ -914,6 +954,7 @@ async function handleUpdateCheck(_req, res) {
     currentNotes: notesForVersion(channelNotes, local),
     pendingNotes: notes,
     available: newer || shaDrift,
+    channel,
     sha: head.slice(0, 12),
   });
 }
@@ -1638,7 +1679,14 @@ function readUiSettings() {
   try {
     return JSON.parse(readFileSync(uiSettingsPath(), "utf8"));
   } catch {
-    return { autoUpdate: true, stackImages: false, notifyAvailable: true, notifyFailed: true, autoApprove: true };
+    return {
+      autoUpdate: true,
+      stackImages: false,
+      notifyAvailable: true,
+      notifyFailed: true,
+      autoApprove: true,
+      betaChannel: false,
+    };
   }
 }
 
@@ -2361,64 +2409,167 @@ async function handlePerformance(req, res) {
   send(res, 200, { ok: true, low });
 }
 
+export async function dispatchReelOsApi(req, res) {
+  const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
+  const method = (req.method || "GET").toUpperCase();
+  if (pathOnly === "/api/lookup") {
+    await handleLookup(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/discover") {
+    await handleDiscover(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/box") {
+    await handleBox(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/ready") {
+    await handleReady(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/indexer") {
+    await handleIndexer(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/tailscale/login") {
+    await handleTailscaleLogin(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/tailscale/install") {
+    await handleTailscaleInstall(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/tailscale/check") {
+    await handleTailscaleCheck(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/check") {
+    await handleUpdateCheck(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/apply") {
+    await handleUpdateApply(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/run") {
+    req.method = "POST";
+    await handleUpdateApply(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/status") {
+    await handleUpdateStatus(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/request") {
+    if (method === "GET") return false;
+    await handleRequest(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/password") {
+    await handlePassword(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/quality") {
+    await handleQuality(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/intent") {
+    await handleIntent(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/activity") {
+    await handleActivity(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/settings") {
+    await handleSettings(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/ports") {
+    await handlePorts(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/doctor") {
+    await handleDoctor(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/repair") {
+    await handleRepair(req, res, { send, readBody, otaRunning });
+    return true;
+  }
+  if (pathOnly === "/api/reset") {
+    await handleReset(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/wire") {
+    await handleWire(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/library") {
+    await handleLibrary(req, res);
+    return true;
+  }
+  if (pathOnly.startsWith("/api/jf/Items/") && pathOnly.endsWith("/Images/Primary")) {
+    await handleJellyfinImage(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/disks") {
+    await handleDisks(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/storage") {
+    await handleStorage(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/transcode") {
+    await handleTranscode(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/provision") {
+    await handleProvision(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/ping") {
+    await handlePing(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/performance") {
+    await handlePerformance(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/terminal") {
+    await handleTerminal(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/logs") {
+    await handleLogs(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/bugs/github") {
+    await handleBugsGithub(req, res);
+    return true;
+  }
+  return false;
+}
+
+function attachLookupApi(server) {
+  server.middlewares.use(async (req, res, next) => {
+    try {
+      if (await dispatchReelOsApi(req, res)) return;
+    } catch (e) {
+      send(res, 500, { error: String(e) });
+      return;
+    }
+    next();
+  });
+}
+
 export function reelosLookupPlugin() {
   return {
     name: "reelos-lookup",
     apply: "serve",
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
-        try {
-          if (pathOnly === "/api/lookup") return void (await handleLookup(req, res));
-          if (pathOnly === "/api/discover") return void (await handleDiscover(req, res));
-          if (pathOnly === "/api/box") return void (await handleBox(req, res));
-          if (pathOnly === "/api/ready") return void (await handleReady(req, res));
-          if (pathOnly === "/api/indexer") return void (await handleIndexer(req, res));
-          if (pathOnly === "/api/tailscale/login") return void (await handleTailscaleLogin(req, res));
-          if (pathOnly === "/api/tailscale/install") return void (await handleTailscaleInstall(req, res));
-          if (pathOnly === "/api/tailscale/check") return void (await handleTailscaleCheck(req, res));
-          if (pathOnly === "/api/update/check") return void (await handleUpdateCheck(req, res));
-          if (pathOnly === "/api/update/apply") return void (await handleUpdateApply(req, res));
-          if (pathOnly === "/api/update/run") {
-            req.method = "POST";
-            return void (await handleUpdateApply(req, res));
-          }
-          if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
-          if (pathOnly === "/api/request") {
-            if ((req.method || "GET").toUpperCase() === "GET") return next();
-            return void (await handleRequest(req, res));
-          }
-          if (pathOnly === "/api/password") return void (await handlePassword(req, res));
-          if (pathOnly === "/api/quality") return void (await handleQuality(req, res));
-          if (pathOnly === "/api/intent") return void (await handleIntent(req, res));
-          if (pathOnly === "/api/activity") return void (await handleActivity(req, res));
-          if (pathOnly === "/api/settings") return void (await handleSettings(req, res));
-          if (pathOnly === "/api/ports") return void (await handlePorts(req, res));
-          if (pathOnly === "/api/doctor") return void (await handleDoctor(req, res));
-          if (pathOnly === "/api/repair") {
-            return void (await handleRepair(req, res, { send, readBody, otaRunning }));
-          }
-          if (pathOnly === "/api/reset") return void (await handleReset(req, res));
-          if (pathOnly === "/api/wire") return void (await handleWire(req, res));
-          if (pathOnly === "/api/library") return void (await handleLibrary(req, res));
-          if (pathOnly.startsWith("/api/jf/Items/") && pathOnly.endsWith("/Images/Primary")) {
-            return void (await handleJellyfinImage(req, res));
-          }
-          if (pathOnly === "/api/disks") return void (await handleDisks(req, res));
-          if (pathOnly === "/api/storage") return void (await handleStorage(req, res));
-          if (pathOnly === "/api/transcode") return void (await handleTranscode(req, res));
-          if (pathOnly === "/api/provision") return void (await handleProvision(req, res));
-          if (pathOnly === "/api/ping") return void (await handlePing(req, res));
-          if (pathOnly === "/api/performance") return void (await handlePerformance(req, res));
-          if (pathOnly === "/api/terminal") return void (await handleTerminal(req, res));
-          if (pathOnly === "/api/logs") return void (await handleLogs(req, res));
-          if (pathOnly === "/api/bugs/github") return void (await handleBugsGithub(req, res));
-        } catch (e) {
-          send(res, 500, { error: String(e) });
-          return;
-        }
-        next();
-      });
-    },
+    configureServer: attachLookupApi,
+    configurePreviewServer: attachLookupApi,
   };
 }

@@ -155,6 +155,7 @@ export default defineConfig(({ command, isPreview }) => ({
     port: 8080,
     strictPort: true,
     allowedHosts: true,
+    hmr: process.env.NODE_ENV === "production" ? false : undefined,
   },
   preview: {
     host: "127.0.0.1",

@@ -212,9 +212,11 @@ test("Settings Fix cards stay lockstep with the allowlist", () => {
     assert.match(ui, new RegExp(`id: "${id}"`));
   }
   const view = readFileSync(join(root, "src/components/settings-view.tsx"), "utf8");
+  const settingsBody = view.slice(view.indexOf("export function SettingsView"));
   assert.match(view, /FixSection/);
   assert.match(view, /This house/);
-  assert.match(view, /named Fix/);
+  assert.match(view, /Show Advanced/);
+  assert.ok(settingsBody.indexOf("Show Advanced") < settingsBody.indexOf("<FixSection"));
   const fix = readFileSync(join(root, "src/components/settings-fix.tsx"), "utf8");
   assert.match(fix, /\/api\/repair/);
   assert.match(fix, /Check hops/);

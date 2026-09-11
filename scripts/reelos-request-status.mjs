@@ -80,6 +80,20 @@ export function planArrPostRecover({ mediaType, season, arrHasFile = false } = {
   return planTvPostRecover({ mediaType, season, arrHasSeasonFile: arrHasFile });
 }
 
+/** Searching/grabbing while the file is already on disk: import, never search. */
+export function planUnstickSearchingIfFileOnDisk({
+  status,
+  engine,
+  arrHasFile: has = false,
+  libraryHit: onShelf = false,
+} = {}) {
+  if (engine === "downloaded" || status === "available") {
+    return { search: false, import: false, action: "none" };
+  }
+  if (has || onShelf) return { search: false, import: true, action: "import" };
+  return { search: false, import: false, action: "none" };
+}
+
 /** House: Seerr 200 then *arr still empty for a few seconds. Poll, do not skip search. */
 export async function waitForArrRow({
   fetchArr = arrJson,

@@ -184,7 +184,7 @@ export function HomeView() {
         <p className="mt-16 text-center text-sm text-muted">
           {shelfError ||
             (shelfReady
-              ? "Nothing in Jellyfin yet. Search and Request — it lands here."
+              ? "Nothing in Jellyfin yet. Search and Request — it lands here. Play uses Jellyfin; on this LAN the official app is http://<lan>:8096 without Tailscale."
               : "Loading library…")}
         </p>
       ) : null}

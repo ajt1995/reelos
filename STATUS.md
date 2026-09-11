@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.33**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later.
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.34**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta channel is wired in this stamp; Arena+Books are not shipped here.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,52 +21,53 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.33 is the ship.*** 2026-09-11. One remaining stamp after [#94](https://github.com/ajt1995/reelos/pull/94) already landed search→request→play as **1.2.50.32**. This number: Requests is in-flight only; Remove from this box (unmonitor/*arr delete, never /media); in-app changelog on Settings → Updates. Absorbs sibling #91/#92 / library-remove so the house Checks and Applies **once**. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
+***1.2.50.34 is the ship.*** 2026-09-11. Background self-heal (door / hung Vite, compose/*arr/Seerr up if provisioned, JF token/probe, request recover, unstick searching-if-file-on-disk). Settings is Check/Apply + changelog + low-perf — Heal/Hops/Doctor behind **Advanced**. Production `start:box` serves a built UI when `dist` exists, else vite. Beta channel stub for later Arena+Books. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.33`
-- **Base:** `main` at 1.2.50.32 ([#94](https://github.com/ajt1995/reelos/pull/94) search→request→play honesty — keep that channel line)
-- Cooked Requests in-flight / library-remove / changelog into **this one number** (not 34 then 35)
-- [#91](https://github.com/ajt1995/reelos/pull/91) / [#92](https://github.com/ajt1995/reelos/pull/92) closed — changelog + Requests in-flight live here, not as 34/35
-- Did **not** take Tron chrome from #52 / #70 / #59
+- **VERSION / channel:** `1.2.50.34`
+- **channel tarball:** `main.tar.gz`
+- **Base:** `main` at 1.2.50.33 ([#95](https://github.com/ajt1995/reelos/pull/95) Requests in-flight, library remove, changelog)
+- **self-heal:** background timer; Austin does not tap Heal
+- **Settings:** not a repair bench
+- **beta later Arena+Books** (infrastructure only; no Arena chrome, no Books in this stamp)
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
 
-### Requests is in-flight only
+### Background diagnose + self-heal
 
-Requests overlays the JF shelf then keeps searching / grabbing / linked waiting for import. Available, Cached, and Play leave the page — they live on Library / On this box. Cancel (and Retry on locks) stay. Home already did this on 1.2.50.30.
+A two-minute timer plus the box process: restore `:8080` / `:80` (restart hung Vite, not a no-op start), `docker compose up -d --no-recreate` when provisioned, probe the Jellyfin token, recover in-flight requests, import when a searching row already has a file on disk. Does not talk to TorBox. Does not re-enable firstboot. Does not walk FUSE.
 
-### Search → request → play honesty (already 1.2.50.32 / #94)
+### Settings is not a repair bench
 
-Kept from main. GET `/api/request?recover=1` on every poll (server cooldown still applies). Overlay uses the JF shelf, not leftover available TMDB ids. Home cards resolve `r.title` when catalog is empty. GET-by-id kicks `wire-engines import` once when a title is available. FUSE dump listing uses timed `ls`. Connect JF chip is gold while probing; loopback-up is green.
+Check / Apply and the changelog stay on Box. Low performance mode stays. Heal, hops, doctor, named Fix, terminal, repair wizard, and factory reset sit behind one **Advanced** disclosure.
 
-### Remove from this box
+### Production start
 
-Phone title / Library / On this box: confirm, then unmonitor and DELETE the Radarr/Sonarr row. `deleteFiles` only for a title dump folder, never `/media` or FUSE roots. Seerr request/media rows go with it. Overlay hides the poster until you request it again.
+`npm run start:box` → `scripts/reelos-box.mjs`. If a client `dist` (or `.output/public`) exists, a small Node server serves it and the existing `/api` plugins. Otherwise the door is still `vite --host :8080`. 4GB Apply still skips `npm ci` unless package.json changed. Not a Go rewrite.
 
-### Settings Updates shows a changelog
+### Mental model
 
-Settings → Box → Updates always lists **This install**. After Check, **This update** is the pending target only — owner English, not a git log. Settings stays a repair panel (Heal/Doctor untouched).
+Requests stays in-flight. Library stays the shelf with Remove. Play uses Jellyfin; on LAN the official app is `http://<lan>:8096` without Tailscale. No secrets in that copy.
 
-### House facts (not a stamp — from #88 / #89)
+### Beta channel (infrastructure)
 
-House is still **1.2.50.27**. `ota.lock` exists; flock not held — do not delete. Firstboot is disabled/idle; `stack-installed` latched. Door `:80`/`:8080`/`:8096` were 200 at the last SSH scan. Do not fight those STATUS PRs; they are docs, not Applies.
+Settings toggle, off by default. Check reads `channel-beta.json` (or a stub). Arena chrome and Books are **not** in this stamp.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/update-notes.test.mjs scripts/reelos-library-remove.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-library.test.mjs
+node --test scripts/stack-smoke.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-repair.test.mjs scripts/reelos-request-status.test.mjs scripts/update-notes.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
+NODE_ENV=production npm run start:box
+# GET / and GET /api/ready → 200
 ```
 
 ## Owner / house Apply
 
-**Do not Apply from the agent.** House is still **1.2.50.27**. Channel will offer **1.2.50.33** after merge (32 is already on main; this is the one remaining Apply). Owner phone **Check → Apply once** after VM boot of this stamp. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
-
-SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 8 compose containers live). `systemctl start` (not enable) **skipped** — `ConditionPathExists=!/var/lib/reelos/stack-installed`. Unit left **disabled**. Old loop journal: `cp: '/opt/reelos/bin/.' and '/opt/reelos/bin/.' are the same file`.
+**Do not Apply from the agent.** House stays **1.2.50.31**. Austin should still not update until this stamp is on **main AND booted**. Then Check → Apply **once**. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
 
 ## Do not
 
@@ -74,7 +75,7 @@ SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 
 - Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
 - Implement Arena UI until the owner names that pass
 - Glue Books/Kavita to Tron chrome or burn it as 1.2.51
-- House Apply 32 then 33 then 34 — 32 is already on main; **this 33 is the one remaining Apply**
+- Ship Arena chrome or Books in this stamp
 - Tap Apply twice
 - Delete `ota.lock`
 - Wipe `/media` or TorBox

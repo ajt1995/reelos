@@ -52,22 +52,29 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.33)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.34)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
+  const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.33");
-  assert.equal(chan.version, "1.2.50.33");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.33"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.33"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.33"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.33"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.33/);
+  assert.equal(ver, "1.2.50.34");
+  assert.equal(chan.version, "1.2.50.34");
+  assert.equal(chan.channel, "stable");
+  assert.equal(beta.channel, "beta");
+  assert.match(beta.notes[0], /Arena chrome and Books/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.34"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.34"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.34"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.34"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.34/);
   assert.match(read("src/components/settings-updates.tsx"), /This install/);
   assert.match(read("src/components/settings-updates.tsx"), /This update/);
+  assert.match(read("src/components/settings-updates.tsx"), /Beta channel/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /pendingNotes: notes/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /currentNotes: notesForVersion/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /channel-beta\.json/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /CHANNEL_BETA_URL/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
@@ -219,4 +226,40 @@ test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () =>
   }
   assert.equal(joinParts(join(root, "install/bin/wire-engines.parts")), joinParts(join(root, "daemon/wire-engines.parts")));
   assert.equal(read("install/bin/reelos-update.sh"), read("daemon/reelos-update.sh"));
+});
+
+test("stack: self-heal, Settings Advanced, start:box, beta stub", () => {
+  const heal = read("daemon/reelos-selfheal.sh");
+  assert.equal(heal, read("install/bin/reelos-selfheal.sh"));
+  assert.match(heal, /not walking FUSE/);
+  assert.match(heal, /not enabling firstboot/);
+  assert.match(heal, /not talking to TorBox/);
+  assert.match(heal, /ensure_door/);
+  assert.match(heal, /docker compose up -d --no-recreate/);
+  assert.equal(heal.includes("enable reelos-firstboot"), false);
+  assert.equal(heal.includes("/mnt/debrid/__all__"), false);
+  assert.doesNotMatch(heal, /api\.torbox|torbox\.app/i);
+  const updater = read("daemon/reelos-update.sh");
+  assert.match(updater, /reelos-selfheal\.timer/);
+  assert.match(updater, /enable --now reelos-selfheal.timer/);
+  assert.equal(updater.includes("enable reelos-firstboot"), false);
+  assert.equal(
+    read("install/systemd/reelos-selfheal.timer"),
+    read("firstboot/reelos-selfheal.timer"),
+  );
+  const pkg = JSON.parse(read("package.json"));
+  assert.equal(pkg.scripts["start:box"], "node scripts/with-app-env.mjs node scripts/reelos-box.mjs");
+  const box = read("scripts/reelos-box.mjs");
+  assert.match(box, /findClientRoot/);
+  assert.match(box, /dispatchReelOsApi/);
+  assert.match(box, /serving built UI/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /configurePreviewServer/);
+  assert.match(read("scripts/reelos-request-progress-plugin.mjs"), /configurePreviewServer/);
+  const view = read("src/components/settings-view.tsx");
+  const settingsBody = view.slice(view.indexOf("export function SettingsView"));
+  assert.match(view, /Show Advanced/);
+  assert.match(view, /FixSection/);
+  assert.ok(settingsBody.indexOf("Show Advanced") < settingsBody.indexOf("<FixSection"));
+  assert.match(read("src/components/settings-updates.tsx"), /Beta channel/);
+  assert.match(read("src/lib/store.ts"), /betaChannel: false/);
 });

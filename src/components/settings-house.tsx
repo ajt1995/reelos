@@ -75,8 +75,8 @@ export function HouseCard() {
             </div>
           </dl>
           <p className="mt-2.5 text-xs text-faint">
-            TV app login is this same user. Source, quality, and library live under This house. Weird Movies or
-            Requests: use Fix.
+            Play uses Jellyfin. On this LAN the official app is {jf || "http://<lan>:8096"} — Tailscale is not required.
+            Source, quality, and library live under This house.
           </p>
         </div>
       </div>

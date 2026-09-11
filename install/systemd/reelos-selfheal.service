@@ -1,0 +1,10 @@
+[Unit]
+Description=ReelOS background self-heal (door, compose, Jellyfin, recover)
+After=network-online.target
+ConditionPathExists=/opt/reelos/bin/reelos-selfheal.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=90
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-selfheal.sh
