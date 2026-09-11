@@ -2,9 +2,9 @@ import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { o as getTitle } from "./appliance-BpvQVhxl.mjs";
-import { p as useReelStore } from "./router-Y_e8_XuY.mjs";
-import { d as formatWhen, i as Gate } from "./gate-DsxBb0Cp.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/activity-BoCP-KDt.js
+import { p as useReelStore } from "./router-CWV-siT-.mjs";
+import { d as formatWhen, i as Gate } from "./gate-BTY0BQJK.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/activity-CkmV_4EA.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function ActivityView() {

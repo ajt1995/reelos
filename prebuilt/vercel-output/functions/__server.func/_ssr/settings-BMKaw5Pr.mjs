@@ -3,10 +3,10 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as adapterProfile, n as HOSTNAME } from "./appliance-BpvQVhxl.mjs";
 import { A as Check, C as Cpu, D as ChevronRight, M as Bell, a as SlidersHorizontal, b as HardDrive, l as ScrollText, m as LoaderCircle, n as Users, o as Shield, r as TriangleAlert, t as Wrench, u as RefreshCw, v as KeyRound, y as House } from "../_libs/lucide-react.mjs";
-import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-Y_e8_XuY.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-DsxBb0Cp.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-f1aTzVG8.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/settings-CorwWasE.js
+import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-CWV-siT-.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-BTY0BQJK.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-CI-yFlsh.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/settings-BMKaw5Pr.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {
@@ -527,7 +527,7 @@ function SourcePanel() {
 * @returns {string}
 */
 function noteVersion(line) {
-	const m = String(line || "").match(/^(\d+(?:\.\d+)*)\s*:/);
+	const m = String(line || "").match(/^(\d+(?:\.\d+)*(?:-beta\.\d+)?)\s*:/);
 	return m ? m[1] : "";
 }
 /**
@@ -535,7 +535,7 @@ function noteVersion(line) {
 * @returns {string}
 */
 function stripVersionPrefix(line) {
-	return String(line || "").replace(/^\d+(?:\.\d+)*:\s*/, "").trim();
+	return String(line || "").replace(/^\d+(?:\.\d+)*(?:-beta\.\d+)?:\s*/, "").trim();
 }
 /**
 * Drop PR asides and parked-stamp lines so the phone stays plain English.
@@ -671,10 +671,10 @@ function UpdatesRow({ open, onClick }) {
 					onClick: checkForUpdate,
 					disabled: update.status === "checking" || update.status === "applying",
 					children: [update.status === "checking" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoaderCircle, { className: "size-4 animate-spin" }) : null, "Check"]
-				}), update.status === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+				}), update.status === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 					size: "sm",
 					onClick: startUpdate,
-					children: ["Apply ", update.target]
+					children: update.rollback ? `Roll back to ${update.target}` : `Apply ${update.target}`
 				}) : null]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
@@ -709,8 +709,16 @@ function UpdatesRow({ open, onClick }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-xs text-muted",
-				children: "Off by default. Check then reads channel-beta (a stub today). Arena chrome and Books are not in this stamp. Apply still comes from main."
-			})
+				children: "Off by default. Check then reads channel-beta. Arena chrome and Books ship on 2.0.0 as a separate tarball — not inside main.tar.gz. Leave beta and Check to roll back to last stable 1.2.50.x (40 once this house has it). Stable Check stays 1.2.50.40 on main.tar.gz."
+			}),
+			update.rollback && update.status === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "mt-2 text-xs text-muted",
+				children: [
+					"Roll back returns this box to ",
+					update.target,
+					". Libraries stay. Arena chrome and Books leave with 2.0."
+				]
+			}) : null
 		]
 	});
 }

@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-BpvQVhxl.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { _ as overlayLibraryPresence, b as titleForRequest, d as sourceLabel, g as mergeServerRequests, h as inFlightRequests, l as frontendLabel, p as useReelStore } from "./router-Y_e8_XuY.mjs";
+import { _ as overlayLibraryPresence, b as titleForRequest, d as sourceLabel, g as mergeServerRequests, h as inFlightRequests, l as frontendLabel, p as useReelStore } from "./router-CWV-siT-.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/gate-DsxBb0Cp.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/gate-BTY0BQJK.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {

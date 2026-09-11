@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/router-Y_e8_XuY.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/router-CWV-siT-.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -552,7 +552,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
-	"1.2.50.40: Check/Apply only swaps the product (tarball, restart, splash, stamp). Library catch-up is its own worker with its own phone clock — folder N, skips, timeouts — not buried in wire.log while Apply looks frozen. Indexers/import/heal never block stamp. Catch-up is a persistent oneshot (not killed when selfheal exits); backs off when ffprobe is D-state; does not stack another FUSE. Splash-locks Home only while dumps still need import. 4GB prebuilt UI. Complements #120. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+	"1.2.50.40: Check/Apply only swaps the product (tarball, restart, splash, stamp). Library catch-up is its own worker with its own phone clock — folder N, skips, timeouts — not buried in wire.log while Apply looks frozen. Indexers/import/heal never block stamp. Catch-up is a persistent oneshot (not killed when selfheal exits); backs off when ffprobe is D-state; does not stack another FUSE. Splash-locks Home only while dumps still need import. Settings Beta ON then Check fetches 2.0.0 Arena+Books as a separate tarball (not this stamp); OFF stays 1.2.50.x. 4GB prebuilt UI. Complements #120. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.39: Check/Apply stamps after hops and the door — dump import/heal runs in the background so the phone is not frozen on import after hops. Import/heal red does not un-stamp a UI swap. Skip Sonarr dump folders that already have files; do not RescanSeries all shows; do not list host+container paths twice; skip a FUSE folder on a short list timeout. No hybrid 1080 grab on Apply. Background import is capped on 4GB. First provision can still do a long walk. Never /media. Complements #117. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.38: Wizard stays seven steps; TorBox is the working source (Validate hits api.torbox.app with User-Agent ReelOS; Continue needs that OK). Real-Debrid, AllDebrid, Premiumize, Local+VPN, Plex claim, and Cloudflare Tunnel are labeled untested; Validate and Finish refuse (no fake always-ok). No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI when a GPU is present; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -626,7 +626,8 @@ function idleUpdate(current = SHIPPED_VERSION) {
 		target: null,
 		checkedAt: null,
 		steps: [],
-		notes: []
+		notes: [],
+		rollback: false
 	};
 }
 function updatePlan() {
@@ -1224,6 +1225,7 @@ var useReelStore = create()(persist((set, get) => ({
 				current: r.local || cur.update.current,
 				target: r.remote || null,
 				notes: pending,
+				rollback: r.rollback === true,
 				checkedAt: Date.now()
 			} });
 			else set({ update: {
@@ -1232,6 +1234,7 @@ var useReelStore = create()(persist((set, get) => ({
 				current: r.local || cur.update.current,
 				target: null,
 				notes: r.ok ? [] : [r.error ?? "Channel unreachable"],
+				rollback: false,
 				checkedAt: Date.now()
 			} });
 		}).catch((e) => {
@@ -1604,27 +1607,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-DSmY2Bgw.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-Draziq_o.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BoCP-KDt.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-CkmV_4EA.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-DPXe3f6g.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-D8Vrr-Yy.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-DH26JayQ.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-B461A05Q.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-C7l_3De3.mjs");
+var $$splitComponentImporter$6 = () => import("./library-CWflB-BP.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-Bc_WgPrt.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-C9YyGNkn.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-CorwWasE.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-BMKaw5Pr.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-DtH8mnlK.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-DN2nTfLz.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-Bgw7GKjN.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-KsJpAcAy.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-asXX7vpA.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-IBv2-O2K.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-kFRs79af.mjs");
+var $$splitComponentImporter = () => import("./title._id-PD7LZOYo.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
