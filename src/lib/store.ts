@@ -21,7 +21,7 @@ import type {
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
-import { mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -88,7 +88,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
-  "1.2.50.32: Search→request→play: recover keeps kicking, overlay does not sticky-available, Home cards match the transferring chip, GET-by-id imports when available, dump list cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+  "1.2.50.32: Requests is in-flight only. Search→request→play tells the truth. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update. Complements #90 / #91. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.30: Home Your requests only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/library hits stay on Requests and On this box — not the top row. Transferring chip uses the same in-flight count. Complements #85. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
@@ -136,7 +136,7 @@ function makeAdapter(answers: WizardAnswers): AdapterState {
   };
 }
 
-function idleUpdate(current = "…"): UpdateState {
+function idleUpdate(current = SHIPPED_VERSION): UpdateState {
   return {
     status: "idle",
     current,
@@ -209,6 +209,7 @@ export interface ReelState {
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
   hydrateShelf: (opts?: { limit?: number }) => void;
+  dropLibraryTitle: (titleId: string, extraIds?: string[]) => void;
 }
 
 const shelfFetches = new Map<string, Promise<void>>();
@@ -685,7 +686,7 @@ export const useReelStore = create<ReelState>()(
                   status: "available",
                   current: r.local || cur.update.current,
                   target: r.remote || null,
-                  notes: r.notes?.length ? r.notes : UPDATE_NOTES,
+                  notes: Array.isArray(r.notes) ? r.notes : [],
                   checkedAt: Date.now(),
                 },
               });
@@ -855,6 +856,15 @@ export const useReelStore = create<ReelState>()(
         if (!extra.length) return;
         rememberCatalogTitles(extra);
         set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
+      },
+      dropLibraryTitle: (titleId, extraIds = []) => {
+        const s = get();
+        const overlay = dropLibraryOverlay(
+          { shelf: s.shelf, library: s.library, requests: s.requests },
+          titleId,
+          extraIds,
+        );
+        set({ shelf: overlay.shelf, library: overlay.library, requests: overlay.requests });
       },
       hydrateShelf: (opts) => {
         if (get().shelfReady) return;

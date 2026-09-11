@@ -1,7 +1,25 @@
 import { Check, LoaderCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CHANNEL, useReelStore } from "@/lib/store";
+import { CHANNEL, SHIPPED_VERSION, UPDATE_NOTES, useReelStore } from "@/lib/store";
+import { displayVersion, notesForVersion, stripVersionPrefix } from "@/lib/update-notes";
 import { Row, Toggle, persistUi } from "@/components/settings-ui";
+
+function Changelog({ title, version, lines }: { title: string; version?: string | null; lines: string[] }) {
+  if (!lines.length) return null;
+  return (
+    <div className="mt-4">
+      <p className="text-sm font-medium">
+        {title}
+        {version ? <span className="ml-2 font-mono text-muted">{version}</span> : null}
+      </p>
+      <ul className="mt-2 space-y-1.5 text-sm text-muted">
+        {lines.map((n) => (
+          <li key={n}>· {stripVersionPrefix(n)}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const update = useReelStore((s) => s.update);
@@ -11,6 +29,10 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
   const checkForUpdate = useReelStore((s) => s.checkForUpdate);
   const startUpdate = useReelStore((s) => s.startUpdate);
 
+  const installed = displayVersion(update.current, SHIPPED_VERSION);
+  const thisNotes = notesForVersion(UPDATE_NOTES, installed);
+  const pending = update.status === "available" ? update.notes : [];
+
   const hint =
     update.status === "applying"
       ? `Applying ${update.target ?? ""}`
@@ -19,13 +41,13 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         : update.status === "checking"
           ? "Checking the stable channel"
           : update.status === "current"
-            ? `${update.current} · up to date`
-            : `${update.current} · ${CHANNEL}`;
+            ? `${installed} · up to date`
+            : `${installed} · ${CHANNEL}`;
 
   return (
     <Row icon={RefreshCw} title="Updates" hint={hint} open={open} onClick={onClick}>
       <p className="font-mono text-sm">
-        Installed {update.current}
+        Installed {installed}
         {update.status === "available" && update.target ? (
           <span className="ml-3 text-muted">available {update.target}</span>
         ) : (
@@ -39,14 +61,6 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       </p>
       {update.status === "error" && update.notes[0] ? (
         <p className="mt-2 text-sm text-danger">{update.notes[0].slice(0, 180)}</p>
-      ) : null}
-
-      {update.status === "available" ? (
-        <ul className="mt-4 space-y-1.5 text-sm text-muted">
-          {update.notes.map((n) => (
-            <li key={n}>· {n}</li>
-          ))}
-        </ul>
       ) : null}
 
       {update.status === "applying" ? (
@@ -69,7 +83,12 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
             </li>
           ))}
         </ol>
-      ) : null}
+      ) : (
+        <>
+          <Changelog title="This install" version={installed} lines={thisNotes} />
+          <Changelog title="This update" version={update.target} lines={pending} />
+        </>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button

@@ -21,44 +21,50 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.32 is the ship.*** 2026-09-11. Search → request → play audit. Recover keeps kicking after a failed first poll, overlay does not sticky-available from persist library ids, Home cards match the transferring chip, GET-by-id imports when available, dump `ls` cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86 / #90. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
+***1.2.50.32 is the ship.*** 2026-09-11. One stamp: Requests is in-flight only; search→request→play honesty; Remove from this box (unmonitor/*arr delete, never /media); in-app changelog on Settings → Updates. Absorbs sibling 32/34/35 work so the house Checks and Applies **once**. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
 
 ## Stamp
 
 - **VERSION / channel:** `1.2.50.32`
 - **Base:** `main` at 1.2.50.31
+- Cooked sibling request-play / Requests in-flight / library-remove / changelog into **this one number**
+- [#91](https://github.com/ajt1995/reelos/pull/91) is **DO NOT APPLY** — changelog UI lives here, not as 1.2.50.34
 - Did **not** take Tron chrome from #52 / #70 / #59
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
 
+### Requests is in-flight only
+
+Requests overlays the JF shelf then keeps searching / grabbing / linked waiting for import. Available, Cached, and Play leave the page — they live on Library / On this box. Cancel (and Retry on locks) stay. Home already did this on 1.2.50.30.
+
 ### Search → request → play honesty
 
-GET `/api/request?recover=1` on every Home poll (server cooldown still applies). Overlay uses the JF shelf, not leftover available TMDB ids. Home cards resolve `r.title` when catalog is empty. GET-by-id kicks `wire-engines import` once when a title is available. FUSE dump listing uses timed `ls`. Connect JF chip is gold while probing; loopback-up is green.
+GET `/api/request?recover=1` on every poll (server cooldown still applies). Overlay uses the JF shelf, not leftover available TMDB ids. Home cards resolve `r.title` when catalog is empty. GET-by-id kicks `wire-engines import` once when a title is available. FUSE dump listing uses timed `ls`. Connect JF chip is gold while probing; loopback-up is green.
 
-### Firstboot is a no-op on a provisioned box
+### Remove from this box
 
-`/var/lib/reelos/stack-installed` is the unit latch (`ConditionPathExists=!…/stack-installed`). Wizard Finish and Apply write it when `provisioned` already exists. Vite latches it on start. `install.sh` stamps it and exits 0 before apt if provisioned.
+Phone title / Library / On this box: confirm, then unmonitor and DELETE the Radarr/Sonarr row. `deleteFiles` only for a title dump folder, never `/media` or FUSE roots. Seerr request/media rows go with it. Overlay hides the poster until you request it again.
 
-### install.sh does not `cp` onto itself
+### Settings Updates shows a changelog
 
-Firstboot ExecStart is `/opt/reelos/install.sh` (HERE==ROOT). App/compose/bin/VERSION copies only run when HERE≠ROOT. GNU `cp` same-file was exit 1.
+Settings → Box → Updates always lists **This install**. After Check, **This update** is the pending target only — owner English, not a git log. Settings stays a repair panel (Heal/Doctor untouched).
 
-### Apply does not enable firstboot
+### House facts (not a stamp — from #88 / #89)
 
-Mailman never `systemctl enable reelos-firstboot`. It refreshes `/opt/reelos/install.sh` from the tarball so a later enable is still a no-op on a provisioned box.
+House is still **1.2.50.27**. `ota.lock` exists; flock not held — do not delete. Firstboot is disabled/idle; `stack-installed` latched. Door `:80`/`:8080`/`:8096` were 200 at the last SSH scan. Do not fight those STATUS PRs; they are docs, not Applies.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-library.test.mjs scripts/reelos-ready.test.mjs
+node --test scripts/stack-smoke.test.mjs scripts/update-notes.test.mjs scripts/reelos-library-remove.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-library.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 ```
 
 ## Owner / house Apply
 
-**Do not Apply from the agent.** House is still **1.2.50.27**. No house Apply until VM boot of this stamp — and even then prefer owner Check → Apply once. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`.
+**Do not Apply from the agent.** House is still **1.2.50.27**. Channel will offer **1.2.50.32** after merge. Owner phone **Check → Apply once** after VM boot of this stamp. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
 
 SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 8 compose containers live). `systemctl start` (not enable) **skipped** — `ConditionPathExists=!/var/lib/reelos/stack-installed`. Unit left **disabled**. Old loop journal: `cp: '/opt/reelos/bin/.' and '/opt/reelos/bin/.' are the same file`.
 
@@ -68,6 +74,7 @@ SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 
 - Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
 - Implement Arena UI until the owner names that pass
 - Glue Books/Kavita to Tron chrome or burn it as 1.2.51
+- House Apply 34 then 35 then 32 — this stamp is the one Apply
 - Tap Apply twice
 - Delete `ota.lock`
 - Wipe `/media` or TorBox

@@ -244,6 +244,19 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
       mem = { at: now, complete, titles };
       return mem;
     },
+    drop(keys, { now = Date.now() } = {}) {
+      if (!mem?.titles) return mem;
+      const hide = keys instanceof Set ? keys : new Set(keys || []);
+      mem = {
+        at: now,
+        complete: mem.complete,
+        titles: mem.titles.filter((t) => {
+          const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
+          return !ids.some((id) => id && hide.has(String(id)));
+        }),
+      };
+      return mem;
+    },
     isFresh(now = Date.now()) {
       return cacheIsFresh(mem, now, ttlMs);
     },
@@ -278,14 +291,23 @@ export async function serveLibrary({
   getAuth,
   fetchItems,
   refresh,
+  removedIds = [],
 }) {
   const u = new URL(url, "http://reelos.local");
   const limit = parseLibraryLimit(u.searchParams.get("limit"));
   const wantFresh = u.searchParams.get("fresh") === "1";
   const stale = cache.read();
+  const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
+  const withoutRemoved = (titles) => {
+    if (!hide.size) return titles || [];
+    return (titles || []).filter((t) => {
+      const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
+      return !ids.some((id) => id && hide.has(String(id)));
+    });
+  };
 
   const serve = (titles, extra = {}) => ({
-    titles: withPosterHost(applyLibraryLimit(dedupeLibraryTitles(titles), limit), host),
+    titles: withPosterHost(applyLibraryLimit(dedupeLibraryTitles(withoutRemoved(titles)), limit), host),
     error: extra.error ?? null,
     fromCache: Boolean(extra.fromCache),
   });

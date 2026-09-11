@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
+import { RemoveFromBox } from "@/components/remove-from-box";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
@@ -173,7 +174,10 @@ export function HomeView() {
       {shelf.length > 0 ? (
         <Row label="On this box">
           {shelf.slice(0, 24).map((t) => (
-            <TitleCard key={t.id} title={t} />
+            <div key={t.id} className="w-[148px] shrink-0 sm:w-[168px]">
+              <TitleCard title={t} className="w-auto" />
+              <RemoveFromBox title={t} compact />
+            </div>
           ))}
         </Row>
       ) : q.trim().length < 2 ? (

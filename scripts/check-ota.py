@@ -42,6 +42,12 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "compose recreated — remount FUSE before hops"),
     ("daemon/reelos-update.sh", "clear stale FUSE before compose up"),
     ("daemon/reelos-update.sh", "fuse_live"),
+    ("src/components/settings-updates.tsx", "This install"),
+    ("src/components/settings-updates.tsx", "This update"),
+    ("scripts/reelos-lookup-plugin.mjs", "pendingNotes"),
+    ("scripts/update-notes.mjs", "ownerEnglish"),
+    ("scripts/reelos-library-remove.mjs", "deleteFilesAllowed"),
+    ("src/components/remove-from-box.tsx", "Remove from this box"),
 )
 
 

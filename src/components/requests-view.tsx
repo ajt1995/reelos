@@ -1,35 +1,40 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
 import { useSyncRequests } from "@/lib/use-sync-requests";
-import { requestShowsRetry } from "@/lib/sync-requests";
-import type { RequestStatus } from "@/lib/types";
+import { inFlightRequests, requestShowsRetry, titleForRequest } from "@/lib/sync-requests";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const FILTERS: { id: "all" | RequestStatus; label: string }[] = [
+const FILTERS: { id: "all" | "downloading" | "waiting"; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "available", label: "Available" },
   { id: "downloading", label: "Downloading" },
   { id: "waiting", label: "Waiting" },
-  { id: "failed", label: "Failed" },
 ];
 
 export function RequestsView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const requests = useReelStore((s) => s.requests);
+  const shelf = useReelStore((s) => s.shelf);
+  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const retry = useReelStore((s) => s.retryRequest);
   const cancel = useReelStore((s) => s.cancelRequest);
   useSyncRequests();
+  useEffect(() => {
+    hydrateShelf({ limit: 24 });
+  }, [hydrateShelf]);
 
-  const list = requests.filter((r) => (filter === "all" ? true : r.status === filter));
+  const inflight = inFlightRequests(requests, { titles: shelf });
+  const list = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
 
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
-      <p className="mt-2 text-sm text-muted">Household asks. Admin can auto-approve.</p>
+      <p className="mt-2 text-sm text-muted">
+        In flight — searching, grabbing, waiting to import. Playable titles are in Library.
+      </p>
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
@@ -47,10 +52,10 @@ export function RequestsView() {
       </div>
       <ul className="mt-6 divide-y divide-border">
         {list.length === 0 ? (
-          <li className="py-12 text-sm text-muted">Nothing in this list.</li>
+          <li className="py-12 text-sm text-muted">Nothing in flight.</li>
         ) : null}
         {list.map((r) => {
-          const t = getTitle(r.titleId);
+          const t = titleForRequest(r, shelf) || getTitle(r.titleId);
           const titleId = t?.id || r.titleId;
           const label = t?.title || r.title || r.titleId || "Title";
           return (
@@ -75,34 +80,22 @@ export function RequestsView() {
                     <div className="h-full bg-gold" style={{ width: `${r.progress}%` }} />
                   </div>
                 ) : null}
-                {r.status === "failed" ? (
-                  <p className="mt-1 text-sm text-danger">{r.reason}</p>
-                ) : (
-                  <p className="mt-1 text-xs text-muted">
-                    {r.reason ||
-                      viaLabel(r.via, r.status) ||
-                      (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                    {r.status === "downloading" && r.progress > 0 && !r.reason ? ` · ${Math.round(r.progress)}%` : ""}
-                    {r.release ? ` · ${r.release}` : ""}
-                  </p>
-                )}
+                <p className="mt-1 text-xs text-muted">
+                  {r.reason ||
+                    viaLabel(r.via, r.status) ||
+                    (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
+                  {r.status === "downloading" && r.progress > 0 && !r.reason ? ` · ${Math.round(r.progress)}%` : ""}
+                  {r.release ? ` · ${r.release}` : ""}
+                </p>
               </div>
               {requestShowsRetry(r) ? (
                 <Button size="sm" variant="ghost" onClick={() => retry(r.id)}>
                   Retry
                 </Button>
-              ) : r.status !== "available" ? (
+              ) : (
                 <Button size="sm" variant="quiet" onClick={() => cancel(r.id)}>
                   Cancel
                 </Button>
-              ) : (
-                <Link
-                  to="/play/$id"
-                  params={{ id: titleId }}
-                  className="text-sm text-gold hover:text-gold-bright"
-                >
-                  Play
-                </Link>
               )}
             </li>
           );

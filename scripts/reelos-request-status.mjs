@@ -22,7 +22,7 @@ export function arrApiKey(name) {
   return null;
 }
 
-async function arrJson(url, key, ms = 10000, { method = "GET", body } = {}) {
+export async function arrJson(url, key, ms = 10000, { method = "GET", body } = {}) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), ms);
   try {

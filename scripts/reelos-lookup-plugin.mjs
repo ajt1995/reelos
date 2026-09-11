@@ -16,10 +16,17 @@ import {
   lookupFailureMessage,
   buildSeerrAddPayload,
 } from "./reelos-seerr.mjs";
-import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
+import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
+import { notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
+import {
+  forgetRemovedTitleIds,
+  readRemovedTitleIds,
+  rememberRemovedTitleIds,
+  removeLibraryTitle,
+} from "./reelos-library-remove.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -411,7 +418,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.31"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.32"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -886,14 +893,16 @@ async function handleUpdateCheck(_req, res) {
     /* */
   }
   const shaDrift = Boolean(head) && head !== applied;
+  const channelNotes = Array.isArray(best.notes) ? best.notes : [];
   const notes = shaDrift && !newer
-    ? [`Code update on ${best.version} (${head.slice(0, 12)})`]
-    : best.notes || [];
+    ? ["This box is behind the latest code even though the version number matches."]
+    : pendingNotes(channelNotes, local, best.version);
   send(res, 200, {
     ok: true,
     local,
     remote: best.version,
     notes,
+    currentNotes: notesForVersion(channelNotes, local),
     available: newer || shaDrift,
     sha: head.slice(0, 12),
   });
@@ -1197,6 +1206,10 @@ async function handleRequest(req, res) {
     return;
   }
   try {
+    forgetRemovedTitleIds(titleId, [
+      parsed.mediaType === "tv" ? `tmdb-tv-${parsed.tmdb}` : `tmdb-${parsed.tmdb}`,
+      parsed.mediaType === "tv" ? `tmdb-${parsed.tmdb}` : `tmdb-tv-${parsed.tmdb}`,
+    ]);
     const listed = await seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 15000 });
     const existingRows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
     const reused = findExistingSeasonRequest(existingRows, {
@@ -1814,6 +1827,10 @@ async function handleJellyfinImage(req, res) {
 }
 
 async function handleLibrary(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "DELETE") {
+    return handleLibraryRemove(req, res);
+  }
   const host =
     String(req.headers.host || "")
       .split(":")[0]
@@ -1824,6 +1841,7 @@ async function handleLibrary(req, res) {
     url: req.url || "/api/library",
     host,
     cache: libraryCache,
+    removedIds: readRemovedTitleIds(),
     getAuth: async () => {
       const a = answers();
       return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
@@ -1840,6 +1858,60 @@ async function handleLibrary(req, res) {
   });
   persistLibraryCache();
   send(res, 200, { titles: result.titles, error: result.error });
+}
+
+async function jellyfinGetItem(id) {
+  const a = answers();
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (!auth?.token) return null;
+  const r = await fetch(`http://127.0.0.1:8096/Items/${encodeURIComponent(id)}`, {
+    headers: jellyfinAuthedHeaders(auth.token),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
+async function jellyfinDeleteItem(id) {
+  const a = answers();
+  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  if (!auth?.token) return;
+  await fetch(`http://127.0.0.1:8096/Items/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: jellyfinAuthedHeaders(auth.token),
+    signal: AbortSignal.timeout(8000),
+  });
+}
+
+async function handleLibraryRemove(req, res) {
+  const body = await readBody(req);
+  const confirm = body.confirm === true || body.confirm === "true";
+  const titleId = String(body.titleId || body.id || "").trim();
+  const ids = Array.isArray(body.ids) ? body.ids.map((id) => String(id)) : [];
+  const shelf = libraryCache.read()?.titles || [];
+  const result = await removeLibraryTitle({
+    titleId,
+    jellyfinId: body.jellyfinId,
+    tmdb: body.tmdb,
+    tvdb: body.tvdb,
+    mediaType: body.mediaType,
+    ids,
+    confirm,
+    shelf,
+    seerrKey: seerrApiKey(),
+    seerrFetch,
+    fetchArr: arrJson,
+    radarrKey: arrApiKey("radarr"),
+    sonarrKey: arrApiKey("sonarr"),
+    jellyfinGetItem,
+    jellyfinDeleteItem,
+    onRemovedIds: (keys) => {
+      rememberRemovedTitleIds(keys);
+      libraryCache.drop(keys);
+      persistLibraryCache();
+    },
+  });
+  send(res, result.ok ? 200 : 400, result);
 }
 
 let fuseReadersKick = 0;

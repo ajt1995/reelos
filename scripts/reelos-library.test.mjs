@@ -252,11 +252,15 @@ test("jf-only TWD Season 1 (2011) collapses onto the 2010 series even when years
     assert.equal(out[0].title, "The Walking Dead");
     assert.equal(out[0].year, 2010);
     assert.equal(out[0].id, "tvdb-153021");
+<<<<<<< Updated upstream
     assert.deepEqual(out[0].ids.filter((i) => /^tmdb-|^tvdb-/.test(i)).sort(), [
       "tmdb-1402",
       "tmdb-tv-1402",
       "tvdb-153021",
     ]);
+=======
+    assert.deepEqual(out[0].ids.filter((i) => /^tmdb-|^tvdb-/.test(i)).sort(), ["tmdb-1402", "tmdb-tv-1402", "tvdb-153021"]);
+>>>>>>> Stashed changes
   }
 });
 
