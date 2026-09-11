@@ -1,6 +1,9 @@
 export {
   cmpVer,
   displayVersion,
+  isBetaLine,
+  isRollback,
+  isStableLine,
   noteVersion,
   notesForVersion,
   ownerEnglish,

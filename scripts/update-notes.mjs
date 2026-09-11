@@ -6,6 +6,7 @@
  */
 export function versionKey(v) {
   return String(v || "0")
+    .replace(/-/g, ".")
     .split(".")
     .map((n) => parseInt(n, 10) || 0);
 }
@@ -26,12 +27,28 @@ export function cmpVer(a, b) {
   return 0;
 }
 
+/** Arena+Books line: 2.x or a leftover *-beta* stamp. */
+export function isBetaLine(v) {
+  const s = String(v || "");
+  return s.startsWith("2.") || s.includes("-beta");
+}
+
+/** Last stable repair line. */
+export function isStableLine(v) {
+  return String(v || "").startsWith("1.2.50.");
+}
+
+/** Leave 2.0 / beta and Apply the 1.2.50.x channel even though it is "older". */
+export function isRollback(local, remote, betaOn) {
+  return !betaOn && isBetaLine(local) && isStableLine(remote);
+}
+
 /**
  * @param {string} line
  * @returns {string}
  */
 export function noteVersion(line) {
-  const m = String(line || "").match(/^(\d+(?:\.\d+)*)\s*:/);
+  const m = String(line || "").match(/^(\d+(?:\.\d+)*(?:-beta\.\d+)?)\s*:/);
   return m ? m[1] : "";
 }
 
@@ -41,7 +58,7 @@ export function noteVersion(line) {
  */
 export function stripVersionPrefix(line) {
   return String(line || "")
-    .replace(/^\d+(?:\.\d+)*:\s*/, "")
+    .replace(/^\d+(?:\.\d+)*(?:-beta\.\d+)?:\s*/, "")
     .trim();
 }
 
