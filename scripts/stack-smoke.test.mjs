@@ -95,7 +95,7 @@ test("stack: VERSION / channel / stamps agree (1.2.50.42)", () => {
   assert.match(chan.notes[4], /TorBox/);
   assert.match(chan.notes[4], /DirectPlay/);
   assert.match(chan.notes[4], /prebuilt hashed UI/);
-  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: catalog \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
 });

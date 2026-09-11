@@ -6,8 +6,13 @@ import { RemoveFromBox } from "@/components/remove-from-box";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
-import { inFlightRequests, titleForRequest } from "@/lib/sync-requests";
-import { useSyncRequests } from "@/lib/use-sync-requests";
+import {
+  collapseHomeRequestCards,
+  inFlightRequests,
+  isGhostRequestLabel,
+  titleForRequest,
+} from "@/lib/sync-requests";
+import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +20,10 @@ export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
-  const watchUrl = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
+  const remoteTitles = useReelStore((s) => s.remoteTitles);
   const shelfError = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
   const navigate = useNavigate();
@@ -28,9 +33,11 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
-  const inflight = inFlightRequests(requests, { titles: shelf });
+  const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
+  const inflight = inFlightRequests(requests, { titles: catalog });
   const transferring = inflight.length;
   useSyncRequests();
+  useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {
     hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
@@ -83,9 +90,9 @@ export function HomeView() {
     };
   }, [q, rememberTitles]);
 
-  const reqCards = inflight
-    .map((r) => ({ r, t: titleForRequest(r, shelf) ?? getTitle(r.titleId) }))
-    .filter((x) => x.t)
+  const reqCards = collapseHomeRequestCards(inflight)
+    .map((r) => ({ r, t: titleForRequest(r, catalog) ?? getTitle(r.titleId) }))
+    .filter((x) => x.t && !isGhostRequestLabel(x.t.title, x.t.id))
     .slice(0, 12);
 
   const continueWatch = Object.entries(watch)
@@ -95,16 +102,6 @@ export function HomeView() {
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
-      {watchUrl ? (
-        <a
-          href={watchUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mb-4 inline-flex h-11 items-center rounded-full bg-gold px-5 text-sm font-medium text-gold-fg"
-        >
-          Watch in this browser
-        </a>
-      ) : null}
       <form
         className="relative mx-auto block w-full max-w-2xl"
         onSubmit={(e) => {

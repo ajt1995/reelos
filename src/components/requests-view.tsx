@@ -3,8 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import { useSyncRequests } from "@/lib/use-sync-requests";
-import { inFlightRequests, requestShowsRetry, titleForRequest } from "@/lib/sync-requests";
+import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
+import { inFlightRequests, isGhostRequestLabel, requestShowsRetry, titleForRequest } from "@/lib/sync-requests";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +18,7 @@ export function RequestsView() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["id"]>("all");
   const requests = useReelStore((s) => s.requests);
   const shelf = useReelStore((s) => s.shelf);
+  const remoteTitles = useReelStore((s) => s.remoteTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const retry = useReelStore((s) => s.retryRequest);
   const cancel = useReelStore((s) => s.cancelRequest);
@@ -26,7 +27,9 @@ export function RequestsView() {
     hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
 
-  const inflight = inFlightRequests(requests, { titles: shelf });
+  const catalog = [...shelf, ...remoteTitles];
+  const inflight = inFlightRequests(requests, { titles: catalog });
+  useResolveGhostRequestTitles(inflight, catalog);
   const list = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
 
   return (
@@ -55,9 +58,10 @@ export function RequestsView() {
           <li className="py-12 text-sm text-muted">Nothing in flight.</li>
         ) : null}
         {list.map((r) => {
-          const t = titleForRequest(r, shelf) || getTitle(r.titleId);
+          const t = titleForRequest(r, catalog) || getTitle(r.titleId);
           const titleId = t?.id || r.titleId;
-          const label = t?.title || r.title || r.titleId || "Title";
+          const raw = t?.title || r.title || "";
+          const label = isGhostRequestLabel(raw, titleId) ? "Looking up title…" : raw || "Title";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">

@@ -4,8 +4,10 @@ import { test } from "node:test";
 import {
   applyTitleRequestPoll,
   collapseDuplicateRequests,
+  collapseHomeRequestCards,
   dropLibraryOverlay,
   inFlightRequests,
+  isGhostRequestLabel,
   isInFlightRequest,
   mergeServerRequests,
   overlayLibraryPresence,
@@ -119,13 +121,15 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
-  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
-  assert.match(home, /titleForRequest\(r, shelf\)/);
-  assert.match(home, /reqCards = inflight/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
+  assert.match(home, /titleForRequest\(r, catalog\)/);
+  assert.match(home, /collapseHomeRequestCards\(inflight\)/);
   assert.match(home, /transferring = inflight\.length/);
+  assert.doesNotMatch(home, /Watch in this browser/);
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
-  assert.match(reqs, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.doesNotMatch(shell, /aria-label="Search"/);
+  assert.match(reqs, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
   assert.match(reqs, /inflight\.filter\(\(r\) => \(filter === "all" \? true : r\.status === filter\)\)/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
@@ -423,6 +427,63 @@ test("titleForRequest uses the request name when catalog is empty", () => {
   );
   assert.equal(t.title, "Spider-Man: Into the Spider-Verse");
   assert.equal(t.id, "tmdb-324857");
+});
+
+test("tmdb-2059 is a ghost label until Seerr names it", () => {
+  assert.equal(isGhostRequestLabel("tmdb-2059", "tmdb-2059"), true);
+  assert.equal(isGhostRequestLabel("", "tmdb-2059"), true);
+  assert.equal(isGhostRequestLabel("National Treasure", "tmdb-2059"), false);
+  const ghost = titleForRequest({ titleId: "tmdb-2059" }, []);
+  assert.equal(isGhostRequestLabel(ghost.title, ghost.id), true);
+  const named = titleForRequest({ titleId: "tmdb-2059" }, [
+    { id: "tmdb-2059", kind: "movie", title: "National Treasure", year: 2004, poster: "https://image.tmdb.org/x.jpg", ids: ["tmdb-2059"] },
+  ]);
+  assert.equal(named.title, "National Treasure");
+  assert.equal(isGhostRequestLabel(named.title, named.id), false);
+});
+
+test("stale local waiting rows drop when Seerr returns a shorter list", () => {
+  const local = [
+    row({ id: "ghost", titleId: "tmdb-2059", title: "National Treasure", status: "downloading", createdAt: 1, updatedAt: 1 }),
+    ...Array.from({ length: 23 }, (_, i) =>
+      row({ id: `stale-${i}`, titleId: `tmdb-tv-${9000 + i}`, title: "The Expanse", status: "waiting", createdAt: 1, updatedAt: 1, season: 1 }),
+    ),
+  ];
+  const server = [
+    row({ id: "seerr-9", titleId: "tmdb-2059", status: "downloading", progress: 0, createdAt: 1, updatedAt: 1 }),
+    row({ id: "debrid-exp", titleId: "tmdb-tv-63639", title: "The Expanse", status: "available", progress: 100, season: 1, engine: "downloaded" }),
+  ];
+  const merged = mergeServerRequests(local, server);
+  const inflight = inFlightRequests(merged, { titles: [] });
+  assert.equal(inflight.length, 1);
+  assert.equal(inflight[0]?.titleId, "tmdb-2059");
+});
+
+test("optimistic local Request survives one poll before Seerr echoes it", () => {
+  const now = Date.now();
+  const local = [row({ id: "req-new", titleId: "tmdb-157336", title: "Interstellar", status: "waiting", createdAt: now, updatedAt: now })];
+  const server = [row({ id: "seerr-9", titleId: "tmdb-2059", status: "downloading" })];
+  const merged = mergeServerRequests(local, server);
+  assert.equal(merged.some((r) => r.titleId === "tmdb-157336"), true);
+  assert.equal(merged.some((r) => r.titleId === "tmdb-2059"), true);
+});
+
+test("Home collapses two Expanse season rows to one card", () => {
+  const cards = collapseHomeRequestCards([
+    row({ id: "s1", titleId: "tmdb-tv-63639", title: "The Expanse", status: "waiting", season: 1 }),
+    row({ id: "s2", titleId: "tmdb-tv-63639", title: "The Expanse", status: "waiting", season: 2 }),
+  ]);
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0]?.titleId, "tmdb-tv-63639");
+});
+
+test("phone chrome keeps one Watch and the tab bar", () => {
+  const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
+  const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(home, /Watch in this browser/);
+  assert.match(shell, />\s*Watch\s*</);
+  assert.match(shell, /to: "\/discover"/);
+  assert.match(shell, /to: "\/settings"/);
 });
 
 test("player matches tmdb-tv to a JF series whose id is tvdb / tmdb", () => {

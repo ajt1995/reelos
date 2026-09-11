@@ -12,6 +12,7 @@ import {
   seerrSearchHit,
   honestifyRequests,
   assembleRequestPayload,
+  attachSeerrDetailTitles,
   mapSeerrSearchResults,
   mapSeerrDiscoverResults,
   lookupFailureMessage,
@@ -1270,7 +1271,8 @@ async function handleRequestList(res) {
       mediaItems = [];
     }
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
-    send(res, 200, { requests: assembled.requests, titles: [], engine: "seerr", pipeline: assembled.pipeline });
+    const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
+    send(res, 200, { requests: filled.rows, titles: filled.titles, engine: "seerr", pipeline: assembled.pipeline });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }

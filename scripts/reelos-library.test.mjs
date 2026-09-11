@@ -534,7 +534,7 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
   assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
-  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
   assert.doesNotMatch(home, /\/api\/box/);
   assert.match(store, /shelf: s\.shelf/);
   const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");
