@@ -28,7 +28,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - **VERSION / channel:** `1.2.50.44`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.43 ([#127](https://github.com/ajt1995/reelos/pull/127)); splash catch-up done. 1.2.50.42 ffprobe stub, 1.2.50.41 hardware profile, 1.2.50.40 Apply/library split stay.
+- **Base:** `main` at 1.2.50.43 ([#127](https://github.com/ajt1995/reelos/pull/127)); splash catch-up done. 1.2.50.42 ffprobe stub, 1.2.50.41 hardware profile, 1.2.50.40 Apply/library split, 1.2.50.38 wizard honesty + DirectPlay, and 1.2.50.37 4GB detect stay.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.43** installed; catch-up oneshot inactive; progress JSON unstuck to done / splashLock false without Apply; firstboot disabled
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
@@ -56,7 +56,7 @@ Check → Apply stamps after hops and the door. Indexers, dump import, heal, hyb
 
 ### Beta sidecar (Check+beta fetches 2.0.0)
 
-Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.43` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 43 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
+Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.44` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 44 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
 
 ### Stamp first, library catch-up in the background
 

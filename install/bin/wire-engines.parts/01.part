@@ -296,10 +296,9 @@ def kick_imports(*, catch_up: bool = False) -> bool:
     # this Apply cannot re-ingest the duplicate dumps it just healed.
     # Never RescanSeries with no id (all shows) on Apply.
     log_wire("import collapse season-folder dumps before jellyfin refresh")
-    ok = heal_after_import(catch_up=catch_up)
     if catch_up:
         write_library_progress(status="done", needsImport=False, splashLock=False)
-    return ok
+    return heal_after_import(catch_up=catch_up)
 
 
 d
