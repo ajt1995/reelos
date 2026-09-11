@@ -1,8 +1,8 @@
 /** Background JF token, request recover, unstick searching-if-file-on-disk.
  *  No TorBox. No FUSE walk. No firstboot. */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import {
   arrHasFile,
   libraryHit,
@@ -184,13 +184,13 @@ function isMainModule(moduleUrl) {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    return pathToFileURL(fileURLToPath(moduleUrl)).href === pathToFileURL(entry).href;
+    return realpathSync(entry) === fileURLToPath(moduleUrl);
   } catch {
     return false;
   }
 }
 
-if (process.argv[1] && isMainModule(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   runSelfHeal()
     .then((r) => {
       process.stdout.write(`${JSON.stringify(r)}\n`);

@@ -8,10 +8,10 @@
  * to `vite --host :8080` so the door still binds.
  */
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, realpathSync, statSync } from "node:fs";
 import http from "node:http";
 import { extname, join, normalize, relative, dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { mergeAppEnv, readAppEnv } from "./with-app-env.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -162,12 +162,12 @@ function isMainModule(moduleUrl) {
   const entry = process.argv[1];
   if (!entry) return false;
   try {
-    return pathToFileURL(fileURLToPath(moduleUrl)).href === pathToFileURL(entry).href;
+    return realpathSync(entry) === fileURLToPath(moduleUrl);
   } catch {
     return false;
   }
 }
 
-if (process.argv[1] && isMainModule(import.meta.url)) {
+if (isMainModule(import.meta.url)) {
   await startBox();
 }
