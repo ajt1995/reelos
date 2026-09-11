@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-BpvQVhxl.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { m as applyTitleRequestPoll, n as Route, p as useReelStore, v as requestShowsRetry, y as showRequestQueueControls } from "./router-BUp0EPEh.mjs";
-import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-Cca-MAtH.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/title._id-BytaE4BA.js
+import { m as applyTitleRequestPoll, n as Route, p as useReelStore, v as requestShowsRetry, y as showRequestQueueControls } from "./router-DstgBgqY.mjs";
+import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-B6Ld30lK.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/title._id-11awAuLr.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 /** Poll GET /api/request; sync status + progress into the matching title+season row. */

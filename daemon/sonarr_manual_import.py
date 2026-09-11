@@ -511,6 +511,23 @@ def ffprobe_d_state_count(text: str | None = None) -> int:
     return n
 
 
+def ffprobe_is_stubbed() -> bool:
+    """True when container ffprobe is the ReelOS no-op script, not the ELF."""
+    try:
+        import subprocess
+
+        r = subprocess.run(
+            ["docker", "exec", "reelos-sonarr-1", "head", "-1", "/app/sonarr/bin/ffprobe"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        return (r.stdout or "").lstrip().startswith("#!")
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def ffprobe_d_backoff_limit(*, small: bool | None = None) -> int:
     """Any ffprobe D-state is I/O backpressure. Hardware size does not change this."""
     mod = _hw()
@@ -520,7 +537,9 @@ def ffprobe_d_backoff_limit(*, small: bool | None = None) -> int:
 
 
 def catchup_chunk_size(*, catch_up: bool, d_state: int = 0, profile: dict | None = None) -> int:
-    """High D-state → 0 on any hardware. Healthy FUSE + many cores → don't walk like a Pi."""
+    """High D-state → 0 on any hardware. Stubbed ffprobe is not FUSE backpressure."""
+    if ffprobe_is_stubbed():
+        d_state = 0
     prof = profile if profile is not None else hardware_profile()
     mod = _hw()
     if mod is not None:
@@ -533,8 +552,8 @@ def catchup_chunk_size(*, catch_up: bool, d_state: int = 0, profile: dict | None
 
 
 def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0, timeouts: int = 0, status: str = "running") -> str:
-    if status == "backoff":
-        return "Library catching up — backing off (ffprobe busy)"
+    if status in ("backoff", "idle"):
+        return ""
     bits = []
     if total:
         bits.append(f"folder {folder} of {total}")
@@ -561,9 +580,22 @@ def write_library_progress(**fields):
         prev = {}
     prev.update({k: v for k, v in fields.items() if v is not None})
     status = str(prev.get("status") or "idle")
+    if status == "backoff":
+        status = "idle"
+        prev["status"] = "idle"
+        prev["needsImport"] = False
     needs = bool(prev.get("needsImport"))
     prev["splashLock"] = status == "running" and needs
-    prev["message"] = fields.get("message") or format_catchup_message(
+    if "message" in fields:
+        prev["message"] = fields.get("message") or format_catchup_message(
+            folder=int(prev.get("folder") or 0),
+            total=int(prev.get("total") or 0),
+            skipped=int(prev.get("skipped") or 0),
+            timeouts=int(prev.get("timeouts") or 0),
+            status=status,
+        )
+    else:
+        prev["message"] = format_catchup_message(
         folder=int(prev.get("folder") or 0),
         total=int(prev.get("total") or 0),
         skipped=int(prev.get("skipped") or 0),
@@ -699,18 +731,21 @@ def _list_manualimport(
     limit = ffprobe_d_backoff_limit()
     for i, folder in enumerate(scan, start=1):
         d_state = ffprobe_d_state_count()
-        if catch_up and d_state >= limit:
+        if catch_up and d_state >= limit and not ffprobe_is_stubbed():
             if log_wire:
-                log_wire(f"import catch-up backoff — ffprobe D-state {d_state} (not piling more)")
+                log_wire(f"import catch-up idle — ffprobe D-state {d_state} (not piling more)")
             write_library_progress(
-                status="backoff",
+                status="idle",
                 folder=i,
                 total=len(scan),
                 timeouts=timeouts,
-                needsImport=True,
-                message=format_catchup_message(folder=i, total=len(scan), timeouts=timeouts, status="backoff"),
+                needsImport=False,
+                message="",
             )
             break
+        if catch_up and d_state >= limit:
+            if log_wire:
+                log_wire(f"import catch-up — ffprobe stubbed, skip-existing dumps (D-state {d_state})")
         if catch_up:
             write_library_progress(
                 status="running",
@@ -1010,21 +1045,31 @@ def _self_test() -> int:
             self.assertEqual(ffprobe_d_state_count(""), 0)
             self.assertEqual(ffprobe_d_backoff_limit(small=True), 1)
             self.assertEqual(ffprobe_d_backoff_limit(small=False), 1)
-            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12), 0)
-            tiny = {"ram_kb": 3_383_440, "ram_gb": 3.23, "cpus": 4, "disk_kind": "rotational", "tiny": True}
-            laptop = {"ram_kb": 16 * 1024 * 1024, "ram_gb": 16.0, "cpus": 8, "disk_kind": "ssd", "tiny": False}
-            self.assertEqual(import_folder_cap(catch_up=True, profile=tiny), 6)
-            self.assertGreater(import_folder_cap(catch_up=True, profile=laptop), 16)
-            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=0, profile=tiny), 8)
-            self.assertGreater(catchup_chunk_size(catch_up=True, d_state=0, profile=laptop), 8)
+            import sys as _sys
+
+            here = _sys.modules[__name__]
+            orig_stub = here.ffprobe_is_stubbed
+            here.ffprobe_is_stubbed = lambda: False
+            try:
+                self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12), 0)
+                tiny = {"ram_kb": 3_383_440, "ram_gb": 3.23, "cpus": 4, "disk_kind": "rotational", "tiny": True}
+                laptop = {"ram_kb": 16 * 1024 * 1024, "ram_gb": 16.0, "cpus": 8, "disk_kind": "ssd", "tiny": False}
+                self.assertEqual(import_folder_cap(catch_up=True, profile=tiny), 6)
+                self.assertGreater(import_folder_cap(catch_up=True, profile=laptop), 16)
+                self.assertEqual(catchup_chunk_size(catch_up=True, d_state=0, profile=tiny), 8)
+                self.assertGreater(catchup_chunk_size(catch_up=True, d_state=0, profile=laptop), 8)
+                here.ffprobe_is_stubbed = lambda: True
+                self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12, profile=tiny), 8)
+            finally:
+                here.ffprobe_is_stubbed = orig_stub
             msg = format_catchup_message(folder=3, total=16, skipped=4, timeouts=1, status="running")
             self.assertIn("folder 3 of 16", msg)
             self.assertIn("4 skipped", msg)
             self.assertIn("1 timeouts", msg)
             self.assertTrue(msg.startswith("Library catching up"))
             back = format_catchup_message(status="backoff")
-            self.assertIn("backing off", back)
-            self.assertIn("ffprobe", back)
+            self.assertEqual(back, "")
+            self.assertEqual(format_catchup_message(status="idle"), "")
 
         def test_splash_lock_only_when_running_and_needs_import(self):
             import tempfile
@@ -1042,6 +1087,8 @@ def _self_test() -> int:
                 self.assertEqual(row["splashLock"], False)
                 row = write_library_progress(status="backoff", needsImport=True)
                 self.assertEqual(row["splashLock"], False)
+                self.assertEqual(row["status"], "idle")
+                self.assertEqual(row.get("message") or "", "")
                 row = write_library_progress(status="done", needsImport=False)
                 self.assertEqual(row["splashLock"], False)
             finally:

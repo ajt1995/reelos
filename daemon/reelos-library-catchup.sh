@@ -62,6 +62,10 @@ fuse_listed() {
   mount 2>/dev/null | grep -q ' on /mnt/debrid type fuse.decypharr'
 }
 
+ffprobe_stubbed() {
+  docker exec reelos-sonarr-1 head -1 /app/sonarr/bin/ffprobe 2>/dev/null | grep -q '^#!'
+}
+
 log "library catch-up in background"
 if fuse_listed; then
   log "fuse listed — do not remount if listed"
@@ -69,11 +73,14 @@ fi
 
 limit=$(d_limit)
 d=$(ffprobe_d_state)
-if [ "${d:-0}" -ge "$limit" ]; then
-  log "import catch-up backoff — ffprobe D-state $d (not piling more)"
-  write_progress backoff "Library catching up — backing off (ffprobe busy)" false false
+if [ "${d:-0}" -ge "$limit" ] && ! ffprobe_stubbed; then
+  log "import catch-up idle — ffprobe D-state $d (not piling more)"
+  write_progress idle "" false false
   # Keep the request flag so the 2min selfheal timer retries when D-state cools.
   exit 0
+fi
+if [ "${d:-0}" -ge "$limit" ]; then
+  log "import catch-up — ffprobe stubbed, skip-existing dumps (D-state $d)"
 fi
 
 write_progress running "Library catching up" false false
@@ -97,7 +104,7 @@ fi
 python3 "$ROOT/bin/wire-engines.py" import --catch-up >>"$LOG" 2>&1 || log "import catch-up non-fatal"
 
 rm -f "$STATE/library-catchup"
-# Python wrote folder N / skips / timeouts. Do not clobber a backoff.
+# Python wrote folder N / skips / timeouts. Never restore a stale backoff splash.
 python3 - "$PROGRESS" <<'PY'
 import json, sys, time
 path = sys.argv[1]
@@ -106,12 +113,11 @@ try:
     prev = json.loads(open(path).read())
 except Exception:
     prev = {}
-if prev.get("status") == "backoff":
-    raise SystemExit(0)
 prev["status"] = "done"
 prev["splashLock"] = False
 prev["needsImport"] = False
-if not prev.get("message") or str(prev.get("message")).startswith("Library catching up"):
+msg = str(prev.get("message") or "")
+if (not msg) or msg.startswith("Library catching up") or "backing off" in msg:
     skipped = int(prev.get("skipped") or 0)
     timeouts = int(prev.get("timeouts") or 0)
     prev["message"] = f"Library catch-up done — {skipped} skipped, {timeouts} timeouts"

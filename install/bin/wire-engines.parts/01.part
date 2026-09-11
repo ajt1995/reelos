@@ -1,6 +1,5 @@
 r -p /mnt /mnt/debrid /mnt/symlinks
-ExecStart=/bin/mount --bind /mnt /mnt
-ExecStart=/bin/mount --make-rshared /mnt
+ExecStart=/bin/bash -c 'findmnt -n /mnt >/dev/null || mount --bind /mnt /mnt; mount --make-rshared /mnt'
 RemainAfterExit=yes
 
 [Install]
@@ -12,6 +11,10 @@ WantedBy=multi-user.target
             return
         path.write_text(unit)
         subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+        if fuse_on_host():
+            subprocess.run(["systemctl", "enable", "reelos-mnt-rshared"], check=False, capture_output=True)
+            log_wire("mnt-rshared unit enabled — fuse live, not bind-stacking")
+            return
         subprocess.run(["systemctl", "enable", "--now", "reelos-mnt-rshared"], check=False, capture_output=True)
         log_wire("mnt-rshared unit enabled")
     except OSError as e:
@@ -156,10 +159,14 @@ def write_library_progress(**fields):
         prev = {}
     prev.update({k: v for k, v in fields.items() if v is not None})
     status = str(prev.get("status") or "idle")
+    if status == "backoff":
+        status = "idle"
+        prev["status"] = "idle"
+        prev["needsImport"] = False
     needs = bool(prev.get("needsImport"))
     prev["splashLock"] = status == "running" and needs
-    if not prev.get("message"):
-        prev["message"] = "Library catching up" if status == "running" else status
+    if "message" not in fields and not prev.get("message"):
+        prev["message"] = "Library catching up" if status == "running" else ""
     prev["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     try:
         STATE.mkdir(parents=True, exist_ok=True)
@@ -200,14 +207,17 @@ def kick_imports(*, catch_up: bool = False) -> bool:
                 limit = int(m.d_backoff_limit())
         except Exception:
             limit = 1
-        if d_state >= limit:
-            log_wire(f"import catch-up backoff — ffprobe D-state {d_state} (not piling more)")
+        if d_state >= limit and not ffprobe_is_stubbed():
+            log_wire(f"import catch-up idle — ffprobe D-state {d_state} (not piling more)")
             write_library_progress(
-                status="backoff",
+                status="idle",
                 needsImport=False,
-                message="Library catching up — backing off (ffprobe busy)",
+                splashLock=False,
+                message="",
             )
             return True
+        if d_state >= limit:
+            log_wire(f"import catch-up — ffprobe stubbed, skip-existing dumps (D-state {d_state})")
     if wait_fuse_ready(20 if catch_up else 40):
         log_wire("import — FUSE ready")
     else:
