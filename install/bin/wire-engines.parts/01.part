@@ -110,7 +110,7 @@ def relink_from_debrid(rk: str | None = None, sk: str | None = None) -> int:
     )
 
 
-def sonarr_manual_import(sk: str) -> None:
+def sonarr_manual_import(sk: str, hint=None, folders=None, *, catch_up: bool = False) -> None:
     """Dump folders are not a series library. Copy matched episodes into the series folder."""
     import importlib.util
     from pathlib import Path as _Path
@@ -125,7 +125,7 @@ def sonarr_manual_import(sk: str) -> None:
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     mod.bind(call_fn=call, log_fn=log_wire)
-    mod.sonarr_manual_import(sk)
+    mod.sonarr_manual_import(sk, hint=hint, folders=folders, catch_up=catch_up)
 
 
 def wait_fuse_ready(seconds: int = 40) -> bool:
@@ -144,28 +144,32 @@ def wait_fuse_ready(seconds: int = 40) -> bool:
     return False
 
 
-def kick_imports() -> bool:
-    if wait_fuse_ready(40):
+def kick_imports(*, catch_up: bool = False) -> bool:
+    ping_wait = 20 if catch_up else 90
+    if wait_fuse_ready(20 if catch_up else 40):
         log_wire("import — FUSE ready")
     else:
         log_wire("import — FUSE not ready, scan anyway")
-    wait_http("http://127.0.0.1:7878/ping", 90)
-    wait_http("http://127.0.0.1:8989/ping", 90)
+    wait_http("http://127.0.0.1:7878/ping", ping_wait)
+    wait_http("http://127.0.0.1:8989/ping", ping_wait)
     radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
     sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
     rk = api_key(radarr_xml)
     sk = api_key(sonarr_xml)
-    relink_from_debrid(rk=rk, sk=sk)
+    if catch_up:
+        log_wire("import catch-up — skip FUSE relink (no dfs walk)")
+    else:
+        relink_from_debrid(rk=rk, sk=sk)
     if rk:
         for attempt in range(5):
             try:
-                for path in ("/mnt/symlinks/radarr", "/symlinks/radarr"):
-                    call(
-                        "http://127.0.0.1:7878/api/v3/command",
-                        rk,
-                        method="POST",
-                        body={"name": "DownloadedMoviesScan", "path": path},
-                    )
+                # *arr sees /symlinks/... — do not list host+container paths twice.
+                call(
+                    "http://127.0.0.1:7878/api/v3/command",
+                    rk,
+                    method="POST",
+                    body={"name": "DownloadedMoviesScan", "path": "/symlinks/radarr"},
+                )
                 call("http://127.0.0.1:7878/api/v3/command", rk, method="POST", body={"name": "RefreshMonitoredDownloads"})
                 log_wire("radarr import scan")
                 break
@@ -175,25 +179,24 @@ def kick_imports() -> bool:
     if sk:
         for attempt in range(5):
             try:
-                for path in ("/mnt/symlinks/sonarr", "/symlinks/sonarr"):
-                    call(
-                        "http://127.0.0.1:8989/api/v3/command",
-                        sk,
-                        method="POST",
-                        body={"name": "DownloadedEpisodesScan", "path": path},
-                    )
-                call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RescanSeries"})
+                call(
+                    "http://127.0.0.1:8989/api/v3/command",
+                    sk,
+                    method="POST",
+                    body={"name": "DownloadedEpisodesScan", "path": "/symlinks/sonarr"},
+                )
                 call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RefreshMonitoredDownloads"})
                 log_wire("sonarr import scan")
                 break
             except Exception as e:
                 log_wire(f"sonarr scan try {attempt + 1} {type(e).__name__} {e}")
                 time.sleep(8)
-        sonarr_manual_import(sk)
+        sonarr_manual_import(sk, catch_up=catch_up)
     # Scan/relink first. Collapse + JF refresh happen in heal_after_import so
     # this Apply cannot re-ingest the duplicate dumps it just healed.
+    # Never RescanSeries with no id (all shows) on Apply.
     log_wire("import collapse season-folder dumps before jellyfin refresh")
-    return heal_after_import()
+    return heal_after_import(catch_up=catch_up)
 
 
 d

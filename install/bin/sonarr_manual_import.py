@@ -18,8 +18,10 @@ call = None  # type: ignore
 log_wire = None  # type: ignore
 
 MEDIA_EXT = (".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts")
-SONARR_FOLDERS = ("/mnt/symlinks/sonarr", "/symlinks/sonarr")
+SONARR_FOLDERS = ("/symlinks/sonarr",)
 FOREIGN_PATH_MARKERS = ("/radarr/", "/lidarr/", "/music/", "\\radarr\\", "\\lidarr\\", "\\music\\")
+SMALL_MEM_KB = 4_718_592
+LIST_TIMEOUT_SEC = 20  # was 120; skip folder on timeout and continue
 
 # Cut scene junk so "The.Walking.Dead.2010.2160p.WEB-DL.DDP5.1" → "The Walking Dead"
 _QUALITY_CUT = re.compile(
@@ -422,57 +424,141 @@ def select_import_files(
     return files, sample_unmatched
 
 
-def _expand_scan_folders(folders: list[str]) -> list[str]:
-    """Scan each dump/series subfolder on its own instead of the whole tree.
+
+def series_episode_file_count(row: dict) -> int:
+    try:
+        return int((row.get("statistics") or {}).get("episodeFileCount") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def folder_already_imported(folder: str, series_rows: list[dict]) -> bool:
+    """True when this dump folder maps to a series Sonarr already has files for."""
+    guess = strip_release_tokens(Path(folder).name)
+    hit = _match_series(series_rows, guess)
+    if not hit:
+        return False
+    return series_episode_file_count(hit) > 0
+
+
+def box_is_small() -> bool:
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return 0 < int(line.split()[1]) <= SMALL_MEM_KB
+    except (OSError, ValueError, IndexError):
+        return False
+    return False
+
+
+def import_folder_cap(*, catch_up: bool) -> int:
+    small = box_is_small()
+    if catch_up:
+        return 6 if small else 16
+    return 12 if small else 48
+
+
+def arr_alias(path: str) -> str:
+    """Sonarr sees /symlinks/... — never list the host /mnt alias as a second folder."""
+    p = str(path or "").replace("\\", "/").rstrip("/")
+    if p.startswith("/mnt/symlinks/"):
+        return "/symlinks/" + p[len("/mnt/symlinks/") :]
+    return p
+
+
+def host_listdir_root(arr_path: str) -> Path:
+    arr = arr_alias(arr_path)
+    if arr.startswith("/symlinks/"):
+        host = Path("/mnt/symlinks") / arr[len("/symlinks/") :]
+        if host.is_dir():
+            return host
+    return Path(arr)
+
+
+def _expand_scan_folders(
+    folders: list[str],
+    *,
+    series_rows: list[dict] | None = None,
+    catch_up: bool = False,
+    cap: int | None = None,
+) -> list[str]:
+    """Scan each dump subfolder once. Never list host+container paths twice.
 
     A single manualimport call on all of /symlinks/sonarr makes Sonarr probe
-    every episode over the FUSE debrid mount and blow past the client timeout
-    ("sonarr manualimport list ... TimeoutError timed out"), so the whole import
-    is skipped. Listing immediate subfolders keeps each call small and bounded,
-    and resolve()-dedupe drops the duplicate mount alias (/symlinks vs
-    /mnt/symlinks) that doubled the work. Falls back to the raw folders when the
-    base path is not present on the host (e.g. FUSE not mounted).
+    every episode over the FUSE debrid mount and blow past the client timeout.
+    Skip folders Sonarr already has files for. Cap so a 4GB box does not melt.
     """
-    targets: list[str] = []
-    seen: set[str] = set()
-    fallback: list[str] = []
+    roots: list[str] = []
+    seen_roots: set[str] = set()
     for base in folders:
-        b = (base or "").rstrip("/")
-        if not b:
+        arr = arr_alias(base)
+        if not arr or arr in seen_roots:
             continue
-        p = Path(b)
+        seen_roots.add(arr)
+        roots.append(arr)
+
+    targets: list[str] = []
+    seen_targets: set[str] = set()
+    fallback: list[str] = []
+    for arr in roots:
+        host = host_listdir_root(arr)
         try:
-            if not p.is_dir():
-                fallback.append(b)
-                continue
-            real = str(p.resolve())
+            is_dir = host.is_dir()
+            subs = sorted(c for c in host.iterdir() if c.is_dir()) if is_dir else []
         except OSError:
-            fallback.append(b)
-            continue
-        if real in seen:
-            continue
-        seen.add(real)
-        try:
-            subs = sorted(str(c) for c in p.iterdir() if c.is_dir())
-        except OSError:
+            is_dir = False
             subs = []
-        targets.extend(subs if subs else [b])
-    return targets or fallback or [f.rstrip("/") for f in folders if f]
+        if not is_dir:
+            fallback.append(arr)
+            continue
+        kids = subs if subs else [None]
+        for child in kids:
+            arr_child = f"{arr.rstrip('/')}/{child.name}" if child is not None else arr
+            if arr_child in seen_targets:
+                continue
+            if series_rows and folder_already_imported(arr_child, series_rows):
+                if log_wire:
+                    log_wire(f"sonarr skip folder already has files {arr_child}")
+                continue
+            seen_targets.add(arr_child)
+            targets.append(arr_child)
+    if not targets:
+        targets = fallback
+    if cap is None:
+        cap = import_folder_cap(catch_up=catch_up)
+    if cap and len(targets) > cap:
+        if log_wire:
+            log_wire(f"sonarr import cap {cap} of {len(targets)} folders")
+        targets = targets[:cap]
+    return targets
 
 
-def _list_manualimport(sk: str, folders: list[str]) -> list[dict]:
+def _list_manualimport(
+    sk: str,
+    folders: list[str],
+    *,
+    series_rows: list[dict] | None = None,
+    catch_up: bool = False,
+) -> list[dict]:
     rows: list = []
-    for folder in _expand_scan_folders(folders):
-        q = urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "false"})
+    for folder in _expand_scan_folders(folders, series_rows=series_rows, catch_up=catch_up):
+        q = urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "true"})
         url = f"http://127.0.0.1:8989/api/v3/manualimport?{q}"
         hdrs = {"X-Api-Key": sk, "Content-Type": "application/json"}
         try:
             req = urllib.request.Request(url, headers=hdrs)
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=LIST_TIMEOUT_SEC) as resp:
                 chunk = json.loads(resp.read().decode()) or []
             if isinstance(chunk, list):
                 rows.extend(chunk)
                 log_wire(f"sonarr manualimport list folder={folder} rows={len(chunk)}")
+        except TimeoutError as e:
+            log_wire(f"sonarr manualimport skip folder on timeout {folder} {e}")
+        except OSError as e:
+            if "timed out" in str(e).lower():
+                log_wire(f"sonarr manualimport skip folder on timeout {folder} {e}")
+            else:
+                log_wire(f"sonarr manualimport list {folder} {type(e).__name__} {e}")
         except Exception as e:
             log_wire(f"sonarr manualimport list {folder} {type(e).__name__} {e}")
     by_path: dict[str, dict] = {}
@@ -484,13 +570,13 @@ def _list_manualimport(sk: str, folders: list[str]) -> list[dict]:
     return list(by_path.values())
 
 
-def _queue_manualimport(sk: str, files: list[dict]) -> None:
+def _queue_manualimport(sk: str, files: list[dict], *, catch_up: bool = False) -> None:
     if not files:
         return
     before = {}
     for sid in {f["seriesId"] for f in files}:
         before[sid] = _series_file_count(sk, int(sid))
-    chunk_size = 40
+    chunk_size = 20 if catch_up or box_is_small() else 40
     try:
         for i in range(0, len(files), chunk_size):
             chunk = files[i : i + chunk_size]
@@ -501,11 +587,11 @@ def _queue_manualimport(sk: str, files: list[dict]) -> None:
                 body={"name": "ManualImport", "files": chunk, "importMode": "copy"},
             )
             log_wire(f"sonarr manualimport queued {len(chunk)} ({i + len(chunk)}/{len(files)})")
-            time.sleep(3)
+            time.sleep(2 if catch_up else 3)
     except Exception as e:
         log_wire(f"sonarr manualimport {type(e).__name__} {e}")
         return
-    deadline = time.time() + 90
+    deadline = time.time() + (20 if catch_up or box_is_small() else 90)
     while time.time() < deadline:
         moved = False
         for sid, prev in before.items():
@@ -515,24 +601,37 @@ def _queue_manualimport(sk: str, files: list[dict]) -> None:
                 moved = True
         if moved:
             break
-        time.sleep(8)
+        time.sleep(5 if catch_up else 8)
     try:
-        call("http://127.0.0.1:8989/api/v3/command", sk, method="POST", body={"name": "RescanSeries"})
+        for sid in {int(f["seriesId"]) for f in files}:
+            call(
+                "http://127.0.0.1:8989/api/v3/command",
+                sk,
+                method="POST",
+                body={"name": "RescanSeries", "seriesId": sid},
+            )
     except Exception as e:
         log_wire(f"sonarr rescan after import {type(e).__name__} {e}")
 
 
-def sonarr_manual_import(sk: str, hint: dict | None = None, folders: list[str] | None = None) -> None:
+def sonarr_manual_import(
+    sk: str,
+    hint: dict | None = None,
+    folders: list[str] | None = None,
+    *,
+    catch_up: bool = False,
+) -> None:
     """Dump folders are not a series library. Copy matched episodes into the series folder.
 
     Never scan /mnt/symlinks (parent of radarr). That listed Museum under Sonarr.
+    Skip folders Sonarr already has files for. Do not RescanSeries with no id.
     """
     scan = list(folders) if folders else list(SONARR_FOLDERS)
     scan = [f for f in scan if f and not is_foreign_media_path(f.rstrip("/") + "/")]
     if not scan:
         scan = list(SONARR_FOLDERS)
-    rows = _list_manualimport(sk, scan)
     series_rows = _sonarr_series_map(sk)
+    rows = _list_manualimport(sk, scan, series_rows=series_rows, catch_up=catch_up)
     ep_cache: dict = {}
 
     def ep_lookup(series_id: int, season: int, episode: int) -> list[int]:
@@ -551,7 +650,7 @@ def sonarr_manual_import(sk: str, hint: dict | None = None, folders: list[str] |
     log_wire(f"sonarr manualimport matched={len(files)} unmatched={len(sample_unmatched)}")
     if sample_unmatched:
         log_wire("sonarr manualimport unmatched sample: " + " | ".join(sample_unmatched))
-    _queue_manualimport(sk, files)
+    _queue_manualimport(sk, files, catch_up=catch_up)
 
 
 def bind(*, call_fn, log_fn):
@@ -603,6 +702,37 @@ def _self_test() -> int:
                 _expand_scan_folders(["/no/such/a", "/no/such/b"]),
                 ["/no/such/a", "/no/such/b"],
             )
+
+        def test_arr_alias_dedupes_host_and_container(self):
+            self.assertEqual(arr_alias("/mnt/symlinks/sonarr/Show"), "/symlinks/sonarr/Show")
+            self.assertEqual(arr_alias("/symlinks/sonarr/Show"), "/symlinks/sonarr/Show")
+            self.assertEqual(
+                _expand_scan_folders(["/mnt/symlinks/sonarr", "/symlinks/sonarr"]),
+                ["/symlinks/sonarr"],
+            )
+            self.assertLess(LIST_TIMEOUT_SEC, 120)
+
+        def test_folder_already_imported_skips_series_with_files(self):
+            series = [{"id": 9, "title": "The Walking Dead", "statistics": {"episodeFileCount": 6}}]
+            self.assertTrue(folder_already_imported("/symlinks/sonarr/The Walking Dead", series))
+            empty = [{"id": 9, "title": "The Walking Dead", "statistics": {"episodeFileCount": 0}}]
+            self.assertFalse(folder_already_imported("/symlinks/sonarr/The Walking Dead", empty))
+            notes = []
+            global log_wire
+            prev = log_wire
+            log_wire = notes.append
+            try:
+                import tempfile
+
+                with tempfile.TemporaryDirectory() as d:
+                    base = Path(d) / "sonarr"
+                    (base / "The Walking Dead").mkdir(parents=True)
+                    (base / "Brand New Show 2010").mkdir()
+                    out = _expand_scan_folders([str(base)], series_rows=series)
+                self.assertEqual([Path(p).name for p in out], ["Brand New Show 2010"])
+                self.assertTrue(any("already has files" in n for n in notes))
+            finally:
+                log_wire = prev
 
         def test_skip_museum_under_radarr(self):
             self.assertTrue(

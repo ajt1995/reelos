@@ -774,6 +774,12 @@ def main() -> int:
     kiosk = ROOT / "bin" / "kiosk.sh"
     if os.environ.get("REELOS_OTA") != "1" and kiosk.exists() and Path("/dev/dri").exists():
         subprocess.run(["bash", str(kiosk)], check=False)
+    if os.environ.get("REELOS_OTA") != "1":
+        try:
+            log_wire("first provision — library walk")
+            kick_imports(catch_up=False)
+        except Exception as e:
+            log_wire(f"provision import {e}")
     return 0
 
 
@@ -1126,7 +1132,7 @@ if __name__ == "__main__":
     if "heal" in sys.argv:
         raise SystemExit(0 if heal_after_import() else 1)
     if "import" in sys.argv:
-        raise SystemExit(0 if kick_imports() else 1)
+        raise SystemExit(0 if kick_imports(catch_up="--catch-up" in sys.argv) else 1)
     if "indexers" in sys.argv:
         raise SystemExit(ensure_indexers_and_sync())
     raise SystemExit(main())

@@ -87,6 +87,17 @@ CONTRACTS = (
     ("src/components/wizard.tsx", "TOTAL = 7"),
     ("src/components/wizard.tsx", "Untested"),
     ("src/lib/store.ts", 'source: "torbox"'),
+    ("daemon/reelos-update.sh", "library catch-up in background"),
+    ("daemon/reelos-update.sh", "import/heal red — not un-stamping UI swap"),
+    ("daemon/reelos-selfheal.sh", "library catch-up in background"),
+    ("daemon/reelos-selfheal.sh", "systemd-run"),
+    ("daemon/reelos-selfheal.sh", "reelos-library-catchup"),
+    ("install/systemd/reelos-selfheal.service", "KillMode=process"),
+    ("daemon/sonarr_manual_import.py", "skip folder on timeout"),
+    ("daemon/sonarr_manual_import.py", "already has files"),
+    ("daemon/wire-engines.parts/01.part", "skip FUSE relink"),
+    ("daemon/wire-engines.parts/08.part", "skip hybrid 1080 grab"),
+    ("daemon/wire-engines.parts/09.part", "first provision — library walk"),
 )
 
 
@@ -108,6 +119,8 @@ def main() -> int:
     latest = re.search(r'LATEST_VERSION = "([^"]+)"', text)
     s = shipped.group(1) if shipped else ""
     l = latest.group(1) if latest else ""
+    if "1.2.51" in ver or ver.startswith("1.2.51"):
+        return fail("1.2.51 is parked; do not stamp it")
     if ver != chan or ver != s or ver != l:
         return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
 
@@ -143,6 +156,11 @@ def main() -> int:
     pull = updater.find('stack images — docker compose pull')
     if pull >= 0 and pull < applied:
         return fail("OTA contract: compose pull must come after applied. stamp")
+    catchup = updater.find("library catch-up in background", applied)
+    if catchup < 0:
+        return fail("OTA contract: library catch-up must come after applied.")
+    if 'log "import after hops' in updater[:applied]:
+        return fail("OTA contract: Apply must not await import after hops before applied")
 
     install_up = root / "install/bin/reelos-update.sh"
     if install_up.is_file() and install_up.read_text() != updater:

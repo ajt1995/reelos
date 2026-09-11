@@ -281,7 +281,7 @@ export function spawnWireImport() {
   ].find((p) => existsSync(p));
   if (!script) return false;
   try {
-    const child = spawn("python3", [script, "import"], { detached: true, stdio: "ignore" });
+    const child = spawn("python3", [script, "import", "--catch-up"], { detached: true, stdio: "ignore" });
     child.unref();
     return true;
   } catch {

@@ -105,6 +105,23 @@ ensure_compose() {
 # not talking to TorBox
 
 ensure_door
+# Apply stamps first, then this recover job dumps/heals in the background.
+# systemd-run escapes TimeoutStartSec=90, KillMode=control-group, and flock fd 9
+# (a nohup child would inherit the lock and block the 2min timer). Do not walk FUSE dfs.
+# Start catch-up before idle/ffprobe skip so a 4GB box still imports after stamp.
+if [ -f "$STATE/library-catchup" ]; then
+  rm -f "$STATE/library-catchup"
+  log "library catch-up in background"
+  if [ -x "$ROOT/bin/wire-engines.py" ]; then
+    systemctl reset-failed reelos-library-catchup.service >/dev/null 2>&1 || true
+    if ! systemd-run --quiet --collect --unit=reelos-library-catchup \
+      --property=Type=oneshot --property=TimeoutStartSec=600 \
+      /bin/bash -c 'python3 "$1" import --catch-up >>"$2" 2>&1' \
+      bash "$ROOT/bin/wire-engines.py" "$STATE/wire.log" >/dev/null 2>&1; then
+      nohup python3 "$ROOT/bin/wire-engines.py" import --catch-up >>"$STATE/wire.log" 2>&1 9>&- &
+    fi
+  fi
+fi
 d=$(ffprobe_d_state)
 if [ "${d:-0}" -gt 0 ]; then
   log "skip compose up — ffprobe D-state $d"

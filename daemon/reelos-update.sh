@@ -425,8 +425,19 @@ need scripts/reelos-request-status.mjs 'seerrRecoverScope'
 need daemon/wire-engines.parts/08.part 'heal_after_import'
 need daemon/wire-engines.parts/08.part 'jellyfin heal red — no token'
 need daemon/wire-engines.parts/09.part 'collapse_dumps=False'
-need daemon/wire-engines.parts/01.part 'return heal_after_import()'
+need daemon/wire-engines.parts/01.part 'return heal_after_import'
 need daemon/reelos-update.sh 'not printing applied — jellyfin/indexer heal red'
+need daemon/reelos-update.sh 'library catch-up in background'
+need daemon/reelos-update.sh 'import/heal red — not un-stamping UI swap'
+need daemon/reelos-selfheal.sh 'library catch-up in background'
+need daemon/reelos-selfheal.sh 'systemd-run'
+need daemon/reelos-selfheal.sh 'reelos-library-catchup'
+need install/systemd/reelos-selfheal.service 'KillMode=process'
+need daemon/sonarr_manual_import.py 'skip folder on timeout'
+need daemon/sonarr_manual_import.py 'already has files'
+need daemon/wire-engines.parts/01.part 'skip FUSE relink'
+need daemon/wire-engines.parts/08.part 'skip hybrid 1080 grab'
+need daemon/wire-engines.parts/09.part 'first provision — library walk'
 need daemon/reelos-update.sh 'door restored — still not stamping'
 need daemon/reelos-update.sh 'restart hung reelos'
 need daemon/reelos-doctor.py 'doctor_jellyfin_library_detail'
@@ -1357,11 +1368,8 @@ if [ -f /var/lib/reelos/provisioned ]; then
       fi
       HEAL_FAIL=1
     fi
-    log "import after hops (TV/movies into the library)"
-    if ! python3 "$ROOT/bin/wire-engines.py" import; then
-      log "import/heal red"
-      HEAL_FAIL=1
-    fi
+    # Do not await the library dump import here. Phone was frozen on "import after hops".
+    # Stamp first; library catch-up runs after applied (recover timer job).
   fi
 fi
 
@@ -1398,10 +1406,14 @@ if [ "$CANARY_FAIL" = "1" ]; then
   STAMP_OK=0
 fi
 if [ "${HEAL_FAIL:-0}" = "1" ]; then
-  log "not printing applied — jellyfin/indexer heal red"
-  bug_snap "heal-red"
-  log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
-  STAMP_OK=0
+  if [ "${COMPOSE_CHANGED:-0}" = "1" ]; then
+    log "not printing applied — jellyfin/indexer heal red"
+    bug_snap "heal-red"
+    log "installed remains $(cat "$ROOT/VERSION" 2>/dev/null || echo unknown)"
+    STAMP_OK=0
+  else
+    log "import/heal red — not un-stamping UI swap"
+  fi
 fi
 
 if ! ensure_door; then
@@ -1421,6 +1433,14 @@ if [ -n "${HEAD_SHA:-}" ]; then
 fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
+# Dump import/heal after stamp so Check is "applied" without waiting on the
+# whole library. Same recover timer job (selfheal + lock-clients). Do not
+# await kick_imports. Do not let a later import/heal red un-stamp this.
+log "library catch-up in background"
+mkdir -p "$STATE"
+echo 1 >"$STATE/library-catchup" 2>/dev/null || true
+systemctl start --no-block reelos-selfheal.service >/dev/null 2>&1 || true
+systemctl start --no-block reelos-lock-clients.service >/dev/null 2>&1 || true
 # Pull after stamp so a long image fetch cannot un-apply a live tree.
 # Separate unit from Vite (unlike Finish/provision spawnSync pull).
 if [ -f /var/lib/reelos/stack-images ]; then
