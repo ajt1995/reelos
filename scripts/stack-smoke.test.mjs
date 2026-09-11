@@ -66,7 +66,8 @@ test("stack: VERSION / channel / stamps agree (1.2.50.33)", () => {
   assert.match(read("STATUS.md"), /1\.2\.50\.33/);
   assert.match(read("src/components/settings-updates.tsx"), /This install/);
   assert.match(read("src/components/settings-updates.tsx"), /This update/);
-  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /pendingNotes/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /pendingNotes: notes/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /currentNotes: notesForVersion/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);

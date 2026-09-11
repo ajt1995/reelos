@@ -874,7 +874,16 @@ async function handleUpdateCheck(_req, res) {
   const local = localVersion();
   const best = await loadChannel();
   if (!best) {
-    send(res, 200, { ok: false, local, remote: local, available: false, notes: [], error: "channel unreachable" });
+    send(res, 200, {
+      ok: false,
+      local,
+      remote: local,
+      available: false,
+      notes: [],
+      currentNotes: [],
+      pendingNotes: [],
+      error: "channel unreachable",
+    });
     return;
   }
   const newer = cmpVer(versionKey(best.version), versionKey(local)) > 0;
@@ -903,6 +912,7 @@ async function handleUpdateCheck(_req, res) {
     remote: best.version,
     notes,
     currentNotes: notesForVersion(channelNotes, local),
+    pendingNotes: notes,
     available: newer || shaDrift,
     sha: head.slice(0, 12),
   });

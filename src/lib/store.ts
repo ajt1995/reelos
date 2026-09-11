@@ -678,8 +678,9 @@ export const useReelStore = create<ReelState>()(
         });
         void fetch("/api/update/check", { cache: "no-store" })
           .then((r) => r.json())
-          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; error?: string }) => {
+          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string }) => {
             const cur = get();
+            const pending = Array.isArray(r.pendingNotes) ? r.pendingNotes : Array.isArray(r.notes) ? r.notes : [];
             if (r.ok && r.available) {
               set({
                 update: {
@@ -687,7 +688,7 @@ export const useReelStore = create<ReelState>()(
                   status: "available",
                   current: r.local || cur.update.current,
                   target: r.remote || null,
-                  notes: Array.isArray(r.notes) ? r.notes : [],
+                  notes: pending,
                   checkedAt: Date.now(),
                 },
               });
