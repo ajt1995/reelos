@@ -5,7 +5,7 @@ import { Row, TitleCard } from "@/components/title-card";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
-import { isInFlightRequest } from "@/lib/sync-requests";
+import { inFlightRequests } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,8 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
-  const transferring = requests.filter(isInFlightRequest).length;
+  const inflight = inFlightRequests(requests, { libraryIds: library, titles: shelf });
+  const transferring = inflight.length;
   useSyncRequests();
   useEffect(() => {
     hydrateShelf({ limit: 24 });
@@ -80,7 +81,7 @@ export function HomeView() {
     };
   }, [q, rememberTitles]);
 
-  const reqCards = requests
+  const reqCards = inflight
     .map((r) => ({ r, t: getTitle(r.titleId) }))
     .filter((x) => x.t)
     .slice(0, 12);

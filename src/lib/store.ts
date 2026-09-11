@@ -58,8 +58,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.29";
-export const SHIPPED_VERSION = "1.2.50.29";
+export const LATEST_VERSION = "1.2.50.30";
+export const SHIPPED_VERSION = "1.2.50.30";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export type BootStepId = "local" | "house" | "library" | "requests";
@@ -88,6 +88,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.30: Home Your requests only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/library hits stay on Requests and On this box — not the top row. Transferring chip uses the same in-flight count. Complements #85. Not 1.2.51 (Tron).",
   "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
   "1.2.50.28: Phone Home does not wait on Jellyfin or a Seerr title fan-out. /api/box returns provisioned immediately; Requests lists in one Seerr call. Recover still kicks in the background. Complements #83. Not 1.2.51 (Tron).",
   "1.2.50.27: Heal-red Apply still brings :80/:8080 back before exiting. Restart hung Vite instead of a no-op systemctl start. Still no stamp on indexer/import red. Complements #82. Not 1.2.51 (Tron).",
@@ -866,12 +867,19 @@ export const useReelStore = create<ReelState>()(
           .then((j) => {
             const titles = Array.isArray(j.titles) ? j.titles : [];
             rememberCatalogTitles(titles);
-            const shelf = mergeShelf(get().shelf, titles, Boolean(limit));
+            const cur = get();
+            const shelf = mergeShelf(cur.shelf, titles, Boolean(limit));
+            const library = [...new Set([...shelf.map((t) => t.id), ...cur.library])];
+            const requests = overlayLibraryPresence(cur.requests, {
+              libraryIds: library,
+              titles: shelf,
+            });
             set({
               shelf,
               shelfError: j.error || null,
               shelfReady: true,
-              library: shelf.map((t) => t.id),
+              library,
+              requests,
             });
           })
           .catch((e) => set({ shelfError: String(e), shelfReady: true }))

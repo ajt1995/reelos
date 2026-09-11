@@ -2,8 +2,18 @@ import type { Kind, MediaRequest, RequestStatus, Title } from "./types.ts";
 
 const IN_FLIGHT = new Set<RequestStatus>(["downloading", "waiting"]);
 
-export function isInFlightRequest(r: { status: string }): boolean {
+/** Searching / grabbing / linked waiting for import. Available, failed, and engine-downloaded are not. */
+export function isInFlightRequest(r: { status: string; engine?: string }): boolean {
+  if (r.engine === "downloaded") return false;
   return IN_FLIGHT.has(r.status as RequestStatus);
+}
+
+/** Home "Your requests" + transferring chip: overlay library hits, then keep in-flight only. */
+export function inFlightRequests(
+  requests: MediaRequest[],
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "kind">[] } = {},
+): MediaRequest[] {
+  return overlayLibraryPresence(requests, opts).filter(isInFlightRequest);
 }
 
 /** Movies: hide Request/Grabbing/Waiting once the title is available. TV/anime: hide only when this season is available. */
@@ -149,7 +159,7 @@ export function collapseDuplicateRequests(rows: MediaRequest[]): MediaRequest[] 
   }
   const out: MediaRequest[] = [];
   for (const list of groups.values()) {
-    const anyAvailable = list.some((r) => r.status === "available");
+    const anyAvailable = list.some((r) => r.status === "available" || r.engine === "downloaded");
     const picked = list.reduce((best, row) => {
       const br = STATUS_RANK[best.status] || 0;
       const rr = STATUS_RANK[row.status] || 0;
@@ -217,7 +227,9 @@ export function overlayLibraryPresence(
     for (const k of titlePresenceKeys(t.id)) movieKeys.add(k);
   }
   const overlaid = requests.map((row) => {
-    if (row.status === "available") return row;
+    if (row.status === "available" || row.engine === "downloaded") {
+      return row.status === "available" ? row : markAvailable(row);
+    }
     if (!isMovieRequest(row)) return row;
     if (titlePresenceKeys(row.titleId).some((k) => movieKeys.has(k))) return markAvailable(row);
     return row;

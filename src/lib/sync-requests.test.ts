@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   applyTitleRequestPoll,
   collapseDuplicateRequests,
+  inFlightRequests,
   isInFlightRequest,
   mergeServerRequests,
   overlayLibraryPresence,
@@ -57,6 +58,71 @@ test("transferring chip never counts available", () => {
   assert.equal(isInFlightRequest({ status: "waiting" }), true);
   assert.equal(isInFlightRequest({ status: "available" }), false);
   assert.equal(isInFlightRequest({ status: "failed" }), false);
+  assert.equal(isInFlightRequest({ status: "downloading", engine: "downloaded" }), false);
+});
+
+test("Home Your requests hides shelf hits; keeps searching/grabbing/linked waiting", () => {
+  const requests = [
+    row({ id: "museum", titleId: "tmdb-1593", status: "downloading", via: "cache" }),
+    row({ id: "wick", titleId: "tmdb-245891", status: "available" }),
+    row({ id: "coyote", titleId: "tmdb-1012201", status: "available" }),
+    row({ id: "searching", titleId: "tmdb-99", status: "waiting" }),
+    row({ id: "grabbing", titleId: "tmdb-100", status: "downloading" }),
+    row({ id: "linked", titleId: "tmdb-tv-1402", status: "waiting", season: 2, reason: "Linked — waiting to import" }),
+    row({ id: "engine-done", titleId: "tmdb-101", status: "downloading", engine: "downloaded" }),
+  ];
+  const inflight = inFlightRequests(requests, {
+    libraryIds: ["tmdb-1593", "tmdb-245891", "tmdb-1012201"],
+    titles: [
+      { id: "tmdb-1593", kind: "movie" },
+      { id: "tmdb-245891", kind: "movie" },
+      { id: "tmdb-1012201", kind: "movie" },
+    ],
+  });
+  assert.deepEqual(
+    inflight.map((r) => r.id),
+    ["searching", "grabbing", "linked"],
+  );
+});
+
+test("TV grabbing season stays on Home even if the series is on the shelf", () => {
+  const requests = [
+    row({ id: "s2", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 2 }),
+  ];
+  const inflight = inFlightRequests(requests, {
+    libraryIds: ["tmdb-tv-1402"],
+    titles: [{ id: "tmdb-tv-1402", kind: "tv" }],
+  });
+  assert.equal(inflight.length, 1);
+  assert.equal(inflight[0]?.status, "downloading");
+});
+
+test("25 mostly-available rows are not 25 transferring", () => {
+  const requests = [
+    ...Array.from({ length: 22 }, (_, i) =>
+      row({ id: `avail-${i}`, titleId: `tmdb-${i + 1}`, status: i % 2 ? "available" : "downloading" }),
+    ),
+    row({ id: "wait", titleId: "tmdb-900", status: "waiting" }),
+    row({ id: "grab", titleId: "tmdb-901", status: "downloading" }),
+    row({ id: "fail", titleId: "tmdb-902", status: "failed" }),
+  ];
+  const libraryIds = requests.filter((r) => r.titleId !== "tmdb-900" && r.titleId !== "tmdb-901" && r.titleId !== "tmdb-902").map((r) => r.titleId);
+  const inflight = inFlightRequests(requests, { libraryIds, titles: libraryIds.map((id) => ({ id, kind: "movie" as const })) });
+  assert.equal(inflight.length, 2);
+  assert.deepEqual(inflight.map((r) => r.id), ["wait", "grab"]);
+});
+
+test("Home filters in-flight; Requests page still lists everything", () => {
+  const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
+  const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
+  const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
+  assert.match(home, /inFlightRequests\(requests, \{ libraryIds: library, titles: shelf \}\)/);
+  assert.match(home, /reqCards = inflight/);
+  assert.match(home, /transferring = inflight\.length/);
+  assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
+  assert.match(shell, /inFlightRequests\(s\.requests/);
+  assert.doesNotMatch(reqs, /inFlightRequests/);
+  assert.match(reqs, /filter === "all" \? true : r\.status === filter/);
 });
 
 test("server available upgrades a stale local downloading row for the same titleId", () => {
@@ -138,6 +204,14 @@ test("library movie hit is AVAILABLE, not downloading/grabbing", () => {
   assert.equal(honest.length, 1);
   assert.equal(honest[0]?.status, "available");
   assert.equal(honest[0]?.progress, 100);
+});
+
+test("engine downloaded overlays to available even without a library id yet", () => {
+  const requests = [row({ id: "seerr-9", titleId: "tmdb-603", status: "downloading", engine: "downloaded", progress: 0 })];
+  const honest = overlayLibraryPresence(requests, { libraryIds: [], titles: [] });
+  assert.equal(honest[0]?.status, "available");
+  assert.equal(honest[0]?.progress, 100);
+  assert.equal(isInFlightRequest(honest[0]!), false);
 });
 
 test("TV library series does not mark a grabbing season available on the client", () => {
