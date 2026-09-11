@@ -12,9 +12,11 @@ test("appliance copy of the mailman matches daemon/", () => {
   assert.equal(packed, updater);
 });
 
-test("SKIP_NPM is gated on package-lock.json as well as package.json", () => {
+test("SKIP_NPM reuses node_modules when the lockfile matches", () => {
   assert.match(updater, /cmp -s "\$ROOT\/app\/package-lock\.json" "\$NEXT\/app\/package-lock\.json"/);
+  assert.match(updater, /package-lock.json unchanged — reused node_modules/);
   assert.match(updater, /package\.json or package-lock\.json changed — running npm ci/);
+  assert.match(updater, /vite build skipped — 4GB box/);
   assert.doesNotMatch(
     updater,
     /if cmp -s "\$ROOT\/app\/package\.json" "\$NEXT\/app\/package\.json"; then\n    SKIP_NPM=1/,

@@ -52,21 +52,22 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.34)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.35)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.34");
-  assert.equal(chan.version, "1.2.50.34");
+  assert.equal(ver, "1.2.50.35");
+  assert.equal(chan.version, "1.2.50.35");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
   assert.match(beta.notes[0], /Arena chrome and Books/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.34"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.34"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.34"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.34"/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.35"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.35"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.35"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.35"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.35/);
   assert.match(read("STATUS.md"), /1\.2\.50\.34/);
   assert.match(read("src/components/settings-updates.tsx"), /This install/);
   assert.match(read("src/components/settings-updates.tsx"), /This update/);
@@ -257,6 +258,9 @@ test("stack: self-heal, Settings Advanced, start:box, beta stub", () => {
   assert.match(box, /production preview/);
   assert.match(box, /vite preview/);
   assert.match(updater, /vite build for production door/);
+  assert.match(updater, /vite build skipped — 4GB box/);
+  assert.match(updater, /package-lock.json unchanged — reused node_modules/);
+  assert.match(heal, /ffprobe D-state/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /configurePreviewServer/);
   assert.match(read("scripts/reelos-request-progress-plugin.mjs"), /configurePreviewServer/);
   const view = read("src/components/settings-view.tsx");

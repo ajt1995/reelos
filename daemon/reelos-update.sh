@@ -475,7 +475,10 @@ need install/systemd/reelos-ensure.service WantedBy
 need install/systemd/reelos-selfheal.timer WantedBy
 need daemon/reelos-selfheal.sh 'not walking FUSE'
 need daemon/reelos-selfheal.sh 'not enabling firstboot'
+need daemon/reelos-selfheal.sh 'ffprobe D-state'
 need daemon/reelos-update.sh 'vite build for production door'
+need daemon/reelos-update.sh 'vite build skipped — 4GB box'
+need daemon/reelos-update.sh 'package-lock.json unchanged — reused node_modules'
 need scripts/reelos-box.mjs 'production preview'
 need scripts/reelos-box.mjs 'serving built UI'
 need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
@@ -582,24 +585,25 @@ if [ ! -f "$NEXT/app/package.json" ] || [ ! -f "$NEXT/app/package-lock.json" ]; 
 fi
 
 SKIP_NPM=0
-if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ]; then
-  if cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json" \
-    && [ -f "$ROOT/app/package-lock.json" ] && [ -f "$NEXT/app/package-lock.json" ] \
-    && cmp -s "$ROOT/app/package-lock.json" "$NEXT/app/package-lock.json"; then
-    SKIP_NPM=1
-    if [ -d "$ROOT/app/node_modules" ]; then
-      log "copying node_modules into staging (8080 still up)"
+# House 31→34: start:box script is the only package.json byte change; lockfile
+# matches. npm ci on 4GB next to live Vite + Sonarr ffprobe D-state is the 28
+# "home never returned" pattern. Reuse node_modules when the lockfile matches.
+if [ -f "$ROOT/app/package-lock.json" ] && [ -f "$NEXT/app/package-lock.json" ] \
+  && cmp -s "$ROOT/app/package-lock.json" "$NEXT/app/package-lock.json" \
+  && [ -d "$ROOT/app/node_modules" ]; then
+  SKIP_NPM=1
+  log "copying node_modules into staging (8080 still up)"
 step "Stage"
-      copy_node_modules_with_heartbeat "$ROOT/app/node_modules" "$NEXT/app/node_modules"
-      log "package.json unchanged — reused node_modules"
-    else
-      SKIP_NPM=0
-    fi
+  copy_node_modules_with_heartbeat "$ROOT/app/node_modules" "$NEXT/app/node_modules"
+  if [ -f "$ROOT/app/package.json" ] && [ -f "$NEXT/app/package.json" ] \
+    && cmp -s "$ROOT/app/package.json" "$NEXT/app/package.json"; then
+    log "package.json unchanged — reused node_modules"
   else
-    log "package.json or package-lock.json changed — running npm ci"
+    log "package-lock.json unchanged — reused node_modules (package.json scripts-only ok)"
   fi
 fi
 if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
+  log "package.json or package-lock.json changed — running npm ci"
   export DEBIAN_FRONTEND=noninteractive
   command -v npm >/dev/null 2>&1 || apt-get install -y nodejs npm || true
   if [ -f "$NEXT/app/package-lock.json" ]; then
@@ -618,11 +622,22 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
 fi
 
 if [ -f "$NEXT/app/package.json" ] && [ -d "$NEXT/app/node_modules" ]; then
-  log "vite build for production door (8080 still on previous tree)"
-  if (cd "$NEXT/app" && PATH="$PWD/node_modules/.bin:$PATH" NODE_ENV=production timeout 180 node scripts/with-app-env.mjs vite build); then
-    log "production client built"
+  mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  # House is 3.2Gi. Staging vite build next to live :8080 is an OOM even when
+  # fail-soft — 28 starved Home. Skip on 4GB / low MemAvailable; start:box
+  # already falls back to vite --host :8080.
+  if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4608000 ]; then
+    log "vite build skipped — 4GB box (start:box falls back to vite --host :8080)"
+  elif [ "${avail_kb:-0}" -gt 0 ] && [ "$avail_kb" -lt 1843200 ]; then
+    log "vite build skipped — 4GB box (start:box falls back to vite --host :8080)"
   else
-    log "vite build skipped — start:box falls back to vite --host :8080"
+    log "vite build for production door (8080 still on previous tree)"
+    if (cd "$NEXT/app" && PATH="$PWD/node_modules/.bin:$PATH" NODE_ENV=production timeout 180 node scripts/with-app-env.mjs vite build); then
+      log "production client built"
+    else
+      log "vite build skipped — start:box falls back to vite --host :8080"
+    fi
   fi
 fi
 

@@ -26,6 +26,10 @@ test("self-heal shell never walks FUSE, TorBox, or firstboot", () => {
   assert.doesNotMatch(heal, /find \/mnt/);
   assert.doesNotMatch(heal, /compose pull/);
   assert.doesNotMatch(heal, /api\.torbox|torbox\.app/i);
+  assert.match(heal, /ffprobe D-state/);
+  assert.match(heal, /skip engines — ffprobe D-state/);
+  assert.match(heal, /skip compose up — ffprobe D-state/);
+  assert.doesNotMatch(heal, /ffprobe -/);
 });
 
 test("box finds a built client and rejects path escape", () => {
