@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { findClientRoot, safeJoin } from "./reelos-box.mjs";
+import { findClientRoot, findPreviewBuild, safeJoin } from "./reelos-box.mjs";
 import { betaChannelStub } from "./reelos-lookup-plugin.mjs";
 import { planUnstickSearchingIfFileOnDisk } from "./reelos-request-status.mjs";
 
@@ -36,10 +36,14 @@ test("box finds a built client and rejects path escape", () => {
     assert.equal(findClientRoot(dir), join(dir, "dist"));
     assert.equal(safeJoin(join(dir, "dist"), "/assets/app.js"), join(dir, "dist", "assets/app.js"));
     assert.equal(safeJoin(join(dir, "dist"), "/../secret"), null);
+    mkdirSync(join(dir, ".vercel/output"), { recursive: true });
+    writeFileSync(join(dir, ".vercel/output", "nitro.json"), "{}\n");
+    assert.equal(findPreviewBuild(dir), join(dir, ".vercel/output"));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
   assert.equal(findClientRoot(join(tmpdir(), "reelos-box-missing")), null);
+  assert.equal(findPreviewBuild(join(tmpdir(), "reelos-box-missing")), null);
 });
 
 test("beta stub is infrastructure only", () => {

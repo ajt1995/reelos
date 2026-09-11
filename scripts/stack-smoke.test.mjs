@@ -251,8 +251,12 @@ test("stack: self-heal, Settings Advanced, start:box, beta stub", () => {
   assert.equal(pkg.scripts["start:box"], "node scripts/with-app-env.mjs node scripts/reelos-box.mjs");
   const box = read("scripts/reelos-box.mjs");
   assert.match(box, /findClientRoot/);
+  assert.match(box, /findPreviewBuild/);
   assert.match(box, /dispatchReelOsApi/);
   assert.match(box, /serving built UI/);
+  assert.match(box, /production preview/);
+  assert.match(box, /vite preview/);
+  assert.match(updater, /vite build for production door/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /configurePreviewServer/);
   assert.match(read("scripts/reelos-request-progress-plugin.mjs"), /configurePreviewServer/);
   const view = read("src/components/settings-view.tsx");

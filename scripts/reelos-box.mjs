@@ -2,9 +2,10 @@
 /**
  * Appliance production door on :8080.
  *
- * Highest-leverage speedup that still is this product: serve a `vite build`
- * client (dist / .output/public) plus the existing /api Vite plugins.
- * No Go rewrite. If dist is missing (4GB Apply copies source only), fall back
+ * Highest-leverage speedup that still is this product: `vite build` then
+ * `vite preview` (this app's nitro output has no dist/index.html) plus the
+ * existing /api Vite plugins. A static file server is used when a classic
+ * dist/index.html exists. No Go rewrite. If no build is present, fall back
  * to `vite --host :8080` so the door still binds.
  */
 import { spawn } from "node:child_process";
@@ -43,6 +44,18 @@ export function findClientRoot(root = ROOT) {
     if (existsSync(join(dir, "index.html"))) return dir;
   }
   return null;
+}
+
+export function findPreviewBuild(root = ROOT) {
+  const nitro = join(root, ".vercel/output/nitro.json");
+  const staticDir = join(root, ".vercel/output/static");
+  if (existsSync(nitro) || existsSync(staticDir)) return join(root, ".vercel/output");
+  return null;
+}
+
+function viteBin(root = ROOT) {
+  const local = join(root, "node_modules/.bin/vite");
+  return existsSync(local) ? local : "vite";
 }
 
 export function safeJoin(root, urlPath) {
@@ -119,13 +132,17 @@ function startStatic(clientRoot) {
   });
 }
 
-function startVite() {
+function startVite(mode = "dev") {
   const env = mergeAppEnv(readAppEnv(ROOT), process.env);
-  const child = spawn(
-    "node",
-    [join(ROOT, "scripts/with-app-env.mjs"), "vite", "--host", HOST, "--port", String(PORT)],
-    { cwd: ROOT, env, stdio: "inherit" },
-  );
+  const args =
+    mode === "preview"
+      ? [viteBin(ROOT), "preview", "--host", HOST, "--port", String(PORT)]
+      : [viteBin(ROOT), "--host", HOST, "--port", String(PORT)];
+  const child = spawn("node", [join(ROOT, "scripts/with-app-env.mjs"), ...args], {
+    cwd: ROOT,
+    env,
+    stdio: "inherit",
+  });
   child.on("exit", (code, signal) => {
     if (signal) process.exit(128);
     process.exit(code ?? 1);
@@ -153,8 +170,14 @@ export async function startBox({ root = ROOT } = {}) {
     setInterval(() => void kickSelfHeal(), 120_000).unref();
     return { mode: "static", client, server };
   }
+  const preview = findPreviewBuild(root);
+  if (preview) {
+    console.log(`[reelos-box] production preview ${preview} on http://${HOST}:${PORT}/`);
+    startVite("preview");
+    return { mode: "preview", client: preview };
+  }
   console.log("[reelos-box] no dist — vite --host :8080 (door still binds)");
-  startVite();
+  startVite("dev");
   return { mode: "vite", client: null };
 }
 

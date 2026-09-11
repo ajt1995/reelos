@@ -475,6 +475,8 @@ need install/systemd/reelos-ensure.service WantedBy
 need install/systemd/reelos-selfheal.timer WantedBy
 need daemon/reelos-selfheal.sh 'not walking FUSE'
 need daemon/reelos-selfheal.sh 'not enabling firstboot'
+need daemon/reelos-update.sh 'vite build for production door'
+need scripts/reelos-box.mjs 'production preview'
 need scripts/reelos-box.mjs 'serving built UI'
 need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
 need daemon/reelos-update.sh 'not printing applied'
@@ -612,6 +614,15 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
       rm -rf "$NEXT"
       exit 1
     }
+  fi
+fi
+
+if [ -f "$NEXT/app/package.json" ] && [ -d "$NEXT/app/node_modules" ]; then
+  log "vite build for production door (8080 still on previous tree)"
+  if (cd "$NEXT/app" && PATH="$PWD/node_modules/.bin:$PATH" NODE_ENV=production timeout 180 node scripts/with-app-env.mjs vite build); then
+    log "production client built"
+  else
+    log "vite build skipped — start:box falls back to vite --host :8080"
   fi
 fi
 

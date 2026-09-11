@@ -51,6 +51,7 @@ CONTRACTS = (
     ("daemon/reelos-selfheal.sh", "not walking FUSE"),
     ("daemon/reelos-selfheal.sh", "not enabling firstboot"),
     ("scripts/reelos-box.mjs", "serving built UI"),
+    ("scripts/reelos-box.mjs", "production preview"),
     ("src/components/settings-view.tsx", "Show Advanced"),
     ("src/components/settings-updates.tsx", "Beta channel"),
     ("scripts/reelos-lookup-plugin.mjs", "CHANNEL_BETA_URL"),

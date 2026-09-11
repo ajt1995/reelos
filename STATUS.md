@@ -45,7 +45,7 @@ Check / Apply and the changelog stay on Box. Low performance mode stays. Heal, h
 
 ### Production start
 
-`npm run start:box` → `scripts/reelos-box.mjs`. If a client `dist` (or `.output/public`) exists, a small Node server serves it and the existing `/api` plugins. Otherwise the door is still `vite --host :8080`. 4GB Apply still skips `npm ci` unless package.json changed. Not a Go rewrite.
+`npm run start:box` → `scripts/reelos-box.mjs`. After `vite build`, the door is `vite preview` of the nitro client (hashed `/assets`) plus existing `/api` plugins. A classic `dist/index.html` still uses the small Node static server. Otherwise the door is `vite --host :8080`. Apply fail-softs a 180s `vite build` in staging. 4GB still skips `npm ci` unless package.json changed. Not a Go rewrite.
 
 ### Mental model
 
