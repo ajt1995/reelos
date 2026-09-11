@@ -25,7 +25,6 @@ export function useEngineRequest(id: string, season?: number) {
               ? { ...x, status: "available", progress: 100, updatedAt: Date.now() }
               : x,
           ),
-          library: s.library.includes(id) ? s.library : [...s.library, id],
         }));
       })
       .catch(() => {});
@@ -52,12 +51,6 @@ export function useEngineRequest(id: string, season?: number) {
               progress: apiProg,
               reason: j.reason,
             }),
-            library:
-              (j.status === "downloaded" || j.status === "available") &&
-              !id.startsWith("tmdb-tv-") &&
-              !s.library.includes(id)
-                ? [...s.library, id]
-                : s.library,
           }));
         })
         .catch(() => {});

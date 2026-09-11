@@ -8,7 +8,7 @@ import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
-import { showRequestQueueControls } from "@/lib/sync-requests";
+import { showRequestQueueControls, requestShowsRetry } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
 
 export function TitleView({ id }: { id: string }) {
@@ -42,6 +42,7 @@ export function TitleView({ id }: { id: string }) {
   const intent = useReelStore((s) => s.answers.intent);
   const source = useReelStore((s) => s.answers.source);
   const requestTitle = useReelStore((s) => s.requestTitle);
+  const retryRequest = useReelStore((s) => s.retryRequest);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
   const { inJellyfin, engineStatus } = useEngineRequest(id, season);
 
@@ -210,7 +211,11 @@ export function TitleView({ id }: { id: string }) {
                 </span>
               ) : request?.status === "waiting" || engineStatus === "queued" ? (
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">
-                  {request?.via === "uncached" ? "No cache · looking for a transfer" : "Waiting for a release"}
+                  {request?.reason
+                    ? request.reason
+                    : request?.via === "uncached"
+                      ? "No cache · looking for a transfer"
+                      : "Waiting for a release"}
                 </span>
               ) : (
                 <Button
@@ -236,6 +241,11 @@ export function TitleView({ id }: { id: string }) {
                     : "Request"}
                 </Button>
               )
+            ) : null}
+            {request && requestShowsRetry(request) ? (
+              <Button variant="ghost" size="lg" onClick={() => retryRequest(request.id)}>
+                Retry
+              </Button>
             ) : null}
           </div>
           {failed ? (

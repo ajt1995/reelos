@@ -58,8 +58,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.31";
-export const SHIPPED_VERSION = "1.2.50.31";
+export const LATEST_VERSION = "1.2.50.32";
+export const SHIPPED_VERSION = "1.2.50.32";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export type BootStepId = "local" | "house" | "library" | "requests";
@@ -88,6 +88,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.32: Search→request→play: recover keeps kicking, overlay does not sticky-available, Home cards match the transferring chip, GET-by-id imports when available, dump list cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.30: Home Your requests only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/library hits stay on Requests and On this box — not the top row. Transferring chip uses the same in-flight count. Complements #85. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
@@ -460,11 +461,9 @@ export const useReelStore = create<ReelState>()(
           const answers = incoming ? { ...s.answers, ...safeIncoming, adminPassword: s.answers.adminPassword } : s.answers;
           const shelf = titles.length ? mergeShelf(s.shelf, titles, true) : s.shelf;
           const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
-            libraryIds: shelf.map((t) => t.id),
             titles: shelf,
           });
-          const extra = requests.filter((r) => r.status === "available").map((r) => r.titleId);
-          const library = [...new Set([...shelf.map((t) => t.id), ...s.library, ...extra])];
+          const library = [...new Set(shelf.map((t) => t.id))];
           const libraryOk = Array.isArray(ready?.titles);
           const requestsOk = Array.isArray(ready?.requests);
           return {
@@ -870,9 +869,8 @@ export const useReelStore = create<ReelState>()(
             rememberCatalogTitles(titles);
             const cur = get();
             const shelf = mergeShelf(cur.shelf, titles, Boolean(limit));
-            const library = [...new Set([...shelf.map((t) => t.id), ...cur.library])];
+            const library = [...new Set(shelf.map((t) => t.id))];
             const requests = overlayLibraryPresence(cur.requests, {
-              libraryIds: library,
               titles: shelf,
             });
             set({

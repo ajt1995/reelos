@@ -144,7 +144,41 @@ export function titlePresenceKeys(id: string, extra: string[] = []): string[] {
   add(id);
   extra.forEach(add);
   if (id.startsWith("tmdb-tv-")) add(`tmdb-${id.slice(8)}`);
+  if (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-")) add(`tmdb-tv-${id.slice(5)}`);
   return [...keys];
+}
+
+export function titleMatchesId(
+  t: Pick<Title, "id" | "ids" | "jellyfinId">,
+  id: string,
+): boolean {
+  const keys = new Set(titlePresenceKeys(t.id, t.ids || []));
+  if (t.jellyfinId) {
+    keys.add(String(t.jellyfinId));
+    keys.add(`jf-${t.jellyfinId}`);
+  }
+  return titlePresenceKeys(id).some((k) => keys.has(k));
+}
+
+/** Home cards: shelf / remembered titles / the request's own name. Always a Title so chip and cards match. */
+export function titleForRequest(
+  r: Pick<MediaRequest, "titleId" | "title">,
+  titles: Pick<Title, "id" | "ids" | "kind" | "title" | "year" | "poster" | "jellyfinId">[] = [],
+): Title {
+  const hit = titles.find((t) => titleMatchesId(t, r.titleId));
+  if (hit) return hit as Title;
+  return {
+    id: r.titleId,
+    kind: String(r.titleId).startsWith("tmdb-tv-") ? "tv" : "movie",
+    title: r.title || r.titleId,
+    year: 0,
+    rating: 0,
+    genres: [],
+    overview: "",
+    poster: "",
+    maxQuality: "1080p",
+    popularity: 0,
+  };
 }
 
 /** Collapse same titleId+season. A done sibling upgrades the rest. */
@@ -215,16 +249,19 @@ export function applyTitleRequestPoll(
 /** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
 export function overlayLibraryPresence(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "kind">[] },
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind">[] },
 ): MediaRequest[] {
   const movieKeys = new Set<string>();
   for (const id of opts.libraryIds || []) {
-    if (id.startsWith("tmdb-tv-") || id.startsWith("tvdb-")) continue;
+    if (id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || id.startsWith("jf-")) continue;
     for (const k of titlePresenceKeys(id)) movieKeys.add(k);
   }
   for (const t of opts.titles || []) {
     if (t.kind === "tv" || t.kind === "anime") continue;
-    for (const k of titlePresenceKeys(t.id)) movieKeys.add(k);
+    for (const k of titlePresenceKeys(t.id, t.ids || [])) {
+      if (k.startsWith("jf-")) continue;
+      movieKeys.add(k);
+    }
   }
   const overlaid = requests.map((row) => {
     if (row.status === "available" || row.engine === "downloaded") {

@@ -522,10 +522,10 @@ async function jellyfinState(ip) {
   const lan = lanUrl ? await probeJson(lanUrl) : { ok: false, json: null };
   if (!lan.ok) {
     const loop = await probeJson("http://127.0.0.1:8096/System/Info/Public");
-    if (loop.ok) {
-      return { state: "red", detail: "Jellyfin is only on localhost, not the LAN", libraries: [] };
+    if (!loop.ok) {
+      return { state: "red", detail: "Jellyfin not on :8096", libraries: [] };
     }
-    return { state: "red", detail: "Jellyfin not on :8096", libraries: [] };
+    // Loopback is the playback path; a miss on the LAN/Tailscale IP is not a red box.
   }
   const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
   if (!auth?.token) {
@@ -543,7 +543,8 @@ async function jellyfinState(ip) {
   if (missing.length) {
     return { state: "red", detail: `Missing library ${missing.join(", ")}`, libraries: names };
   }
-  return { state: "green", detail: `Jellyfin on http://${ip}:8096`, libraries: names };
+  const detail = ip && lan.ok ? `Jellyfin on http://${ip}:8096` : "Jellyfin on loopback :8096";
+  return { state: "green", detail, libraries: names };
 }
 
 async function readJellyfinVirtualFolders(token) {
@@ -624,7 +625,7 @@ function boxSyncSlice() {
   const now = Date.now();
   const fresh = Boolean(boxProbeCache.jf) && now - boxProbeCache.at < BOX_PROBE_CACHE_MS;
   if (!fresh) scheduleBoxProbe(ip);
-  const jellyfin = boxProbeCache.jf || { state: "unknown", detail: "", libraries: [] };
+  const jellyfin = boxProbeCache.jf || { state: "amber", detail: "Still starting", libraries: [] };
   const ts = boxProbeCache.ts || tailscaleCache.val || {
     installed: a.access === "tailscale",
     up: a.access === "tailscale",
@@ -1095,7 +1096,7 @@ async function handleRequestList(res) {
     return;
   }
   try {
-    const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
+    const r = await seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 4000 });
     const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
     const requests = [];
     for (const row of rows) {
@@ -1106,7 +1107,7 @@ async function handleRequestList(res) {
     const facts = await loadPresenceFacts();
     let mediaItems = [];
     try {
-      const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 });
+      const media = await seerrFetch("/api/v1/media?take=100&filter=all&sort=added", { key, ms: 3000 });
       mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
     } catch {
       mediaItems = [];
@@ -1196,7 +1197,7 @@ async function handleRequest(req, res) {
     return;
   }
   try {
-    const listed = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 15000 });
+    const listed = await seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 15000 });
     const existingRows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
     const reused = findExistingSeasonRequest(existingRows, {
       mediaType: parsed.mediaType,
@@ -2301,7 +2302,10 @@ export function reelosLookupPlugin() {
             return void (await handleUpdateApply(req, res));
           }
           if (pathOnly === "/api/update/status") return void (await handleUpdateStatus(req, res));
-          if (pathOnly === "/api/request") return void (await handleRequest(req, res));
+          if (pathOnly === "/api/request") {
+            if ((req.method || "GET").toUpperCase() === "GET") return next();
+            return void (await handleRequest(req, res));
+          }
           if (pathOnly === "/api/password") return void (await handlePassword(req, res));
           if (pathOnly === "/api/quality") return void (await handleQuality(req, res));
           if (pathOnly === "/api/intent") return void (await handleIntent(req, res));

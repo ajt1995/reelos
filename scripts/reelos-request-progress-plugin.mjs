@@ -14,7 +14,19 @@ import {
   kickArrRecover,
   listRecoverTargets,
   loadPresenceFacts,
+  spawnWireImport,
 } from "./reelos-request-status.mjs";
+
+const importedOnce = new Set();
+function maybeImportAvailable(data) {
+  const status = String(data?.status || "");
+  const engine = String(data?.engine || "");
+  const titleId = String(data?.titleId || "");
+  if (!titleId || importedOnce.has(titleId)) return;
+  if (status !== "available" && status !== "downloaded" && engine !== "downloaded") return;
+  importedOnce.add(titleId);
+  spawnWireImport();
+}
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -56,14 +68,14 @@ function maybeRecover(u) {
       const key = seerrApiKey();
       if (key) {
         try {
-          const r = await seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
+          const r = await seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 4000 });
           const rows = Array.isArray(r.json) ? r.json : r.json?.results || [];
           seerrRows = rows.map((row) => seerrRequestRow(row)).filter((rec) => rec?.titleId);
         } catch {
           seerrRows = [];
         }
         try {
-          const media = await seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 });
+          const media = await seerrFetch("/api/v1/media?take=100&filter=all&sort=added", { key, ms: 3000 });
           const mediaItems = Array.isArray(media.json) ? media.json : media.json?.results || [];
           seerrRows = [...seerrRows, ...seerrMediaGhostRows(mediaItems)];
         } catch {
@@ -93,9 +105,9 @@ export async function collectRequestList() {
     return { requests: [], titles: [], error: "Seerr has no API key yet" };
   }
   try {
-    const listedP = seerrFetch("/api/v1/request?take=50&filter=all&sort=added", { key, ms: 4000 });
+    const listedP = seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 4000 });
     const factsP = loadPresenceFacts();
-    const mediaP = seerrFetch("/api/v1/media?take=50&filter=all&sort=added", { key, ms: 3000 }).catch(() => ({ json: null }));
+    const mediaP = seerrFetch("/api/v1/media?take=100&filter=all&sort=added", { key, ms: 3000 }).catch(() => ({ json: null }));
     const [listed, facts, media] = await Promise.all([listedP, factsP, mediaP]);
     const rows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
     const requests = [];
@@ -144,7 +156,7 @@ async function handleGet(req, res) {
   }
   try {
     const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
-    const r = await seerrFetch(path, { key, ms: 5000 });
+    const r = await seerrFetch(path, { key, ms: 8000 });
     const media = mediaFromDetail(r.json) || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
     const seasonRaw = u.searchParams.get("season");
@@ -163,10 +175,16 @@ async function handleGet(req, res) {
     const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId })[0] || mapped;
     const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+    maybeImportAvailable({
+      status: honest.status,
+      engine: honest.engine,
+      titleId: mapped.titleId,
+    });
     send(res, 200, {
       status: honest.engine || "unknown",
       engine: "seerr",
       title: title?.title,
+      titleId: mapped.titleId,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
       progress: honest.status === "available" ? 100 : honest.progress,

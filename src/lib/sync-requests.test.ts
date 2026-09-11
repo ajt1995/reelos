@@ -10,6 +10,8 @@ import {
   overlayLibraryPresence,
   requestShowsRetry,
   showRequestQueueControls,
+  titleForRequest,
+  titleMatchesId,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
 
@@ -116,11 +118,12 @@ test("Home filters in-flight; Requests page still lists everything", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
-  assert.match(home, /inFlightRequests\(requests, \{ libraryIds: library, titles: shelf \}\)/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(home, /titleForRequest\(r, shelf\)/);
   assert.match(home, /reqCards = inflight/);
   assert.match(home, /transferring = inflight\.length/);
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
-  assert.match(shell, /inFlightRequests\(s\.requests/);
+  assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
   assert.doesNotMatch(reqs, /inFlightRequests/);
   assert.match(reqs, /filter === "all" \? true : r\.status === filter/);
 });
@@ -322,4 +325,44 @@ test("Retry stays on locks that will never search", () => {
     false,
   );
   assert.equal(requestShowsRetry({ status: "available" }), false);
+});
+
+test("sticky persist library ids do not keep a ghost movie available without a shelf hit", () => {
+  const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
+  const honest = overlayLibraryPresence(requests, { titles: [] });
+  assert.equal(honest[0]?.status, "downloading");
+});
+
+test("movie overlay matches TMDB from title.ids, not only t.id", () => {
+  const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
+  const honest = overlayLibraryPresence(requests, {
+    titles: [{ id: "jf-museum", kind: "movie", ids: ["tmdb-1593", "jf-1"] }],
+  });
+  assert.equal(honest[0]?.status, "available");
+});
+
+test("jf- library ids do not overlay a TMDB movie", () => {
+  const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
+  const honest = overlayLibraryPresence(requests, { libraryIds: ["jf-abc"], titles: [] });
+  assert.equal(honest[0]?.status, "downloading");
+});
+
+test("titleForRequest uses the request name when catalog is empty", () => {
+  const t = titleForRequest(
+    { titleId: "tmdb-324857", title: "Spider-Man: Into the Spider-Verse" },
+    [],
+  );
+  assert.equal(t.title, "Spider-Man: Into the Spider-Verse");
+  assert.equal(t.id, "tmdb-324857");
+});
+
+test("player matches tmdb-tv to a JF series whose id is tvdb / tmdb", () => {
+  const series = {
+    id: "tvdb-280619",
+    ids: ["tmdb-63639", "tmdb-tv-63639", "tvdb-280619"],
+    jellyfinId: "jf-expanse",
+  };
+  assert.equal(titleMatchesId(series, "tmdb-tv-63639"), true);
+  assert.equal(titleMatchesId(series, "tmdb-63639"), true);
+  assert.equal(titleMatchesId(series, "tvdb-280619"), true);
 });

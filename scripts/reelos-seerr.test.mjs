@@ -167,6 +167,16 @@ test("duplicate TWD S01 Seerr rows collapse to one phone request", () => {
   assert.equal(collapsed[0].id, "seerr-3");
   assert.equal(findExistingSeasonRequest([a, b], { mediaType: "tv", tmdb: 1402, season: 1 })?.id, "seerr-3");
   assert.equal(findExistingSeasonRequest([a], { mediaType: "tv", tmdb: 1402, season: 2 }), null);
+  const seasonLess = seerrRequestRow({
+    id: 99,
+    type: "tv",
+    status: 2,
+    createdAt: "2026-09-09T01:00:00.000Z",
+    updatedAt: "2026-09-09T01:00:00.000Z",
+    seasons: [],
+    media: { tmdbId: 1402, status: 3 },
+  }, {});
+  assert.equal(findExistingSeasonRequest([seasonLess], { mediaType: "tv", tmdb: 1402, season: 2 }), null);
 });
 
 test("requested TV season AVAILABLE beats series still processing", () => {
@@ -714,6 +724,14 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
     }),
     "Files linked — waiting for Sonarr import",
   );
+  assert.equal(
+    tvRequestReason(row, {
+      series: [series],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["Justified.2010.S01.1080p.AMZN"] },
+    }),
+    "Files linked — waiting for Sonarr import",
+  );
   const honest = honestifyRequests([row], {
     series: [series],
     arrSeriesReady: true,
@@ -889,14 +907,22 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.doesNotMatch(progress, /await maybeRecover/);
   assert.doesNotMatch(progress, /force: true/);
   assert.match(progress, /ms: 4000/);
+  assert.match(progress, /spawnWireImport/);
+  assert.match(progress, /maybeImportAvailable/);
   assert.match(lookup, /scheduleBoxProbe/);
-  assert.match(sync, /recover=1/);
+  assert.match(sync, /\/api\/request\?recover=1/);
+  assert.doesNotMatch(sync, /recoveredOnce/);
   assert.match(requestsView, /requestShowsRetry/);
   assert.match(progress, /reason: honest.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);
   assert.match(lookup, /seerr reuse/);
+  assert.match(lookup, /GET"\)\.toUpperCase\(\) === "GET"\) return next/);
+  assert.doesNotMatch(lookup, /Jellyfin is only on localhost, not the LAN/);
+  const status = readFileSync(join(root, "scripts/reelos-request-status.mjs"), "utf8");
+  assert.match(status, /spawnSync\("ls"/);
+  assert.match(status, /timeout: 800/);
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
