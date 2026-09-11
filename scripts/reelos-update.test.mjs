@@ -63,8 +63,10 @@ test("restore moves the broken tree aside instead of deleting live app first", (
 
 test("house compose/configs overlay onto staging (no dest-exists nest)", () => {
   assert.match(updater, /overlay house compose\/configs onto staging/);
-  assert.match(updater, /cp -a "\$ROOT\/compose\/configs\/\." "\$NEXT\/compose\/configs\/"/);
+  assert.match(updater, /overlay_house_configs/);
+  assert.match(updater, /"\$ROOT\/compose\/configs\/" "\$NEXT\/compose\/configs\/"/);
   assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs" "\$NEXT\/compose\/configs"/);
+  assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs\/\." "\$NEXT\/compose\/configs\/"/);
 });
 
 test("Stage 3 node_modules copy heartbeats so a long cp does not look wedged", () => {

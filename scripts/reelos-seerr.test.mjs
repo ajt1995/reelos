@@ -918,7 +918,8 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);
   assert.match(lookup, /seerr reuse/);
-  assert.match(lookup, /GET"\)\.toUpperCase\(\) === "GET"\) return next/);
+  assert.match(progress, /dispatchRequestGet/);
+  assert.match(lookup, /if \(method === "GET"\) return false/);
   assert.doesNotMatch(lookup, /Jellyfin is only on localhost, not the LAN/);
   const status = readFileSync(join(root, "scripts/reelos-request-status.mjs"), "utf8");
   assert.match(status, /spawnSync\("ls"/);

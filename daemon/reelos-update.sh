@@ -472,6 +472,12 @@ need daemon/reelos-doctor.py 'MoviesSearch cannot grab'
 need daemon/reelos-update.sh 'wire-engines.py" indexers'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
+need install/systemd/reelos-selfheal.timer WantedBy
+need daemon/reelos-selfheal.sh 'not walking FUSE'
+need daemon/reelos-selfheal.sh 'not enabling firstboot'
+need daemon/reelos-update.sh 'vite build for production door'
+need scripts/reelos-box.mjs 'production preview'
+need scripts/reelos-box.mjs 'serving built UI'
 need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
 need daemon/reelos-update.sh 'not printing applied'
 need daemon/reelos-update.sh 'package.json or package-lock.json changed'
@@ -511,6 +517,8 @@ if [ -d "$WORK/src/src" ]; then
     cp -a "$WORK/src/public/." "$NEXT/app/public/" || true
     rm -rf "$NEXT/app/public/install" || true
   fi
+  [ -f "$WORK/src/channel.json" ] && cp -a "$WORK/src/channel.json" "$NEXT/app/"
+  [ -f "$WORK/src/channel-beta.json" ] && cp -a "$WORK/src/channel-beta.json" "$NEXT/app/"
   echo 1 >"$NEXT/app/.reelos-appliance"
 fi
 if [ -d "$WORK/src/daemon" ]; then
@@ -606,6 +614,15 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
       rm -rf "$NEXT"
       exit 1
     }
+  fi
+fi
+
+if [ -f "$NEXT/app/package.json" ] && [ -d "$NEXT/app/node_modules" ]; then
+  log "vite build for production door (8080 still on previous tree)"
+  if (cd "$NEXT/app" && PATH="$PWD/node_modules/.bin:$PATH" NODE_ENV=production timeout 180 node scripts/with-app-env.mjs vite build); then
+    log "production client built"
+  else
+    log "vite build skipped — start:box falls back to vite --host :8080"
   fi
 fi
 
@@ -801,6 +818,14 @@ fi
 if [ -f "$ROOT/systemd/reelos-lock-clients.timer" ]; then
   cp "$ROOT/systemd/reelos-lock-clients.timer" /etc/systemd/system/reelos-lock-clients.timer
   systemctl enable --now reelos-lock-clients.timer >/dev/null 2>&1 || true
+fi
+if [ -f "$ROOT/systemd/reelos-selfheal.service" ]; then
+  cp "$ROOT/systemd/reelos-selfheal.service" /etc/systemd/system/reelos-selfheal.service
+fi
+if [ -f "$ROOT/systemd/reelos-selfheal.timer" ]; then
+  cp "$ROOT/systemd/reelos-selfheal.timer" /etc/systemd/system/reelos-selfheal.timer
+  chmod 755 "$ROOT/bin/reelos-selfheal.sh" 2>/dev/null || true
+  systemctl enable --now reelos-selfheal.timer >/dev/null 2>&1 || true
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell

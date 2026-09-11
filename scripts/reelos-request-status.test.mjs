@@ -15,6 +15,7 @@ import {
   loadPresenceFacts,
   planArrPostRecover,
   planTvPostRecover,
+  planUnstickSearchingIfFileOnDisk,
   resetPresenceFactsCache,
   waitForArrRow,
   decypharrClientMissing,
@@ -870,4 +871,23 @@ test("kickArrRecover POSTs a missing Sonarr series then SeasonSearchs", async ()
   const search = calls.find((c) => String(c.url).includes("/command"));
   assert.equal(search?.body?.name, "SeasonSearch");
   assert.equal(search?.body?.seasonNumber, 3);
+});
+
+test("unstick searching-if-file-on-disk imports and never searches", () => {
+  assert.deepEqual(
+    planUnstickSearchingIfFileOnDisk({ status: "downloading", arrHasFile: true }),
+    { search: false, import: true, action: "import" },
+  );
+  assert.deepEqual(
+    planUnstickSearchingIfFileOnDisk({ status: "waiting", libraryHit: true }),
+    { search: false, import: true, action: "import" },
+  );
+  assert.deepEqual(
+    planUnstickSearchingIfFileOnDisk({ status: "available", arrHasFile: true }),
+    { search: false, import: false, action: "none" },
+  );
+  assert.deepEqual(
+    planUnstickSearchingIfFileOnDisk({ status: "downloading", arrHasFile: false, libraryHit: false }),
+    { search: false, import: false, action: "none" },
+  );
 });

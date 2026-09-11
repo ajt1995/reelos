@@ -1,6 +1,7 @@
-export const LATEST_VERSION = "1.2.50.33";
-export const SHIPPED_VERSION = "1.2.50.33";
+export const LATEST_VERSION = "1.2.50.34";
+export const SHIPPED_VERSION = "1.2.50.34";
 export const UPDATE_NOTES = [
+  "1.2.50.34: Background self-heal keeps the door, compose/*arr/Seerr, Jellyfin token, and request recover going so you do not tap Heal. Settings is Check/Apply, not a repair bench. Production start serves the built UI when dist exists. Beta channel is a stub for later Arena+Books. Complements #95. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.33: Requests is in-flight only. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update. Complements #94. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.32: Search→request→play: recover keeps kicking, overlay does not sticky-available, Home cards match the transferring chip, GET-by-id imports when available, dump list cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",

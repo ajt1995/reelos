@@ -176,6 +176,12 @@ fi
 if [ -f "$HERE/systemd/reelos-lock-clients.timer" ]; then
   cp "$HERE/systemd/reelos-lock-clients.timer" /etc/systemd/system/reelos-lock-clients.timer
 fi
+if [ -f "$HERE/systemd/reelos-selfheal.service" ]; then
+  cp "$HERE/systemd/reelos-selfheal.service" /etc/systemd/system/reelos-selfheal.service
+fi
+if [ -f "$HERE/systemd/reelos-selfheal.timer" ]; then
+  cp "$HERE/systemd/reelos-selfheal.timer" /etc/systemd/system/reelos-selfheal.timer
+fi
 if [ -f "$HERE/systemd/reelos-mnt-rshared.service" ]; then
   cp "$HERE/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
 fi
@@ -226,9 +232,11 @@ if [ ! -f "$STATE/provisioned" ]; then
 fi
 enable_unit reelos-console
 systemctl enable reelos-lock-clients.timer >/dev/null 2>&1 || true
+systemctl enable reelos-selfheal.timer >/dev/null 2>&1 || true
 systemctl enable --now reelos-mnt-rshared >/dev/null 2>&1 || enable_unit reelos-mnt-rshared
 if systemd_live; then
   systemctl start reelos-lock-clients.timer || true
+  systemctl start reelos-selfheal.timer || true
   python3 /opt/reelos/bin/lock-download-clients.py || true
 fi
 systemctl disable getty@tty1.service >/dev/null 2>&1 || true

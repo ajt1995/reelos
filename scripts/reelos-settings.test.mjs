@@ -20,6 +20,15 @@ test("Settings autoUpdate write is best-effort and does not 500 the JSON", () =>
   );
 });
 
+test("Check can target the beta channel stub", () => {
+  assert.match(src, /channel-beta\.json/);
+  assert.match(src, /betaChannel === true/);
+  assert.match(src, /betaChannelStub/);
+  assert.match(src, /channel: "beta"/);
+  assert.match(src, /CHANNEL_BETA_URL/);
+  assert.match(src, /ajt1995\/reelos\/main\/channel-beta\.json/);
+});
+
 test("jellyfinState does not call a timed-out VirtualFolders empty list Missing library", () => {
   const idx = src.indexOf("async function jellyfinState");
   assert.ok(idx >= 0);

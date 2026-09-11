@@ -25,6 +25,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
   const update = useReelStore((s) => s.update);
   const autoUpdate = useReelStore((s) => s.settings.autoUpdate);
   const stackImages = useReelStore((s) => s.settings.stackImages);
+  const betaChannel = useReelStore((s) => s.settings.betaChannel);
   const patchSettings = useReelStore((s) => s.patchSettings);
   const checkForUpdate = useReelStore((s) => s.checkForUpdate);
   const startUpdate = useReelStore((s) => s.startUpdate);
@@ -39,10 +40,12 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       : update.status === "available"
         ? `${update.target} is ready`
         : update.status === "checking"
-          ? "Checking the stable channel"
+          ? betaChannel
+            ? "Checking the beta channel"
+            : "Checking the stable channel"
           : update.status === "current"
             ? `${installed} · up to date`
-            : `${installed} · ${CHANNEL}`;
+            : `${installed} · ${betaChannel ? "beta" : CHANNEL}`;
 
   return (
     <Row icon={RefreshCw} title="Updates" hint={hint} open={open} onClick={onClick}>
@@ -51,7 +54,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         {update.status === "available" && update.target ? (
           <span className="ml-3 text-muted">available {update.target}</span>
         ) : (
-          <span className="ml-3 text-muted">{CHANNEL}</span>
+          <span className="ml-3 text-muted">{betaChannel ? "beta" : CHANNEL}</span>
         )}
       </p>
       <p className="mt-2 text-sm text-muted">
@@ -127,6 +130,20 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
           }}
         />
       </label>
+      <label className="mt-3 flex items-center justify-between text-sm">
+        Beta channel
+        <Toggle
+          on={betaChannel}
+          onChange={(v) => {
+            patchSettings({ betaChannel: v });
+            persistUi({ betaChannel: v });
+          }}
+        />
+      </label>
+      <p className="mt-2 text-xs text-muted">
+        Off by default. Check then reads channel-beta (a stub today). Arena chrome and Books are not in this stamp.
+        Apply still comes from main.
+      </p>
     </Row>
   );
 }
