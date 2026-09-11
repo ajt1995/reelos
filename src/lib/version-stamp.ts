@@ -1,6 +1,7 @@
-export const LATEST_VERSION = "1.2.50.37";
-export const SHIPPED_VERSION = "1.2.50.37";
+export const LATEST_VERSION = "1.2.50.38";
+export const SHIPPED_VERSION = "1.2.50.38";
 export const UPDATE_NOTES = [
+  "1.2.50.38: No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI transcode when a GPU is present; low-perf still caps threads. Detect at provision, self-heal --performance, and Settings. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.35: House Apply of 34 would npm ci (start:box script) and vite-build on 4GB while Sonarr ffprobe-storms FUSE dumps. Reuse node_modules when lockfile matches; skip vite build on 4GB; self-heal skips compose/recover while ffprobe is D-state. Complements #111. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.34: Background self-heal keeps the door, compose/*arr/Seerr, Jellyfin token, and request recover going so you do not tap Heal. Settings is Check/Apply, not a repair bench. Production start serves the built UI when dist exists. Beta channel is a stub for later Arena+Books. Complements #95. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",

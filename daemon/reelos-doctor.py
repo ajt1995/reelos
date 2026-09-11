@@ -569,11 +569,16 @@ def main() -> int:
         checks.append(ok("Plex", "Responding" if listening(32400) else "Not up", listening(32400)))
 
     dri = Path("/dev/dri").exists()
+    if dri and Path("/dev/dri").is_dir():
+        try:
+            dri = any(p.name.startswith(("renderD", "card")) for p in Path("/dev/dri").iterdir())
+        except OSError:
+            dri = True
     checks.append(
         ok(
             "Hardware transcode",
-            "/dev/dri present" if dri else "No GPU node. Software encode.",
-            dri,
+            "/dev/dri present — VAAPI" if dri else "No /dev/dri — DirectPlay/DirectStream only",
+            True,
         )
     )
 

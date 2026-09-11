@@ -34,6 +34,30 @@ cat >"$ROOT/compose/configs/jellyfin/config/network.xml" <<'XML'
   <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>
 </NetworkConfiguration>
 XML
-echo "reset: configs wiped; jellyfin network.xml re-seeded" >>"$LOG"
+# No GPU: DirectPlay/DirectStream only. VAAPI when /dev/dri has a render/card node.
+ACCEL=none
+HW=false
+HEVC=false
+if ls /dev/dri/renderD* /dev/dri/card* >/dev/null 2>&1; then
+  ACCEL=vaapi
+  HW=true
+  HEVC=true
+fi
+cat >"$ROOT/compose/configs/jellyfin/config/encoding.xml" <<XML
+<?xml version="1.0" encoding="utf-8"?>
+<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EncodingThreadCount>1</EncodingThreadCount>
+  <EnableThrottling>true</EnableThrottling>
+  <EnableSegmentDeletion>true</EnableSegmentDeletion>
+  <SegmentKeepSeconds>60</SegmentKeepSeconds>
+  <HardwareAccelerationType>${ACCEL}</HardwareAccelerationType>
+  <EnableHardwareEncoding>${HW}</EnableHardwareEncoding>
+  <EnableSubtitleExtraction>false</EnableSubtitleExtraction>
+  <EncoderPreset>veryfast</EncoderPreset>
+  <AllowHevcEncoding>${HEVC}</AllowHevcEncoding>
+  <VaapiDevice>/dev/dri/renderD128</VaapiDevice>
+</EncodingOptions>
+XML
+echo "reset: configs wiped; jellyfin network.xml re-seeded; encoding.xml DirectPlay/VAAPI" >>"$LOG"
 systemctl restart reelos >>"$LOG" 2>&1 || true
 echo "reset done" >>"$LOG"
