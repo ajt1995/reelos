@@ -10,6 +10,7 @@ import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
 import { showRequestQueueControls, requestShowsRetry } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
+import { RemoveFromBox } from "@/components/remove-from-box";
 
 export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
@@ -190,6 +191,7 @@ export function TitleView({ id }: { id: string }) {
                 In library
               </span>
             ) : null}
+            {available ? <RemoveFromBox title={resolved} /> : null}
             {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.

@@ -21,7 +21,7 @@ import type {
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
-import { mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -58,8 +58,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.32";
-export const SHIPPED_VERSION = "1.2.50.32";
+export const LATEST_VERSION = "1.2.50.33";
+export const SHIPPED_VERSION = "1.2.50.33";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export type BootStepId = "local" | "house" | "library" | "requests";
@@ -88,6 +88,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.33: Requests is in-flight only. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update. Complements #94. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.32: Search→request→play: recover keeps kicking, overlay does not sticky-available, Home cards match the transferring chip, GET-by-id imports when available, dump list cannot hang Vite, JF chip is amber until probed, loopback JF is not localhost-red. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.30: Home Your requests only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/library hits stay on Requests and On this box — not the top row. Transferring chip uses the same in-flight count. Complements #85. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -136,7 +137,7 @@ function makeAdapter(answers: WizardAnswers): AdapterState {
   };
 }
 
-function idleUpdate(current = "…"): UpdateState {
+function idleUpdate(current = SHIPPED_VERSION): UpdateState {
   return {
     status: "idle",
     current,
@@ -209,6 +210,7 @@ export interface ReelState {
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
   hydrateShelf: (opts?: { limit?: number }) => void;
+  dropLibraryTitle: (titleId: string, extraIds?: string[]) => void;
 }
 
 const shelfFetches = new Map<string, Promise<void>>();
@@ -676,8 +678,9 @@ export const useReelStore = create<ReelState>()(
         });
         void fetch("/api/update/check", { cache: "no-store" })
           .then((r) => r.json())
-          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; error?: string }) => {
+          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string }) => {
             const cur = get();
+            const pending = Array.isArray(r.pendingNotes) ? r.pendingNotes : Array.isArray(r.notes) ? r.notes : [];
             if (r.ok && r.available) {
               set({
                 update: {
@@ -685,7 +688,7 @@ export const useReelStore = create<ReelState>()(
                   status: "available",
                   current: r.local || cur.update.current,
                   target: r.remote || null,
-                  notes: r.notes?.length ? r.notes : UPDATE_NOTES,
+                  notes: pending,
                   checkedAt: Date.now(),
                 },
               });
@@ -855,6 +858,15 @@ export const useReelStore = create<ReelState>()(
         if (!extra.length) return;
         rememberCatalogTitles(extra);
         set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
+      },
+      dropLibraryTitle: (titleId, extraIds = []) => {
+        const s = get();
+        const overlay = dropLibraryOverlay(
+          { shelf: s.shelf, library: s.library, requests: s.requests },
+          titleId,
+          extraIds,
+        );
+        set({ shelf: overlay.shelf, library: overlay.library, requests: overlay.requests });
       },
       hydrateShelf: (opts) => {
         if (get().shelfReady) return;

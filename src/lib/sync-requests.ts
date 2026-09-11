@@ -8,10 +8,10 @@ export function isInFlightRequest(r: { status: string; engine?: string }): boole
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
-/** Home "Your requests" + transferring chip: overlay library hits, then keep in-flight only. */
+/** Home "Your requests", Requests page, and transferring chip: overlay library hits, then keep in-flight only. */
 export function inFlightRequests(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "kind">[] } = {},
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind">[] } = {},
 ): MediaRequest[] {
   return overlayLibraryPresence(requests, opts).filter(isInFlightRequest);
 }
@@ -178,6 +178,38 @@ export function titleForRequest(
     poster: "",
     maxQuality: "1080p",
     popularity: 0,
+  };
+}
+
+function titleInDropSet(t: Pick<Title, "id" | "ids" | "jellyfinId">, keys: Set<string>): boolean {
+  const ids = titlePresenceKeys(t.id, t.ids || []);
+  if (t.jellyfinId) {
+    ids.push(String(t.jellyfinId), `jf-${t.jellyfinId}`);
+  }
+  return ids.some((k) => keys.has(k));
+}
+
+/** Drop a title from shelf, library ids, and request overlay. TV drops every season row. */
+export function dropLibraryOverlay(
+  state: { shelf?: Title[]; library?: string[]; requests?: MediaRequest[] },
+  titleId: string,
+  extraIds: string[] = [],
+): { shelf: Title[]; library: string[]; requests: MediaRequest[]; keys: string[] } {
+  const keys = new Set(titlePresenceKeys(titleId, extraIds));
+  for (const t of state.shelf || []) {
+    if (!titleInDropSet(t, keys)) continue;
+    for (const k of titlePresenceKeys(t.id, t.ids || [])) keys.add(k);
+    if (t.jellyfinId) {
+      keys.add(String(t.jellyfinId));
+      keys.add(`jf-${t.jellyfinId}`);
+    }
+  }
+  const gone = (id: string) => keys.has(id) || titlePresenceKeys(id).some((k) => keys.has(k));
+  return {
+    shelf: (state.shelf || []).filter((t) => !titleInDropSet(t, keys)),
+    library: (state.library || []).filter((id) => !gone(String(id))),
+    requests: (state.requests || []).filter((r) => !r?.titleId || !gone(r.titleId)),
+    keys: [...keys],
   };
 }
 

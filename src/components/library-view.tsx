@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { TitleCard } from "@/components/title-card";
+import { RemoveFromBox } from "@/components/remove-from-box";
 import { useReelStore } from "@/lib/store";
 import type { Kind } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -67,7 +68,10 @@ export function LibraryView() {
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {shown.map((t) => (
-            <TitleCard key={t.id} title={t} className="w-auto" />
+            <div key={t.id}>
+              <TitleCard title={t} className="w-auto" />
+              <RemoveFromBox title={t} compact />
+            </div>
           ))}
         </div>
       )}

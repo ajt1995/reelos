@@ -180,7 +180,7 @@ export function SettingsView() {
         </Row>
       </Section>
 
-      <Section title="Box" hint="Updates, performance, logs. Apply still lives here.">
+      <Section title="Box" hint="Updates, changelog, performance, logs. Apply still lives here.">
         <UpdatesRow
           open={panel === "updates"}
           onClick={() => setPanel(panel === "updates" ? null : "updates")}
