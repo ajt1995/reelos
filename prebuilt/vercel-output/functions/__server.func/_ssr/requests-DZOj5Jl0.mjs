@@ -2,9 +2,9 @@ import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { d as viaLabel, o as getTitle } from "./appliance-BpvQVhxl.mjs";
-import { b as titleForRequest, h as inFlightRequests, p as useReelStore, v as requestShowsRetry } from "./router-DstgBgqY.mjs";
-import { d as formatWhen, f as useSyncRequests, i as Gate, l as cn, n as Button } from "./gate-B6Ld30lK.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/requests-DOvmakdc.js
+import { S as titleForRequest, _ as isGhostRequestLabel, b as requestShowsRetry, g as inFlightRequests, p as useReelStore } from "./router-BQRDW39d.mjs";
+import { d as formatWhen, f as useResolveGhostRequestTitles, i as Gate, l as cn, n as Button, p as useSyncRequests } from "./gate-C62mb7cr.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/requests-DZOj5Jl0.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var FILTERS = [
@@ -25,6 +25,7 @@ function RequestsView() {
 	const [filter, setFilter] = (0, import_react.useState)("all");
 	const requests = useReelStore((s) => s.requests);
 	const shelf = useReelStore((s) => s.shelf);
+	const remoteTitles = useReelStore((s) => s.remoteTitles);
 	const hydrateShelf = useReelStore((s) => s.hydrateShelf);
 	const retry = useReelStore((s) => s.retryRequest);
 	const cancel = useReelStore((s) => s.cancelRequest);
@@ -32,7 +33,10 @@ function RequestsView() {
 	(0, import_react.useEffect)(() => {
 		hydrateShelf({ limit: 24 });
 	}, [hydrateShelf]);
-	const list = inFlightRequests(requests, { titles: shelf }).filter((r) => filter === "all" ? true : r.status === filter);
+	const catalog = [...shelf, ...remoteTitles];
+	const inflight = inFlightRequests(requests, { titles: catalog });
+	useResolveGhostRequestTitles(inflight, catalog);
+	const list = inflight.filter((r) => filter === "all" ? true : r.status === filter);
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "px-5 py-6 md:px-10 md:py-8",
 		children: [
@@ -59,9 +63,10 @@ function RequestsView() {
 					className: "py-12 text-sm text-muted",
 					children: "Nothing in flight."
 				}) : null, list.map((r) => {
-					const t = titleForRequest(r, shelf) || getTitle(r.titleId);
+					const t = titleForRequest(r, catalog) || getTitle(r.titleId);
 					const titleId = t?.id || r.titleId;
-					const label = t?.title || r.title || r.titleId || "Title";
+					const raw = t?.title || r.title || "";
+					const label = isGhostRequestLabel(raw, titleId) ? "Looking up title…" : raw || "Title";
 					return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
 						className: "flex items-center gap-4 py-4",
 						children: [

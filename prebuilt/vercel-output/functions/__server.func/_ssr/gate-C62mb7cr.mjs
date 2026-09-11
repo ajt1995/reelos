@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-BpvQVhxl.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { _ as overlayLibraryPresence, b as titleForRequest, d as sourceLabel, g as mergeServerRequests, h as inFlightRequests, l as frontendLabel, p as useReelStore } from "./router-DstgBgqY.mjs";
+import { S as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-BQRDW39d.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/gate-B6Ld30lK.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/gate-C62mb7cr.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -289,7 +289,7 @@ function useSyncRequests() {
 				useReelStore.getState().rememberTitles?.(titles);
 				const live = Array.isArray(j.requests) ? j.requests : [];
 				useReelStore.setState((s) => {
-					return { requests: overlayLibraryPresence(mergeServerRequests(s.requests, live), { titles: s.shelf }) };
+					return { requests: overlayLibraryPresence(mergeServerRequests(s.requests, live), { titles: [...s.shelf, ...s.remoteTitles] }) };
 				});
 			} catch {}
 		};
@@ -303,14 +303,38 @@ function useSyncRequests() {
 		};
 	}, []);
 }
+/** Lookup posters/names for inflight rows that still paint as tmdb-2059. */
+function useResolveGhostRequestTitles(requests, titles) {
+	const rememberTitles = useReelStore((s) => s.rememberTitles);
+	const key = [...new Set(requests.filter((r) => {
+		const t = titleForRequest(r, titles);
+		return isGhostRequestLabel(t.title, t.id) || !t.poster;
+	}).map((r) => r.titleId).filter(Boolean))].slice(0, 8).join("|");
+	(0, import_react.useEffect)(() => {
+		if (!key) return;
+		let cancelled = false;
+		for (const id of key.split("|")) fetch(`/api/lookup?id=${encodeURIComponent(id)}`, { cache: "no-store" }).then(async (res) => {
+			if (!res.ok) return null;
+			return res.json();
+		}).then((j) => {
+			if (cancelled || !j) return;
+			const list = Array.isArray(j.titles) ? j.titles : [];
+			rememberCatalogTitles(list);
+			rememberTitles?.(list);
+		}).catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [key, rememberTitles]);
+}
 function HomeView() {
 	const [q, setQ] = (0, import_react.useState)("");
 	const [remoteHits, setRemoteHits] = (0, import_react.useState)([]);
 	const [lookupErr, setLookupErr] = (0, import_react.useState)(null);
-	const watchUrl = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
 	const rememberTitles = useReelStore((s) => s.rememberTitles);
 	const hydrateShelf = useReelStore((s) => s.hydrateShelf);
 	const shelf = useReelStore((s) => s.shelf);
+	const remoteTitles = useReelStore((s) => s.remoteTitles);
 	const shelfError = useReelStore((s) => s.shelfError);
 	const shelfReady = useReelStore((s) => s.shelfReady);
 	const navigate = useNavigate();
@@ -320,9 +344,11 @@ function HomeView() {
 	const frontend = useReelStore((s) => s.answers.frontend);
 	const source = useReelStore((s) => s.answers.source);
 	const adapter = useReelStore((s) => s.adapter);
-	const inflight = inFlightRequests(requests, { titles: shelf });
+	const catalog = (0, import_react.useMemo)(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
+	const inflight = inFlightRequests(requests, { titles: catalog });
 	const transferring = inflight.length;
 	useSyncRequests();
+	useResolveGhostRequestTitles(inflight, catalog);
 	(0, import_react.useEffect)(() => {
 		hydrateShelf({ limit: 24 });
 	}, [hydrateShelf]);
@@ -372,10 +398,10 @@ function HomeView() {
 			window.clearTimeout(t);
 		};
 	}, [q, rememberTitles]);
-	const reqCards = inflight.map((r) => ({
+	const reqCards = collapseHomeRequestCards(inflight).map((r) => ({
 		r,
-		t: titleForRequest(r, shelf) ?? getTitle(r.titleId)
-	})).filter((x) => x.t).slice(0, 12);
+		t: titleForRequest(r, catalog) ?? getTitle(r.titleId)
+	})).filter((x) => x.t && !isGhostRequestLabel(x.t.title, x.t.id)).slice(0, 12);
 	const continueWatch = Object.entries(watch).filter(([, v]) => v > .03 && v < .96).map(([id, v]) => ({
 		t: getTitle(id),
 		v
@@ -383,13 +409,6 @@ function HomeView() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "px-5 pb-12 pt-2 md:px-10 md:pt-8",
 		children: [
-			watchUrl ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("a", {
-				href: watchUrl,
-				target: "_blank",
-				rel: "noreferrer",
-				className: "mb-4 inline-flex h-11 items-center rounded-full bg-gold px-5 text-sm font-medium text-gold-fg",
-				children: "Watch in this browser"
-			}) : null,
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
 				className: "relative mx-auto block w-full max-w-2xl",
 				onSubmit: (e) => {
@@ -1198,18 +1217,6 @@ function Shell({ children }) {
 								rel: "noreferrer",
 								className: "ml-auto flex h-11 items-center rounded-xl px-3 text-sm font-medium text-gold",
 								children: "Watch"
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
-								to: "/discover",
-								className: "flex size-11 items-center justify-center rounded-xl text-muted",
-								"aria-label": "Search",
-								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Search, { className: "size-5" })
-							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Link, {
-								to: "/settings",
-								className: "flex size-11 items-center justify-center rounded-xl text-muted",
-								"aria-label": "Settings",
-								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Settings, { className: "size-5" })
 							})
 						]
 					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("main", {
@@ -2012,4 +2019,4 @@ function Boot() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Wizard, {});
 }
 //#endregion
-export { Poster as a, TitleCard as c, formatWhen as d, useSyncRequests as f, Gate as i, cn as l, Button as n, RemoveFromBox as o, ConnectView as r, Row as s, Boot as t, formatRuntime as u };
+export { Poster as a, TitleCard as c, formatWhen as d, useResolveGhostRequestTitles as f, Gate as i, cn as l, Button as n, RemoveFromBox as o, useSyncRequests as p, ConnectView as r, Row as s, Boot as t, formatRuntime as u };
