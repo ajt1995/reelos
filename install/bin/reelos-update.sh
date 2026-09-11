@@ -470,7 +470,7 @@ need daemon/reelos-doctor.py 'MoviesSearch cannot grab'
 need daemon/reelos-update.sh 'wire-engines.py" indexers'
 need daemon/reelos-update.sh 'bug filed'
 need install/systemd/reelos-ensure.service WantedBy
-need scripts/reelos-lookup-plugin.mjs 'Code update on'
+need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
 need daemon/reelos-update.sh 'not printing applied'
 need daemon/reelos-update.sh 'package.json or package-lock.json changed'
 need daemon/reelos-update.sh 'staging missing package.json'
