@@ -28,7 +28,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - **VERSION / channel:** `1.2.50.42`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.41 ([#124](https://github.com/ajt1995/reelos/pull/124))
+- **Base:** `main` at 1.2.50.41 ([#124](https://github.com/ajt1995/reelos/pull/124)); 1.2.50.40 Apply/library split ([#122](https://github.com/ajt1995/reelos/pull/122)) stays. 1.2.50.38 wizard honesty + DirectPlay and 1.2.50.37 4GB detect stay.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; 41 is installed and live-patched (one FUSE, ffprobe stubbed, catch-up unmasked); firstboot disabled
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
