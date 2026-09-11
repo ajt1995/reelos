@@ -56,7 +56,7 @@ node --experimental-strip-types --test src/lib/sync-requests.test.ts
 
 **Do not Apply from the agent.** House is still **1.2.50.27**. Channel will offer 1.2.50.31 after merge. Owner phone **Check → Apply once**. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`.
 
-SSH latch of `/var/lib/reelos/stack-installed` (if `provisioned` is already there) is the house protection until 31 is Applied.
+SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 8 compose containers live). `systemctl start` (not enable) **skipped** — `ConditionPathExists=!/var/lib/reelos/stack-installed`. Unit left **disabled**. Old loop journal: `cp: '/opt/reelos/bin/.' and '/opt/reelos/bin/.' are the same file`.
 
 ## Do not
 
