@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import type { WizardAnswers } from "./types";
+import { provisionHonestyError } from "./wizard-honesty";
 
 function composeProfiles(answers: WizardAnswers): string[] {
   const p = ["indexers"];
@@ -20,6 +21,10 @@ function composeProfiles(answers: WizardAnswers): string[] {
 export const provisionAppliance = createServerFn({ method: "POST" })
   .validator((data: { answers: WizardAnswers }) => data)
   .handler(async ({ data }) => {
+    const blocked = provisionHonestyError(data.answers);
+    if (blocked) {
+      return { ok: false as const, simulated: false as const, error: blocked };
+    }
     if (process.env.REELOS_APPLIANCE !== "1") {
       return { ok: true as const, simulated: true as const };
     }

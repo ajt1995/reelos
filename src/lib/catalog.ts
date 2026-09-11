@@ -12,11 +12,11 @@ export const SOURCES: {
   blurb: string;
   mark: string;
 }[] = [
-  { id: "torbox", name: "TorBox", blurb: "Cloud debrid. STRM for Jellyfin, FUSE for Plex.", mark: "TB" },
-  { id: "real-debrid", name: "Real-Debrid", blurb: "Cached torrents into a virtual library.", mark: "RD" },
-  { id: "alldebrid", name: "AllDebrid", blurb: "Same class of cloud unlock as Real-Debrid.", mark: "AD" },
-  { id: "premiumize", name: "Premiumize", blurb: "Cloud transfer plus a hosted library.", mark: "PM" },
-  { id: "local-vpn", name: "Local + VPN", blurb: "qBittorrent behind Gluetun. Killswitch on.", mark: "LN" },
+  { id: "torbox", name: "TorBox", blurb: "Working path. Paste a key and Validate it.", mark: "TB" },
+  { id: "real-debrid", name: "Real-Debrid", blurb: "Untested on this house. Validate refuses.", mark: "RD" },
+  { id: "alldebrid", name: "AllDebrid", blurb: "Untested on this house. Validate refuses.", mark: "AD" },
+  { id: "premiumize", name: "Premiumize", blurb: "Untested on this house. Validate refuses.", mark: "PM" },
+  { id: "local-vpn", name: "Local + VPN", blurb: "Untested. No fake OK — credentials are not collected.", mark: "LN" },
 ];
 
 export const TITLES: Title[] = [

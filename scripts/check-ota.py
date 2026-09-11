@@ -70,10 +70,23 @@ CONTRACTS = (
     ("daemon/reelos-selfheal.sh", "idle load"),
     ("scripts/reelos-box.mjs", "nitro+api"),
     ("scripts/reelos-box-scale.mjs", "SMALL_MEM_KB"),
+    ("scripts/reelos-box-scale.mjs", "hasVaapiDri"),
+    ("daemon/wire-engines.parts/09.part", "DirectPlay/DirectStream"),
+    ("daemon/wire-engines.parts/09.part", "persist_jellyfin_encoding_xml"),
+    ("daemon/wire-engines.parts/09.part", "has_vaapi_dri"),
+    ("scripts/reelos-selfheal.mjs", "--performance"),
+    ("scripts/reelos-lookup-plugin.mjs", "seedJellyfinEncodingXml"),
+    ("src/components/settings-panels.tsx", "DirectPlay/DirectStream"),
     ("prebuilt/MANIFEST.txt", "/assets/"),
     ("prebuilt/vercel-output/nitro.json", "nitro"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "enableMediaInfo"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "rescanAfterRefresh"),
+    ("scripts/wizard-honesty.mjs", "Use TorBox."),
+    ("scripts/reelos-lookup-plugin.mjs", "sourceValidateError"),
+    ("scripts/reelos-lookup-plugin.mjs", "provisionHonestyError"),
+    ("src/components/wizard.tsx", "TOTAL = 7"),
+    ("src/components/wizard.tsx", "Untested"),
+    ("src/lib/store.ts", 'source: "torbox"'),
 )
 
 

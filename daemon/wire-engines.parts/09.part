@@ -777,6 +777,338 @@ def main() -> int:
     return 0
 
 
+
+def has_vaapi_dri(path: str | None = None) -> bool:
+    """Host GPU node for VAAPI. Missing/empty /dev/dri ⇒ DirectPlay only (no CPU ffmpeg storm)."""
+    dri = Path(path or "/dev/dri")
+    if not dri.exists():
+        return False
+    if dri.is_dir():
+        try:
+            return any(p.name.startswith(("renderD", "card")) for p in dri.iterdir())
+        except OSError:
+            return True
+    return True
+
+
+def transcode_override(*, compose_up=True) -> None:
+    """Redefines 06.part. --performance writes override without compose-up."""
+    override = COMPOSE / "compose.override.yml"
+    if not has_vaapi_dri():
+        if override.exists():
+            try:
+                override.unlink()
+            except OSError:
+                pass
+        return
+    override.write_text(
+        "services:\n"
+        "  jellyfin:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+        "  plex:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+    )
+    if not compose_up:
+        return
+    subprocess.run(
+        ["docker", "compose", "up", "-d"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
+    """GPU: VAAPI transcode (low still caps threads). No GPU: DirectPlay/DirectStream — no CPU ffmpeg."""
+    out = jellyfin_debrid_encoding_patch(enc)
+    if has_dri:
+        out["HardwareAccelerationType"] = "vaapi"
+        out["EnableHardwareEncoding"] = True
+        if not out.get("VaapiDevice"):
+            out["VaapiDevice"] = "/dev/dri/renderD128"
+        codecs = [str(c) for c in (out.get("HardwareDecodingCodecs") or []) if c]
+        for c in ("h264", "hevc", "vp9", "av1", "vc1", "mpeg2video"):
+            if c not in codecs:
+                codecs.append(c)
+        out["HardwareDecodingCodecs"] = codecs
+        out["EnableIntelLowPowerH264HwEncoder"] = True
+        out["EnableIntelLowPowerHevcHwEncoder"] = True
+        out["AllowHevcEncoding"] = True
+    else:
+        out["HardwareAccelerationType"] = "none"
+        out["EnableHardwareEncoding"] = False
+        out["EnableIntelLowPowerH264HwEncoder"] = False
+        out["EnableIntelLowPowerHevcHwEncoder"] = False
+        out["AllowHevcEncoding"] = False
+    if low:
+        out["EncodingThreadCount"] = 1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 60
+        out["EncoderPreset"] = "veryfast"
+    else:
+        out["EncodingThreadCount"] = -1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 180
+        out["EncoderPreset"] = "auto"
+    return out
+
+
+def jellyfin_playback_policy_for_box(policy, *, has_dri=False) -> dict:
+    """No GPU: DirectPlay/DirectStream only. Remux stays; ffmpeg transcode does not."""
+    out = dict(policy or {})
+    out["EnableVideoPlaybackTranscoding"] = bool(has_dri)
+    out["EnableAudioPlaybackTranscoding"] = bool(has_dri)
+    out["EnablePlaybackRemuxing"] = True
+    out["ForceRemoteSourceTranscoding"] = False
+    return out
+
+
+JF_ENCODING_XML = (
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n'
+    "  <EncodingThreadCount>1</EncodingThreadCount>\n"
+    "  <EnableThrottling>true</EnableThrottling>\n"
+    "  <EnableSegmentDeletion>true</EnableSegmentDeletion>\n"
+    "  <SegmentKeepSeconds>60</SegmentKeepSeconds>\n"
+    "  <HardwareAccelerationType>none</HardwareAccelerationType>\n"
+    "  <EnableHardwareEncoding>false</EnableHardwareEncoding>\n"
+    "  <EnableSubtitleExtraction>false</EnableSubtitleExtraction>\n"
+    "  <EncoderPreset>veryfast</EncoderPreset>\n"
+    "  <AllowHevcEncoding>false</AllowHevcEncoding>\n"
+    "  <VaapiDevice>/dev/dri/renderD128</VaapiDevice>\n"
+    "</EncodingOptions>\n"
+)
+
+
+def _xml_bool(value) -> str:
+    return "true" if value else "false"
+
+
+def encoding_xml_set(text: str, tag: str, value: str) -> str:
+    pat = rf"<{tag}>[^<]*</{tag}>"
+    repl = f"<{tag}>{value}</{tag}>"
+    if re.search(pat, text, flags=re.I):
+        return re.sub(pat, repl, text, count=1, flags=re.I)
+    if "</EncodingOptions>" in text:
+        return text.replace("</EncodingOptions>", f"  {repl}\n</EncodingOptions>", 1)
+    return text
+
+
+def persist_jellyfin_encoding_xml(enc: dict, dest: Path | None = None) -> Path:
+    """Write encoding.xml so DirectPlay/VAAPI survives before JF is up and after a reset."""
+    dest = dest or (COMPOSE / "configs" / "jellyfin" / "config" / "encoding.xml")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    text = dest.read_text() if dest.exists() else JF_ENCODING_XML
+    if "</EncodingOptions>" not in text:
+        text = JF_ENCODING_XML
+    scalars = {
+        "HardwareAccelerationType": str(enc.get("HardwareAccelerationType") or "none"),
+        "EnableHardwareEncoding": _xml_bool(enc.get("EnableHardwareEncoding")),
+        "EncodingThreadCount": str(enc.get("EncodingThreadCount", 1)),
+        "EnableThrottling": _xml_bool(enc.get("EnableThrottling", True)),
+        "EnableSegmentDeletion": _xml_bool(enc.get("EnableSegmentDeletion", True)),
+        "SegmentKeepSeconds": str(enc.get("SegmentKeepSeconds", 60)),
+        "EncoderPreset": str(enc.get("EncoderPreset") or "veryfast"),
+        "EnableSubtitleExtraction": _xml_bool(enc.get("EnableSubtitleExtraction")),
+        "AllowHevcEncoding": _xml_bool(enc.get("AllowHevcEncoding")),
+        "EnableIntelLowPowerH264HwEncoder": _xml_bool(enc.get("EnableIntelLowPowerH264HwEncoder")),
+        "EnableIntelLowPowerHevcHwEncoder": _xml_bool(enc.get("EnableIntelLowPowerHevcHwEncoder")),
+    }
+    if enc.get("VaapiDevice"):
+        scalars["VaapiDevice"] = str(enc.get("VaapiDevice"))
+    for tag, value in scalars.items():
+        text = encoding_xml_set(text, tag, value)
+    dest.write_text(text)
+    return dest
+
+
+def persist_transcode_state(has_dri: bool) -> None:
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "transcode.json").write_text(
+            json.dumps(
+                {
+                    "dri": bool(has_dri),
+                    "mode": "vaapi" if has_dri else "direct",
+                    "videoTranscoding": bool(has_dri),
+                    "audioTranscoding": bool(has_dri),
+                    "remux": True,
+                }
+            )
+            + "\n"
+        )
+    except OSError:
+        pass
+
+
+def seed_jellyfin_encoding_xml() -> None:
+    has_dri = has_vaapi_dri()
+    persist_jellyfin_encoding_xml(
+        jellyfin_encoding_for_box({}, low=performance_low(), has_dri=has_dri)
+    )
+    persist_transcode_state(has_dri)
+
+
+def _encoding_needs_write(cur, patched) -> bool:
+    keys = (
+        "HardwareAccelerationType",
+        "EnableHardwareEncoding",
+        "EncodingThreadCount",
+        "EnableThrottling",
+        "EnableSegmentDeletion",
+        "EnableSubtitleExtraction",
+        "EncoderPreset",
+        "AllowHevcEncoding",
+    )
+    cur = cur if isinstance(cur, dict) else {}
+    return any(cur.get(k) != patched.get(k) for k in keys)
+
+
+def apply_jellyfin_playback_policies(token: str, *, has_dri: bool) -> None:
+    hdr = jellyfin_headers(token)
+    try:
+        users = call("http://127.0.0.1:8096/Users", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance users {e}")
+        return
+    for user in users if isinstance(users, list) else []:
+        uid = user.get("Id")
+        policy = user.get("Policy")
+        if not uid or not isinstance(policy, dict):
+            continue
+        patched = jellyfin_playback_policy_for_box(policy, has_dri=has_dri)
+        if (
+            policy.get("EnableVideoPlaybackTranscoding") == patched["EnableVideoPlaybackTranscoding"]
+            and policy.get("EnableAudioPlaybackTranscoding") == patched["EnableAudioPlaybackTranscoding"]
+            and policy.get("EnablePlaybackRemuxing") is True
+            and policy.get("ForceRemoteSourceTranscoding") is not True
+        ):
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:8096/Users/{uid}/Policy",
+                method="POST",
+                body=patched,
+                headers=hdr,
+            )
+            log_wire(
+                f"performance user {user.get('Name') or uid} transcode="
+                f"{'vaapi' if has_dri else 'DirectPlay/DirectStream'}"
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance user {uid} {e}")
+
+
+def apply_jellyfin_performance(token: str | None = None) -> None:
+    low = performance_low()
+    has_dri = has_vaapi_dri()
+    persist_jellyfin_encoding_xml(jellyfin_encoding_for_box({}, low=low, has_dri=has_dri))
+    persist_transcode_state(has_dri)
+    try:
+        transcode_override(compose_up=False)
+    except Exception as e:
+        log_wire(f"performance transcode override {e}")
+    token = token or jellyfin_token()
+    if not token:
+        log_wire("performance: jellyfin auth failed — encoding.xml persisted DirectPlay/VAAPI")
+        return
+    flags = jellyfin_debrid_library_flags()
+    hdr = jellyfin_headers(token)
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance folders {e}")
+        folders = []
+    for folder in folders if isinstance(folders, list) else []:
+        fid = folder.get("ItemId") or folder.get("Guid") or folder.get("Id")
+        if not fid:
+            continue
+        opts = dict(folder.get("LibraryOptions") or {})
+        opts.update(flags)
+        try:
+            call(
+                "http://127.0.0.1:8096/Library/VirtualFolders/LibraryOptions",
+                method="POST",
+                body={"Id": fid, "LibraryOptions": opts},
+                headers=hdr,
+            )
+            log_wire(f"performance library {folder.get('Name')} low={low} debrid-safe")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance library {folder.get('Name')} {e}")
+    try:
+        enc = call("http://127.0.0.1:8096/System/Configuration/encoding", headers=hdr) or {}
+        patched = jellyfin_encoding_for_box(
+            enc if isinstance(enc, dict) else {},
+            low=low,
+            has_dri=has_dri,
+        )
+        persist_jellyfin_encoding_xml(patched)
+        if _encoding_needs_write(enc if isinstance(enc, dict) else {}, patched):
+            call(
+                "http://127.0.0.1:8096/System/Configuration/encoding",
+                method="POST",
+                body=patched,
+                headers=hdr,
+            )
+        log_wire(
+            f"performance encoding low={low} dri={has_dri} "
+            f"mode={'vaapi' if has_dri else 'DirectPlay/DirectStream'} "
+            f"accel={patched.get('HardwareAccelerationType')} threads={patched.get('EncodingThreadCount')}"
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance encoding {e}")
+    apply_jellyfin_playback_policies(token, has_dri=has_dri)
+    try:
+        tasks = call("http://127.0.0.1:8096/ScheduledTasks", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance tasks {e}")
+        tasks = []
+    cap_scans = box_is_small() or low
+    for task in tasks if isinstance(tasks, list) else []:
+        if not (
+            jellyfin_task_hammers_debrid(task)
+            or (cap_scans and jellyfin_task_library_scan(task))
+        ):
+            continue
+        tid = task.get("Id")
+        name = str(task.get("Name") or "")
+        if not tid:
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
+                method="POST",
+                body=[],
+                headers=hdr,
+            )
+            log_wire(f"performance disabled task {name}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance task {name} {e}")
+
+
+_bootstrap_jellyfin = bootstrap_jellyfin
+
+
+def bootstrap_jellyfin() -> None:
+    seed_jellyfin_encoding_xml()
+    _bootstrap_jellyfin()
+
+
+_reset_jellyfin_config = reset_jellyfin_config
+
+
+def reset_jellyfin_config() -> None:
+    _reset_jellyfin_config()
+    seed_jellyfin_encoding_xml()
+
+
 if __name__ == "__main__":
     if "--performance" in sys.argv or "no-ffprobe" in sys.argv:
         apply_jellyfin_performance()
