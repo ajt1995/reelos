@@ -26,15 +26,30 @@ Austin 2026-09-11. He is right: **cloud `npm run start:box` is not the house.** 
 ### Must assume on the next stamp
 
 - **~4GB box** (3.2Gi RAM, 3.7Gi swap with ~1.1Gi in use). Vite/OTA already peak hundreds of MB. Overlay or `cp -a` of FUSE dumps starves the box.
-- **FUSE overlay must exclude dfs/cache.** 1.2.50.28 proved it: mailman walked `compose/configs`, copied Decypharr FUSE cache, probe never returned Home, restore, `reelos-ota` failed (30min, 677M peak). Live sizes: `configs` ~1G; `decypharr/cache` / `cache/dfs` **~400–550M**. Also skip Jellyfin cache/transcodes, MediaCover, logs, sqlite wal/shm. Do not walk millions of files; `du -sh` on cache dirs only. 1.2.50.29 rsync excludes are the contract — test mailman against **this** tree, not cloud.
+- **FUSE overlay must exclude dfs/cache.** 1.2.50.28 proved it: mailman walked `compose/configs`, copied Decypharr FUSE cache, probe never returned Home, restore, `reelos-ota` failed (30min, 677M peak). Live sizes (this scan): `configs` **1000M**; `decypharr/cache` **547M** (all in `cache/dfs`). Apparent ~11G; `/mnt/debrid` apparent tens of TB is FUSE — do not `du` it. Also skip Jellyfin cache/transcodes, MediaCover, logs, sqlite wal/shm. Do not walk millions of files; `du -sh` on cache dirs only. 1.2.50.29 rsync excludes are the contract — test mailman against **this** tree, not cloud.
 - **House stamp is 1.2.50.27** (`/opt/reelos/VERSION`). `.prev` is stripped (16K: VERSION + yml only). `/api/ready` 404. Channel already offers 1.2.50.30 — **do not Apply from the agent.**
 - **\*arr bind localhost:** `:9696` Prowlarr, `:7878` Radarr, `:8989` Sonarr, `:8686` Lidarr, `:6767` Bazarr, `:8282` Decypharr. **Jellyfin 12** `0.0.0.0:8096`, Seerr `0.0.0.0:5055`, Caddy `:80`, Vite `:8080`. MediaBrowser Token (JF 12 401 on X-Emby-Token alone).
-- **Leftover Gemini stack:** `/home/reelos/media-sandbox/docker-compose.yml` (not running). Offset ports 8196/17878/18989/19696/16767/13378/15055 + images rclone, linuxserver/jellyfin, audiobookshelf, python, alpine. Empty `sandbox_default` network. Do not `compose down` it as ReelOS. Do not wipe `/media`.
+- **Leftover Gemini stack:** `/home/reelos/media-sandbox/docker-compose.yml` (no sandbox containers). Offset ports 8196/17878/18989/19696/16767/13378/15055. Services: rclone, linuxserver jellyfin/radarr/sonarr/prowlarr/bazarr, audiobookshelf, jellyseerr. Leftover images still on disk: `python:3.12-slim`, `python:3.12-alpine`, `alpine`. Empty `sandbox_default` network. Do not `compose down` it as ReelOS. Do not wipe `/media`.
 - **Seerr is unlabeled** (empty compose project labels, created Sep 8) while `docker compose ls` shows `reelos` **running(7)** — Seerr is the 8th container on `reelos_default`. Next `compose up` must not spawn a second Seerr on `:5055`.
 - **FUSE** `fuse.decypharr` on `/mnt/debrid` is **stacked 4×**. `/mnt` rshared units exist (`reelos-mnt-rshared` + leftover `reelos-mnt-shared`). Do not bind-mount `/mnt` over the live FUSE. Hops use `ls`, not `[ -e ]`.
 - **`ota.lock` exists** (`/var/lib/reelos/ota.lock`, empty file). **Do not delete.** Dual Apply still doubles `ota.log`.
-- **systemd:** `reelos` + `caddy` active (door live). `reelos-ota` **failed** (the 28 Apply — do not restart it). `reelos-firstboot` is looping `install.sh` exit 1 on an already-provisioned box. `compose.override.yml` is `/dev/dri` for jellyfin+plex — keep it. Lidarr+Bazarr are up on 4GB even with music off.
+- **systemd:** `reelos` + `caddy` active (door live; `:80`/`:8080`/`:8096` 200 this scan). `reelos-ota` **failed** since 2026-09-10 23:21 (the 28 Apply — do not restart it). `reelos-firstboot` **inactive/disabled** as of this retry (NRestarts 0; `stack-installed` still missing). Do not re-enable or re-run house `install.sh`. `compose.override.yml` is `/dev/dri` for jellyfin+plex — keep it. Lidarr+Bazarr are up on 4GB even with music off.
+- **Live compose (one project `reelos`, 8 containers):** sonarr/prowlarr/radarr ~8h; decypharr+jellyfin ~10h healthy; seerr/lidarr/bazarr ~43h. No HostConfig.Dns leftover. No extra *arr containers.
 - Disk is **sda only** (458G, 24G used). No `/dev/sdb`. `/srv/media/sdb` is an empty dir.
+
+### Messy Apply reconstruction (`ota.log` + journalctl — lines are doubled)
+
+Last **stamp** is **1.2.50.27** (`applied-sha` `5dd6a88`, 2026-09-10 22:00). Channel Check already offers **1.2.50.30**. **Do not Apply.**
+
+| When (UTC Sep 10) | Attempt | Outcome |
+|---|---|---|
+| 17:24 → 17:44 | 1.2.50.21 → **22** | stamped (`ReelOS 1.2.50.22 applied.`) after earlier heal_red / hops_red / restore on the same 21 |
+| 20:45 → 21:16 | 1.2.50.22 → 26 | **heal_red**, not printed applied; installed stayed 22 |
+| 21:31 → 22:00 | 1.2.50.22 → **27** | stamped; door `:80` ReelOS |
+| 22:19 → 22:49 | 1.2.50.27 → 28 | **home never returned**; SIGKILL Vite on stop; restore `20260910T224644-restore_`; ota exit 1 |
+| 22:50 → 23:21 | 1.2.50.27 → 28 again | probe 90/90; SIGKILL (`final-sigterm` timeout); restore `20260910T231446-restore_`; `reelos-ota` **failed** (30min, 677M). Caddy restarted 23:21/23:25; door came back. |
+
+Older 50.x: 11 stamped; 12/13 heal_red (stayed 11); 19/20 applied; 21 heal_red then applied. Dual Apply still **doubles every `ota.log` line**. `ota.lock` file present, flock **not** held — do not delete.
 
 ## Current ship
 
@@ -73,7 +88,7 @@ node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/r
 
 **This STATUS update is not a stamp. Do not house Apply for this PR.**
 
-House is still **1.2.50.27**. Door `:80`/`:8080` 200. 1.2.50.28 overlay already failed closed and restored. Next mailman must exclude dfs/cache and be tested against this layout before any owner Apply of 1.2.50.29+.
+House is still **1.2.50.27**. Door `:80`/`:8080` 200. Firstboot is **idle/disabled**. 1.2.50.28 overlay already failed closed and restored (twice). Next mailman must exclude dfs/cache and be tested against this layout before any owner Apply of 1.2.50.29+.
 
 ## Do not
 
@@ -87,4 +102,5 @@ House is still **1.2.50.27**. Door `:80`/`:8080` 200. 1.2.50.28 overlay already 
 - Delete `ota.lock`
 - Wipe `/media`, TorBox, or `~/media-sandbox`
 - Restart `reelos-ota` / post house Apply from the agent
+- Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`
 - Reboot unless the door is fully dead (it is not)
