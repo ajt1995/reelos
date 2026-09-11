@@ -126,6 +126,6 @@ test("beta: Kavita is profile books; Caddy is /kavita not /books*", () => {
   assert.match(read("scripts/books-catalog.mjs"), /gutenberg\.org/);
   assert.match(read("scripts/books-catalog.mjs"), /standardebooks\.org/);
   assert.match(read("scripts/books-catalog.mjs"), /archive\.org/);
-  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /intent\.books/);
+  assert.match(read("scripts/reelos-books.mjs"), /ReelOS-books/);
   assert.match(read("src/lib/provision-appliance.ts"), /intent\.books/);
 });

@@ -22,6 +22,7 @@ import {
 
 const SEARCH_TIMEOUT_MS = 8000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+const BOOK_UA = "ReelOS-books";
 
 function send(res, code, body) {
   res.statusCode = code;
@@ -42,7 +43,10 @@ async function readBody(req) {
 }
 
 async function getJson(url, signal) {
-  const res = await fetch(url, { signal, headers: { accept: "application/json" } });
+  const res = await fetch(url, {
+    signal,
+    headers: { accept: "application/json", "user-agent": BOOK_UA },
+  });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json();
 }
@@ -80,7 +84,7 @@ const standardEbooks = {
   async search(q, signal) {
     const res = await fetch(
       `https://standardebooks.org/feeds/opds/all?query=${encodeURIComponent(q)}`,
-      { signal, headers: { accept: "application/atom+xml" } },
+      { signal, headers: { accept: "application/atom+xml", "user-agent": BOOK_UA } },
     );
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return parseStandardEbooksFeed(await res.text());
@@ -201,7 +205,10 @@ async function fetchAllowlisted(url) {
   if (url.protocol !== "https:" || !ownsDownload(url)) {
     return { error: `ReelOS does not download books from ${url.hostname}.` };
   }
-  const res = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    headers: { "user-agent": BOOK_UA },
+  });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   if (!res.body) throw new Error("Empty response body");
   const declared = Number(res.headers.get("content-length"));
