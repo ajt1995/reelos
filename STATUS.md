@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.38 is the ship.*** 2026-09-11. 37 claimed DirectPlay in the channel note; Python still left CPU transcode on. **This stamp persists it.** No GPU (`/dev/dri` render/card): encoding.xml DirectPlay/DirectStream only and user video/audio transcode off (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. GPU: VAAPI transcode allowed; low-perf still caps threads. Detect at provision, self-heal `--performance`, and Settings. Complements 1.2.50.37 (#115). Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.**
+***1.2.50.38 is the ship.*** 2026-09-11. Folds [#114](https://github.com/ajt1995/reelos/pull/114) wizard honesty and [#116](https://github.com/ajt1995/reelos/pull/116) no-GPU DirectPlay onto main at 1.2.50.37 ([#115](https://github.com/ajt1995/reelos/pull/115)). Wizard stays seven steps; TorBox is the only first-class source (Validate hits `api.torbox.app` with User-Agent `ReelOS`). Real-Debrid / AllDebrid / Premiumize / Local+VPN / Plex claim / Cloudflare Tunnel are labeled untested — Validate and Finish refuse; no fake always-ok. No GPU (`/dev/dri` render/card): encoding.xml DirectPlay/DirectStream only and user video/audio transcode off (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. GPU: VAAPI transcode allowed; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.**
 
 ## Stamp
 
@@ -57,11 +57,15 @@ Same as 36: lazy-unmount stale only. Persist `/var/lib/reelos/fuse-listed` + `fu
 
 `has_vaapi_dri()` / `hasVaapiDri()` is a host `/dev/dri` **renderD*** or **card*** node (empty `/dev/dri` is no GPU). **GPU present:** VAAPI transcode allowed; low-perf still one ffmpeg thread. **No GPU:** persist `encoding.xml` (hardware encode off) and disable user video/audio transcode so clients DirectPlay/DirectStream (remux stays). Provision seeds XML before compose up; self-heal `--performance` and Settings `/api/performance` re-apply XML + policies. TorBox dumps stay unread. 37 claimed this in the channel note; **38 is the persist.**
 
+### Wizard does not present untested providers as working
+
+Seven-step wizard is unchanged. Default source is TorBox. Continue on the source step requires a real TorBox Validate. Real-Debrid, AllDebrid, Premiumize, and Local+VPN are labeled Untested; Validate refuses and does not call those APIs (Local+VPN is not a fake OK). Plex / Both and Cloudflare Tunnel are labeled Untested; Continue and `/api/provision` refuse. Jellyfin + this network / Tailscale stay. No Books chip. No Arena.
+
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs
+node --test scripts/stack-smoke.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box
 # GET / → 200 with /assets/styles-*.css, not /src/styles.css
@@ -70,7 +74,7 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House stays **1.2.50.31**. **Do not Apply 36 or 37 from this agent.** Do not Apply from the agent. Wait until house `ffprobe` D-state is ~0, then phone **Check → Apply 1.2.50.38 once**. 38 includes 37, 36, and 35. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
+House stays **1.2.50.31**. **Do not Apply from the agent.** Do not tell Austin to Apply until this combined 38 is on main **and** this VM has booted hashed UI + `/api/ready`. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
 
 ## Do not
 

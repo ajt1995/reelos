@@ -81,6 +81,12 @@ CONTRACTS = (
     ("prebuilt/vercel-output/nitro.json", "nitro"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "enableMediaInfo"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "rescanAfterRefresh"),
+    ("scripts/wizard-honesty.mjs", "Use TorBox."),
+    ("scripts/reelos-lookup-plugin.mjs", "sourceValidateError"),
+    ("scripts/reelos-lookup-plugin.mjs", "provisionHonestyError"),
+    ("src/components/wizard.tsx", "TOTAL = 7"),
+    ("src/components/wizard.tsx", "Untested"),
+    ("src/lib/store.ts", 'source: "torbox"'),
 )
 
 

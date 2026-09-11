@@ -27,7 +27,7 @@ export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
   selectedDisks: ["sda", "sdb"],
   formatDisks: [],
-  source: "real-debrid",
+  source: "torbox",
   apiKey: "",
   vpnProvider: "mullvad",
   intent: {
@@ -90,7 +90,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
-  "1.2.50.38: No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI transcode when a GPU is present; low-perf still caps threads. Detect at provision, self-heal --performance, and Settings. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+  "1.2.50.38: Wizard stays seven steps; TorBox is the working source (Validate hits api.torbox.app with User-Agent ReelOS; Continue needs that OK). Real-Debrid, AllDebrid, Premiumize, Local+VPN, Plex claim, and Cloudflare Tunnel are labeled untested; Validate and Finish refuse (no fake always-ok). No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI when a GPU is present; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.36: Sonarr/Radarr stop ffprobe/MediaInfo on debrid FUSE dumps so Apply does not restorm. Mailman/nudge_fuse do not stack another Decypharr FUSE when /mnt/debrid is live; unmount extras only when stale. 35's 4GB skip-npm/skip-vite and self-heal D-state skip stay. Complements #106. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.35: House Apply of 34 would npm ci (start:box script) and vite-build on 4GB while Sonarr ffprobe-storms FUSE dumps. Reuse node_modules when lockfile matches; skip vite build on 4GB; self-heal skips compose/recover while ffprobe is D-state. Complements #111. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -140,7 +140,7 @@ function makeAdapter(answers: WizardAnswers): AdapterState {
     cacheHits: 0,
     transfers: 0,
     lastPing: healthy ? Date.now() : null,
-    daysLeft: answers.source === "local-vpn" ? 0 : 38,
+    daysLeft: 0,
   };
 }
 
@@ -296,7 +296,8 @@ function event(kind: ActivityEvent["kind"], message: string, titleId?: string): 
 
 const demoAnswers: WizardAnswers = {
   ...defaultAnswers,
-  apiKey: "RD-LAB-KEY-7F3A",
+  source: "torbox",
+  apiKey: "lab-preview-not-live",
   adminName: "Ada",
   adminPassword: "household",
   intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },

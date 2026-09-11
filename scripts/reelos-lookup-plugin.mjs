@@ -21,6 +21,7 @@ import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
 import { notesForVersion, pendingNotes } from "./update-notes.mjs";
+import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
   forgetRemovedTitleIds,
@@ -2240,6 +2241,11 @@ async function handleProvision(req, res) {
   }
   const answers = await readBody(req);
   const a = answers.answers || answers;
+  const blocked = provisionHonestyError(a) || sourceValidateError(a.source || "");
+  if (blocked) {
+    send(res, 200, { ok: false, simulated: false, error: blocked });
+    return;
+  }
   const root = process.env.REELOS_ROOT || "/opt/reelos";
   const composeDir = existsSync(`${root}/compose/docker-compose.yml`)
     ? `${root}/compose`
@@ -2341,73 +2347,8 @@ async function handlePing(req, res) {
   const body = await readBody(req);
   const source = String(body.source || "");
   const key = String(body.key || "").trim();
-  if (source === "local-vpn") {
-    send(res, 200, { ok: true, message: "VPN path. No debrid key." });
-    return;
-  }
-  if (key.length < 10) {
-    send(res, 200, { ok: false, error: "Provider rejected this key." });
-    return;
-  }
-  try {
-    if (source === "real-debrid") {
-      const r = await fetch("https://api.real-debrid.com/rest/1.0/user", {
-        headers: { Authorization: `Bearer ${key}` },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!r.ok) {
-        send(res, 200, { ok: false, error: `Real-Debrid ${r.status}` });
-        return;
-      }
-      const j = await r.json();
-      send(res, 200, { ok: true, message: `Real-Debrid ${j.username || "ok"}` });
-      return;
-    }
-    if (source === "torbox") {
-      const r = await fetch("https://api.torbox.app/v1/api/user/me", {
-        headers: {
-          Authorization: `Bearer ${key}`,
-          Accept: "application/json",
-          "User-Agent": "ReelOS",
-        },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (!r.ok) {
-        send(res, 200, { ok: false, error: `TorBox ${r.status}` });
-        return;
-      }
-      send(res, 200, { ok: true, message: "TorBox key accepted" });
-      return;
-    }
-    if (source === "alldebrid") {
-      const url = new URL("https://api.alldebrid.com/v4/user");
-      url.searchParams.set("agent", "ReelOS");
-      url.searchParams.set("apikey", key);
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      const j = await r.json();
-      if (j.status !== "success") {
-        send(res, 200, { ok: false, error: "AllDebrid rejected this key." });
-        return;
-      }
-      send(res, 200, { ok: true, message: `AllDebrid ${j.data?.user?.username || "ok"}` });
-      return;
-    }
-    if (source === "premiumize") {
-      const url = new URL("https://www.premiumize.me/api/account/info");
-      url.searchParams.set("apikey", key);
-      const r = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      const j = await r.json();
-      if (j.status !== "success") {
-        send(res, 200, { ok: false, error: "Premiumize rejected this key." });
-        return;
-      }
-      send(res, 200, { ok: true, message: "Premiumize key accepted" });
-      return;
-    }
-    send(res, 200, { ok: false, error: "Unknown source." });
-  } catch (e) {
-    send(res, 200, { ok: false, error: String(e) });
-  }
+  const result = await pingWizardSource(source, key);
+  send(res, 200, result);
 }
 
 function performancePath() {

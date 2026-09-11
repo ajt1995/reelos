@@ -76,6 +76,14 @@ test("stack: VERSION / channel / stamps agree (1.2.50.38)", () => {
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /currentNotes: notesForVersion/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /channel-beta\.json/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /CHANNEL_BETA_URL/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /provisionHonestyError/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /sourceValidateError/);
+  assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
+  assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
+  assert.match(store, /source: "torbox"/);
+  assert.match(chan.notes[0], /TorBox/);
+  assert.match(chan.notes[0], /DirectPlay/);
+  assert.match(chan.notes[0], /prebuilt hashed UI/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);

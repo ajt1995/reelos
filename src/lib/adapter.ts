@@ -67,9 +67,9 @@ export function adapterProfile(source: SourceId, frontend: Frontend) {
 
 export function pingCopy(source: SourceId, frontend: Frontend): string {
   const p = adapterProfile(source, frontend);
-  if (source === "local-vpn") return "VPN client ready. Killswitch on.";
   if (source === "torbox") return `Account live. ${p.mount}. ${p.api}.`;
-  return `Premium · 38 days. ${p.name} will be the download client.`;
+  if (source === "local-vpn") return "Local + VPN is untested. Use TorBox.";
+  return "Untested on this house. Use TorBox.";
 }
 
 export function syntheticRelease(title: Title, floor: string): string {
