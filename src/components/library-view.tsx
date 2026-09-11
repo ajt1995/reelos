@@ -81,7 +81,7 @@ export function LibraryView() {
       {tab === "book" ? (
         books.length === 0 ? (
           <p className="mt-6 text-sm text-muted">
-            No files in /srv/media/books yet. Search the catalogs — Download is the file.
+            No files in /srv/media/books yet. Search the catalogs — Download is the file. Read opens EPUB/PDF on this phone.
           </p>
         ) : (
           <ul className="mt-4 divide-y divide-border">
@@ -91,6 +91,12 @@ export function LibraryView() {
                   <p className="truncate text-sm">{b.title}</p>
                   <p className="text-xs text-muted">{b.author}</p>
                 </div>
+                <a
+                  className="inline-flex h-8 items-center rounded-full px-3 text-xs font-medium text-circuit shadow-[var(--shadow-circuit)]"
+                  href={`/books?read=${encodeURIComponent(b.rel)}`}
+                >
+                  Read
+                </a>
                 <a
                   className="inline-flex h-8 items-center rounded-full bg-gold px-3 text-xs font-medium text-gold-fg arena-gold-press"
                   href={`/api/books/file?rel=${encodeURIComponent(b.rel)}`}

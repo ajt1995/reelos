@@ -15,6 +15,13 @@ export function DiscoverView() {
   const [browseTv, setBrowseTv] = useState<Title[]>([]);
   const [browseErr, setBrowseErr] = useState<string | null>(null);
   const [browseReady, setBrowseReady] = useState(false);
+  const booksOn = useReelStore((s) => s.answers.intent.books);
+  const [bookFeatured, setBookFeatured] = useState<
+    { id: string; title: string; author: string; year?: number | null; source: string; downloadUrl: string }[]
+  >([]);
+  const [bookLicensed, setBookLicensed] = useState<
+    { id: string; title: string; author: string; year?: number | null; source: string; actions?: { label: string; url: string }[] }[]
+  >([]);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
 
   useEffect(() => {
@@ -51,6 +58,27 @@ export function DiscoverView() {
       cancelled = true;
     };
   }, [rememberTitles]);
+
+  useEffect(() => {
+    if (!booksOn) return;
+    let cancelled = false;
+    void fetch("/api/books/discover", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ featured?: typeof bookFeatured; licensed?: typeof bookLicensed }>)
+      .then((j) => {
+        if (cancelled) return;
+        setBookFeatured(Array.isArray(j.featured) ? j.featured : []);
+        setBookLicensed(Array.isArray(j.licensed) ? j.licensed : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBookFeatured([]);
+          setBookLicensed([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [booksOn]);
 
   const hits = useMemo(() => {
     const seen = new Set<string>();
@@ -147,11 +175,52 @@ export function DiscoverView() {
               ))}
             </Row>
           ) : null}
-          {browseMovies.length === 0 && browseTv.length === 0 ? (
+          {booksOn && bookFeatured.length > 0 ? (
+            <section className="mt-5">
+              <h2 className="mb-2 font-display text-sm font-medium tracking-tight">Books</h2>
+              <p className="mb-2 text-xs text-muted">Open catalogs. Download is a real DRM-free file — not Seerr.</p>
+              <ul className="divide-y divide-border">
+                {bookFeatured.slice(0, 8).map((b) => (
+                  <li key={b.id} className="py-2">
+                    <p className="truncate text-sm font-medium">{b.title}</p>
+                    <p className="text-xs text-muted">
+                      {b.author}
+                      {b.year ? ` · ${b.year}` : ""} · {b.source}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <a href="/books" className="mt-2 inline-block text-sm text-circuit">
+                Open Books Discover
+              </a>
+            </section>
+          ) : null}
+          {booksOn && bookLicensed.length > 0 ? (
+            <section className="mt-5">
+              <h2 className="mb-2 font-display text-sm font-medium tracking-tight">In stores and libraries</h2>
+              <p className="mb-2 text-xs text-muted">
+                In copyright. This box cannot fetch the full file. Buy, borrow, or sideload.
+              </p>
+              <ul className="divide-y divide-border">
+                {bookLicensed.slice(0, 6).map((b) => (
+                  <li key={b.id} className="py-2">
+                    <p className="truncate text-sm font-medium">{b.title}</p>
+                    <p className="text-xs text-muted">
+                      {b.author}
+                      {b.year ? ` · ${b.year}` : ""} · {b.source}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {browseMovies.length === 0 && browseTv.length === 0 && bookFeatured.length === 0 && bookLicensed.length === 0 ? (
             <p className="mt-10 text-sm text-muted">
               {browseErr ||
                 (browseReady ? "Seerr has nothing new to show yet." : "Looking up movies and shows…")}
             </p>
+          ) : browseMovies.length === 0 && browseTv.length === 0 && browseReady && browseErr ? (
+            <p className="mt-4 text-sm text-muted">{browseErr}</p>
           ) : null}
         </>
       )}

@@ -3,10 +3,20 @@ import { test } from "node:test";
 
 import {
   BOOKS_DIR,
+  FEATURED_OPEN_BOOKS,
+  LICENSED_HONESTY,
+  catalogRelevant,
   dedupe,
   extensionFor,
+  featuredFallback,
+  filterOpenHits,
+  iaKeepable,
+  legalActions,
+  mapGoogleVolume,
+  mapOpenLibraryWork,
   opdsLinks,
   ownsDownload,
+  parseGutenbergOpds,
   parseStandardEbooksFeed,
   rank,
   resolveBookRel,
@@ -140,6 +150,108 @@ test("download hosts are the legal catalogs only", () => {
   assert.equal(ownsDownload(new URL("https://standardebooks.org/ebooks/bram-stoker/dracula/downloads/bram-stoker_dracula.epub")), true);
   assert.equal(ownsDownload(new URL("https://archive.org/download/dracula00stok/dracula00stok.epub")), true);
   assert.equal(ownsDownload(new URL("https://ia800301.us.archive.org/foo.epub")), true);
+  assert.equal(ownsDownload(new URL("https://books.google.com/books/download/x.epub")), true);
+  assert.equal(ownsDownload(new URL("https://books.googleusercontent.com/books/content?id=x")), true);
   assert.equal(ownsDownload(new URL("https://piratebay.example/x.epub")), false);
   assert.equal(ownsDownload(new URL("https://gutendex.com/books/345.epub")), false);
 });
+
+test("Hunger Games does not match a Robert E. Howard open-catalog leftover", () => {
+  const howard = { title: "A Witch Shall Be Born", author: "Robert E. Howard" };
+  assert.equal(catalogRelevant(howard, "Hunger Games"), false);
+  assert.equal(
+    filterOpenHits(
+      [howard, { title: "The Hunger Games", author: "Suzanne Collins" }],
+      "Hunger Games",
+    ).map((b) => b.title).join(),
+    "The Hunger Games",
+  );
+});
+
+test("Holmes-class PD featured shelf does not depend on gutendex", () => {
+  assert.ok(FEATURED_OPEN_BOOKS.some((b) => /sherlock holmes/i.test(b.title)));
+  const holmes = featuredFallback("holmes");
+  assert.ok(holmes.length >= 1);
+  assert.ok(holmes.every((b) => /holmes|doyle/i.test(`${b.title} ${b.author}`)));
+  assert.equal(featuredFallback("Hunger Games").length, 0);
+  assert.match(FEATURED_OPEN_BOOKS[0].downloadUrl, /^https:\/\/standardebooks\.org\//);
+});
+
+test("IA keep-files refuse post-PD years even if ebook_access is public", () => {
+  assert.equal(iaKeepable({ ebook_access: "public", first_publish_year: 1892, ia: ["x"] }), true);
+  assert.equal(iaKeepable({ ebook_access: "public", first_publish_year: 2008, ia: ["hungergames"] }), false);
+  assert.equal(iaKeepable({ ebook_access: "public", ia: ["mystery"] }), false);
+  assert.equal(iaKeepable({ ebook_access: "borrowable", first_publish_year: 1892, ia: ["x"] }), false);
+});
+
+test("Google Books PD downloadLink is open; ACSM/in-copyright is licensed metadata", () => {
+  const pd = mapGoogleVolume({
+    id: "pg1",
+    volumeInfo: { title: "Dracula", authors: ["Bram Stoker"], publishedDate: "1897" },
+    accessInfo: { publicDomain: true, epub: { downloadLink: "https://books.google.com/books/download/Dracula.epub" } },
+  });
+  assert.equal(pd.kind, "open");
+  assert.match(pd.downloadUrl, /books\.google\.com/);
+  const hg = mapGoogleVolume({
+    id: "hg1",
+    volumeInfo: {
+      title: "The Hunger Games",
+      authors: ["Suzanne Collins"],
+      publishedDate: "2008",
+      industryIdentifiers: [{ type: "ISBN_13", identifier: "9780439023481" }],
+      previewLink: "https://books.google.com/books?id=hg1",
+    },
+    accessInfo: {
+      publicDomain: false,
+      epub: { isAvailable: true, acsTokenLink: "https://books.google.com/books/download/acs" },
+    },
+  });
+  assert.equal(hg.kind, "licensed");
+  assert.equal(hg.downloadUrl, undefined);
+  assert.ok(hg.actions.some((a) => a.label === "Bookshop"));
+  assert.ok(hg.actions.some((a) => a.label === "Libby"));
+  assert.doesNotMatch(JSON.stringify(hg.actions), /acsTokenLink|pirate/i);
+});
+
+test("Open Library Hunger Games work is licensed buy/borrow, not a keep-file", () => {
+  const work = mapOpenLibraryWork({
+    key: "/works/OL5736962W",
+    title: "The Hunger Games",
+    author_name: ["Suzanne Collins"],
+    first_publish_year: 2008,
+    isbn: ["9780439023481"],
+  });
+  assert.equal(work.kind, "licensed");
+  assert.match(work.honesty, /keep-file/);
+  assert.ok(work.actions.some((a) => a.kind === "borrow" && a.label === "Open Library"));
+});
+
+test("legal actions are storefronts, not file URLs", () => {
+  const acts = legalActions({ title: "The Hunger Games", author: "Suzanne Collins" });
+  assert.ok(acts.every((a) => /^https:\/\//.test(a.url)));
+  assert.ok(acts.some((a) => a.url.includes("bookshop.org")));
+  assert.ok(acts.some((a) => a.url.includes("libbyapp.com")));
+  assert.doesNotMatch(acts.map((a) => a.url).join(" "), /epub|torrent|nzb/i);
+  assert.match(LICENSED_HONESTY, /TorBox/);
+});
+
+test("Gutenberg OPDS entries keep an https epub acquisition", () => {
+  const xml = `<?xml version="1.0"?>
+  <feed>
+    <entry>
+      <id>https://www.gutenberg.org/ebooks/1661</id>
+      <title>The Adventures of Sherlock Holmes</title>
+      <author><name>Doyle, Arthur Conan</name></author>
+      <link rel="http://opds-spec.org/acquisition" href="/ebooks/1661.epub.images" type="application/epub+zip"/>
+    </entry>
+  </feed>`;
+  const [book] = parseGutenbergOpds(xml);
+  assert.equal(book.title, "The Adventures of Sherlock Holmes");
+  assert.equal(book.downloadUrl, "https://www.gutenberg.org/ebooks/1661.epub.images");
+});
+
+test("PDF extension follows the file", () => {
+  assert.equal(extensionFor(new URL("https://x.test/a.pdf"), null), ".pdf");
+  assert.equal(extensionFor(new URL("https://x.test/a"), "application/pdf"), ".pdf");
+});
+
