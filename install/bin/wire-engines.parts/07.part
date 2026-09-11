@@ -24,8 +24,8 @@ def jellyfin_debrid_library_flags() -> dict:
 
 
 def arr_debrid_media_flags() -> dict:
-    """Never ffprobe/MediaInfo library files on debrid/FUSE. Import/grab still use filenames."""
-    return {"enableMediaInfo": False}
+    """Never ffprobe/MediaInfo library files on debrid/FUSE. Cap rescans. Import/grab still use filenames."""
+    return {"enableMediaInfo": False, "rescanAfterRefresh": "Never"}
 
 
 def arr_debrid_media_patch(cfg: dict) -> dict:
@@ -47,6 +47,7 @@ def persist_arr_debrid_config_files() -> None:
         {
             "enableMediaInfo": False,
             "ffprobeLibrary": False,
+            "rescanAfterRefresh": "Never",
             "note": "Debrid/FUSE dumps. Import and grab still use filenames. Apply must not turn this back on.",
         },
         indent=2,
@@ -134,6 +135,15 @@ def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
     return out
 
 
+def jellyfin_task_library_scan(task: dict) -> bool:
+    """Periodic library walks on FUSE starve a 4GB box. Import still refreshes on demand."""
+    key = str(task.get("Key") or "")
+    if key in {"RefreshLibrary", "RefreshMediaLibrary"}:
+        return True
+    name = str(task.get("Name") or "").lower()
+    return "scan media library" in name or name == "refresh media library"
+
+
 def jellyfin_task_hammers_debrid(task: dict) -> bool:
     key = str(task.get("Key") or "")
     if key in {
@@ -204,8 +214,12 @@ def apply_jellyfin_performance(token: str | None = None) -> None:
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
         log_wire(f"performance tasks {e}")
         tasks = []
+    cap_scans = box_is_small() or low
     for task in tasks if isinstance(tasks, list) else []:
-        if not jellyfin_task_hammers_debrid(task):
+        if not (
+            jellyfin_task_hammers_debrid(task)
+            or (cap_scans and jellyfin_task_library_scan(task))
+        ):
             continue
         tid = task.get("Id")
         name = str(task.get("Name") or "")

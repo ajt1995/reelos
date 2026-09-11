@@ -1,4 +1,5 @@
 import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync, unlinkSync } from "node:fs";
+import { hasVaapiDri } from "./reelos-box-scale.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
@@ -441,6 +442,50 @@ const JF_NETWORK_XML = `<?xml version="1.0" encoding="utf-8"?>
   <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>
 </NetworkConfiguration>
 `;
+
+function xmlSetTag(text, tag, value) {
+  const pat = new RegExp(`<${tag}>[^<]*</${tag}>`, "i");
+  const repl = `<${tag}>${value}</${tag}>`;
+  if (pat.test(text)) return text.replace(pat, repl);
+  if (text.includes("</EncodingOptions>")) {
+    return text.replace("</EncodingOptions>", `  ${repl}\n</EncodingOptions>`);
+  }
+  return text;
+}
+
+const JF_ENCODING_XML = `<?xml version="1.0" encoding="utf-8"?>
+<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <EncodingThreadCount>1</EncodingThreadCount>
+  <EnableThrottling>true</EnableThrottling>
+  <EnableSegmentDeletion>true</EnableSegmentDeletion>
+  <SegmentKeepSeconds>60</SegmentKeepSeconds>
+  <HardwareAccelerationType>none</HardwareAccelerationType>
+  <EnableHardwareEncoding>false</EnableHardwareEncoding>
+  <EnableSubtitleExtraction>false</EnableSubtitleExtraction>
+  <EncoderPreset>veryfast</EncoderPreset>
+  <AllowHevcEncoding>false</AllowHevcEncoding>
+  <VaapiDevice>/dev/dri/renderD128</VaapiDevice>
+</EncodingOptions>
+`;
+
+function seedJellyfinEncodingXml(composeDir) {
+  const dest = `${composeDir}/configs/jellyfin/config/encoding.xml`;
+  try {
+    mkdirSync(`${composeDir}/configs/jellyfin/config`, { recursive: true });
+    const hasDri = hasVaapiDri();
+    let text = existsSync(dest) ? readFileSync(dest, "utf8") : JF_ENCODING_XML;
+    if (!text.includes("</EncodingOptions>")) text = JF_ENCODING_XML;
+    text = xmlSetTag(text, "HardwareAccelerationType", hasDri ? "vaapi" : "none");
+    text = xmlSetTag(text, "EnableHardwareEncoding", hasDri ? "true" : "false");
+    text = xmlSetTag(text, "AllowHevcEncoding", hasDri ? "true" : "false");
+    text = xmlSetTag(text, "EnableSubtitleExtraction", "false");
+    text = xmlSetTag(text, "EnableThrottling", "true");
+    text = xmlSetTag(text, "EnableSegmentDeletion", "true");
+    writeFileSync(dest, text);
+  } catch {
+    /* */
+  }
+}
 
 function seedJellyfinNetworkXml(composeDir) {
   const dest = `${composeDir}/configs/jellyfin/config/network.xml`;
@@ -2161,12 +2206,13 @@ async function handleStorage(req, res) {
 }
 
 async function handleTranscode(_req, res) {
-  const dri = existsSync("/dev/dri");
+  const dri = hasVaapiDri();
   const override = existsSync("/opt/reelos/compose/compose.override.yml");
   send(res, 200, {
     dri,
     override,
-    hint: dri ? "VAAPI/QSV node present" : "No /dev/dri — CPU encode",
+    mode: dri ? "vaapi" : "direct",
+    hint: dri ? "VAAPI/QSV node present" : "No /dev/dri — DirectPlay/DirectStream only",
   });
 }
 
@@ -2202,6 +2248,7 @@ async function handleProvision(req, res) {
     mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
     mkdirSync(`${composeDir}/configs/decypharr`, { recursive: true });
     seedJellyfinNetworkXml(composeDir);
+    seedJellyfinEncodingXml(composeDir);
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
     const profiles = composeProfiles(a).join(",");
     const envLines = [
@@ -2388,14 +2435,18 @@ function applyPerformance() {
 }
 
 async function handlePerformance(req, res) {
+  const { boxIsSmall, readHostMemKb } = await import("./reelos-box-scale.mjs");
   mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
   const method = (req.method || "GET").toUpperCase();
+  const small = boxIsSmall(readHostMemKb());
+  const dri = hasVaapiDri();
+  const mode = dri ? "vaapi" : "direct";
   if (method === "GET") {
     const cur = readPerformance();
     if (!existsSync(performancePath())) {
-      writeFileSync(performancePath(), JSON.stringify({ low: true }) + "\n");
+      writeFileSync(performancePath(), JSON.stringify({ low: true, detectedSmall: small }) + "\n");
     }
-    send(res, 200, { low: cur.low !== false });
+    send(res, 200, { low: small || cur.low !== false, detectedSmall: small, dri, mode });
     return;
   }
   if (method !== "POST") {
@@ -2403,10 +2454,10 @@ async function handlePerformance(req, res) {
     return;
   }
   const body = await readBody(req);
-  const low = body.low !== false;
-  writeFileSync(performancePath(), JSON.stringify({ low }) + "\n");
+  const low = small || body.low !== false;
+  writeFileSync(performancePath(), JSON.stringify({ low: body.low !== false, detectedSmall: small }) + "\n");
   applyPerformance();
-  send(res, 200, { ok: true, low });
+  send(res, 200, { ok: true, low, detectedSmall: small, dri, mode });
 }
 
 export async function dispatchReelOsApi(req, res) {

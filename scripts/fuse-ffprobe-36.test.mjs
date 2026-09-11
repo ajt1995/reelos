@@ -25,6 +25,7 @@ test("shipped reelos-debrid.json keeps enableMediaInfo off for *arr", () => {
     const live = JSON.parse(read(`compose/configs/${app}/reelos-debrid.json`));
     assert.equal(install.enableMediaInfo, false, app);
     assert.equal(install.ffprobeLibrary, false, app);
+    assert.equal(install.rescanAfterRefresh, "Never", app);
     assert.deepEqual(install, live);
   }
 });
@@ -41,12 +42,14 @@ g = {"__name__": "wire_engines"}
 exec(compile(sys.stdin.read(), "wire-engines.py", "exec"), g)
 flags = g["arr_debrid_media_flags"]()
 assert flags["enableMediaInfo"] is False
+assert flags["rescanAfterRefresh"] == "Never"
 jf = g["jellyfin_debrid_library_flags"]()
 assert jf["EnableTrickplayImageExtraction"] is False
 assert jf["ExtractTrickplayImagesDuringLibraryScan"] is False
 assert jf["EnableChapterImageExtraction"] is False
 patched = g["arr_debrid_media_patch"]({"id": 1, "enableMediaInfo": True, "recycleBin": "/x"})
 assert patched["enableMediaInfo"] is False
+assert patched["rescanAfterRefresh"] == "Never"
 assert patched["recycleBin"] == "/x"
 info = """36 24 0:32 / /mnt/debrid rw shared:18 - fuse.decypharr decypharr rw
 37 24 0:33 / /mnt/debrid rw shared:18 - fuse.decypharr decypharr rw
@@ -68,7 +71,7 @@ assert g["fuse_mount_count_from_mount"](mount) == 2
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
   const fuseFn = code.slice(code.indexOf("def ensure_fuse"), code.indexOf("def root_paths"));
   assert.doesNotMatch(fuseFn, /kick_imports/);
-  assert.match(fuseFn, /not remounting/);
+  assert.match(fuseFn, /do not remount if listed/);
   assert.match(code, /fuse stacked/);
   assert.match(code, /not restarting/);
   assert.match(code, /no-ffprobe/);

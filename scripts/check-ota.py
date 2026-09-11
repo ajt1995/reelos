@@ -55,13 +55,25 @@ CONTRACTS = (
     ("scripts/reelos-box.mjs", "production preview"),
     ("daemon/reelos-update.sh", "vite build skipped — 4GB box"),
     ("daemon/reelos-update.sh", "package-lock.json unchanged — reused node_modules"),
+    ("daemon/reelos-update.sh", "prebuilt client staged"),
+    ("daemon/reelos-update.sh", "4GB box never compiles"),
+    ("daemon/reelos-update.sh", "do not remount if listed"),
     ("src/components/settings-view.tsx", "Show Advanced"),
     ("src/components/settings-updates.tsx", "Beta channel"),
     ("scripts/reelos-lookup-plugin.mjs", "CHANNEL_BETA_URL"),
     ("daemon/reelos-update.sh", "no-ffprobe"),
     ("daemon/reelos-update.sh", "fuse stacked"),
     ("daemon/wire-engines.parts/07.part", "enableMediaInfo"),
+    ("daemon/wire-engines.parts/07.part", "rescanAfterRefresh"),
+    ("daemon/wire-engines.parts/06.part", "box_is_small"),
+    ("daemon/wire-engines.parts/02.part", "do not remount if listed"),
+    ("daemon/reelos-selfheal.sh", "idle load"),
+    ("scripts/reelos-box.mjs", "nitro+api"),
+    ("scripts/reelos-box-scale.mjs", "SMALL_MEM_KB"),
+    ("prebuilt/MANIFEST.txt", "/assets/"),
+    ("prebuilt/vercel-output/nitro.json", "nitro"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "enableMediaInfo"),
+    ("install/compose/configs/sonarr/reelos-debrid.json", "rescanAfterRefresh"),
 )
 
 
@@ -91,6 +103,10 @@ def main() -> int:
         textc = (root / rel).read_text() if (root / rel).is_file() else ""
         if needle not in textc:
             return fail(f"OTA contract missing {rel} ~ {needle}")
+
+    assets = root / "prebuilt/vercel-output/static/assets"
+    if not list(assets.glob("styles-*.css")) or not list(assets.glob("index-*.js")):
+        return fail("OTA contract: prebuilt hashed /assets styles/index missing")
 
     if "stale ota.lock — taking lock" in updater or 'rm -f "$STATE/ota.lock"' in updater:
         return fail("OTA contract: must not delete ota.lock (inode split = dual Apply)")

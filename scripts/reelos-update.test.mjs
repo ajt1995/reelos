@@ -17,6 +17,8 @@ test("SKIP_NPM reuses node_modules when the lockfile matches", () => {
   assert.match(updater, /package-lock.json unchanged — reused node_modules/);
   assert.match(updater, /package\.json or package-lock\.json changed — running npm ci/);
   assert.match(updater, /vite build skipped — 4GB box/);
+  assert.match(updater, /prebuilt client staged/);
+  assert.match(updater, /4GB box never compiles/);
   assert.doesNotMatch(
     updater,
     /if cmp -s "\$ROOT\/app\/package\.json" "\$NEXT\/app\/package\.json"; then\n    SKIP_NPM=1/,
@@ -133,7 +135,7 @@ test("second Apply is refused; ota.lock is never deleted", () => {
 test("nudge_fuse does not stack a live Decypharr mount; no-ffprobe always runs", () => {
   assert.match(updater, /fuse_count\(\) \{/);
   assert.match(updater, /fuse stacked \$n — live, not unmounting/);
-  assert.match(updater, /fuse already on host \(\$n mount\(s\)\) — not remounting/);
+  assert.match(updater, /fuse already on host \(\$n mount\(s\)\) — do not remount if listed/);
   assert.match(updater, /python3 "\$ROOT\/bin\/wire-engines.py" no-ffprobe/);
   assert.match(updater, /seed_arr_debrid_json/);
   assert.match(updater, /reelos-debrid\.json/);

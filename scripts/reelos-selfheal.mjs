@@ -19,6 +19,12 @@ import {
   spawnWireImport,
 } from "./reelos-request-status.mjs";
 import { filterRemovedRequests, readRemovedTitleIds } from "./reelos-library-remove.mjs";
+import {
+  anythingPlaying,
+  readHostLoad1,
+  shouldSkipIdleWork,
+} from "./reelos-box-scale.mjs";
+import { spawnSync } from "node:child_process";
 
 const STATE = "/var/lib/reelos";
 const RECOVER_COOLDOWN_MS = 120_000;
@@ -56,6 +62,22 @@ function writeStamp(name) {
 
 function cooled(name, ms) {
   return Date.now() - readStamp(name) < ms;
+}
+
+function applyJellyfinPerformance() {
+  const wire = existsSync("/opt/reelos/bin/wire-engines.py")
+    ? "/opt/reelos/bin/wire-engines.py"
+    : existsSync("/workspace/daemon/wire-engines.py")
+      ? "/workspace/daemon/wire-engines.py"
+      : "";
+  if (!wire) return "encoding skip — no wire";
+  const r = spawnSync("python3", [wire, "--performance"], {
+    encoding: "utf8",
+    timeout: 20000,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  if (r.status === 0) return "encoding DirectPlay/VAAPI";
+  return `encoding --performance ${r.status}`;
 }
 
 export async function probeJellyfinToken() {
@@ -161,8 +183,24 @@ export async function runSelfHeal() {
   if (!isProvisioned()) {
     return { ok: true, provisioned: false, steps: ["skip engines — not provisioned"] };
   }
+  let psArgs = "";
+  try {
+    psArgs = spawnSync("ps", ["-eo", "args"], { encoding: "utf8", timeout: 1500 }).stdout || "";
+  } catch {
+    psArgs = "";
+  }
+  const idle = shouldSkipIdleWork({
+    playing: anythingPlaying({ psArgs }),
+    load1: readHostLoad1(),
+    ffprobeD: 0,
+  });
+  if (idle.skip) {
+    steps.push(`skip engines — ${idle.reason} (nothing playing)`);
+    return { ok: true, provisioned: true, skipped: idle.reason, steps };
+  }
   const jf = await probeJellyfinToken();
   steps.push(jf.ok ? "jf token ok" : `jf ${jf.reason}`);
+  steps.push(applyJellyfinPerformance());
   const recover = await recoverInFlightRequests();
   steps.push(
     recover.skipped

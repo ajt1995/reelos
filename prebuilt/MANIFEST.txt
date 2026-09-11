@@ -1,0 +1,5 @@
+version=1.2.50.37
+mode=nitro+api
+css=/assets/styles-DLihiwGe.css
+js=/assets/index-Ddcd8PtJ.js
+note=hashed client; posters stay in public/; 4GB box never compiles

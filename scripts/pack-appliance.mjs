@@ -21,6 +21,7 @@ const appCopies = [
   "server",
   "channel.json",
   "channel-beta.json",
+  "prebuilt",
 ];
 for (const rel of appCopies) {
   const from = join(root, rel);
