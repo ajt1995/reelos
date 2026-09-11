@@ -28,7 +28,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const frontend = useReelStore((s) => s.answers.frontend);
   const transferring = useReelStore(
-    (s) => inFlightRequests(s.requests, { libraryIds: s.library, titles: s.shelf }).length,
+    (s) => inFlightRequests(s.requests, { titles: s.shelf }).length,
   );
 
   return (

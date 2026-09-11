@@ -138,6 +138,7 @@ test("Home shelf collapses duplicate Interstellar / Expanse / Museum rows", () =
   assert.equal(titles.filter((n) => n === "The Expanse").length, 1);
   assert.equal(out.find((t) => t.title === "Night at the Museum").jellyfinId, "jf-museum-art");
   assert.equal(out.find((t) => t.title === "The Expanse").jellyfinId, "jf-expanse");
+  assert.ok(out.find((t) => t.title === "The Expanse").ids.includes("tmdb-tv-63639"));
   assert.equal(shelfTitleKey(interstellar("jf-a")), "movie:interstellar");
 });
 
@@ -529,7 +530,7 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
   assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
-  assert.match(home, /inFlightRequests\(requests, \{ libraryIds: library, titles: shelf \}\)/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.doesNotMatch(home, /\/api\/box/);
   assert.match(store, /shelf: s\.shelf/);
   const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");

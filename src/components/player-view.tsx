@@ -2,11 +2,12 @@ import { useEffect } from "react";
 import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
+import { titleMatchesId } from "@/lib/sync-requests";
 
 export function PlayerView({ id }: { id: string }) {
   const catalog = getTitle(id);
-  const shelf = useReelStore((s) => s.shelf.find((t) => t.id === id));
-  const remote = useReelStore((s) => s.remoteTitles.find((t) => t.id === id));
+  const shelf = useReelStore((s) => s.shelf.find((t) => titleMatchesId(t, id)));
+  const remote = useReelStore((s) => s.remoteTitles.find((t) => titleMatchesId(t, id) || t.id === id));
   const title = catalog ?? shelf ?? remote;
   const jfId = shelf?.jellyfinId;
 

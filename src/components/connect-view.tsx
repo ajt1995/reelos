@@ -9,7 +9,7 @@ type Box = {
   ipv4: string;
   watch: string;
   seerr?: string;
-  jellyfin: { state: "green" | "amber" | "red"; detail: string };
+  jellyfin: { state: "green" | "amber" | "red" | "unknown"; detail: string };
   frontend: string;
   access: string;
   adminName: string;
@@ -311,7 +311,7 @@ function Card({ children, locked }: { children: React.ReactNode; locked?: boolea
   );
 }
 
-function Dot({ state }: { state: "green" | "amber" | "red" }) {
-  const color = state === "green" ? "bg-live" : state === "amber" ? "bg-gold" : "bg-danger";
+function Dot({ state }: { state: "green" | "amber" | "red" | "unknown" }) {
+  const color = state === "green" ? "bg-live" : state === "red" ? "bg-danger" : "bg-gold";
   return <span className={cn("mt-1 size-2.5 shrink-0 rounded-full", color)} />;
 }

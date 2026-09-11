@@ -5,7 +5,7 @@ import { Row, TitleCard } from "@/components/title-card";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
-import { inFlightRequests } from "@/lib/sync-requests";
+import { inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -27,7 +27,7 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
-  const inflight = inFlightRequests(requests, { libraryIds: library, titles: shelf });
+  const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = inflight.length;
   useSyncRequests();
   useEffect(() => {
@@ -54,8 +54,9 @@ export function HomeView() {
       return;
     }
     let cancelled = false;
+    const ac = new AbortController();
     const t = window.setTimeout(() => {
-      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
           return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
@@ -69,20 +70,20 @@ export function HomeView() {
           setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
         })
         .catch((e) => {
-          if (!cancelled) {
-            setRemoteHits([]);
-            setLookupErr(String(e));
-          }
+          if (cancelled || e?.name === "AbortError") return;
+          setRemoteHits([]);
+          setLookupErr(String(e));
         });
     }, 280);
     return () => {
       cancelled = true;
+      ac.abort();
       window.clearTimeout(t);
     };
   }, [q, rememberTitles]);
 
   const reqCards = inflight
-    .map((r) => ({ r, t: getTitle(r.titleId) }))
+    .map((r) => ({ r, t: titleForRequest(r, shelf) ?? getTitle(r.titleId) }))
     .filter((x) => x.t)
     .slice(0, 12);
 

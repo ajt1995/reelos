@@ -74,8 +74,9 @@ export function DiscoverView() {
     setLooking(true);
     setLookupErr(null);
     let cancelled = false;
+    const ac = new AbortController();
     const t = window.setTimeout(() => {
-      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store" })
+      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
           return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
@@ -90,15 +91,15 @@ export function DiscoverView() {
           setLooking(false);
         })
         .catch((e) => {
-          if (!cancelled) {
-            setRemoteHits([]);
-            setLookupErr(String(e?.name === "AbortError" ? "Seerr lookup timed out. Try the search again." : e));
-            setLooking(false);
-          }
+          if (cancelled || e?.name === "AbortError") return;
+          setRemoteHits([]);
+          setLookupErr(String(e?.name === "AbortError" ? "Seerr lookup timed out. Try the search again." : e));
+          setLooking(false);
         });
     }, 280);
     return () => {
       cancelled = true;
+      ac.abort();
       window.clearTimeout(t);
     };
   }, [q, rememberTitles]);

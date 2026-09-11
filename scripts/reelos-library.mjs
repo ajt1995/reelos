@@ -51,6 +51,7 @@ export function mapJellyfinItem(it, host) {
   const kind = it.Type === "Series" ? "tv" : "movie";
   const ids = [
     tmdb ? `tmdb-${tmdb}` : "",
+    tmdb && kind === "tv" ? `tmdb-tv-${tmdb}` : "",
     tvdb ? `tvdb-${tvdb}` : "",
     it.Id ? `jf-${it.Id}` : "",
   ].filter(Boolean);

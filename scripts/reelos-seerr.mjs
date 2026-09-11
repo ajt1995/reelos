@@ -480,9 +480,18 @@ function seriesSeasonFiles(hit, season) {
 }
 
 function sonarrDumpNamed(dumps, title) {
-  const want = String(title || "").toLowerCase();
+  const want = String(title || "").toLowerCase().trim();
   if (!want) return false;
-  return (dumps?.sonarr || []).some((n) => String(n || "").toLowerCase() === want);
+  const stem = want.replace(/[^a-z0-9]+/g, " ").trim();
+  return (dumps?.sonarr || []).some((n) => {
+    const got = String(n || "").toLowerCase().trim();
+    if (got === want) return true;
+    const gotStem = got.replace(/\.[0-9]{4}.*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+    if (stem && gotStem === stem) return true;
+    const gotCompact = got.replace(/[^a-z0-9]+/g, "");
+    const wantCompact = want.replace(/[^a-z0-9]+/g, "");
+    return Boolean(wantCompact) && gotCompact.startsWith(wantCompact);
+  });
 }
 
 /** Seerr requested a show, Sonarr has 0 files. Keep downloading@0, say why. */
@@ -1017,7 +1026,9 @@ export function findExistingSeasonRequest(rows, { mediaType, tmdb, season } = {}
     const rec = raw?.titleId ? raw : seerrRequestRow(raw, {});
     if (!rec?.titleId || String(rec.tmdb) !== wantTmdb) continue;
     if ((rec.mediaType || (String(rec.titleId).startsWith("tmdb-tv-") ? "tv" : "movie")) !== wantType) continue;
-    if (wantType === "tv" && wantSeason && rec.season != null && Number(rec.season) !== wantSeason) continue;
+    if (wantType === "tv" && Number.isFinite(wantSeason)) {
+      if (rec.season == null || Number(rec.season) !== wantSeason) continue;
+    }
     if (rec.status === "failed") continue;
     return rec;
   }

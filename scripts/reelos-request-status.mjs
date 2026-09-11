@@ -1,6 +1,6 @@
 /** Load Jellyfin shelf + *arr hasFile facts for honest GET /api/request. */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import { arrHasFile, buildArrIndex } from "./reelos-seerr.mjs";
 
@@ -807,7 +807,12 @@ export async function loadPresenceFacts({
 
 export function listDirNames(dir) {
   try {
-    return readdirSync(dir).filter((n) => n && !n.startsWith("."));
+    const out = spawnSync("ls", ["-1", dir], { encoding: "utf8", timeout: 800 });
+    if (out.status !== 0) return [];
+    return String(out.stdout || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((n) => n && !n.startsWith("."));
   } catch {
     return [];
   }
