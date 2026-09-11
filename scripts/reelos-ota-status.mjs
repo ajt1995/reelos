@@ -72,12 +72,19 @@ export function idleLibraryProgress() {
   };
 }
 
-export function parseLibraryProgress(raw) {
+export function catchupWorkerLive(run = spawnSync) {
+  const st = String(run("systemctl", ["is-active", "reelos-library-catchup"], { encoding: "utf8" }).stdout || "").trim();
+  return st === "active" || st === "activating";
+}
+
+export function parseLibraryProgress(raw, { workerLive = true } = {}) {
   const idle = idleLibraryProgress();
   try {
     const doc = JSON.parse(String(raw || "{}"));
     if (!doc || typeof doc !== "object") return idle;
+    if (doc.stopped) return idle;
     const status = String(doc.status || "idle");
+    if ((status === "backoff" || status === "running") && workerLive === false) return idle;
     const needsImport = Boolean(doc.needsImport);
     const splashLock = status === "running" && needsImport;
     return {
@@ -95,10 +102,12 @@ export function parseLibraryProgress(raw) {
   }
 }
 
-export function readLibraryProgress(filePath = LIBRARY_PROGRESS) {
+export function readLibraryProgress(filePath = LIBRARY_PROGRESS, run = spawnSync) {
   try {
     if (!existsSync(filePath)) return idleLibraryProgress();
-    return parseLibraryProgress(readFileSync(filePath, "utf8"));
+    return parseLibraryProgress(readFileSync(filePath, "utf8"), {
+      workerLive: catchupWorkerLive(run),
+    });
   } catch {
     return idleLibraryProgress();
   }

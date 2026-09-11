@@ -211,6 +211,7 @@ export interface ReelState {
   setHydrated: () => void;
   setBootStep: (id: BootStepId, status: BootStepStatus) => void;
   applyReadyPayload: (ready: ReadyPayload) => void;
+  clearLibraryCatchup: () => void;
   setPhase: (p: Phase) => void;
   setWizardStep: (n: number) => void;
   patchAnswers: (p: Partial<WizardAnswers>) => void;
@@ -480,6 +481,7 @@ export const useReelStore = create<ReelState>()(
       ...initial,
       setHydrated: () => set({ hydrated: true }),
       setBootStep: (id, status) => set({ bootSteps: { ...get().bootSteps, [id]: status } }),
+      clearLibraryCatchup: () => set({ libraryCatchup: idleLibraryCatchup() }),
       applyReadyPayload: (ready) => {
         const provisioned = Boolean(ready?.provisioned);
         const incoming = ready?.answers && typeof ready.answers === "object" ? ready.answers : null;
@@ -524,20 +526,21 @@ export const useReelStore = create<ReelState>()(
         }
         const st = ready?.update;
         const lib = ready?.libraryCatchup || ready?.update?.library;
-        if (lib && typeof lib === "object") {
-          set({
-            libraryCatchup: {
-              status: (lib.status as LibraryCatchupState["status"]) || "idle",
-              message: String(lib.message || ""),
-              folder: Number(lib.folder || 0) || 0,
-              total: Number(lib.total || 0) || 0,
-              skipped: Number(lib.skipped || 0) || 0,
-              timeouts: Number(lib.timeouts || 0) || 0,
-              needsImport: Boolean(lib.needsImport),
-              splashLock: Boolean(lib.splashLock),
-            },
-          });
-        }
+        set({
+          libraryCatchup:
+            lib && typeof lib === "object"
+              ? {
+                  status: (lib.status as LibraryCatchupState["status"]) || "idle",
+                  message: String(lib.message || ""),
+                  folder: Number(lib.folder || 0) || 0,
+                  total: Number(lib.total || 0) || 0,
+                  skipped: Number(lib.skipped || 0) || 0,
+                  timeouts: Number(lib.timeouts || 0) || 0,
+                  needsImport: Boolean(lib.needsImport),
+                  splashLock: Boolean(lib.splashLock),
+                }
+              : idleLibraryCatchup(),
+        });
         if (st) {
           const cur = get();
           const last = (st.log || "").trim().split("\n").pop() || "";

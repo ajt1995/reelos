@@ -73,3 +73,17 @@ test("library progress splash-locks only when running and dumps need import", ()
   assert.equal(back.splashLock, false);
 });
 
+
+test("stopped or dead catch-up worker does not advertise backoff", async () => {
+  const { parseLibraryProgress, readLibraryProgress } = await import("./reelos-ota-status.mjs");
+  const backoff = JSON.stringify({
+    status: "backoff",
+    message: "Library catching up — backing off (ffprobe busy)",
+    splashLock: false,
+    needsImport: false,
+  });
+  assert.equal(parseLibraryProgress(backoff, { workerLive: true }).status, "backoff");
+  assert.equal(parseLibraryProgress(backoff, { workerLive: false }).status, "idle");
+  assert.equal(parseLibraryProgress(JSON.stringify({ status: "backoff", stopped: true })).status, "idle");
+  assert.equal(parseLibraryProgress(JSON.stringify({ status: "running", needsImport: true }), { workerLive: false }).status, "idle");
+});

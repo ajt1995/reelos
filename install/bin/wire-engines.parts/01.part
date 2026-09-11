@@ -144,6 +144,24 @@ def wait_fuse_ready(seconds: int = 40) -> bool:
     return False
 
 
+
+def catchup_killed() -> bool:
+    """Austin killed house catch-up. Do not restamp the phone backoff banner."""
+    unit = Path("/etc/systemd/system/reelos-library-catchup.service")
+    try:
+        if unit.is_symlink() and unit.resolve(strict=False) == Path("/dev/null"):
+            return True
+    except OSError:
+        pass
+    try:
+        prev = json.loads((STATE / "library-progress.json").read_text())
+        if isinstance(prev, dict) and prev.get("stopped"):
+            return True
+    except (OSError, json.JSONDecodeError):
+        pass
+    return False
+
+
 def write_library_progress(**fields):
     """Phone library clock. Same JSON the splash / /api/ready read."""
     path = STATE / "library-progress.json"
@@ -155,6 +173,8 @@ def write_library_progress(**fields):
     except (OSError, json.JSONDecodeError):
         prev = {}
     prev.update({k: v for k, v in fields.items() if v is not None})
+    if prev.get("stopped") and str(fields.get("status") or "") in ("backoff", "running"):
+        return prev
     status = str(prev.get("status") or "idle")
     needs = bool(prev.get("needsImport"))
     prev["splashLock"] = status == "running" and needs
@@ -187,6 +207,9 @@ def ffprobe_d_state_count() -> int:
 
 def kick_imports(*, catch_up: bool = False) -> bool:
     ping_wait = 20 if catch_up else 90
+    if catch_up and catchup_killed():
+        log_wire("import catch-up killed — not advertising backoff")
+        return True
     if catch_up:
         write_library_progress(status="running", message="Library catching up")
         if fuse_on_host():

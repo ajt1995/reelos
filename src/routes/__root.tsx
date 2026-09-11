@@ -81,6 +81,7 @@ function Runtime({ children }: { children: React.ReactNode }) {
           })
           .catch(() => {
             const cur = useReelStore.getState();
+            cur.clearLibraryCatchup();
             cur.setBootStep("house", cur.provisioned ? "ok" : "fail");
             cur.setBootStep("library", cur.shelfReady ? "ok" : "fail");
             cur.setBootStep("requests", cur.requestsSeeded ? "ok" : "fail");

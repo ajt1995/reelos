@@ -550,6 +550,23 @@ def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0,
     return "Library catching up"
 
 
+
+def catchup_killed() -> bool:
+    unit = Path("/etc/systemd/system/reelos-library-catchup.service")
+    try:
+        if unit.is_symlink() and unit.resolve(strict=False) == Path("/dev/null"):
+            return True
+    except OSError:
+        pass
+    try:
+        prev = json.loads(PROGRESS_PATH.read_text()) if PROGRESS_PATH.is_file() else {}
+        if isinstance(prev, dict) and prev.get("stopped"):
+            return True
+    except (OSError, json.JSONDecodeError):
+        pass
+    return False
+
+
 def write_library_progress(**fields):
     """Phone library clock. Merge onto the JSON the splash/API read."""
     path = PROGRESS_PATH
@@ -560,6 +577,8 @@ def write_library_progress(**fields):
     except (OSError, json.JSONDecodeError):
         prev = {}
     prev.update({k: v for k, v in fields.items() if v is not None})
+    if (prev.get("stopped") or catchup_killed()) and str(fields.get("status") or "") in ("backoff", "running"):
+        return prev
     status = str(prev.get("status") or "idle")
     needs = bool(prev.get("needsImport"))
     prev["splashLock"] = status == "running" and needs
