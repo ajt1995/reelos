@@ -1,6 +1,6 @@
 # HAL.md
 
-Hal. **2026-09-09.** Named stamp **1.2.50.13** (*arr Torznab attach actually lands). Stacked on **#67 / 1.2.50.12**. Does **not** take 1.2.51 (Tron reserved).
+Hal. **2026-09-09.** Named stamp **1.2.50.13** (*arr Torznab attach actually lands). Stacked on **#67 / 1.2.50.12**. Does **not** take parked 1.2.51.
 
 ## Why 1.2.50.12 missed the house
 
@@ -21,10 +21,10 @@ Apply of #67 on 100.100.154.16 heal_red'd correctly and did **not** stamp. Prowl
 
 ## xorriso — do this
 
-1. Merge this onto **main** after #67. Separate from Tron #52.
+1. Merge this onto **main** after #67. Separate from #52.
 2. House CLI or phone Check→Apply of current `main`. Expect `ReelOS 1.2.50.13 applied.`
 3. On `main`, **`channel.json` tarball = `main.tar.gz`**.
-4. Hold Tron redesign. Do not wipe TorBox. Do not paste private tracker keys.
+4. Hold Arena. Do not wipe TorBox. Do not paste private tracker keys.
 
 ## Proof after Apply
 
@@ -33,4 +33,4 @@ Apply of #67 on 100.100.154.16 heal_red'd correctly and did **not** stamp. Prowl
 3. National Treasure: recover/POST adds the Radarr row (reason leaves `no movie yet`).
 4. Heal red still blocks the stamp.
 
-Do not Apply the Tron feature tarball as if it were main.
+Do not Apply #52 / #70 as if they were main.

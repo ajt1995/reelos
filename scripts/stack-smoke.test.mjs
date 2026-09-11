@@ -66,6 +66,24 @@ test("stack: VERSION / channel / stamps agree (1.2.50.31)", () => {
   assert.match(read("STATUS.md"), /1\.2\.50\.31/);
 });
 
+test("stack: Settings/Check notes park 1.2.51 without the scrapped chrome name", () => {
+  const chan = JSON.parse(read("channel.json"));
+  const stamp = read("src/lib/version-stamp.ts");
+  const store = read("src/lib/store.ts");
+  const blob = [JSON.stringify(chan.notes), stamp, store, read("STATUS.md"), read("HAL.md")].join("\n");
+  const banned = String.fromCharCode(84, 114, 111, 110);
+  assert.equal(new RegExp(banned, "i").test(blob), false);
+  assert.match(chan.notes[0], /1\.2\.51 parked \/ unused/);
+  assert.equal(
+    chan.notes.some((n) => /Not 1\.2\.51 \(/.test(n)),
+    false,
+  );
+  for (const n of chan.notes) {
+    assert.equal(stamp.includes(n), true, n.slice(0, 48));
+    assert.equal(store.includes(n), true, n.slice(0, 48));
+  }
+});
+
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));
