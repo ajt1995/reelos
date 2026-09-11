@@ -93,5 +93,6 @@ export const provisionAppliance = createServerFn({ method: "POST" })
       spawn("python3", [wire], { stdio: "ignore", detached: true }).unref();
     }
     fs.writeFileSync(path.join(stateDir, "provisioned"), "1\n");
+    fs.writeFileSync(path.join(stateDir, "stack-installed"), "1\n");
     return { ok: true as const, simulated: false as const };
   });
