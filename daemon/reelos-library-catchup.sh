@@ -24,19 +24,13 @@ ffprobe_d_state() {
   ps -eo state,comm 2>/dev/null | awk '$1 ~ /D/ && $2 ~ /ffprobe/ { n++ } END { print n+0 }'
 }
 
-SMALL_MEM_KB=4718592
-box_is_small() {
-  local mem_kb
-  mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-  [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le "$SMALL_MEM_KB" ]
-}
-
+# FUSE/ffprobe D-state is I/O backpressure, not "we're a Pi".
 d_limit() {
-  if box_is_small; then
-    echo 4
-  else
-    echo 8
+  local hw="$ROOT/bin/reelos_hardware.py"
+  if [ -f "$hw" ]; then
+    python3 "$hw" --d-backoff 2>/dev/null && return 0
   fi
+  echo 1
 }
 
 write_progress() {

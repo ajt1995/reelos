@@ -2430,18 +2430,40 @@ function applyPerformance() {
 }
 
 async function handlePerformance(req, res) {
-  const { boxIsSmall, readHostMemKb } = await import("./reelos-box-scale.mjs");
+  const { boxIsSmall, readHostMemKb, hardwareProfile, hardwareLimits } = await import("./reelos-box-scale.mjs");
   mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
   const method = (req.method || "GET").toUpperCase();
-  const small = boxIsSmall(readHostMemKb());
+  const memKb = readHostMemKb();
+  const small = boxIsSmall(memKb);
+  let profile = hardwareProfile({ ramKb: memKb, cpus: 1, diskKind: "unknown", diskFreeGb: 0 });
+  try {
+    const persisted = JSON.parse(readFileSync("/var/lib/reelos/hardware-profile.json", "utf8"));
+    if (persisted && (persisted.ram_kb || persisted.ramKb)) {
+      profile = hardwareProfile({
+        ramKb: persisted.ram_kb || persisted.ramKb || memKb,
+        cpus: persisted.cpus || 1,
+        diskKind: persisted.disk_kind || persisted.diskKind || "unknown",
+        diskFreeGb: persisted.disk_free_gb || persisted.diskFreeGb || 0,
+      });
+    }
+  } catch {
+    try {
+      const { cpus } = await import("node:os");
+      profile = hardwareProfile({ ramKb: memKb, cpus: cpus().length || 1, diskKind: "unknown", diskFreeGb: 0 });
+    } catch {
+      /* measured RAM only */
+    }
+  }
+  const limits = hardwareLimits(profile);
   const dri = hasVaapiDri();
   const mode = dri ? "vaapi" : "direct";
+  const hardware = { ...profile, ...limits };
   if (method === "GET") {
     const cur = readPerformance();
     if (!existsSync(performancePath())) {
       writeFileSync(performancePath(), JSON.stringify({ low: true, detectedSmall: small }) + "\n");
     }
-    send(res, 200, { low: small || cur.low !== false, detectedSmall: small, dri, mode });
+    send(res, 200, { low: small || cur.low !== false, detectedSmall: small, dri, mode, hardware });
     return;
   }
   if (method !== "POST") {
@@ -2452,7 +2474,7 @@ async function handlePerformance(req, res) {
   const low = small || body.low !== false;
   writeFileSync(performancePath(), JSON.stringify({ low: body.low !== false, detectedSmall: small }) + "\n");
   applyPerformance();
-  send(res, 200, { ok: true, low, detectedSmall: small, dri, mode });
+  send(res, 200, { ok: true, low, detectedSmall: small, dri, mode, hardware });
 }
 
 export async function dispatchReelOsApi(req, res) {

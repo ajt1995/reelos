@@ -12,6 +12,8 @@ KillMode=process
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
+# 768M is the 4GB/tiny default. reelos_hardware.py writes a drop-in
+# (MemoryMax 2G/8G on 16–32GB). Do not hardcode laptop RAM here.
 MemoryMax=768M
 Environment=REELOS_ROOT=/opt/reelos
 ExecStart=/bin/bash /opt/reelos/bin/reelos-library-catchup.sh

@@ -48,13 +48,7 @@ ffprobe_d_state() {
   ps -eo state,comm 2>/dev/null | awk '$1 ~ /D/ && $2 ~ /ffprobe/ { n++ } END { print n+0 }'
 }
 
-SMALL_MEM_KB=4718592
-
-box_is_small() {
-  local mem_kb
-  mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-  [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le "$SMALL_MEM_KB" ]
-}
+# D-state is I/O backpressure (any hardware). Tiny-RAM detect lives in reelos_hardware.py.
 
 load_high() {
   awk '{ exit !($1+0 >= 2) }' /proc/loadavg 2>/dev/null
@@ -108,10 +102,13 @@ ensure_door
 # Apply stamps first, then this recover job dumps/heals in the background.
 # Persistent reelos-library-catchup.service outlives TimeoutStartSec=90.
 # systemd-run / nohup 9>&- is the fallback if the unit is missing.
-# Do not walk FUSE dfs. Start catch-up before idle/ffprobe skip so a 4GB box
-# still queues the worker; the worker backs off when D-state is high.
+# Do not walk FUSE dfs. Keep the catch-up request flag while ffprobe is
+# D-state, but do not start the oneshot every two minutes (FUSE wedge).
 start_library_catchup() {
   log "library catch-up in background"
+  if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+    python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
+  fi
   if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
     cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service 2>/dev/null || true
     chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
@@ -143,10 +140,14 @@ start_library_catchup() {
   fi
 }
 
-if [ -f "$STATE/library-catchup" ]; then
-  start_library_catchup
-fi
 d=$(ffprobe_d_state)
+if [ -f "$STATE/library-catchup" ]; then
+  if [ "${d:-0}" -gt 0 ]; then
+    log "library catch-up deferred — ffprobe D-state $d (not piling more)"
+  else
+    start_library_catchup
+  fi
+fi
 if [ "${d:-0}" -gt 0 ]; then
   log "skip compose up — ffprobe D-state $d"
   log "skip engines — ffprobe D-state $d (not walking FUSE)"

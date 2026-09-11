@@ -798,24 +798,38 @@ def has_vaapi_dri(path: str | None = None) -> bool:
 
 
 def transcode_override(*, compose_up=True) -> None:
-    """Redefines 06.part. --performance writes override without compose-up."""
-    override = COMPOSE / "compose.override.yml"
-    if not has_vaapi_dri():
-        if override.exists():
-            try:
-                override.unlink()
-            except OSError:
-                pass
-        return
-    override.write_text(
-        "services:\n"
-        "  jellyfin:\n"
-        "    devices:\n"
-        "      - /dev/dri:/dev/dri\n"
-        "  plex:\n"
-        "    devices:\n"
-        "      - /dev/dri:/dev/dri\n"
-    )
+    """Redefines 06.part. Hardware mem_limit + optional /dev/dri. Never clobber RAM profile."""
+    mod = None
+    try:
+        mod = hw()
+    except Exception:
+        mod = None
+    dri = has_vaapi_dri()
+    if mod is not None:
+        try:
+            mod.apply_runtime_files(has_dri=dri, compose_dir=COMPOSE)
+        except Exception as e:
+            log_wire(f"hardware compose override {e}")
+    else:
+        override = COMPOSE / "compose.override.yml"
+        if not dri:
+            if override.exists():
+                try:
+                    override.unlink()
+                except OSError:
+                    pass
+            if not compose_up:
+                return
+        else:
+            override.write_text(
+                "services:\n"
+                "  jellyfin:\n"
+                "    devices:\n"
+                "      - /dev/dri:/dev/dri\n"
+                "  plex:\n"
+                "    devices:\n"
+                "      - /dev/dri:/dev/dri\n"
+            )
     if not compose_up:
         return
     subprocess.run(

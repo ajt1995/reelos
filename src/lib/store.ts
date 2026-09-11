@@ -60,8 +60,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.40";
-export const SHIPPED_VERSION = "1.2.50.40";
+export const LATEST_VERSION = "1.2.50.41";
+export const SHIPPED_VERSION = "1.2.50.41";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -92,6 +92,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.41: Measure CPU (nproc), RAM (MemTotal + DirectMap vs cgroup so hidden DIMMs are not treated as 4GB), and disk (SSD vs HDD). HP 15-bs0xx is a 4GB DIMM (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi (catch-up MemoryMax 768M). CPU/SSD can raise import caps; HDD stays throttled. Catch-up does not wedge FUSE: no-ffprobe on dumps, D-state concurrency 0, one fuse.decypharr. Selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. Complements #122. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.40: Check/Apply only swaps the product (tarball, restart, splash, stamp). Library catch-up is its own worker with its own phone clock — folder N, skips, timeouts — not buried in wire.log while Apply looks frozen. Indexers/import/heal never block stamp. Catch-up is a persistent oneshot (not killed when selfheal exits); backs off when ffprobe is D-state; does not stack another FUSE. Splash-locks Home only while dumps still need import. Settings Beta ON then Check fetches 2.0.0 Arena+Books as a separate tarball (not this stamp); OFF stays 1.2.50.x. 4GB prebuilt UI. Complements #120. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.39: Check/Apply stamps after hops and the door — dump import/heal runs in the background so the phone is not frozen on import after hops. Import/heal red does not un-stamp a UI swap. Skip Sonarr dump folders that already have files; do not RescanSeries all shows; do not list host+container paths twice; skip a FUSE folder on a short list timeout. No hybrid 1080 grab on Apply. Background import is capped on 4GB. First provision can still do a long walk. Never /media. Complements #117. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.38: Wizard stays seven steps; TorBox is the working source (Validate hits api.torbox.app with User-Agent ReelOS; Continue needs that OK). Real-Debrid, AllDebrid, Premiumize, Local+VPN, Plex claim, and Cloudflare Tunnel are labeled untested; Validate and Finish refuse (no fake always-ok). No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI when a GPU is present; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
