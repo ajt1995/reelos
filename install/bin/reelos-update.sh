@@ -428,6 +428,7 @@ need daemon/wire-engines.parts/09.part 'collapse_dumps=False'
 need daemon/wire-engines.parts/01.part 'return heal_after_import'
 need daemon/reelos-update.sh 'not printing applied — jellyfin/indexer heal red'
 need daemon/reelos-update.sh 'library catch-up in background'
+need daemon/reelos-update.sh 'indexers/import after applied (not blocking stamp)'
 need daemon/reelos-update.sh 'import/heal red — not un-stamping UI swap'
 need daemon/reelos-selfheal.sh 'library catch-up in background'
 need daemon/reelos-selfheal.sh 'systemd-run'
@@ -1208,15 +1209,13 @@ if [ -f /var/lib/reelos/provisioned ] && [ -f "$ROOT/compose/docker-compose.yml"
     start_fuse_readers
   fi
 fi
-if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ] && [ -x "$ROOT/bin/wire-engines.py" ]; then
-  # Run the heavy wire (import loops, 1080 companion sweep, recycle) at the
-  # lowest CPU + idle IO priority so it yields to Vite/the app on a low-power
-  # box. Same work, just deprioritized — children inherit the nice/ionice level,
-  # so the app stays responsive and the door probe does not time out mid-Apply.
-  NICE=""
-  command -v nice >/dev/null 2>&1 && NICE="nice -n 19"
-  command -v ionice >/dev/null 2>&1 && NICE="$NICE ionice -c 3"
-  REELOS_OTA=1 $NICE python3 "$ROOT/bin/wire-engines.py" || log "wire-engines non-fatal"
+if [ "${COMPOSE_CHANGED:-0}" = "1" ] && [ -f /var/lib/reelos/provisioned ]; then
+  # Product swap already remounted FUSE (nudge_fuse, only if not listed) and
+  # wrote no-ffprobe. Bare wire-engines.py is main(): Jellyfin bootstrap,
+  # public indexers, ensure_fuse, hybrid widen. That is library/engine work —
+  # never block stamp. reelos-library-catchup runs indexers + import --catch-up
+  # after "applied." Hops + indexer canary still fail-close compose recreates.
+  log "compose recreated — indexers/import after applied (not blocking stamp)"
 fi
 
 indexer_canary() {

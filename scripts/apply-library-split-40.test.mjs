@@ -27,6 +27,9 @@ test("Apply path never awaits indexers or import before applied", () => {
   assert.equal(before.includes('if ! python3 "$ROOT/bin/wire-engines.py" indexers'), false);
   assert.equal(before.includes('wire-engines.py" import'), false);
   assert.equal(before.includes("kick_imports("), false);
+  assert.doesNotMatch(before, /python3 "\$ROOT\/bin\/wire-engines\.py"\s*(?:\|\||$)/m);
+  assert.doesNotMatch(before, /REELOS_OTA=1.*wire-engines\.py/);
+  assert.match(before, /indexers\/import after applied \(not blocking stamp\)/);
   assert.match(updater.slice(applied), /library catch-up in background/);
   assert.match(updater.slice(applied), /reelos-library-catchup/);
   assert.equal(read("install/bin/reelos-update.sh"), updater);

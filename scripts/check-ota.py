@@ -172,6 +172,29 @@ def main() -> int:
         return fail("OTA contract: Apply must not await import after hops before applied")
     if 'if ! python3 "$ROOT/bin/wire-engines.py" indexers' in updater[:applied]:
         return fail("OTA contract: indexers must not block stamp")
+    for line in updater[:applied].splitlines():
+        s = line.strip()
+        if s.startswith("#") or s.startswith("need "):
+            continue
+        if "wire-engines.py" not in s:
+            continue
+        if '-x "$ROOT/bin/wire-engines.py"' in s:
+            continue
+        if 'wire-engines.py" fuse' in s or 'wire-engines.py" no-ffprobe' in s:
+            continue
+        return fail(f"OTA contract: Apply path must not run library wire-engines before stamp: {s[:120]}")
+    if 'REELOS_OTA=1' in updater[:applied] and 'python3 "$ROOT/bin/wire-engines.py"' in updater[:applied]:
+        # Bare main() with REELOS_OTA still does indexers/ensure_fuse before stamp.
+        bare = False
+        for line in updater[:applied].splitlines():
+            s = line.strip()
+            if s.startswith("#"):
+                continue
+            if "REELOS_OTA=1" in s and "wire-engines.py" in s and "no-ffprobe" not in s and '" fuse' not in s:
+                bare = True
+                break
+        if bare:
+            return fail("OTA contract: REELOS_OTA wire-engines main() must not block stamp")
     catch_sh = root / "daemon/reelos-library-catchup.sh"
     install_catch = root / "install/bin/reelos-library-catchup.sh"
     if catch_sh.is_file() and install_catch.is_file() and catch_sh.read_text() != install_catch.read_text():
