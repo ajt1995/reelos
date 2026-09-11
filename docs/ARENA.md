@@ -22,9 +22,22 @@ Not gold: selected tabs, chips, Check, Apply, Finish, Continue, Retry, Cached, t
 
 Download is the Books/file primary later. These stills do not invent a Books app. When Ready is a book, the gold button is Download.
 
+## Density (phone)
+
+Austin 2026-09-11. First stills wasted the top of the glass: oversized ReelOS + Watch + gear with spa padding, posters starting too low.
+
+Phone stills are **content-first crops**, not a device in a void and not a wellness app. Tasteful motion below stays.
+
+- **Canvas:** iPhone **9:19.5** (GenerateImage 9:16 is the stand-in; compose to 9:19.5). Fill the frame with UI. No floating bezel, no letterbox, no padded shot of a shot.
+- **Header:** One compact row under the status bar (~32px): small reel mark, white ReelOS, compact gold Watch, gear. 12px side inset. No empty slab between status bar and chrome, or between chrome and the first content.
+- **Posters start high:** Search is a thin field (~32px). Chips are one 22px row. Page titles are 17px, not display heroes. The first poster/row begins in the upper third. More than half the glass is content.
+- **No spa whitespace:** Tight gutters (12px). Cards close. Short lists should not leave a vacant middle — circuit can live at the edges, not as a blank center.
+
+Motion in this file stays. Density is layout, not stillness.
+
 ## Still — not motion
 
-Stills are parking, not a kit. Product copy wins if a still lies.
+Stills are parking, not a kit. They follow the density rule. Product copy wins if a still lies.
 
 | Room | File | What it must show |
 | --- | --- | --- |
@@ -71,6 +84,7 @@ Library idle → floor still. Packet never celebrates Remove or Apply.
 - Stamp **1.2.51** or any version for this pass
 - Paint `src/` / `public/` CSS, tokens, or components
 - Gold the nav, Check, Apply, or the wordmark
+- Oversized header chrome or spa padding on phone stills
 - Idle-animate the floor
 - Merge #52 / #70 / #59
 - Glue Books/Kavita to this parking lot as a ship
