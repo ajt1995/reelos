@@ -9,14 +9,14 @@ import {
 } from "./update-notes.mjs";
 
 const NOTES = [
-  "1.2.50.34: Settings → Updates shows what this install changed. Complements #90. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
-  "1.2.50.33: Library remove on the phone. Complements #91. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
-  "1.2.50.32: Request then Play tells the truth. Complements #92. Not 1.2.51 (Tron).",
+  "1.2.50.33: Requests is in-flight only. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update. Complements #94. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+  "1.2.50.32: Search→request→play: recover keeps kicking. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 ];
 
 test("ownerEnglish strips PR asides and parked Tron lines", () => {
   const s = ownerEnglish(NOTES[0]);
+  assert.match(s, /Requests is in-flight only/);
   assert.match(s, /Settings → Updates/);
   assert.doesNotMatch(s, /Complements/);
   assert.doesNotMatch(s, /1\.2\.51/);
@@ -31,13 +31,12 @@ test("notesForVersion is this stamp only", () => {
 });
 
 test("pendingNotes is the delta, not the git log", () => {
-  const pending = pendingNotes(NOTES, "1.2.50.31", "1.2.50.34");
+  const pending = pendingNotes(NOTES, "1.2.50.31", "1.2.50.33");
   assert.deepEqual(
     pending.map(stripVersionPrefix),
     [
-      "Settings → Updates shows what this install changed.",
-      "Library remove on the phone.",
-      "Request then Play tells the truth.",
+      "Requests is in-flight only. Remove from this box unmonitors and deletes the *arr row — never /media. Settings → Updates shows this install and, after Check, the pending update.",
+      "Search→request→play: recover keeps kicking.",
     ],
   );
 });
@@ -57,13 +56,13 @@ test("pendingNotes caps at four newest", () => {
 });
 
 test("unknown local only names the remote stamp", () => {
-  const pending = pendingNotes(NOTES, "0", "1.2.50.32");
+  const pending = pendingNotes(NOTES, "0", "1.2.50.33");
   assert.equal(pending.length, 1);
-  assert.match(pending[0], /^1\.2\.50\.32:/);
+  assert.match(pending[0], /^1\.2\.50\.33:/);
 });
 
 test("displayVersion ignores placeholder current", () => {
-  assert.equal(displayVersion("…", "1.2.50.32"), "1.2.50.32");
-  assert.equal(displayVersion("0", "1.2.50.32"), "1.2.50.32");
-  assert.equal(displayVersion("1.2.50.27", "1.2.50.32"), "1.2.50.27");
+  assert.equal(displayVersion("…", "1.2.50.33"), "1.2.50.33");
+  assert.equal(displayVersion("0", "1.2.50.33"), "1.2.50.33");
+  assert.equal(displayVersion("1.2.50.27", "1.2.50.33"), "1.2.50.27");
 });
