@@ -33,8 +33,18 @@ Austin 2026-09-11. He is right: **cloud `npm run start:box` is not the house.** 
 - **Seerr is unlabeled** (empty compose project labels, created Sep 8) while `docker compose ls` shows `reelos` **running(7)** — Seerr is the 8th container on `reelos_default`. Next `compose up` must not spawn a second Seerr on `:5055`.
 - **FUSE** `fuse.decypharr` on `/mnt/debrid` is **stacked 4×**. `/mnt` rshared units exist (`reelos-mnt-rshared` + leftover `reelos-mnt-shared`). Do not bind-mount `/mnt` over the live FUSE. Hops use `ls`, not `[ -e ]`.
 - **`ota.lock` exists** (`/var/lib/reelos/ota.lock`, empty file). **Do not delete.** Dual Apply still doubles `ota.log`.
-- **systemd:** `reelos` + `caddy` active (door live). `reelos-ota` **failed** (the 28 Apply — do not restart it). `reelos-firstboot` is looping `install.sh` exit 1 on an already-provisioned box. `compose.override.yml` is `/dev/dri` for jellyfin+plex — keep it. Lidarr+Bazarr are up on 4GB even with music off.
+- **systemd:** `reelos` + `caddy` active (door live). `reelos-ota` **failed** (the 28 Apply — do not restart it). `reelos-firstboot` **stopped** 2026-09-11 (`systemctl disable --now`; last NRestarts **1722**, now inactive/disabled, counter reset 0). Do not re-enable it — `stack-installed` is still missing and live `install.sh` still dies. `compose.override.yml` is `/dev/dri` for jellyfin+plex — keep it. Lidarr+Bazarr are up on 4GB even with music off.
 - Disk is **sda only** (458G, 24G used). No `/dev/sdb`. `/srv/media/sdb` is an empty dir.
+
+### Firstboot loop — stopped (2026-09-11)
+
+ISO leftover, not a live install failure. Unit is first-install only (`ConditionPathExists=!/var/lib/reelos/stack-installed`). Wizard wrote `provisioned` (Sep 9) and compose is up; it never writes `stack-installed`. Live `/opt/reelos/install.sh` (`set -e`) exits 1 on `cp: '/opt/reelos/bin/.' and '/opt/reelos/bin/.' are the same file` (HERE==ROOT), so firstboot never stamped and retried `apt-get update` every ~30s (~1722 restarts, load 7–16). `install-failed` is leftover ISO curtin (`failed`, 2026-09-06) — the unit does not read it; left in place.
+
+**Fix (least invasive):** `systemctl disable --now reelos-firstboot` as root. Did not re-run `install.sh`, did not write `stack-installed`, did not mask (stayed dead past RestartSec), did not delete `install-failed`, did not touch `ota.lock` / `/media`.
+
+**After:** inactive/disabled; no `install.sh`; :80/:8080 200; compose still up; VERSION **1.2.50.27**. Load falling (1m ~8 → ~2). Creating `stack-installed` would also be correct (compose already live) but disable was enough.
+
+**Still do not Apply.** Firstboot is idle. Owner Applies. Thumb: do not Apply until firstboot is idle — it is idle now; Apply is still a no (house 1.2.50.27 vs channel 1.2.50.30; `ota.lock` stays).
 
 ## Current ship
 
@@ -73,7 +83,7 @@ node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/r
 
 **This STATUS update is not a stamp. Do not house Apply for this PR.**
 
-House is still **1.2.50.27**. Door `:80`/`:8080` 200. 1.2.50.28 overlay already failed closed and restored. Next mailman must exclude dfs/cache and be tested against this layout before any owner Apply of 1.2.50.29+.
+House is still **1.2.50.27**. Door `:80`/`:8080` 200. Firstboot is **idle** (`disable --now`). 1.2.50.28 overlay already failed closed and restored. Next mailman must exclude dfs/cache and be tested against this layout before any owner Apply of 1.2.50.29+.
 
 ## Do not
 
@@ -87,4 +97,5 @@ House is still **1.2.50.27**. Door `:80`/`:8080` 200. 1.2.50.28 overlay already 
 - Delete `ota.lock`
 - Wipe `/media`, TorBox, or `~/media-sandbox`
 - Restart `reelos-ota` / post house Apply from the agent
+- Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`
 - Reboot unless the door is fully dead (it is not)
