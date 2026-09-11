@@ -2,11 +2,11 @@
 
 **Copy this block onto every later STATUS. Austin 2026-09-11. Canonical.**
 
-## Standing orders — Tron scrap / Arena later / Books live
+## Standing orders — Arena later / Books live
 
-- **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
-- **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.31**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later.
+- **Night chrome is scrapped.** Cyan/gold phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
+- **1.2.51 stays parked / unused.** Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked / unused.`
+- **Books / Kavita still wanted.** Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.31**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** those PRs' night tokens, CSS, or magenta. Arena chrome is a separate named stamp later.
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -17,18 +17,18 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - Phone primary: download the file; the device reader opens it. No in-app EPUB player. Ready for a book is **Download**.
 - Kavita (`lscr.io/linuxserver/kavita`, compose profile `books`, `/srv/media/books`, `:5000`) is the **box library**, a secondary “Library on the box” link. Caddy `/kavita*` only — do not steal `/books*`.
 - Home/Library Books row only when `intent.books` **and** real files exist.
-- Rebase onto current `main` (1.2.50.31+). Do not merge Tron+Books as one 1.2.51 stamp.
+- Rebase onto current `main` (1.2.50.31+). Do not merge #52/#70 Books as one 1.2.51 stamp.
 
 ## Current ship
 
-***1.2.50.31 is the ship.*** 2026-09-11. House firstboot hit NRestarts 1722: wizard wrote `provisioned` but never `stack-installed`; `install.sh` died on GNU `cp` same-file when HERE==ROOT; unit `Restart=on-failure` every 30s. 1.2.50.30 mailman does **not** `systemctl enable reelos-firstboot`, so Apply of 30 would not re-enable a disabled unit — but a re-enabled unit would still loop, and the ISO/install path is still broken. This stamp latches `stack-installed` (wizard, Apply, Vite, provisioned install.sh), skips self-`cp`, and does not enable firstboot on a provisioned box. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
+***1.2.50.31 is the ship.*** 2026-09-11. House firstboot hit NRestarts 1722: wizard wrote `provisioned` but never `stack-installed`; `install.sh` died on GNU `cp` same-file when HERE==ROOT; unit `Restart=on-failure` every 30s. 1.2.50.30 mailman does **not** `systemctl enable reelos-firstboot`, so Apply of 30 would not re-enable a disabled unit — but a re-enabled unit would still loop, and the ISO/install path is still broken. This stamp latches `stack-installed` (wizard, Apply, Vite, provisioned install.sh), skips self-`cp`, and does not enable firstboot on a provisioned box. Does not take #52 / #70 / #59. 1.2.51 parked / unused.
 
 ## Stamp
 
 - **VERSION / channel:** `1.2.50.31`
 - **Base:** `main` at 1.2.50.30
-- Did **not** take Tron chrome from #52 / #70 / #59
-- **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
+- Did **not** take night chrome from #52 / #70 / #59
+- **1.2.51** remains unused/parked (not Arena)
 
 ## Changelog
 
@@ -61,9 +61,9 @@ SSH 2026-09-11: wrote `/var/lib/reelos/stack-installed` (`provisioned` present, 
 ## Do not
 
 - Merge #52 / #70 / #59 onto the 1.2.50.x repair line
-- Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
+- Stamp **1.2.51** (parked / unused; not Arena)
 - Implement Arena UI until the owner names that pass
-- Glue Books/Kavita to Tron chrome or burn it as 1.2.51
+- Glue Books/Kavita to #52/#70 chrome or burn it as 1.2.51
 - Tap Apply twice
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
