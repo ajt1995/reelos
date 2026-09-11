@@ -15,7 +15,6 @@ export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
-  const watchUrl = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
@@ -111,16 +110,6 @@ export function HomeView() {
 
   return (
     <div className="arena-page pt-1">
-      {watchUrl ? (
-        <a
-          href={watchUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mb-3 inline-flex h-8 items-center rounded-full bg-gold px-3 text-xs font-medium text-gold-fg arena-gold-press"
-        >
-          Watch in this browser
-        </a>
-      ) : null}
       <form
         className="relative mx-auto block w-full max-w-2xl"
         onSubmit={(e) => {
@@ -186,6 +175,12 @@ export function HomeView() {
                 <span className="min-w-0 flex-1 truncate text-sm">
                   {b.title} <span className="text-muted">· {b.author}</span>
                 </span>
+                <a
+                  className="inline-flex h-7 items-center rounded-full px-2.5 text-[11px] font-medium text-circuit shadow-[var(--shadow-circuit)]"
+                  href={`/books?read=${encodeURIComponent(b.rel)}`}
+                >
+                  Read
+                </a>
                 <a
                   className="inline-flex h-7 items-center rounded-full bg-gold px-2.5 text-[11px] font-medium text-gold-fg arena-gold-press"
                   href={`/api/books/file?rel=${encodeURIComponent(b.rel)}`}
