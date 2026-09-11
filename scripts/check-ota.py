@@ -62,6 +62,12 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "fuse stacked"),
     ("daemon/wire-engines.parts/07.part", "enableMediaInfo"),
     ("install/compose/configs/sonarr/reelos-debrid.json", "enableMediaInfo"),
+    ("scripts/wizard-honesty.mjs", "Use TorBox."),
+    ("scripts/reelos-lookup-plugin.mjs", "sourceValidateError"),
+    ("scripts/reelos-lookup-plugin.mjs", "provisionHonestyError"),
+    ("src/components/wizard.tsx", "TOTAL = 7"),
+    ("src/components/wizard.tsx", "Untested"),
+    ("src/lib/store.ts", 'source: "torbox"'),
 )
 
 

@@ -20,6 +20,11 @@ import type {
   StorageMode,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import {
+  accessHonestyError,
+  frontendHonestyError,
+  sourceValidateError,
+} from "@/lib/wizard-honesty";
 
 const TOTAL = 7;
 
@@ -30,6 +35,7 @@ export function Wizard() {
   const startBuild = useReelStore((s) => s.startBuild);
   const [finishErr, setFinishErr] = useState("");
   const [finishing, setFinishing] = useState(false);
+  const [sourceOk, setSourceOk] = useState(false);
 
   const go = (n: number) => setStep(Math.min(TOTAL, Math.max(1, n)));
 
@@ -73,7 +79,7 @@ export function Wizard() {
       </header>
       <div className="mx-auto w-full max-w-3xl px-6 pb-36 pt-4 md:px-8">
         {step === 1 && <StepStorage />}
-        {step === 2 && <StepSource />}
+        {step === 2 && <StepSource sourceOk={sourceOk} setSourceOk={setSourceOk} />}
         {step === 3 && <StepIntent />}
         {step === 4 && <StepQuality />}
         {step === 5 && <StepFrontend />}
@@ -94,7 +100,7 @@ export function Wizard() {
               if (step < TOTAL) go(step + 1);
               else void finish();
             }}
-            disabled={!canContinue(step, answers) || finishing}
+            disabled={!canContinue(step, answers, sourceOk) || finishing}
           >
             {finishing ? <LoaderCircle className="size-4 animate-spin" /> : null}
             {step === TOTAL ? "Finish" : "Continue"}
@@ -107,21 +113,22 @@ export function Wizard() {
   );
 }
 
-function canContinue(step: number, a: ReturnType<typeof useReelStore.getState>["answers"]) {
+function canContinue(
+  step: number,
+  a: ReturnType<typeof useReelStore.getState>["answers"],
+  sourceOk: boolean,
+) {
   if (step === 2) {
-    if (a.source === "local-vpn") return a.vpnProvider.length > 0;
-    return a.apiKey.trim().length >= 10;
+    if (sourceValidateError(a.source)) return false;
+    return a.apiKey.trim().length >= 10 && sourceOk;
   }
   if (step === 3) {
     const i = a.intent;
     return i.movies || i.tv || i.anime || i.kids || i.music;
   }
-  if (step === 5) {
-    if (a.frontend === "plex" || a.frontend === "both") return a.plexClaim.trim().length >= 4;
-    return true;
-  }
+  if (step === 5) return !frontendHonestyError(a.frontend);
   if (step === 6) return a.adminName.trim().length >= 2 && a.adminPassword.length >= 8;
-  if (step === 7 && a.access === "cloudflare") return a.tunnelToken.trim().length >= 8;
+  if (step === 7) return !accessHonestyError(a.access);
   return true;
 }
 
@@ -298,16 +305,22 @@ function StepStorage() {
   );
 }
 
-function StepSource() {
+function StepSource({
+  sourceOk,
+  setSourceOk,
+}: {
+  sourceOk: boolean;
+  setSourceOk: (v: boolean) => void;
+}) {
   const answers = useReelStore((s) => s.answers);
   const patch = useReelStore((s) => s.patchAnswers);
   const [checking, setChecking] = useState(false);
-  const [ok, setOk] = useState<null | boolean>(null);
   const [err, setErr] = useState("");
+  const untested = sourceValidateError(answers.source);
 
   const ping = async () => {
     setChecking(true);
-    setOk(null);
+    setSourceOk(false);
     setErr("");
     const key = answers.apiKey.trim();
     try {
@@ -318,14 +331,14 @@ function StepSource() {
       });
       const result = (await r.json()) as { ok?: boolean; message?: string; error?: string };
       if (result.ok) {
-        setOk(true);
+        setSourceOk(true);
         setErr(result.message || "Key accepted");
       } else {
-        setOk(false);
+        setSourceOk(false);
         setErr(result.error || "Provider rejected this key.");
       }
     } catch (e) {
-      setOk(false);
+      setSourceOk(false);
       setErr(String(e));
     }
     setChecking(false);
@@ -335,56 +348,56 @@ function StepSource() {
     <div>
       <Heading
         title="Your source"
-        sub="One provider. Paste a key and we will ping it before Continue. Local + VPN skips the key and uses Gluetun."
+        sub="TorBox is the working path on this house. Paste a TorBox key and Validate it before Continue. Other providers stay visible but untested — Validate refuses; there is no fake OK."
       />
       <div className="grid gap-3 sm:grid-cols-2">
-        {SOURCES.map((s) => (
-          <Card
-            key={s.id}
-            selected={answers.source === s.id}
-            onClick={() => {
-              patch({ source: s.id });
-              setOk(null);
-              setErr("");
-            }}
-          >
-            <div className="flex items-start gap-3 pr-6">
-              <span
-                className={cn(
-                  "flex size-10 items-center justify-center rounded-lg font-display text-xs tracking-wide",
-                  answers.source === s.id ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
-                )}
-              >
-                {s.mark}
-              </span>
-              <div>
-                <p className="font-display font-medium">{s.name}</p>
-                <p className="mt-1 text-sm text-muted">{s.blurb}</p>
+        {SOURCES.map((s) => {
+          const blocked = sourceValidateError(s.id);
+          return (
+            <Card
+              key={s.id}
+              selected={answers.source === s.id}
+              onClick={() => {
+                patch({ source: s.id });
+                setSourceOk(false);
+                setErr("");
+              }}
+            >
+              <div className="flex items-start gap-3 pr-6">
+                <span
+                  className={cn(
+                    "flex size-10 items-center justify-center rounded-lg font-display text-xs tracking-wide",
+                    answers.source === s.id ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+                  )}
+                >
+                  {s.mark}
+                </span>
+                <div>
+                  <p className="font-display font-medium">
+                    {s.name}
+                    {blocked ? (
+                      <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                        Untested
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="mt-1 text-sm text-muted">{s.blurb}</p>
+                </div>
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
-      {answers.source === "local-vpn" ? (
+      {untested ? (
         <div className="mt-6">
-          <label className="text-sm text-muted">VPN provider</label>
-          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {["mullvad", "proton", "nord", "custom"].map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => patch({ vpnProvider: v })}
-                className={cn(
-                  "h-10 rounded-xl capitalize",
-                  answers.vpnProvider === v
-                    ? "bg-gold text-gold-fg"
-                    : "bg-card text-muted shadow-[var(--shadow-border)]",
-                )}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          <p className="text-sm text-gold-bright">{untested}</p>
+          {answers.source !== "local-vpn" ? (
+            <Button className="mt-3" variant="ghost" onClick={() => void ping()} disabled={checking}>
+              {checking ? <LoaderCircle className="size-4 animate-spin" /> : null}
+              Validate
+            </Button>
+          ) : null}
+          {!sourceOk && err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
         </div>
       ) : (
         <div className="mt-6">
@@ -393,11 +406,11 @@ function StepSource() {
             <input
               type="password"
               autoComplete="off"
-              placeholder="Paste key"
+              placeholder="Paste TorBox key"
               value={answers.apiKey}
               onChange={(e) => {
                 patch({ apiKey: e.target.value });
-                setOk(null);
+                setSourceOk(false);
                 setErr("");
               }}
               className="h-12 flex-1 rounded-xl bg-card px-4 text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
@@ -407,10 +420,8 @@ function StepSource() {
               {checking ? "Checking" : "Validate"}
             </Button>
           </div>
-          {ok === true ? (
-            <p className="mt-2 text-sm text-success">{err}</p>
-          ) : null}
-          {ok === false && err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
+          {sourceOk ? <p className="mt-2 text-sm text-success">{err}</p> : null}
+          {!sourceOk && err ? <p className="mt-2 text-sm text-danger">{err}</p> : null}
         </div>
       )}
     </div>
@@ -499,33 +510,32 @@ function StepFrontend() {
     { id: "plex", title: "Plex", body: "Bring a claim token from plex.tv/claim." },
     { id: "both", title: "Both", body: "Same libraries. Choose a player when you hit Play." },
   ];
-  const needsClaim = answers.frontend !== "jellyfin";
+  const plexUntested = frontendHonestyError(answers.frontend);
   return (
     <div>
       <Heading
         title="Where will you watch?"
-        sub="ReelOS is not a player. Playback happens in Jellyfin or Plex apps on phones, TVs, and browsers."
+        sub="ReelOS is not a player. Jellyfin is the working path. Plex claim is untested on this house — Continue refuses it."
       />
       <div className="grid gap-3">
-        {opts.map((o) => (
-          <Card key={o.id} selected={answers.frontend === o.id} onClick={() => patch({ frontend: o.id })}>
-            <p className="font-display text-lg font-medium pr-8">{o.title}</p>
-            <p className="mt-1 text-sm text-muted">{o.body}</p>
-          </Card>
-        ))}
+        {opts.map((o) => {
+          const blocked = frontendHonestyError(o.id);
+          return (
+            <Card key={o.id} selected={answers.frontend === o.id} onClick={() => patch({ frontend: o.id })}>
+              <p className="font-display text-lg font-medium pr-8">
+                {o.title}
+                {blocked ? (
+                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                    Untested
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-1 text-sm text-muted">{o.body}</p>
+            </Card>
+          );
+        })}
       </div>
-      {needsClaim ? (
-        <div className="mt-6">
-          <label className="text-sm text-muted">Plex claim token</label>
-          <p className="mt-1 text-xs text-faint">Open plex.tv/claim in another tab. Paste the token. It expires quickly.</p>
-          <input
-            className="mt-2 h-12 w-full rounded-xl bg-card px-4 font-mono text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
-            placeholder="claim-…"
-            value={answers.plexClaim}
-            onChange={(e) => patch({ plexClaim: e.target.value })}
-          />
-        </div>
-      ) : null}
+      {plexUntested ? <p className="mt-6 text-sm text-gold-bright">{plexUntested}</p> : null}
     </div>
   );
 }
@@ -585,31 +595,32 @@ function StepAccess() {
       body: "Paste a tunnel token. No inbound ports.",
     },
   ];
+  const cfUntested = accessHonestyError(answers.access);
   return (
     <div>
       <Heading
         title="How will you reach it?"
-        sub="One front door. Remote is optional. Watching still happens in the official apps."
+        sub="One front door. This network and Tailscale are the working paths. Cloudflare Tunnel is untested — Continue refuses it."
       />
       <div className="grid gap-3">
-        {opts.map((o) => (
-          <Card key={o.id} selected={answers.access === o.id} onClick={() => patch({ access: o.id })}>
-            <p className="font-display text-lg font-medium pr-8">{o.title}</p>
-            <p className="mt-1 text-sm text-muted">{o.body}</p>
-          </Card>
-        ))}
+        {opts.map((o) => {
+          const blocked = accessHonestyError(o.id);
+          return (
+            <Card key={o.id} selected={answers.access === o.id} onClick={() => patch({ access: o.id })}>
+              <p className="font-display text-lg font-medium pr-8">
+                {o.title}
+                {blocked ? (
+                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                    Untested
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-1 text-sm text-muted">{o.body}</p>
+            </Card>
+          );
+        })}
       </div>
-      {answers.access === "cloudflare" ? (
-        <label className="mt-6 block">
-          <span className="text-sm text-muted">Tunnel token</span>
-          <input
-            className="mt-2 h-12 w-full rounded-xl bg-card px-4 font-mono text-sm shadow-[var(--shadow-border)]"
-            value={answers.tunnelToken}
-            onChange={(e) => patch({ tunnelToken: e.target.value })}
-            placeholder="eyJ…"
-          />
-        </label>
-      ) : null}
+      {cfUntested ? <p className="mt-6 text-sm text-gold-bright">{cfUntested}</p> : null}
     </div>
   );
 }
