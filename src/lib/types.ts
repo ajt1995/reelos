@@ -147,4 +147,5 @@ export interface UpdateState {
   checkedAt: number | null;
   steps: BuildStep[];
   notes: string[];
+  rollback?: boolean;
 }

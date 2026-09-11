@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.40**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta channel is wired; Arena+Books stay off this stamp (different agent).**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.40**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,14 +21,15 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.40 is the ship.*** Check → Apply only swaps the product (tarball, restart, splash, stamp). Dumps / Sonarr import / heal / hybrid 1080 / ffprobe / FUSE never block stamp. Library catch-up is a persistent `reelos-library-catchup` oneshot with its own phone clock (folder N, skips, timeouts) — not buried in `wire.log` while Apply looks frozen. Splash-locks Home only while dumps still need import. Worker backs off when ffprobe is D-state; does not stack another FUSE. 39 stamp-first stays. 38 wizard honesty + DirectPlay stays. Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.** House is still **1.2.50.38**. 40 is a strict superset of 39 — Check→Apply **40 once** when D-state cools. Do not tap 39 then 40.
+***1.2.50.40 is the ship.*** Check → Apply only swaps the product (tarball, restart, splash, stamp). Dumps / Sonarr import / heal / hybrid 1080 / ffprobe / FUSE never block stamp. Library catch-up is a persistent `reelos-library-catchup` oneshot with its own phone clock (folder N, skips, timeouts) — not buried in `wire.log` while Apply looks frozen. Splash-locks Home only while dumps still need import. Worker backs off when ffprobe is D-state; does not stack another FUSE. Settings **Beta channel** is a real toggle (not a stub): ON then Check fetches **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`; OFF stays 1.2.50.x. `channel-beta.json` on this tree (and on main after merge) is that 2.0.0 pointer, not `main.tar.gz`. 39 stamp-first stays. 38 wizard honesty + DirectPlay stays. Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.** House is **1.2.50.39**. Check→Apply **40 once**. Do not tap 39 again. Beta ON + Check/Apply **2.0.0** is a second tap only if Austin wants Arena/Books.
 
 ## Stamp
 
 - **VERSION / channel:** `1.2.50.40`
 - **channel tarball:** `main.tar.gz`
-- **Base:** `main` at 1.2.50.39 ([#120](https://github.com/ajt1995/reelos/pull/120)); keeps 1.2.50.37 prebuilt hashed UI
-- **House snapshot:** 1.2.50.38; firstboot disabled; `stack-installed` latched; Apply **40 once** when D-state cools (skip 39)
+- **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
+- **Base:** `main` at 1.2.50.39 ([#120](https://github.com/ajt1995/reelos/pull/120)); folds mailman sidecar from [#123](https://github.com/ajt1995/reelos/pull/123)
+- **House snapshot:** 1.2.50.39; firstboot disabled; `stack-installed` latched; Apply **40 once** (skip a second 39)
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog

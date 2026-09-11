@@ -118,7 +118,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         </Button>
         {update.status === "available" ? (
           <Button size="sm" onClick={startUpdate}>
-            Apply {update.target}
+            {update.rollback ? `Roll back to ${update.target}` : `Apply ${update.target}`}
           </Button>
         ) : null}
       </div>
@@ -154,9 +154,15 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         />
       </label>
       <p className="mt-2 text-xs text-muted">
-        Off by default. Check then reads channel-beta (a stub today). Arena chrome and Books are not in this stamp.
-        Apply still comes from main.
+        Off by default. Check then reads channel-beta. Arena chrome and Books ship on 2.0.0 as a separate tarball — not
+        inside main.tar.gz. Leave beta and Check to roll back to last stable 1.2.50.x (40 once this house has it).
+        Stable Check stays 1.2.50.40 on main.tar.gz.
       </p>
+      {update.rollback && update.status === "available" ? (
+        <p className="mt-2 text-xs text-muted">
+          Roll back returns this box to {update.target}. Libraries stay. Arena chrome and Books leave with 2.0.
+        </p>
+      ) : null}
     </Row>
   );
 }

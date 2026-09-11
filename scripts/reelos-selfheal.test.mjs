@@ -52,12 +52,15 @@ test("box finds a built client and rejects path escape", () => {
   assert.equal(findPreviewBuild(join(tmpdir(), "reelos-box-missing")), null);
 });
 
-test("beta stub is infrastructure only", () => {
+test("beta sidecar is infrastructure only", () => {
   const stub = betaChannelStub("1.2.50.34");
   assert.equal(stub.channel, "beta");
   assert.match(stub.notes[0], /Arena chrome and Books/);
   assert.doesNotMatch(JSON.stringify(stub), /Kavita/);
   assert.match(read("channel-beta.json"), /Arena chrome and Books/);
+  assert.match(read("channel-beta.json"), /2\.0\.0/);
+  assert.doesNotMatch(JSON.parse(read("channel-beta.json")).tarball, /main\.tar\.gz/);
+  assert.doesNotMatch(read("src/styles.css"), /\.arena-page/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /betaChannel === true/);
 });
 
