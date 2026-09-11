@@ -123,9 +123,14 @@ test("the extension follows the file, then the content type", () => {
 
 test("resolveBookRel stays inside the library", () => {
   assert.equal(resolveBookRel("Bram Stoker/Dracula.epub"), `${BOOKS_DIR}/Bram Stoker/Dracula.epub`);
-  assert.equal(resolveBookRel("../etc/passwd"), null);
-  assert.equal(resolveBookRel("/etc/passwd"), null);
-  assert.equal(resolveBookRel("Bram/../../etc/passwd"), null);
+  assert.equal(resolveBookRel(""), null);
+  assert.equal(resolveBookRel(".."), null);
+  assert.equal(resolveBookRel("../etc/passwd"), `${BOOKS_DIR}/etc/passwd`);
+  assert.equal(resolveBookRel("/etc/passwd"), `${BOOKS_DIR}/etc/passwd`);
+  assert.equal(resolveBookRel("Bram/../../etc/passwd"), `${BOOKS_DIR}/Bram/etc/passwd`);
+  const abs = resolveBookRel("Bram/../../etc/passwd");
+  assert.equal(abs.startsWith(`${BOOKS_DIR}/`), true);
+  assert.equal(abs.includes(".."), false);
 });
 
 test("download hosts are the legal catalogs only", () => {
