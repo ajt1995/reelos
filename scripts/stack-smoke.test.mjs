@@ -52,18 +52,21 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.31)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.34)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.31");
-  assert.equal(chan.version, "1.2.50.31");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.31"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.31"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.31"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.31"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.31/);
+  assert.equal(ver, "1.2.50.34");
+  assert.equal(chan.version, "1.2.50.34");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.34"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.34"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.34"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.34"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.34/);
+  assert.match(read("src/components/settings-updates.tsx"), /This install/);
+  assert.match(read("src/components/settings-updates.tsx"), /This update/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /pendingNotes/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {

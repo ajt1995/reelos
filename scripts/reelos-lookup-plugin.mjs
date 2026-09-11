@@ -19,6 +19,7 @@ import {
 import { kickArrRecover, loadPresenceFacts } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
+import { notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
   createLibraryCache,
@@ -885,14 +886,16 @@ async function handleUpdateCheck(_req, res) {
     /* */
   }
   const shaDrift = Boolean(head) && head !== applied;
+  const channelNotes = Array.isArray(best.notes) ? best.notes : [];
   const notes = shaDrift && !newer
-    ? [`Code update on ${best.version} (${head.slice(0, 12)})`]
-    : best.notes || [];
+    ? ["This box is behind the latest code even though the version number matches."]
+    : pendingNotes(channelNotes, local, best.version);
   send(res, 200, {
     ok: true,
     local,
     remote: best.version,
     notes,
+    currentNotes: notesForVersion(channelNotes, local),
     available: newer || shaDrift,
     sha: head.slice(0, 12),
   });
