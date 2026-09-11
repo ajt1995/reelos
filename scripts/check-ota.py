@@ -238,6 +238,10 @@ def main() -> int:
     install_hw = root / "install/bin/reelos_hardware.py"
     if hw.is_file() and install_hw.is_file() and hw.read_text() != install_hw.read_text():
         return fail("OTA contract: install/bin/reelos_hardware.py must match daemon/")
+    heal = root / "daemon/reelos-selfheal.sh"
+    install_heal = root / "install/bin/reelos-selfheal.sh"
+    if heal.is_file() and install_heal.is_file() and heal.read_text() != install_heal.read_text():
+        return fail("OTA contract: install/bin/reelos-selfheal.sh must match daemon/")
     unit = (root / "install/systemd/reelos-library-catchup.service").read_text()
     boot = (root / "firstboot/reelos-library-catchup.service").read_text() if (root / "firstboot/reelos-library-catchup.service").is_file() else ""
     if unit != boot:

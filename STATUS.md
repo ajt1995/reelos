@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.41 is the ship.*** Hardware profile uses nproc, MemTotal, DirectMap vs cgroup, and SSD vs HDD. The house HP 15-bs0xx is a **4GB DIMM** (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi. CPU/SSD can raise import caps; this box is an HDD so catch-up stays throttled. D-state concurrency 0; one fuse.decypharr; selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. 40's Apply vs library split stays. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. **House Apply 41 once after merge (Jellyfin image pull off).**
+***1.2.50.41 is the ship.*** Hardware profile uses nproc, MemTotal, DirectMap vs cgroup, and SSD vs HDD. The house HP 15-bs0xx is a **4GB DIMM** (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi. CPU/SSD can raise import caps; this box is an HDD so catch-up stays throttled. D-state concurrency 0; one fuse.decypharr; selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. 40's Apply vs library split stays. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. **No house Apply from the agent.**
 
 ## Stamp
 
@@ -95,7 +95,7 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House is **1.2.50.40**. After this PR is on `origin/main` and OTA is idle: **Check/Apply 1.2.50.41 once** (Jellyfin image pull off). Do not tap twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
+House is **1.2.50.40**. **Do not Apply from the agent.** Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
 
 ## Do not
 
@@ -108,5 +108,5 @@ House is **1.2.50.40**. After this PR is on `origin/main` and OTA is idle: **Che
 - Tap Apply 39 again
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
-- Tap Apply 41 twice
+- Post house Apply from the agent
 - Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`
