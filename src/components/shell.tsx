@@ -9,6 +9,7 @@ import {
   Settings,
 } from "lucide-react";
 import { ApplyingBar } from "@/components/applying-bar";
+import { LibraryCatchupBar } from "@/components/library-catchup-bar";
 import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
@@ -34,6 +35,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-background">
       <ApplyingBar />
+      <LibraryCatchupBar />
       <div className="md:flex">
       <aside className="hidden w-[220px] shrink-0 flex-col border-r border-border md:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">

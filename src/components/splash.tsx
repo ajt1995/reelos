@@ -20,7 +20,9 @@ function stepLabel(status: BootStepStatus) {
 export function Splash({ compact = false, warming = false }: { compact?: boolean; warming?: boolean }) {
   const provisioned = useReelStore((s) => s.provisioned);
   const bootSteps = useReelStore((s) => s.bootSteps);
+  const catchup = useReelStore((s) => s.libraryCatchup);
   const showWarming = warming || provisioned;
+  const libraryWorking = catchup.splashLock || bootSteps.library === "running";
   const begin = () => {
     useReelStore.getState().setPhase("wizard");
     useReelStore.getState().setWizardStep(1);
@@ -33,7 +35,7 @@ export function Splash({ compact = false, warming = false }: { compact?: boolean
         className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
       />
       <div className="rise relative">
-        <Wordmark className="flex-col gap-5" markClassName="size-20" spinRing={showWarming} />
+        <Wordmark className="flex-col gap-5" markClassName="size-20" spinRing={showWarming && libraryWorking} />
       </div>
       <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
         Install. Point. Stream.
@@ -60,7 +62,11 @@ export function Splash({ compact = false, warming = false }: { compact?: boolean
                   />
                   {step.label}
                 </span>
-                <span className="text-xs text-muted">{stepLabel(status)}</span>
+                <span className="text-xs text-muted">
+                  {step.id === "library" && catchup.splashLock
+                    ? catchup.message || "Library catching up"
+                    : stepLabel(status)}
+                </span>
               </li>
             );
           })}

@@ -144,8 +144,64 @@ def wait_fuse_ready(seconds: int = 40) -> bool:
     return False
 
 
+def write_library_progress(**fields):
+    """Phone library clock. Same JSON the splash / /api/ready read."""
+    path = STATE / "library-progress.json"
+    log_path = STATE / "library.log"
+    try:
+        prev = json.loads(path.read_text()) if path.is_file() else {}
+        if not isinstance(prev, dict):
+            prev = {}
+    except (OSError, json.JSONDecodeError):
+        prev = {}
+    prev.update({k: v for k, v in fields.items() if v is not None})
+    status = str(prev.get("status") or "idle")
+    needs = bool(prev.get("needsImport"))
+    prev["splashLock"] = status == "running" and needs
+    if not prev.get("message"):
+        prev["message"] = "Library catching up" if status == "running" else status
+    prev["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(prev) + "\n")
+        with log_path.open("a") as fh:
+            fh.write(prev["updatedAt"] + " " + str(prev.get("message") or "") + "\n")
+    except OSError:
+        pass
+    log_wire(str(prev.get("message") or "library progress"))
+    return prev
+
+
+def ffprobe_d_state_count() -> int:
+    try:
+        r = subprocess.run(["ps", "-eo", "state,comm"], capture_output=True, text=True, check=False)
+    except OSError:
+        return 0
+    n = 0
+    for line in (r.stdout or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and "D" in parts[0] and "ffprobe" in parts[1]:
+            n += 1
+    return n
+
+
 def kick_imports(*, catch_up: bool = False) -> bool:
     ping_wait = 20 if catch_up else 90
+    if catch_up:
+        write_library_progress(status="running", message="Library catching up")
+        if fuse_on_host():
+            n = fuse_host_mount_count()
+            log_wire(f"import catch-up — fuse listed ({n}), do not remount if listed")
+        d_state = ffprobe_d_state_count()
+        limit = 4 if box_is_small() else 8
+        if d_state >= limit:
+            log_wire(f"import catch-up backoff — ffprobe D-state {d_state} (not piling more)")
+            write_library_progress(
+                status="backoff",
+                needsImport=False,
+                message="Library catching up — backing off (ffprobe busy)",
+            )
+            return True
     if wait_fuse_ready(20 if catch_up else 40):
         log_wire("import — FUSE ready")
     else:
@@ -158,6 +214,7 @@ def kick_imports(*, catch_up: bool = False) -> bool:
     sk = api_key(sonarr_xml)
     if catch_up:
         log_wire("import catch-up — skip FUSE relink (no dfs walk)")
+        # Never ensure_fuse / remount from the library worker.
     else:
         relink_from_debrid(rk=rk, sk=sk)
     if rk:

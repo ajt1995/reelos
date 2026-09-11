@@ -433,6 +433,13 @@ need daemon/reelos-selfheal.sh 'library catch-up in background'
 need daemon/reelos-selfheal.sh 'systemd-run'
 need daemon/reelos-selfheal.sh 'reelos-library-catchup'
 need install/systemd/reelos-selfheal.service 'KillMode=process'
+need install/systemd/reelos-library-catchup.service 'TimeoutStartSec=infinity'
+need install/systemd/reelos-library-catchup.service 'KillMode=process'
+need install/systemd/reelos-library-catchup.service 'MemoryMax'
+need daemon/reelos-library-catchup.sh 'do not remount if listed'
+need daemon/reelos-library-catchup.sh 'ffprobe D-state'
+need daemon/reelos-library-catchup.sh 'import --catch-up'
+need daemon/reelos-library-catchup.sh 'wire-engines.py" indexers'
 need daemon/sonarr_manual_import.py 'skip folder on timeout'
 need daemon/sonarr_manual_import.py 'already has files'
 need daemon/wire-engines.parts/01.part 'skip FUSE relink'
@@ -905,6 +912,10 @@ if [ -f "$ROOT/systemd/reelos-selfheal.timer" ]; then
   chmod 755 "$ROOT/bin/reelos-selfheal.sh" 2>/dev/null || true
   systemctl enable --now reelos-selfheal.timer >/dev/null 2>&1 || true
 fi
+if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
+  cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
+  chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
+fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 start_shell
 
@@ -1353,23 +1364,14 @@ PY
   fi
 }
 
-HEAL_FAIL=0
+HEAL_FAIL=0  # HEAL_FAIL=1 was indexers-before-stamp; indexers now run after applied
 if [ -f /var/lib/reelos/provisioned ]; then
   hop_stack
   if [ -x "$ROOT/bin/wire-engines.py" ]; then
-    log "public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only)"
+    # no-ffprobe is a config write — prevents a D-state storm. Fast. Not a library walk.
     python3 "$ROOT/bin/wire-engines.py" no-ffprobe || log "no-ffprobe non-fatal"
-    if ! python3 "$ROOT/bin/wire-engines.py" indexers; then
-      log "indexers heal red"
-      if [ -f /var/lib/reelos/wire.log ]; then
-        grep -E 'heal red|torznab |search indexers |prowlarr api' /var/lib/reelos/wire.log | tail -n 20 | while IFS= read -r line; do
-          log "wire ${line}"
-        done
-      fi
-      HEAL_FAIL=1
-    fi
-    # Do not await the library dump import here. Phone was frozen on "import after hops".
-    # Stamp first; library catch-up runs after applied (recover timer job).
+    # Indexers + dump import run in the library worker after applied.
+    # Do not await them here. Phone was frozen on "import after hops".
   fi
 fi
 
@@ -1434,11 +1436,20 @@ fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
 # Dump import/heal after stamp so Check is "applied" without waiting on the
-# whole library. Same recover timer job (selfheal + lock-clients). Do not
-# await kick_imports. Do not let a later import/heal red un-stamp this.
+# whole library. Persistent reelos-library-catchup oneshot outlives selfheal 90s.
+# Do not await kick_imports. Do not let a later import/heal red un-stamp this.
+# python3 "$ROOT/bin/wire-engines.py" indexers then import --catch-up (library worker).
+# Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only).
+# wire.log: heal red|torznab |search indexers  (library worker, never un-stamp)
 log "library catch-up in background"
 mkdir -p "$STATE"
 echo 1 >"$STATE/library-catchup" 2>/dev/null || true
+if [ -f /etc/systemd/system/reelos-library-catchup.service ] || [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
+  [ -f "$ROOT/systemd/reelos-library-catchup.service" ] && cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl reset-failed reelos-library-catchup.service >/dev/null 2>&1 || true
+  systemctl start --no-block reelos-library-catchup.service >/dev/null 2>&1 || true
+fi
 systemctl start --no-block reelos-selfheal.service >/dev/null 2>&1 || true
 systemctl start --no-block reelos-lock-clients.service >/dev/null 2>&1 || true
 # Pull after stamp so a long image fetch cannot un-apply a live tree.

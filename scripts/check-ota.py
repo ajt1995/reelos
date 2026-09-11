@@ -97,7 +97,16 @@ CONTRACTS = (
     ("daemon/sonarr_manual_import.py", "already has files"),
     ("daemon/wire-engines.parts/01.part", "skip FUSE relink"),
     ("daemon/wire-engines.parts/08.part", "skip hybrid 1080 grab"),
-    ("daemon/wire-engines.parts/09.part", "first provision — library walk"),
+    ("src/components/library-catchup-bar.tsx", "Library catching up"),
+    ("src/components/applying-bar.tsx", "Applying"),
+    ("scripts/reelos-ota-status.mjs", "applyProductRunning"),
+    ("scripts/reelos-ota-status.mjs", "productSwapDone"),
+    ("scripts/reelos-lookup-plugin.mjs", "libraryCatchup"),
+    ("install/systemd/reelos-library-catchup.service", "TimeoutStartSec=infinity"),
+    ("install/systemd/reelos-library-catchup.service", "MemoryMax"),
+    ("daemon/reelos-library-catchup.sh", "do not remount if listed"),
+    ("daemon/sonarr_manual_import.py", "import catch-up backoff"),
+    ("daemon/wire-engines.parts/01.part", "do not remount if listed"),
 )
 
 
@@ -161,6 +170,16 @@ def main() -> int:
         return fail("OTA contract: library catch-up must come after applied.")
     if 'log "import after hops' in updater[:applied]:
         return fail("OTA contract: Apply must not await import after hops before applied")
+    if 'if ! python3 "$ROOT/bin/wire-engines.py" indexers' in updater[:applied]:
+        return fail("OTA contract: indexers must not block stamp")
+    catch_sh = root / "daemon/reelos-library-catchup.sh"
+    install_catch = root / "install/bin/reelos-library-catchup.sh"
+    if catch_sh.is_file() and install_catch.is_file() and catch_sh.read_text() != install_catch.read_text():
+        return fail("OTA contract: install/bin/reelos-library-catchup.sh must match daemon/")
+    unit = (root / "install/systemd/reelos-library-catchup.service").read_text()
+    boot = (root / "firstboot/reelos-library-catchup.service").read_text() if (root / "firstboot/reelos-library-catchup.service").is_file() else ""
+    if unit != boot:
+        return fail("OTA contract: firstboot/reelos-library-catchup.service must match install/systemd/")
 
     install_up = root / "install/bin/reelos-update.sh"
     if install_up.is_file() and install_up.read_text() != updater:

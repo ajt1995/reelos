@@ -1,8 +1,8 @@
 {
-  "version": "1.2.50.39",
+  "version": "1.2.50.40",
   "channel": "beta",
   "notes": [
-    "Beta is infrastructure only on 1.2.50.39. Arena chrome and Books will land here later. This stamp does not ship them. Stable remains the default. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse)."
+    "Beta is infrastructure only on 1.2.50.40. Arena chrome and Books will land here later. This stamp does not ship them. Stable remains the default. 1.2.51 parked (was Tron chrome; scrapped — do not reuse)."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/main.tar.gz"
 }

@@ -19,7 +19,12 @@ import {
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
-import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
+import {
+  applyIsRunning,
+  applyProductRunning,
+  applyTargetFromLog,
+  readLibraryProgress,
+} from "./reelos-ota-status.mjs";
 import { notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
@@ -1108,14 +1113,17 @@ function lastOtaLines(n = 3) {
 }
 
 async function handleUpdateStatus(_req, res) {
-  const running = applyIsRunning();
+  const logText = otaLogText();
+  const running = applyProductRunning({ logText });
   const log = lastOtaLines(3);
   send(res, 200, {
     ok: true,
     local: localVersion(),
     running,
-    target: running ? applyTargetFromLog(otaLogText()) : null,
+    held: applyIsRunning(),
+    target: running ? applyTargetFromLog(logText) : null,
     log,
+    library: readLibraryProgress(),
   });
 }
 
@@ -2081,13 +2089,15 @@ async function handleReady(req, res) {
 
   const updateP = (async () => {
     const t0 = Date.now();
-    const running = applyIsRunning();
+    const logText = otaLogText();
+    const running = applyProductRunning({ logText });
     const payload = {
       ok: true,
       local: localVersion(),
       running,
-      target: running ? applyTargetFromLog(otaLogText()) : null,
+      target: running ? applyTargetFromLog(logText) : null,
       log: lastOtaLines(3),
+      library: readLibraryProgress(),
     };
     mark("update", t0);
     return payload;
@@ -2148,6 +2158,7 @@ async function handleReady(req, res) {
     answers: publicAnswers(slice.answers),
     jellyfin: slice.jellyfin,
     update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
+    libraryCatchup: update?.library || readLibraryProgress(),
     titles: Array.isArray(library?.titles) ? library.titles : [],
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,

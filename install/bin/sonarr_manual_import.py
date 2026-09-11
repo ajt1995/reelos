@@ -22,6 +22,10 @@ SONARR_FOLDERS = ("/symlinks/sonarr",)
 FOREIGN_PATH_MARKERS = ("/radarr/", "/lidarr/", "/music/", "\\radarr\\", "\\lidarr\\", "\\music\\")
 SMALL_MEM_KB = 4_718_592
 LIST_TIMEOUT_SEC = 20  # was 120; skip folder on timeout and continue
+FFPROBE_D_BACKOFF_SMALL = 4
+FFPROBE_D_BACKOFF_OTHER = 8
+PROGRESS_PATH = Path("/var/lib/reelos/library-progress.json")
+LIBRARY_LOG = Path("/var/lib/reelos/library.log")
 
 # Cut scene junk so "The.Walking.Dead.2010.2160p.WEB-DL.DDP5.1" → "The Walking Dead"
 _QUALITY_CUT = re.compile(
@@ -451,6 +455,95 @@ def box_is_small() -> bool:
     return False
 
 
+def ffprobe_d_state_count(text: str | None = None) -> int:
+    """Count D-state ffprobe rows. Empty/missing text is 0 — never guess high."""
+    if text is None:
+        try:
+            import subprocess
+
+            r = subprocess.run(["ps", "-eo", "state,comm"], capture_output=True, text=True, check=False)
+            text = r.stdout or ""
+        except OSError:
+            return 0
+    n = 0
+    for line in str(text or "").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and "D" in parts[0] and "ffprobe" in parts[1]:
+            n += 1
+    return n
+
+
+def ffprobe_d_backoff_limit(*, small: bool | None = None) -> int:
+    if small is None:
+        small = box_is_small()
+    return FFPROBE_D_BACKOFF_SMALL if small else FFPROBE_D_BACKOFF_OTHER
+
+
+def catchup_chunk_size(*, catch_up: bool, d_state: int = 0) -> int:
+    if d_state > 0:
+        return 4
+    if catch_up or box_is_small():
+        return 8 if catch_up else 20
+    return 40
+
+
+def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0, timeouts: int = 0, status: str = "running") -> str:
+    if status == "backoff":
+        return "Library catching up — backing off (ffprobe busy)"
+    bits = []
+    if total:
+        bits.append(f"folder {folder} of {total}")
+    if skipped:
+        bits.append(f"{skipped} skipped")
+    if timeouts:
+        bits.append(f"{timeouts} timeouts")
+    detail = ", ".join(bits)
+    if status == "done":
+        return f"Library catch-up done" + (f" — {detail}" if detail else "")
+    if detail:
+        return f"Library catching up — {detail}"
+    return "Library catching up"
+
+
+def write_library_progress(**fields):
+    """Phone library clock. Merge onto the JSON the splash/API read."""
+    path = PROGRESS_PATH
+    try:
+        prev = json.loads(path.read_text()) if path.is_file() else {}
+        if not isinstance(prev, dict):
+            prev = {}
+    except (OSError, json.JSONDecodeError):
+        prev = {}
+    prev.update({k: v for k, v in fields.items() if v is not None})
+    status = str(prev.get("status") or "idle")
+    needs = bool(prev.get("needsImport"))
+    prev["splashLock"] = status == "running" and needs
+    prev["message"] = fields.get("message") or format_catchup_message(
+        folder=int(prev.get("folder") or 0),
+        total=int(prev.get("total") or 0),
+        skipped=int(prev.get("skipped") or 0),
+        timeouts=int(prev.get("timeouts") or 0),
+        status=status,
+    )
+    prev["updatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(prev) + "\n")
+    except OSError:
+        pass
+    msg = prev.get("message") or ""
+    if msg:
+        try:
+            LIBRARY_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with LIBRARY_LOG.open("a") as fh:
+                fh.write(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + " " + msg + "\n")
+        except OSError:
+            pass
+    if log_wire:
+        log_wire(msg)
+    return prev
+
+
 def import_folder_cap(*, catch_up: bool) -> int:
     small = box_is_small()
     if catch_up:
@@ -500,6 +593,7 @@ def _expand_scan_folders(
     targets: list[str] = []
     seen_targets: set[str] = set()
     fallback: list[str] = []
+    skipped = 0
     for arr in roots:
         host = host_listdir_root(arr)
         try:
@@ -517,6 +611,7 @@ def _expand_scan_folders(
             if arr_child in seen_targets:
                 continue
             if series_rows and folder_already_imported(arr_child, series_rows):
+                skipped += 1
                 if log_wire:
                     log_wire(f"sonarr skip folder already has files {arr_child}")
                 continue
@@ -527,9 +622,18 @@ def _expand_scan_folders(
     if cap is None:
         cap = import_folder_cap(catch_up=catch_up)
     if cap and len(targets) > cap:
+        skipped += len(targets) - cap
         if log_wire:
             log_wire(f"sonarr import cap {cap} of {len(targets)} folders")
         targets = targets[:cap]
+    if catch_up:
+        write_library_progress(
+            status="running",
+            skipped=skipped,
+            total=len(targets),
+            folder=0,
+            needsImport=bool(targets),
+        )
     return targets
 
 
@@ -541,7 +645,31 @@ def _list_manualimport(
     catch_up: bool = False,
 ) -> list[dict]:
     rows: list = []
-    for folder in _expand_scan_folders(folders, series_rows=series_rows, catch_up=catch_up):
+    scan = _expand_scan_folders(folders, series_rows=series_rows, catch_up=catch_up)
+    timeouts = 0
+    limit = ffprobe_d_backoff_limit()
+    for i, folder in enumerate(scan, start=1):
+        d_state = ffprobe_d_state_count()
+        if catch_up and d_state >= limit:
+            if log_wire:
+                log_wire(f"import catch-up backoff — ffprobe D-state {d_state} (not piling more)")
+            write_library_progress(
+                status="backoff",
+                folder=i,
+                total=len(scan),
+                timeouts=timeouts,
+                needsImport=True,
+                message=format_catchup_message(folder=i, total=len(scan), timeouts=timeouts, status="backoff"),
+            )
+            break
+        if catch_up:
+            write_library_progress(
+                status="running",
+                folder=i,
+                total=len(scan),
+                timeouts=timeouts,
+                needsImport=True,
+            )
         q = urllib.parse.urlencode({"folder": folder, "filterExistingFiles": "true"})
         url = f"http://127.0.0.1:8989/api/v3/manualimport?{q}"
         hdrs = {"X-Api-Key": sk, "Content-Type": "application/json"}
@@ -553,10 +681,16 @@ def _list_manualimport(
                 rows.extend(chunk)
                 log_wire(f"sonarr manualimport list folder={folder} rows={len(chunk)}")
         except TimeoutError as e:
+            timeouts += 1
             log_wire(f"sonarr manualimport skip folder on timeout {folder} {e}")
+            if catch_up:
+                write_library_progress(status="running", folder=i, total=len(scan), timeouts=timeouts, needsImport=True)
         except OSError as e:
             if "timed out" in str(e).lower():
+                timeouts += 1
                 log_wire(f"sonarr manualimport skip folder on timeout {folder} {e}")
+                if catch_up:
+                    write_library_progress(status="running", folder=i, total=len(scan), timeouts=timeouts, needsImport=True)
             else:
                 log_wire(f"sonarr manualimport list {folder} {type(e).__name__} {e}")
         except Exception as e:
@@ -576,7 +710,7 @@ def _queue_manualimport(sk: str, files: list[dict], *, catch_up: bool = False) -
     before = {}
     for sid in {f["seriesId"] for f in files}:
         before[sid] = _series_file_count(sk, int(sid))
-    chunk_size = 20 if catch_up or box_is_small() else 40
+    chunk_size = catchup_chunk_size(catch_up=catch_up, d_state=ffprobe_d_state_count())
     try:
         for i in range(0, len(files), chunk_size):
             chunk = files[i : i + chunk_size]
@@ -817,6 +951,44 @@ def _self_test() -> int:
         def test_scan_folders_never_include_symlink_parent(self):
             self.assertNotIn("/mnt/symlinks", SONARR_FOLDERS)
             self.assertTrue(all("sonarr" in f for f in SONARR_FOLDERS))
+
+        def test_ffprobe_d_state_count_and_backoff_message(self):
+            sample = "D ffprobe\nD ffprobe\nS bash\nR ffmpeg\n"
+            self.assertEqual(ffprobe_d_state_count(sample), 2)
+            self.assertEqual(ffprobe_d_state_count(""), 0)
+            self.assertEqual(ffprobe_d_backoff_limit(small=True), 4)
+            self.assertEqual(ffprobe_d_backoff_limit(small=False), 8)
+            self.assertEqual(catchup_chunk_size(catch_up=True, d_state=12), 4)
+            msg = format_catchup_message(folder=3, total=16, skipped=4, timeouts=1, status="running")
+            self.assertIn("folder 3 of 16", msg)
+            self.assertIn("4 skipped", msg)
+            self.assertIn("1 timeouts", msg)
+            self.assertTrue(msg.startswith("Library catching up"))
+            back = format_catchup_message(status="backoff")
+            self.assertIn("backing off", back)
+            self.assertIn("ffprobe", back)
+
+        def test_splash_lock_only_when_running_and_needs_import(self):
+            import tempfile
+            from pathlib import Path as _P
+            global PROGRESS_PATH, LIBRARY_LOG
+            old_p, old_l = PROGRESS_PATH, LIBRARY_LOG
+            td = tempfile.TemporaryDirectory()
+            PROGRESS_PATH = _P(td.name) / "library-progress.json"
+            LIBRARY_LOG = _P(td.name) / "library.log"
+            try:
+                row = write_library_progress(status="running", needsImport=True, folder=2, total=6, skipped=1)
+                self.assertEqual(row["splashLock"], True)
+                self.assertIn("Library catching up", row["message"])
+                row = write_library_progress(status="running", needsImport=False, skipped=12, total=0)
+                self.assertEqual(row["splashLock"], False)
+                row = write_library_progress(status="backoff", needsImport=True)
+                self.assertEqual(row["splashLock"], False)
+                row = write_library_progress(status="done", needsImport=False)
+                self.assertEqual(row["splashLock"], False)
+            finally:
+                PROGRESS_PATH, LIBRARY_LOG = old_p, old_l
+                td.cleanup()
 
     suite = unittest.defaultTestLoader.loadTestsFromTestCase(Matching)
     result = unittest.TextTestRunner(verbosity=2).run(suite)

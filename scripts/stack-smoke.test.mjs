@@ -52,21 +52,22 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.39)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.40)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.39");
-  assert.equal(chan.version, "1.2.50.39");
+  assert.equal(ver, "1.2.50.40");
+  assert.equal(chan.version, "1.2.50.40");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
   assert.match(beta.notes[0], /Arena chrome and Books/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.39"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.39"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.39"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.39"/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.40"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.40"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.40"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.40"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.40/);
   assert.match(read("STATUS.md"), /1\.2\.50\.39/);
   assert.match(read("STATUS.md"), /1\.2\.50\.38/);
   assert.match(read("STATUS.md"), /1\.2\.50\.37/);
@@ -82,10 +83,11 @@ test("stack: VERSION / channel / stamps agree (1.2.50.39)", () => {
   assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
-  assert.match(chan.notes[0], /library catch-up|import after hops/);
-  assert.match(chan.notes[1], /TorBox/);
-  assert.match(chan.notes[1], /DirectPlay/);
-  assert.match(chan.notes[1], /prebuilt hashed UI/);
+  assert.match(chan.notes[0], /own phone clock|Library catching up|product/);
+  assert.match(chan.notes[1], /library catch-up|import after hops/);
+  assert.match(chan.notes[2], /TorBox/);
+  assert.match(chan.notes[2], /DirectPlay/);
+  assert.match(chan.notes[2], /prebuilt hashed UI/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);

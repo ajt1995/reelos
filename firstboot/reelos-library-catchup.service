@@ -1,0 +1,17 @@
+[Unit]
+Description=ReelOS library catch-up (dumps/import after Apply stamp)
+After=network-online.target reelos.service
+ConditionPathExists=/opt/reelos/bin/reelos-library-catchup.sh
+
+[Service]
+Type=oneshot
+# Must outlive reelos-selfheal TimeoutStartSec=90 / KillMode. 600s systemd-run
+# was not enough for a FUSE list of dump folders. Infinity + KillMode=process.
+TimeoutStartSec=infinity
+KillMode=process
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+MemoryMax=768M
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-library-catchup.sh
