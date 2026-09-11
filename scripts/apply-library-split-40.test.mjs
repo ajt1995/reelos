@@ -72,15 +72,16 @@ test("phone has two clocks: Applying vs Library catching up", () => {
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /applyProductRunning/);
 });
 
-test("library worker backs off on ffprobe D-state and does not remount FUSE", () => {
+test("library worker stays idle on ffprobe D-state unless ffprobe is stubbed", () => {
   const one = read("daemon/wire-engines.parts/01.part");
   const harden = read("daemon/sonarr_manual_import.py");
   assert.equal(one, read("install/bin/wire-engines.parts/01.part"));
   assert.equal(harden, read("install/bin/sonarr_manual_import.py"));
   assert.match(one, /do not remount if listed/);
-  assert.match(one, /import catch-up backoff/);
+  assert.match(one, /import catch-up idle/);
+  assert.match(one, /ffprobe stubbed/);
   assert.doesNotMatch(one.slice(one.indexOf("def kick_imports")), /ensure_fuse\(/);
-  assert.match(harden, /import catch-up backoff/);
+  assert.match(harden, /import catch-up idle/);
   assert.match(harden, /FFPROBE_D_BACKOFF_LIMIT = 1/);
   assert.match(harden, /Library catching up/);
 });

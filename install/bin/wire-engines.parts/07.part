@@ -81,10 +81,10 @@ def apply_arr_debrid_media_info() -> None:
             continue
         if not isinstance(cfg, dict) or not cfg.get("id"):
             continue
-        if cfg.get("enableMediaInfo") is False:
+        body = arr_debrid_media_patch(cfg)
+        if cfg.get("enableMediaInfo") is False and cfg.get("rescanAfterRefresh") == "Never":
             log_wire(f"{name} enableMediaInfo already off")
             continue
-        body = arr_debrid_media_patch(cfg)
         try:
             call(
                 f"{base}/config/mediamanagement/{cfg['id']}",
@@ -95,6 +95,61 @@ def apply_arr_debrid_media_info() -> None:
             log_wire(f"{name} enableMediaInfo off — no ffprobe on FUSE")
         except NET_ERR as e:
             log_wire(f"{name} media-info put {e}")
+    stub_container_ffprobe()
+
+
+FFPROBE_STUB_SCRIPT = r"""
+src="$1"
+[ -e "$src" ] || exit 0
+if head -1 "$src" 2>/dev/null | grep -q '^#!/bin/sh'; then
+  echo already_stub
+  exit 0
+fi
+mv "$src" "${src}.busy-inode" 2>/dev/null || true
+if [ ! -f "${src}.reelos-real" ] && [ -f "${src}.busy-inode" ]; then
+  cp -a "${src}.busy-inode" "${src}.reelos-real" 2>/dev/null || true
+fi
+cat > "$src" << 'STUB'
+#!/bin/sh
+# ReelOS: do not ffprobe FUSE dumps.
+echo '{"format":{"duration":"0","size":"0","bit_rate":"0"},"streams":[],"chapters":[]}'
+exit 0
+STUB
+chmod 755 "$src"
+"""
+
+FFPROBE_STUB_PATHS = (
+    ("reelos-sonarr-1", "/app/sonarr/bin/ffprobe"),
+    ("reelos-radarr-1", "/app/radarr/bin/ffprobe"),
+    ("reelos-jellyfin-1", "/usr/lib/jellyfin-ffmpeg/ffprobe"),
+)
+
+
+def stub_container_ffprobe() -> None:
+    """enableMediaInfo false still leaves Sonarr spawning ffprobe on FUSE dumps."""
+    for name, path in FFPROBE_STUB_PATHS:
+        r = subprocess.run(
+            ["docker", "exec", "-u", "0", name, "sh", "-c", FFPROBE_STUB_SCRIPT, "stub", path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = (r.stdout or r.stderr or "").strip().replace("\n", " ")[:160]
+        log_wire(f"no-ffprobe stub {name} rc={r.returncode} {out}")
+
+
+def ffprobe_is_stubbed() -> bool:
+    try:
+        r = subprocess.run(
+            ["docker", "exec", "reelos-sonarr-1", "head", "-1", "/app/sonarr/bin/ffprobe"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        return (r.stdout or "").lstrip().startswith("#!")
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def jellyfin_debrid_encoding_patch(enc) -> dict:

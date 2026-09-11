@@ -140,9 +140,13 @@ start_library_catchup() {
   fi
 }
 
+ffprobe_stubbed() {
+  docker exec reelos-sonarr-1 head -1 /app/sonarr/bin/ffprobe 2>/dev/null | grep -q '^#!'
+}
+
 d=$(ffprobe_d_state)
 if [ -f "$STATE/library-catchup" ]; then
-  if [ "${d:-0}" -gt 0 ]; then
+  if [ "${d:-0}" -gt 0 ] && ! ffprobe_stubbed; then
     log "library catch-up deferred — ffprobe D-state $d (not piling more)"
   else
     start_library_catchup

@@ -636,6 +636,7 @@ def share_mnt() -> None:
     persist_mnt_shared()
     if fuse_on_host():
         log_wire("share_mnt: fuse on host — not bind-mounting /mnt")
+        fuse_unstack_extra_mnt_binds()
         return
     r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
     if r.returncode:

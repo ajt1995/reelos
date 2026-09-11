@@ -200,6 +200,18 @@ def restart_fuse_readers() -> None:
     if not fuse_on_host():
         log_wire("fuse not up — skip reader restart")
         return
+    d_state = 0
+    try:
+        r = subprocess.run(["ps", "-eo", "state,comm"], capture_output=True, text=True, check=False)
+        for line in (r.stdout or "").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and "D" in parts[0] and "ffprobe" in parts[1]:
+                d_state += 1
+    except OSError:
+        d_state = 0
+    if d_state > 0:
+        log_wire(f"skip reader restart — ffprobe D-state {d_state}")
+        return
     subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True)
     for name in ("reelos-jellyfin-1", "reelos-radarr-1", "reelos-sonarr-1"):
         r = subprocess.run(["docker", "restart", name], capture_output=True, text=True, check=False)
@@ -278,12 +290,86 @@ def fuse_host_mount_count() -> int:
         return 0
 
 
+def fuse_unique_devices_from_mountinfo(text: str, mountpoint: str = "/mnt/debrid") -> set[str]:
+    """Same FUSE maj:min listed four times is one daemon, not four stacks."""
+    devices: set[str] = set()
+    mp = mountpoint.rstrip("/") or "/"
+    for line in text.splitlines():
+        if " - " not in line:
+            continue
+        left, right = line.split(" - ", 1)
+        fields = left.split()
+        if len(fields) < 5:
+            continue
+        if fields[4].replace("\\040", " ") != mp:
+            continue
+        bits = right.split()
+        fstype = bits[0] if bits else ""
+        source = bits[1] if len(bits) > 1 else ""
+        if "decypharr" in fstype or "decypharr" in source:
+            devices.add(fields[2])
+    return devices
+
+
+def fuse_mnt_self_bind_count(text: str) -> int:
+    """Count ext4 /mnt-on-/mnt binds that duplicate one live FUSE into extra views."""
+    n = 0
+    for line in text.splitlines():
+        if " - " not in line:
+            continue
+        left, right = line.split(" - ", 1)
+        fields = left.split()
+        if len(fields) < 5 or fields[4] != "/mnt":
+            continue
+        if fields[3] == "/mnt" and "ext4" in right:
+            n += 1
+    return n
+
+
+def fuse_unstack_extra_mnt_binds() -> None:
+    """Peel extra /mnt self-binds. Never /media. Never lazy-umount a live FUSE."""
+    if not fuse_on_host():
+        return
+    try:
+        text = Path("/proc/self/mountinfo").read_text()
+    except OSError:
+        return
+    binds = fuse_mnt_self_bind_count(text)
+    views = fuse_mount_count_from_mountinfo(text)
+    devices = fuse_unique_devices_from_mountinfo(text)
+    if views <= 1 or binds <= 0:
+        if views > 1 and len(devices) <= 1:
+            log_wire(f"fuse stacked {views} views / {len(devices)} device — same FUSE, not unmounting live")
+        return
+    log_wire(f"fuse stacked {views} — live, peel extra /mnt binds ({binds})")
+    for _ in range(min(binds, 8)):
+        if not fuse_on_host():
+            log_wire("stop peel — fuse not live")
+            return
+        r = subprocess.run(["umount", "/mnt"], check=False, capture_output=True, text=True)
+        if r.returncode:
+            log_wire(f"umount /mnt busy — not lazy ({(r.stderr or '')[:80]})")
+            return
+        time.sleep(0.3)
+        if not fuse_on_host():
+            log_wire("peel dropped fuse — stop")
+            return
+        try:
+            text = Path("/proc/self/mountinfo").read_text()
+        except OSError:
+            return
+        if fuse_mnt_self_bind_count(text) == 0 or fuse_mount_count_from_mountinfo(text) <= 1:
+            log_wire(f"fuse peeled to {fuse_mount_count_from_mountinfo(text)} view(s)")
+            return
+
+
 def fuse_unstack_stale() -> None:
-    """Unmount extra/stale /mnt/debrid FUSE only. Never /media. Leave a live mount alone."""
+    """Unmount extra/stale /mnt/debrid FUSE only. Never /media. Peel extra /mnt binds when live."""
     if fuse_on_host():
         n = fuse_host_mount_count()
         if n > 1:
-            log_wire(f"fuse stacked {n} — live, not unmounting")
+            log_wire(f"fuse stacked {n} — live, peel extra /mnt binds")
+            fuse_unstack_extra_mnt_binds()
         return
     n = fuse_host_mount_count()
     if n == 0:
