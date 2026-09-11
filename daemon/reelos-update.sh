@@ -85,28 +85,60 @@ bug_snap() {
 trap 'log "ERR line $LINENO exit $?"; bug_snap "ERR-$LINENO"' ERR
 
 # curl, not Python urllib. House Python 3.14 hangs under systemd; Node/curl do not.
+ui_wants_beta() {
+  python3 -c 'import json
+try:
+    d=json.load(open("/var/lib/reelos/ui-settings.json"))
+    print("1" if d.get("betaChannel") is True else "0")
+except Exception:
+    print("0")' 2>/dev/null || echo 0
+}
+
 fetch_channel() {
   mkdir -p "$WORK"
-  # GitHub API first — raw.githubusercontent.com caches stale channel.json
-  if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" \
-      -H "Accept: application/vnd.github.raw" \
-      -o "$WORK/channel.json" \
-      "https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main" \
-    && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("version") else 1)' "$WORK/channel.json"
-  then
-    log "channel $(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')"
-    return 0
+  local file=${1:-channel.json}
+  local urls
+  if [ "$file" = "channel-beta.json" ]; then
+    # Sidecar: main channel-beta.json first (pointer at 2.0 tarball). Skip the
+    # 1.2.50.x / main.tar.gz stub so Check+beta cannot apply Arena via stable.
+    urls="
+https://api.github.com/repos/ajt1995/reelos/contents/channel-beta.json?ref=main
+https://github.com/ajt1995/reelos/raw/refs/heads/main/channel-beta.json
+https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json?$(date +%s)
+https://api.github.com/repos/ajt1995/reelos/contents/channel-beta.json?ref=cursor/beta-arena-books-5ba6
+https://github.com/ajt1995/reelos/raw/refs/heads/cursor/beta-arena-books-5ba6/channel-beta.json
+https://raw.githubusercontent.com/ajt1995/reelos/cursor/beta-arena-books-5ba6/channel-beta.json
+"
+  else
+    urls="
+https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main
+https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json
+https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json?$(date +%s)
+"
   fi
   local u
-  for u in \
-    "https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json" \
-    "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json?$(date +%s)"
+  for u in $urls
   do
+    [ -n "$u" ] || continue
     log "channel GET $u"
-    if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" -o "$WORK/channel.json" "$u" \
+    if curl -fsSL --ipv4 --max-time 20 -A "ReelOS-update" \
+        -H "Accept: application/vnd.github.raw" \
+        -o "$WORK/channel.json" "$u" \
       && python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("version") else 1)' "$WORK/channel.json"
     then
-      log "channel $(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')"
+      if [ "$file" = "channel-beta.json" ]; then
+        if ! python3 -c 'import json,sys
+d=json.load(open("/tmp/reelos-ota/channel.json"))
+ver=str(d.get("version") or "")
+tar=str(d.get("tarball") or "")
+ok=(ver.startswith("2.") or "-beta" in ver) and "main.tar.gz" not in tar
+sys.exit(0 if ok else 1)'
+        then
+          log "channel-beta stub — keep looking $u"
+          continue
+        fi
+      fi
+      log "channel $(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])') file=$file"
       return 0
     fi
     log "channel miss $u"
@@ -118,7 +150,12 @@ LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
 MODE="${1:-check}"
 echo "---- $(date -Is) $MODE local=$LOCAL ----" >>"$LOG"
 
-fetch_channel || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
+CHANNEL_FILE=channel.json
+if [ "$(ui_wants_beta)" = "1" ]; then
+  CHANNEL_FILE=channel-beta.json
+  log "beta channel from ui-settings.json"
+fi
+fetch_channel "$CHANNEL_FILE" || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
 REMOTE=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')
 TARBALL=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json")).get("tarball") or "")')
 NOTES=$(python3 -c 'import json; print("\n".join(json.load(open("/tmp/reelos-ota/channel.json")).get("notes") or []))')
@@ -128,8 +165,16 @@ fi
 
 newer() {
   python3 -c 'import sys
-a=[int(x) for x in sys.argv[1].split(".") if x.isdigit()]
-b=[int(x) for x in sys.argv[2].split(".") if x.isdigit()]
+def key(v):
+    out=[]
+    for x in v.replace("-", ".").split("."):
+        n=""
+        for c in x:
+            if c.isdigit(): n+=c
+            else: break
+        out.append(int(n) if n else 0)
+    return out
+a=key(sys.argv[1]); b=key(sys.argv[2])
 n=max(len(a),len(b)); a+=[0]*(n-len(a)); b+=[0]*(n-len(b))
 sys.exit(0 if a>b else 1)' "$1" "$2"
 }
@@ -150,16 +195,34 @@ APPLIED_SHA=$(cat "$STATE/applied-sha" 2>/dev/null || true)
 
 if [ "$MODE" = "check" ]; then
   python3 -c 'import json,sys
-loc, rem, head, applied = sys.argv[1:5]
+loc, rem, head, applied, beta = sys.argv[1:6]
 def key(v):
-    return [int(x) for x in v.split(".") if x.isdigit()]
+    out=[]
+    for x in v.replace("-", ".").split("."):
+        n=""
+        for c in x:
+            if c.isdigit(): n+=c
+            else: break
+        out.append(int(n) if n else 0)
+    return out
+def is_beta_line(v):
+    return v.startswith("2.") or "-beta" in v
+def is_stable_line(v):
+    return v.startswith("1.2.50.")
+ka, kb = key(rem), key(loc)
+n=max(len(ka),len(kb)); ka+=[0]*(n-len(ka)); kb+=[0]*(n-len(kb))
+newer = ka>kb
 same_tree = bool(head) and head == applied
+rollback = beta != "1" and is_beta_line(loc) and is_stable_line(rem)
+sha_drift = newer is False and bool(head) and not same_tree and beta != "1" and not rollback
 print(json.dumps({
   "local": loc,
   "remote": rem,
-  "available": key(rem) > key(loc) or (bool(head) and not same_tree),
+  "available": newer or sha_drift or rollback,
+  "rollback": rollback,
   "sha": head[:12],
-}))' "$LOCAL" "$REMOTE" "$HEAD_SHA" "$APPLIED_SHA"
+  "channel": "beta" if beta == "1" else "stable",
+}))' "$LOCAL" "$REMOTE" "$HEAD_SHA" "$APPLIED_SHA" "$(ui_wants_beta)"
   exit 0
 fi
 
@@ -184,8 +247,19 @@ if [ "$MODE" = "apply" ]; then
   fi
 fi
 
+ROLLBACK=0
+if [ "$(ui_wants_beta)" != "1" ] && python3 -c 'import sys
+loc, rem = sys.argv[1:3]
+sys.exit(0 if (loc.startswith("2.") or "-beta" in loc) and rem.startswith("1.2.50.") else 1)' "$LOCAL" "$REMOTE"
+then
+  ROLLBACK=1
+  log "rollback $LOCAL → $REMOTE (leave beta for last stable)"
+fi
+
 if ! newer "$REMOTE" "$LOCAL"; then
-  if [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$APPLIED_SHA" ]; then
+  if [ "$ROLLBACK" = "1" ]; then
+    :
+  elif [ "$(ui_wants_beta)" != "1" ] && [ -n "$HEAD_SHA" ] && [ "$HEAD_SHA" != "$APPLIED_SHA" ]; then
     log "same $LOCAL, new main ${HEAD_SHA:0:12}"
   else
     log "already $LOCAL (channel $REMOTE)"
@@ -1426,6 +1500,13 @@ if [ "$STAMP_OK" != "1" ]; then
   exit 1
 fi
 
+if python3 -c 'import sys; sys.exit(0 if sys.argv[1].startswith("1.2.50.") else 1)' "$LOCAL"; then
+  echo "$LOCAL" >"$STATE/last-stable"
+  log "last-stable $LOCAL"
+elif python3 -c 'import sys; sys.exit(0 if sys.argv[1].startswith("1.2.50.") else 1)' "$REMOTE"; then
+  echo "$REMOTE" >"$STATE/last-stable"
+  log "last-stable $REMOTE"
+fi
 echo "$REMOTE" >"$ROOT/VERSION"
 echo "$REMOTE" >"$STATE/installed-version"
 if [ -n "${HEAD_SHA:-}" ]; then

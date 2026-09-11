@@ -153,6 +153,7 @@ function idleUpdate(current = SHIPPED_VERSION): UpdateState {
     checkedAt: null,
     steps: [],
     notes: [],
+    rollback: false,
   };
 }
 
@@ -689,7 +690,7 @@ export const useReelStore = create<ReelState>()(
         });
         void fetch("/api/update/check", { cache: "no-store" })
           .then((r) => r.json())
-          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string }) => {
+          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string; rollback?: boolean }) => {
             const cur = get();
             const pending = Array.isArray(r.pendingNotes) ? r.pendingNotes : Array.isArray(r.notes) ? r.notes : [];
             if (r.ok && r.available) {
@@ -700,6 +701,7 @@ export const useReelStore = create<ReelState>()(
                   current: r.local || cur.update.current,
                   target: r.remote || null,
                   notes: pending,
+                  rollback: r.rollback === true,
                   checkedAt: Date.now(),
                 },
               });
@@ -711,6 +713,7 @@ export const useReelStore = create<ReelState>()(
                   current: r.local || cur.update.current,
                   target: null,
                   notes: r.ok ? [] : [r.error ?? "Channel unreachable"],
+                  rollback: false,
                   checkedAt: Date.now(),
                 },
               });

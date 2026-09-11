@@ -98,6 +98,13 @@ CONTRACTS = (
     ("daemon/wire-engines.parts/01.part", "skip FUSE relink"),
     ("daemon/wire-engines.parts/08.part", "skip hybrid 1080 grab"),
     ("daemon/wire-engines.parts/09.part", "first provision — library walk"),
+    ("daemon/reelos-update.sh", "ui_wants_beta"),
+    ("daemon/reelos-update.sh", "beta channel from ui-settings.json"),
+    ("daemon/reelos-update.sh", "leave beta for last stable"),
+    ("daemon/reelos-update.sh", "channel-beta stub — keep looking"),
+    ("scripts/reelos-lookup-plugin.mjs", "rollback"),
+    ("scripts/reelos-lookup-plugin.mjs", "ui apply using local mailman"),
+    ("src/components/settings-updates.tsx", "Roll back"),
 )
 
 
@@ -107,11 +114,13 @@ def fail(msg: str) -> int:
 
 
 def main() -> int:
+    import json
+
     apply = "--apply" in sys.argv
     args = [a for a in sys.argv[1:] if a != "--apply"]
     root = Path(args[0] if args else ".").resolve()
     ver = (root / "VERSION").read_text().strip()
-    chan = __import__("json").loads((root / "channel.json").read_text()).get("version")
+    chan = json.loads((root / "channel.json").read_text()).get("version")
     stamp_path = root / "src/lib/version-stamp.ts"
     store_path = root / "src/lib/store.ts"
     text = stamp_path.read_text() if stamp_path.is_file() else store_path.read_text()
@@ -123,6 +132,23 @@ def main() -> int:
         return fail("1.2.51 is parked; do not stamp it")
     if ver != chan or ver != s or ver != l:
         return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
+
+    beta_path = root / "channel-beta.json"
+    if beta_path.is_file():
+        beta_doc = json.loads(beta_path.read_text())
+        bver = str(beta_doc.get("version") or "")
+        tar = str(beta_doc.get("tarball") or "")
+        if beta_doc.get("channel") != "beta":
+            return fail("channel-beta.json must be channel=beta")
+        if "main.tar.gz" in tar:
+            return fail("sidecar channel-beta.json must not point at main.tar.gz")
+        if not (bver.startswith("2.") or "-beta" in bver):
+            return fail(f"sidecar channel-beta.json must be 2.x, got {bver}")
+        if "beta-arena-books" not in tar:
+            return fail("sidecar beta tarball must be the beta-arena-books branch")
+        styles = (root / "src/styles.css").read_text() if (root / "src/styles.css").is_file() else ""
+        if ".arena-page" in styles:
+            return fail("stable sidecar must not ship Arena CSS onto main.tar.gz")
 
     updater = (root / "daemon/reelos-update.sh").read_text()
     for rel, needle in CONTRACTS:

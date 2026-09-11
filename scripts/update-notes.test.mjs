@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  cmpVer,
   displayVersion,
+  isRollback,
   notesForVersion,
   ownerEnglish,
   pendingNotes,
@@ -65,4 +67,20 @@ test("displayVersion ignores placeholder current", () => {
   assert.equal(displayVersion("…", "1.2.50.33"), "1.2.50.33");
   assert.equal(displayVersion("0", "1.2.50.33"), "1.2.50.33");
   assert.equal(displayVersion("1.2.50.27", "1.2.50.33"), "1.2.50.27");
+  assert.equal(displayVersion("1.2.50.38-beta.1", "1.2.50.38"), "1.2.50.38-beta.1");
+});
+
+test("2.0.0 is newer than 1.2.50.39; rollback is the older stable", () => {
+  assert.ok(cmpVer("2.0.0", "1.2.50.39") > 0);
+  assert.ok(cmpVer("1.2.50.39", "2.0.0") < 0);
+  assert.equal(isRollback("2.0.0", "1.2.50.39", false), true);
+  assert.equal(isRollback("2.0.0", "1.2.50.39", true), false);
+  assert.equal(isRollback("1.2.50.39", "1.2.50.39", false), false);
+  const pending = pendingNotes(
+    ["2.0.0: Arena chrome and Books.", "1.2.50.39: Stable."],
+    "1.2.50.39",
+    "2.0.0",
+  );
+  assert.equal(pending.length, 1);
+  assert.match(pending[0], /Arena chrome and Books/);
 });

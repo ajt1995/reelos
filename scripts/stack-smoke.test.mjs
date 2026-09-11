@@ -62,7 +62,11 @@ test("stack: VERSION / channel / stamps agree (1.2.50.39)", () => {
   assert.equal(chan.version, "1.2.50.39");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
+  assert.equal(beta.version, "2.0.0");
+  assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
+  assert.match(beta.tarball, /beta-arena-books-5ba6/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
+  assert.match(beta.notes[0], /separate beta tarball|Not inside main/);
   assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.39"/);
   assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.39"/);
   assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.39"/);

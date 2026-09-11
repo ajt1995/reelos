@@ -19,6 +19,11 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - Home/Library Books row only when `intent.books` **and** real files exist.
 - Rebase onto current `main` (1.2.50.31+). Do not merge Tron+Books as one 1.2.51 stamp.
 
+
+## Beta sidecar (this tree — do not merge until house is 1.2.50.39)
+
+VERSION / `channel.json` / stamps stay **1.2.50.39**. `channel-beta.json` is a **2.0.0 pointer** at `cursor/beta-arena-books-5ba6.tar.gz`, not `main.tar.gz`. Mailman honors Beta and skips the old stub. Arena CSS stays off this tree. Draft until house VERSION is already 1.2.50.39. Do not stamp 1.2.50.40.
+
 ## Current ship
 
 ***1.2.50.39 is the ship.*** Stamp-first Apply: hops + door, then `applied`, then dump import/heal in the background (same recover timer job). Check is not frozen on `import after hops`. Import/heal red does not un-stamp a successful UI swap. Skip Sonarr folders that already have files; no `RescanSeries` without an id; no host+container double list; skip a FUSE folder on a short timeout. No hybrid 1080 grab on Apply. Background import capped on 4GB. First provision can still do a long walk. Never `/media`. Never walk FUSE dfs. 38 wizard honesty + DirectPlay stays. Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.** Endure the current 38 Apply; after it finishes, Check→Apply **39 once**.
