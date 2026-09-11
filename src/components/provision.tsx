@@ -44,17 +44,17 @@ function Building() {
     <div className="relative min-h-dvh bg-background px-6 py-8 md:px-10">
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-16 top-10 size-72 rounded-full bg-gold/10 blur-[90px]"
+        className="pointer-events-none absolute -left-16 top-10 size-72 rounded-full bg-circuit/10 blur-[90px]"
       />
       <Wordmark />
       <div className="mx-auto mt-12 max-w-lg">
-        <p className="font-display text-xs tracking-[0.22em] text-gold uppercase">Building your stack</p>
+        <p className="font-display text-xs tracking-[0.22em] text-circuit uppercase">Building your stack</p>
         <h1 className="mt-3 font-display text-3xl font-semibold tracking-tight">Standing up ReelOS</h1>
         <p className="mt-3 text-sm text-muted">Waiting for engines. Libraries are not claimed until the box says so.</p>
         {provisionErr ? <p className="mt-3 text-sm text-danger">{provisionErr}</p> : null}
         <div className="mt-6 h-1 overflow-hidden rounded-full bg-card-2">
           <div
-            className="h-full bg-gold transition-[width] duration-500 ease-out"
+            className="h-full bg-circuit transition-[width] duration-500 ease-out"
             style={{ width: `${(done / total) * 100}%` }}
           />
         </div>
@@ -67,7 +67,7 @@ function Building() {
                   className={cn(
                     "text-sm",
                     s.status === "pending" && "text-faint",
-                    s.status === "running" && "text-gold-bright",
+                    s.status === "running" && "text-circuit-bright",
                     s.status === "done" && "text-foreground",
                   )}
                 >
@@ -104,13 +104,13 @@ function Building() {
 function StatusDot({ status }: { status: string }) {
   if (status === "done") {
     return (
-      <span className="mt-0.5 flex size-5 items-center justify-center rounded-full bg-gold text-gold-fg">
+      <span className="mt-0.5 flex size-5 items-center justify-center rounded-full bg-circuit text-background">
         <Check className="size-3" strokeWidth={3} />
       </span>
     );
   }
   if (status === "running") {
-    return <LoaderCircle className="mt-0.5 size-5 animate-spin text-gold" />;
+    return <LoaderCircle className="mt-0.5 size-5 animate-spin text-circuit" />;
   }
   return <span className="mt-0.5 size-5 rounded-full shadow-[var(--shadow-border)]" />;
 }

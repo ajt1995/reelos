@@ -82,16 +82,6 @@ var createLucideIcon = (iconName, iconNode) => {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
-var Activity = createLucideIcon("activity", [["path", {
-	d: "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",
-	key: "169zse"
-}]]);
-/**
-* @license lucide-react v0.510.0 - ISC
-*
-* This source code is licensed under the ISC license.
-* See the LICENSE file in the root directory of this source tree.
-*/
 var ArrowLeft = createLucideIcon("arrow-left", [["path", {
 	d: "m12 19-7-7 7-7",
 	key: "1l729n"
@@ -111,6 +101,19 @@ var Bell = createLucideIcon("bell", [["path", {
 }], ["path", {
 	d: "M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326",
 	key: "11g9vi"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var BookOpen = createLucideIcon("book-open", [["path", {
+	d: "M12 7v14",
+	key: "1akyts"
+}], ["path", {
+	d: "M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z",
+	key: "ruj8y"
 }]]);
 /**
 * @license lucide-react v0.510.0 - ISC
@@ -782,4 +785,4 @@ var Wrench = createLucideIcon("wrench", [["path", {
 	key: "cbrjhi"
 }]]);
 //#endregion
-export { Check as A, Cpu as C, ChevronRight as D, Clapperboard as E, Bell as M, ArrowLeft as N, ChevronLeft as O, Activity as P, Download as S, Cloud as T, Layers as _, SlidersHorizontal as a, HardDrive as b, Search as c, Plus as d, Play as f, Library as g, ListFilter as h, SquareTerminal as i, Captions as j, ChevronDown as k, ScrollText as l, LoaderCircle as m, Users as n, Shield as o, Music as p, TriangleAlert as r, Settings as s, Wrench as t, RefreshCw as u, KeyRound as v, Compass as w, Film as x, House as y };
+export { Check as A, Cpu as C, ChevronRight as D, Clapperboard as E, BookOpen as M, Bell as N, ChevronLeft as O, ArrowLeft as P, Download as S, Cloud as T, Layers as _, SlidersHorizontal as a, HardDrive as b, Search as c, Plus as d, Play as f, Library as g, ListFilter as h, SquareTerminal as i, Captions as j, ChevronDown as k, ScrollText as l, LoaderCircle as m, Users as n, Shield as o, Music as p, TriangleAlert as r, Settings as s, Wrench as t, RefreshCw as u, KeyRound as v, Compass as w, Film as x, House as y };

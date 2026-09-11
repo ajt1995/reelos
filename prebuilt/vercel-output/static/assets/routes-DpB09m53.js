@@ -1,0 +1,1 @@
+import{V as e}from"./store-C1DywLfF.js";import{t}from"./gate-DRdHP_ti.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};

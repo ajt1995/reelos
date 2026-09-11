@@ -69,7 +69,7 @@ test("provision refuses Plex claim and Cloudflare Tunnel as working paths", () =
   assert.match(provisionHonestyError({ source: "real-debrid", frontend: "jellyfin", access: "lan" }), /TorBox/);
 });
 
-test("7-step wizard stays; Books chip stays out; default source is TorBox", () => {
+test("7-step wizard stays; Books chip off by default; default source is TorBox", () => {
   const wizard = read("src/components/wizard.tsx");
   const catalog = read("src/lib/catalog.ts");
   const store = read("src/lib/store.ts");
@@ -80,7 +80,8 @@ test("7-step wizard stays; Books chip stays out; default source is TorBox", () =
   assert.match(wizard, /const TOTAL = 7/);
   assert.match(wizard, /step === 1 && <StepStorage/);
   assert.match(wizard, /step === 7 && <StepAccess/);
-  assert.doesNotMatch(wizard, /Books/);
+  assert.match(wizard, /key: "books"/);
+  assert.match(store, /books: false/);
   assert.doesNotMatch(catalog, /id: "books"/);
   assert.match(store, /source: "torbox"/);
   assert.doesNotMatch(store, /source: "real-debrid"/);

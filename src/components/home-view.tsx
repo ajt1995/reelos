@@ -28,12 +28,28 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
+  const booksOn = useReelStore((s) => s.answers.intent.books);
+  const [playMode, setPlayMode] = useState<string | null>(null);
+  const [bookShelf, setBookShelf] = useState<{ title: string; author: string; rel: string }[]>([]);
   const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = inflight.length;
   useSyncRequests();
   useEffect(() => {
     hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
+  useEffect(() => {
+    void fetch("/api/performance", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ mode?: string }>)
+      .then((j) => setPlayMode(j.mode === "direct" ? "DirectPlay" : j.mode === "vaapi" ? "VAAPI" : null))
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    if (!booksOn) return;
+    void fetch("/api/books/library", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ books?: { title: string; author: string; rel: string }[] }>)
+      .then((j) => setBookShelf(j.books || []))
+      .catch(() => setBookShelf([]));
+  }, [booksOn]);
 
   const catalogHits: Title[] = [];
   const hits = useMemo(() => {
@@ -94,13 +110,13 @@ export function HomeView() {
     .filter((x) => x.t && library.includes(x.t.id));
 
   return (
-    <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
+    <div className="arena-page pt-1">
       {watchUrl ? (
         <a
           href={watchUrl}
           target="_blank"
           rel="noreferrer"
-          className="mb-4 inline-flex h-11 items-center rounded-full bg-gold px-5 text-sm font-medium text-gold-fg"
+          className="mb-3 inline-flex h-8 items-center rounded-full bg-gold px-3 text-xs font-medium text-gold-fg arena-gold-press"
         >
           Watch in this browser
         </a>
@@ -112,12 +128,12 @@ export function HomeView() {
           if (hits[0]) void navigate({ to: "/title/$id", params: { id: hits[0].id } });
         }}
       >
-        <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-faint" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search movies, shows, music"
-          className="h-14 w-full rounded-2xl bg-card pl-12 pr-4 text-base shadow-[var(--shadow-border)] placeholder:text-faint"
+          placeholder="Search movies, shows, music, books"
+          className="h-10 w-full rounded-xl bg-card pl-10 pr-3 text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
         />
         {hits.length > 0 ? (
           <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-border)]">
@@ -143,7 +159,7 @@ export function HomeView() {
         ) : null}
       </form>
 
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         <Chip live>
           {frontendLabel[frontend]} live
         </Chip>
@@ -152,8 +168,40 @@ export function HomeView() {
           {adapter.status === "healthy" ? " live" : ""}
         </Chip>
         <Chip>{HOSTNAME}</Chip>
-        {transferring > 0 ? <Chip gold>{transferring} transferring</Chip> : <Chip>Library idle</Chip>}
+        {transferring > 0 ? <Chip live>{transferring} transferring</Chip> : <Chip>Library idle</Chip>}
+        {playMode === "DirectPlay" ? <Chip live>DirectPlay</Chip> : playMode === "VAAPI" ? <Chip live>VAAPI</Chip> : null}
       </div>
+
+      {booksOn && bookShelf.length > 0 ? (
+        <section className="mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-display text-sm font-medium">Books</h2>
+            <Link to="/books" className="text-xs text-circuit">
+              Catalog
+            </Link>
+          </div>
+          <ul className="space-y-1.5">
+            {bookShelf.slice(0, 6).map((b) => (
+              <li key={b.rel} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {b.title} <span className="text-muted">· {b.author}</span>
+                </span>
+                <a
+                  className="inline-flex h-7 items-center rounded-full bg-gold px-2.5 text-[11px] font-medium text-gold-fg arena-gold-press"
+                  href={`/api/books/file?rel=${encodeURIComponent(b.rel)}`}
+                  download
+                >
+                  Download
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : booksOn ? (
+        <p className="mt-4 text-xs text-muted">
+          Books is on. <Link to="/books" className="text-circuit">Search the catalogs</Link> — Download is the file.
+        </p>
+      ) : null}
 
       {continueWatch.length > 0 ? (
         <Row label="Continue">
@@ -204,12 +252,12 @@ function Chip({
   return (
     <span
       className={cn(
-        "inline-flex h-8 items-center gap-2 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",
+        "inline-flex h-7 items-center gap-1.5 rounded-full bg-card px-2.5 text-[11px] text-muted shadow-[var(--shadow-border)]",
         gold && "text-gold",
-        live && "text-live",
+        live && "text-circuit",
       )}
     >
-      {live ? <span className="size-1.5 rounded-full bg-live" /> : null}
+      {live ? <span className="size-1.5 rounded-full bg-circuit" /> : null}
       {children}
     </span>
   );

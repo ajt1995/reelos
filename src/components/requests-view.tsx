@@ -30,20 +30,20 @@ export function RequestsView() {
   const list = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
-      <p className="mt-2 text-sm text-muted">
+    <div className="arena-page">
+      <h1 className="font-display text-2xl font-semibold tracking-tight">Requests</h1>
+      <p className="mt-1 text-sm text-muted">
         In flight — searching, grabbing, waiting to import. Playable titles are in Library.
       </p>
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {FILTERS.map((f) => (
           <button
             key={f.id}
             type="button"
             onClick={() => setFilter(f.id)}
             className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              filter === f.id ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
+              "h-7 rounded-full px-3 text-xs",
+              filter === f.id ? "bg-circuit/20 text-circuit" : "bg-card text-muted shadow-[var(--shadow-border)]",
             )}
           >
             {f.label}
@@ -77,7 +77,7 @@ export function RequestsView() {
                 </p>
                 {r.status === "downloading" && r.progress > 0 ? (
                   <div className="mt-2 h-1 max-w-xs overflow-hidden rounded-full bg-card-2">
-                    <div className="h-full bg-gold" style={{ width: `${r.progress}%` }} />
+                    <div className="arena-grab h-full" style={{ width: `${r.progress}%` }} />
                   </div>
                 ) : null}
                 <p className="mt-1 text-xs text-muted">

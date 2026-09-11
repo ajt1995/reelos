@@ -71,9 +71,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
           {update.steps.map((s) => (
             <li key={s.id} className="flex items-start gap-2 text-sm">
               {s.status === "done" ? (
-                <Check className="mt-0.5 size-3.5 text-gold" strokeWidth={3} />
+                <Check className="mt-0.5 size-3.5 text-circuit" strokeWidth={3} />
               ) : s.status === "running" ? (
-                <LoaderCircle className="mt-0.5 size-3.5 animate-spin text-gold" />
+                <LoaderCircle className="mt-0.5 size-3.5 animate-spin text-circuit" />
               ) : (
                 <span className="mt-1.5 size-1.5 rounded-full bg-faint/40" />
               )}
@@ -95,7 +95,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Button
-          variant="ghost"
+          variant="circuit"
           size="sm"
           onClick={checkForUpdate}
           disabled={update.status === "checking" || update.status === "applying"}
@@ -104,7 +104,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
           Check
         </Button>
         {update.status === "available" ? (
-          <Button size="sm" onClick={startUpdate}>
+          <Button size="sm" variant="circuit" onClick={startUpdate}>
             Apply {update.target}
           </Button>
         ) : null}
@@ -141,8 +141,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         />
       </label>
       <p className="mt-2 text-xs text-muted">
-        Off by default. Check then reads channel-beta (a stub today). Arena chrome and Books are not in this stamp.
-        Apply still comes from main.
+        Off by default. Check then reads channel-beta. Arena chrome and Books ship on 1.2.50.38-beta.1. Stable Check stays 1.2.50.38 on main.tar.gz.
       </p>
     </Row>
   );

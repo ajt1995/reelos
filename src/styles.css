@@ -5,17 +5,19 @@
   --font-display: "Outfit", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-background: #0b0d10;
-  --color-raised: #12151b;
-  --color-card: #181c24;
-  --color-card-2: #1e232c;
+  --color-background: #000000;
+  --color-raised: #07090c;
+  --color-card: #0c1014;
+  --color-card-2: #12171c;
   --color-foreground: #f3f4f6;
   --color-muted: #9aa3b2;
   --color-faint: #6b7380;
   --color-gold: #d4a017;
   --color-gold-bright: #e8b84a;
   --color-gold-fg: #1a1406;
-  --color-live: #3ec6d8;
+  --color-live: #3ee7f0;
+  --color-circuit: #3ee7f0;
+  --color-circuit-bright: #5cf6ff;
   --color-success: #3ddc97;
   --color-danger: #e25c5c;
   --color-border: rgb(243 244 246 / 0.08);
@@ -31,6 +33,7 @@
   --shadow-border: 0 0 0 1px rgb(255 255 255 / 0.08);
   --shadow-border-hover: 0 0 0 1px rgb(255 255 255 / 0.14);
   --shadow-gold: 0 0 0 1px rgb(212 160 23 / 0.55), 0 0 24px rgb(212 160 23 / 0.12);
+  --shadow-circuit: 0 0 0 1px rgb(62 231 240 / 0.55), 0 0 18px rgb(62 231 240 / 0.12);
 }
 
 @layer base {
@@ -116,13 +119,11 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
-    filter: blur(4px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0);
   }
 }
 
@@ -137,7 +138,7 @@
 }
 
 @utility rise {
-  animation: rise 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 160ms ease-out both;
 }
 
 .rise-1 {
@@ -191,4 +192,47 @@
 img.poster {
   outline: 1px solid rgb(255 255 255 / 0.1);
   outline-offset: -1px;
+}
+
+.arena-page {
+  padding: 0.5rem 0.75rem 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .arena-page {
+    padding: 1.5rem 2.5rem 2.5rem;
+  }
+}
+
+.arena-pip-work {
+  animation: pulse-live 1.6s ease-in-out infinite;
+}
+
+.arena-grab {
+  background: var(--color-circuit);
+}
+
+@keyframes arena-press {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.98);
+  }
+}
+
+.arena-gold-press:active:not(:disabled) {
+  transform: scale(0.98);
+  transition-duration: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-pip-work,
+  .arena-packet,
+  .reel-spin-ring {
+    animation: none !important;
+  }
+  .arena-circuit .arena-packet {
+    display: none;
+  }
 }

@@ -20,7 +20,7 @@ import {
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
 import { applyIsRunning, applyTargetFromLog } from "./reelos-ota-status.mjs";
-import { notesForVersion, pendingNotes } from "./update-notes.mjs";
+import { cmpVer, notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
@@ -29,6 +29,7 @@ import {
   rememberRemovedTitleIds,
   removeLibraryTitle,
 } from "./reelos-library-remove.mjs";
+import { dispatchBooksApi } from "./reelos-books.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -841,21 +842,6 @@ async function handleIndexer(req, res) {
   }
 }
 
-function versionKey(v) {
-  return String(v || "0")
-    .split(".")
-    .map((n) => parseInt(n, 10) || 0);
-}
-
-function cmpVer(a, b) {
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    const d = (a[i] || 0) - (b[i] || 0);
-    if (d) return d;
-  }
-  return 0;
-}
-
 function localVersion() {
   try {
     if (existsSync("/var/lib/reelos/installed-version")) {
@@ -891,7 +877,7 @@ export function betaChannelStub(local = "0") {
     version: local,
     channel: "beta",
     notes: [
-      "Beta is a stub. Arena chrome and Books land here later. This stamp does not ship them. Stable remains the default. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+      "Beta channel unreachable. Arena chrome and Books ship on 1.2.50.38-beta.1 when channel-beta.json is reachable. Stable remains the default. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
     ],
   };
 }
@@ -917,7 +903,14 @@ async function loadChannel(name = "stable") {
     `https://api.github.com/repos/ajt1995/reelos/contents/${file}?ref=main`,
     `https://github.com/ajt1995/reelos/raw/refs/heads/main/${file}`,
     `https://raw.githubusercontent.com/ajt1995/reelos/main/${file}`,
+    name === "beta"
+      ? "https://raw.githubusercontent.com/ajt1995/reelos/cursor/beta-arena-books-5ba6/channel-beta.json"
+      : null,
+    name === "beta"
+      ? "https://github.com/ajt1995/reelos/raw/refs/heads/cursor/beta-arena-books-5ba6/channel-beta.json"
+      : null,
   ].filter(Boolean);
+  const found = [];
   for (const u of urls) {
     try {
       const text = await fetchGh(u);
@@ -933,15 +926,21 @@ async function loadChannel(name = "stable") {
       }
       if (ch && ch.version) {
         otaNote(`channel ${ch.version} via ${u}`);
-        return ch;
+        if (name !== "beta") return ch;
+        found.push(ch);
       }
     } catch (e) {
       otaNote(`miss ${u} ${e}`);
     }
   }
   const localFile = readLocalChannelFile(file);
+  if (localFile) found.push(localFile);
+  if (name === "beta") {
+    if (!found.length) return betaChannelStub(localVersion());
+    found.sort((a, b) => cmpVer(b.version, a.version));
+    return found[0];
+  }
   if (localFile) return localFile;
-  if (name === "beta") return betaChannelStub(localVersion());
   return null;
 }
 
@@ -972,7 +971,7 @@ async function handleUpdateCheck(_req, res) {
     });
     return;
   }
-  const newer = cmpVer(versionKey(best.version), versionKey(local)) > 0;
+  const newer = cmpVer(best.version, local) > 0;
   let head = "";
   try {
     const t = await fetchGh("https://api.github.com/repos/ajt1995/reelos/commits/main");
@@ -987,7 +986,9 @@ async function handleUpdateCheck(_req, res) {
   } catch {
     /* */
   }
-  const shaDrift = Boolean(head) && head !== applied;
+  // Beta Check is version-only. Main SHA drift must not offer Arena on stable
+  // or overwrite a beta box with main.tar.gz.
+  const shaDrift = !beta && Boolean(head) && head !== applied;
   const channelNotes = Array.isArray(best.notes) ? best.notes : [];
   const notes = shaDrift && !newer
     ? ["This box is behind the latest code even though the version number matches."]
@@ -1015,24 +1016,48 @@ async function handleUpdateApply(req, res) {
     return;
   }
   try {
-    const urls = [
-      "https://api.github.com/repos/ajt1995/reelos/contents/daemon/reelos-update.sh?ref=main",
-      "https://github.com/ajt1995/reelos/raw/refs/heads/main/daemon/reelos-update.sh",
-      "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
-    ];
+    const beta = readUiSettings().betaChannel === true;
     let body = "";
-    for (const u of urls) {
-      try {
-        const r = await fetch(u, {
-          cache: "no-store",
-          headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github.raw" },
-        });
-        if (r.ok) {
-          body = await r.text();
-          break;
+    if (beta) {
+      for (const p of ["/opt/reelos/bin/reelos-update.sh", "/opt/reelos/app/daemon/reelos-update.sh"]) {
+        try {
+          if (!existsSync(p)) continue;
+          const t = readFileSync(p, "utf8");
+          if (t.includes("ReelOS") && t.includes("ui_wants_beta")) {
+            body = t;
+            otaNote(`ui apply using local mailman ${p}`);
+            break;
+          }
+        } catch {
+          /* */
         }
-      } catch {
-        /* */
+      }
+    }
+    const urls = beta
+      ? [
+          "https://raw.githubusercontent.com/ajt1995/reelos/cursor/beta-arena-books-5ba6/daemon/reelos-update.sh",
+          "https://github.com/ajt1995/reelos/raw/refs/heads/cursor/beta-arena-books-5ba6/daemon/reelos-update.sh",
+          "https://api.github.com/repos/ajt1995/reelos/contents/daemon/reelos-update.sh?ref=cursor/beta-arena-books-5ba6",
+        ]
+      : [
+          "https://api.github.com/repos/ajt1995/reelos/contents/daemon/reelos-update.sh?ref=main",
+          "https://github.com/ajt1995/reelos/raw/refs/heads/main/daemon/reelos-update.sh",
+          "https://raw.githubusercontent.com/ajt1995/reelos/main/daemon/reelos-update.sh",
+        ];
+    if (!body) {
+      for (const u of urls) {
+        try {
+          const r = await fetch(u, {
+            cache: "no-store",
+            headers: { "User-Agent": "ReelOS-update", Accept: "application/vnd.github.raw" },
+          });
+          if (r.ok) {
+            body = await r.text();
+            break;
+          }
+        } catch {
+          /* */
+        }
       }
     }
     if (!body.includes("ReelOS")) {
@@ -1698,6 +1723,20 @@ async function handleIntent(req, res) {
   } else {
     spawnSync("docker", ["compose", "stop", "lidarr"], { cwd: compose, encoding: "utf8", timeout: 20000 });
   }
+  if (a.intent?.books) {
+    try {
+      mkdirSync("/srv/media/books", { recursive: true });
+    } catch {
+      /* */
+    }
+    spawnSync("docker", ["compose", "--profile", "books", "up", "-d", "kavita"], {
+      cwd: compose,
+      encoding: "utf8",
+      timeout: 60000,
+    });
+  } else {
+    spawnSync("docker", ["compose", "stop", "kavita"], { cwd: compose, encoding: "utf8", timeout: 20000 });
+  }
   send(res, 200, { ok: true, intent: a.intent });
 }
 
@@ -2223,6 +2262,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (intent.books) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") {
     p.push("jellyfin");
@@ -2256,6 +2296,13 @@ async function handleProvision(req, res) {
     seedJellyfinNetworkXml(composeDir);
     seedJellyfinEncodingXml(composeDir);
     writeFileSync("/var/lib/reelos/answers.json", JSON.stringify(a, null, 2) + "\n", { mode: 0o600 });
+    if (a.intent?.books) {
+      try {
+        mkdirSync("/srv/media/books", { recursive: true });
+      } catch {
+        /* */
+      }
+    }
     const profiles = composeProfiles(a).join(",");
     const envLines = [
       "PUID=1000",
@@ -2404,6 +2451,7 @@ async function handlePerformance(req, res) {
 export async function dispatchReelOsApi(req, res) {
   const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
   const method = (req.method || "GET").toUpperCase();
+  if (await dispatchBooksApi(req, res)) return true;
   if (pathOnly === "/api/lookup") {
     await handleLookup(req, res);
     return true;

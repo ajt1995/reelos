@@ -48,16 +48,16 @@ export function Row({
       <button
         type="button"
         onClick={onClick}
-        className="flex w-full items-center gap-4 px-5 py-4 text-left"
+        className="flex w-full items-center gap-3 px-3 py-3 text-left"
       >
-        <Icon className="size-5 text-gold" />
+        <Icon className="size-5 text-circuit" />
         <span className="flex-1">
           <span className="block font-display font-medium">{title}</span>
           <span className="mt-0.5 block text-sm text-muted">{hint}</span>
         </span>
         <ChevronRight className={cn("size-4 text-faint transition-transform", open && "rotate-90")} />
       </button>
-      {open ? <div className="border-t border-border px-5 py-4">{children}</div> : null}
+      {open ? <div className="border-t border-border px-3 py-3">{children}</div> : null}
     </div>
   );
 }
@@ -70,14 +70,14 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
       aria-checked={on}
       onClick={() => onChange(!on)}
       className={cn(
-        "relative h-6 w-11 rounded-full transition-colors",
-        on ? "bg-gold" : "bg-card-2",
+        "relative h-5 w-9 rounded-full transition-colors",
+        on ? "bg-circuit" : "bg-card-2",
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-foreground transition-transform",
-          on ? "translate-x-5" : "translate-x-0.5",
+          "absolute top-0.5 size-4 rounded-full bg-foreground transition-transform",
+          on ? "translate-x-4" : "translate-x-0.5",
         )}
       />
     </button>

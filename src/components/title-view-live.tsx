@@ -99,7 +99,7 @@ export function TitleView({ id }: { id: string }) {
     return (
       <div className="px-6 py-16">
         <p className="text-muted">Looking up that title…</p>
-        <Link to="/" className="mt-4 inline-block text-gold">
+        <Link to="/" className="mt-4 inline-block text-circuit">
           Home
         </Link>
       </div>
@@ -132,7 +132,7 @@ export function TitleView({ id }: { id: string }) {
       <div className="relative z-10 mx-auto -mt-40 grid max-w-5xl gap-8 px-5 md:-mt-48 md:grid-cols-[200px_1fr] md:px-10">
         <Poster title={resolved} className="mx-auto w-[180px] rounded-2xl md:w-auto" />
         <div className="pt-2">
-          <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
+          <p className="text-xs tracking-[0.18em] text-circuit uppercase">{kindLabel(resolved.kind)}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">
             {resolved.year}
@@ -145,7 +145,7 @@ export function TitleView({ id }: { id: string }) {
           <p className="mt-2 text-xs text-faint">{(resolved.genres ?? []).join(" · ")}</p>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
           {!available && !blocked && !request ? (
-            <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
+            <p className="mt-4 text-sm text-circuit">{cacheCopy(resolved, source)}</p>
           ) : null}
 
           {resolved.kind === "tv" || resolved.kind === "anime" ? (
@@ -160,7 +160,7 @@ export function TitleView({ id }: { id: string }) {
                     onClick={() => setSeason(n)}
                     className={
                       season === n
-                        ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
+                        ? "h-9 rounded-full bg-circuit/20 px-3 text-xs text-circuit"
                         : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
                     }
                   >
@@ -174,9 +174,9 @@ export function TitleView({ id }: { id: string }) {
           <div className="mt-6 flex flex-wrap gap-3">
             {available ? (
               <a href={jellyfin} target="_blank" rel="noreferrer">
-                <Button size="lg">
+                <Button size="lg" variant="gold">
                   <Play className="size-4" fill="currentColor" />
-                  Play in Jellyfin
+                  Watch
                 </Button>
               </a>
             ) : (
@@ -202,7 +202,7 @@ export function TitleView({ id }: { id: string }) {
                 requestStatus: request?.status,
               }) ? (
               request?.status === "downloading" ? (
-                <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
+                <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-circuit">
                   {typeof request.progress === "number" && request.progress > 0
                     ? `Grabbing · ${Math.round(request.progress)}%`
                     : request.reason

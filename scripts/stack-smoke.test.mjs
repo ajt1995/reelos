@@ -52,22 +52,28 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.38)", () => {
+test("stack: stable channel stays 1.2.50.38; this tree is 1.2.50.38-beta.1", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.38");
+  assert.equal(ver, "1.2.50.38-beta.1");
+  assert.doesNotMatch(ver, /1\.2\.51/);
   assert.equal(chan.version, "1.2.50.38");
   assert.equal(chan.channel, "stable");
+  assert.match(chan.tarball, /\/main\.tar\.gz$/);
+  assert.equal(beta.version, "1.2.50.38-beta.1");
   assert.equal(beta.channel, "beta");
+  assert.match(beta.tarball, /cursor\/beta-arena-books-5ba6\.tar\.gz$/);
+  assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.38"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.38"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.38"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.38"/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.38-beta\.1"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.38-beta\.1"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.38-beta\.1"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.38-beta\.1"/);
   assert.match(read("STATUS.md"), /1\.2\.50\.38/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.38-beta\.1/);
   assert.match(read("STATUS.md"), /1\.2\.50\.37/);
   assert.match(read("src/components/settings-updates.tsx"), /This install/);
   assert.match(read("src/components/settings-updates.tsx"), /This update/);

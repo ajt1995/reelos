@@ -18,7 +18,7 @@ echo "ReelOS · heal (keep wizard answers)"
 
 mkdir -p "$COMPOSE/configs/jellyfin" "$COMPOSE/configs/decypharr" "$COMPOSE/configs/seerr" "$ROOT/bin" \
   /mnt/debrid /mnt/symlinks /mnt/symlinks/radarr /mnt/symlinks/sonarr \
-  /srv/media/movies /srv/media/tv /srv/media/anime /srv/media/music
+  /srv/media/movies /srv/media/tv /srv/media/anime /srv/media/music /srv/media/books
 modprobe fuse 2>/dev/null || true
 mount --make-rshared /mnt 2>/dev/null || true
 chown -R 1000:1000 "$COMPOSE/configs" /mnt/debrid /mnt/symlinks /srv/media 2>/dev/null || true

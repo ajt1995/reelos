@@ -22,7 +22,7 @@ export const Route = createRootRoute({
         name: "description",
         content: "Install. Point. Stream. A personal media appliance.",
       },
-      { name: "theme-color", content: "#0B0D10" },
+      { name: "theme-color", content: "#000000" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

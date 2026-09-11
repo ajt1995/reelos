@@ -102,8 +102,8 @@ export function SettingsView() {
   const profile = adapterProfile(answers.source, answers.frontend);
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Settings</h1>
+    <div className="arena-page">
+      <h1 className="font-display text-2xl font-semibold tracking-tight">Settings</h1>
       <p className="mt-1.5 max-w-xl text-sm text-muted">
         House identity, daily knobs, and updates. The box heals itself — you should not need Heal.
       </p>

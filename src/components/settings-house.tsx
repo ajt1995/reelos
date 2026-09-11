@@ -50,7 +50,7 @@ export function HouseCard() {
               <dt className="text-muted">Password</dt>
               <dd className="flex items-center gap-2 font-mono">
                 {reveal ? pin || "—" : "••••"}
-                <button type="button" className="text-xs text-gold" onClick={() => setReveal((v) => !v)}>
+                <button type="button" className="text-xs text-circuit" onClick={() => setReveal((v) => !v)}>
                   {reveal ? "Hide" : "Reveal"}
                 </button>
               </dd>

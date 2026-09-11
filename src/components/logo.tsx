@@ -6,7 +6,7 @@ export function ReelMark({ className, spinRing = false }: { className?: string; 
       viewBox="0 0 64 64"
       fill="none"
       aria-hidden="true"
-      className={cn("text-gold", className)}
+      className={cn("text-circuit", className)}
     >
       <circle
         cx="32"
@@ -20,7 +20,7 @@ export function ReelMark({ className, spinRing = false }: { className?: string; 
         cx="32"
         cy="32"
         r="25.5"
-        stroke="#3EC6D8"
+        stroke="#5CF6FF"
         strokeOpacity="0.55"
         strokeWidth="1.4"
         strokeDasharray="18 80"
@@ -50,7 +50,7 @@ export function Wordmark({
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <ReelMark className={cn("size-8", markClassName)} spinRing={spinRing} />
-      <span className="font-display text-[1.35rem] font-semibold tracking-[0.18em] text-gold">
+      <span className="font-display text-[1.35rem] font-semibold tracking-[0.18em] text-foreground">
         ReelOS
       </span>
     </span>

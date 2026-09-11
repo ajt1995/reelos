@@ -66,7 +66,7 @@ test("handleBox still does not await jellyfinState", () => {
   assert.match(box, /adminPassword/);
 });
 
-test("splash shows warming steps when provisioned; Begin setup only when not", () => {
+test("splash shows warming steps when provisioned; Begin only when not", () => {
   const splash = read("src/components/splash.tsx");
   const gate = read("src/components/gate.tsx");
   const rootFile = read("src/routes/__root.tsx");
@@ -76,9 +76,10 @@ test("splash shows warming steps when provisioned; Begin setup only when not", (
   assert.match(splash, /This house/);
   assert.match(splash, /Library/);
   assert.match(splash, /Requests/);
-  assert.match(splash, /Begin setup/);
+  assert.match(splash, />\s*Begin\s*</);
+  assert.doesNotMatch(splash, /Begin setup/);
   assert.match(splash, /showWarming/);
-  assert.match(splash, /spinRing=\{showWarming\}/);
+  assert.match(splash, /spinRing=\{showWarming && working\}/);
   assert.match(gate, /<Splash warming \/>/);
   assert.match(gate, /phase === "splash"\) return <Splash \/>/);
   assert.match(rootFile, /\/api\/ready\?limit=24/);

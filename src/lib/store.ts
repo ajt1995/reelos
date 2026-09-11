@@ -37,6 +37,7 @@ export const defaultAnswers: WizardAnswers = {
     uhd: false,
     kids: false,
     music: false,
+    books: false,
   },
   quality: "hybrid",
   frontend: "jellyfin",
@@ -59,8 +60,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.38";
-export const SHIPPED_VERSION = "1.2.50.38";
+export const LATEST_VERSION = "1.2.50.38-beta.1";
+export const SHIPPED_VERSION = "1.2.50.38-beta.1";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -90,6 +91,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.38-beta.1: Arena chrome and Books. Black floor, cyan circuit, neon kept; gold only Watch / Download / Begin. Kavita plus Gutenberg / Standard Ebooks / Internet Archive; phone file download. Wizard Books chip off by default. Stable Check stays 1.2.50.38 on main.tar.gz. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.38: Wizard stays seven steps; TorBox is the working source (Validate hits api.torbox.app with User-Agent ReelOS; Continue needs that OK). Real-Debrid, AllDebrid, Premiumize, Local+VPN, Plex claim, and Cloudflare Tunnel are labeled untested; Validate and Finish refuse (no fake always-ok). No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI when a GPU is present; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.36: Sonarr/Radarr stop ffprobe/MediaInfo on debrid FUSE dumps so Apply does not restorm. Mailman/nudge_fuse do not stack another Decypharr FUSE when /mnt/debrid is live; unmount extras only when stale. 35's 4GB skip-npm/skip-vite and self-heal D-state skip stay. Complements #106. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -251,6 +253,7 @@ function logFor(id: string, label: string) {
     debrid: "Decypharr registered as the download client. Engines send work here.",
     caddy: "reelos.local → shell. Engines on /advanced.",
     transcode: "No /dev/dri. DirectPlay/DirectStream only — no CPU ffmpeg.",
+    kavita: "Kavita on :5000. Files in /srv/media/books.",
     link: "Engines, request UI, and media server agree on paths.",
     tailscale: "tailscaled running. Auth URL copied to finish screen.",
     cf: "Tunnel service installed from token.",
@@ -272,6 +275,7 @@ export function buildPlan(answers: WizardAnswers): BuildStep[] {
   if (answers.intent.tv) steps.push({ id: "sonarr", label: "TV engine" });
   if (answers.intent.anime) steps.push({ id: "anime", label: "Anime profile" });
   if (answers.intent.music) steps.push({ id: "lidarr", label: "Music engine" });
+  if (answers.intent.books) steps.push({ id: "kavita", label: "Books library" });
   steps.push({ id: "seerr", label: "Request UI" });
   if (answers.frontend !== "plex") steps.push({ id: "jellyfin", label: "Jellyfin" });
   if (answers.frontend !== "jellyfin") steps.push({ id: "plex", label: "Plex" });
@@ -300,7 +304,7 @@ const demoAnswers: WizardAnswers = {
   apiKey: "lab-preview-not-live",
   adminName: "Ada",
   adminPassword: "household",
-  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true },
+  intent: { movies: true, tv: true, anime: true, uhd: true, kids: true, music: true, books: false },
   quality: "hybrid",
   frontend: "jellyfin",
 };

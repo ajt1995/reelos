@@ -65,19 +65,19 @@ export function Wizard() {
     <div className="relative min-h-dvh overflow-hidden bg-background">
       <div
         aria-hidden
-        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-gold/10 blur-[90px]"
+        className="pointer-events-none absolute -left-24 top-[-8rem] size-[28rem] rounded-full bg-circuit/10 blur-[90px]"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-live/8 blur-[80px]"
+        className="pointer-events-none absolute -right-20 bottom-[-6rem] size-[22rem] rounded-full bg-circuit/8 blur-[80px]"
       />
-      <header className="flex items-center justify-between px-6 py-5 md:px-10">
+      <header className="flex items-center justify-between px-4 py-3 md:px-10">
         <Wordmark markClassName="size-7" />
         <p className="font-display text-sm tracking-[0.22em] text-muted tabular-nums">
           {String(step).padStart(2, "0")} / {String(TOTAL).padStart(2, "0")}
         </p>
       </header>
-      <div className="mx-auto w-full max-w-3xl px-6 pb-36 pt-4 md:px-8">
+      <div className="mx-auto w-full max-w-3xl px-4 pb-28 pt-3 md:px-8">
         {step === 1 && <StepStorage />}
         {step === 2 && <StepSource sourceOk={sourceOk} setSourceOk={setSourceOk} />}
         {step === 3 && <StepIntent />}
@@ -86,7 +86,7 @@ export function Wizard() {
         {step === 6 && <StepAdmin />}
         {step === 7 && <StepAccess />}
       </div>
-      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/85 px-6 py-4 backdrop-blur-md md:px-10">
+      <footer className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-background/85 px-4 py-3 backdrop-blur-md md:px-10">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <Button
             variant="ghost"
@@ -124,7 +124,7 @@ function canContinue(
   }
   if (step === 3) {
     const i = a.intent;
-    return i.movies || i.tv || i.anime || i.kids || i.music;
+    return i.movies || i.tv || i.anime || i.kids || i.music || i.books;
   }
   if (step === 5) return !frontendHonestyError(a.frontend);
   if (step === 6) return a.adminName.trim().length >= 2 && a.adminPassword.length >= 8;
@@ -134,14 +134,14 @@ function canContinue(
 
 function Heading({ kicker, title, sub }: { kicker?: string; title: string; sub: string }) {
   return (
-    <div className="mb-8 rise">
+    <div className="mb-5 rise">
       {kicker ? (
-        <p className="mb-2 font-display text-xs tracking-[0.22em] text-gold uppercase">{kicker}</p>
+        <p className="mb-1.5 font-display text-xs tracking-[0.22em] text-circuit uppercase">{kicker}</p>
       ) : null}
-      <h1 className="font-display text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
         {title}
       </h1>
-      <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-muted">{sub}</p>
+      <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted">{sub}</p>
     </div>
   );
 }
@@ -165,16 +165,16 @@ function Card({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "relative w-full rounded-2xl p-5 text-left transition-[box-shadow,background-color,transform] duration-150 ease-out",
+        "relative w-full rounded-xl p-3.5 text-left transition-[box-shadow,background-color,transform] duration-150 ease-out",
         selected
-          ? "bg-gold/8 shadow-[var(--shadow-gold)]"
+          ? "bg-circuit/8 shadow-[var(--shadow-circuit)]"
           : "bg-card shadow-[var(--shadow-border)] hover:shadow-[var(--shadow-border-hover)]",
         disabled && "opacity-45",
         className,
       )}
     >
       {selected ? (
-        <span className="absolute right-4 top-4 flex size-6 items-center justify-center rounded-full bg-gold text-gold-fg">
+        <span className="absolute right-3 top-3 flex size-5 items-center justify-center rounded-full bg-circuit text-background">
           <Check className="size-3.5" strokeWidth={3} />
         </span>
       ) : null}
@@ -226,7 +226,7 @@ function StepStorage() {
         {options.map((o) => (
           <Card key={o.id} selected={mode === o.id} onClick={() => patch({ storageMode: o.id })}>
             <div className="flex gap-4 pr-8">
-              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-gold" : "text-muted")} />
+              <o.icon className={cn("mt-0.5 size-5", mode === o.id ? "text-circuit" : "text-muted")} />
               <div>
                 <p className="font-display text-lg font-medium">{o.title}</p>
                 <p className="mt-1 text-sm leading-relaxed text-muted">{o.body}</p>
@@ -265,7 +265,7 @@ function StepStorage() {
                       <label className="flex items-center gap-2 text-xs text-muted">
                         <input
                           type="checkbox"
-                          className="size-4 accent-gold"
+                          className="size-4 accent-circuit"
                           checked={format.includes(d.name)}
                           onChange={() => {
                             const next = format.includes(d.name)
@@ -278,7 +278,7 @@ function StepStorage() {
                       </label>
                       <Button
                         size="sm"
-                        variant={on ? "gold" : "ghost"}
+                        variant={on ? "circuit" : "ghost"}
                         onClick={() => {
                           const next = on ? selected.filter((x) => x !== d.name) : [...selected, d.name];
                           patch({ selectedDisks: next });
@@ -294,7 +294,7 @@ function StepStorage() {
             )}
           </div>
           {format.length > 0 ? (
-            <p className="mt-3 flex items-start gap-2 text-sm text-gold-bright">
+            <p className="mt-3 flex items-start gap-2 text-sm text-muted">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" />
               Formatting erases {format.join(", ")}. The OS disk is never touched here.
             </p>
@@ -367,7 +367,7 @@ function StepSource({
                 <span
                   className={cn(
                     "flex size-10 items-center justify-center rounded-lg font-display text-xs tracking-wide",
-                    answers.source === s.id ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+                    answers.source === s.id ? "bg-circuit text-background" : "bg-card-2 text-muted",
                   )}
                 >
                   {s.mark}
@@ -376,7 +376,7 @@ function StepSource({
                   <p className="font-display font-medium">
                     {s.name}
                     {blocked ? (
-                      <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                      <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-muted">
                         Untested
                       </span>
                     ) : null}
@@ -390,7 +390,7 @@ function StepSource({
       </div>
       {untested ? (
         <div className="mt-6">
-          <p className="text-sm text-gold-bright">{untested}</p>
+          <p className="text-sm text-muted">{untested}</p>
           {answers.source !== "local-vpn" ? (
             <Button className="mt-3" variant="ghost" onClick={() => void ping()} disabled={checking}>
               {checking ? <LoaderCircle className="size-4 animate-spin" /> : null}
@@ -438,12 +438,13 @@ function StepIntent() {
     { key: "uhd", label: "4K" },
     { key: "kids", label: "Kids" },
     { key: "music", label: "Music" },
+    { key: "books", label: "Books" },
   ];
   return (
     <div>
       <Heading
         title="What are you collecting?"
-        sub="We only install engines you need. Movies and TV are on by default. Music never appears unless you ask."
+        sub="We only install engines you need. Movies and TV are on by default. Music and Books never appear unless you ask."
       />
       <div className="flex flex-wrap gap-2">
         {chips.map((c) => {
@@ -454,8 +455,8 @@ function StepIntent() {
               type="button"
               onClick={() => patchIntent({ [c.key]: !on })}
               className={cn(
-                "h-11 rounded-full px-5 text-sm font-medium transition-colors duration-150",
-                on ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
+                "h-9 rounded-full px-4 text-sm font-medium transition-colors duration-150",
+                on ? "bg-circuit/15 text-circuit shadow-[var(--shadow-circuit)]" : "bg-card text-muted shadow-[var(--shadow-border)]",
               )}
             >
               {c.label}
@@ -525,7 +526,7 @@ function StepFrontend() {
               <p className="font-display text-lg font-medium pr-8">
                 {o.title}
                 {blocked ? (
-                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-muted">
                     Untested
                   </span>
                 ) : null}
@@ -535,7 +536,7 @@ function StepFrontend() {
           );
         })}
       </div>
-      {plexUntested ? <p className="mt-6 text-sm text-gold-bright">{plexUntested}</p> : null}
+      {plexUntested ? <p className="mt-6 text-sm text-muted">{plexUntested}</p> : null}
     </div>
   );
 }
@@ -610,7 +611,7 @@ function StepAccess() {
               <p className="font-display text-lg font-medium pr-8">
                 {o.title}
                 {blocked ? (
-                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-gold-bright">
+                  <span className="ml-2 align-middle font-sans text-[11px] font-medium tracking-normal text-muted">
                     Untested
                   </span>
                 ) : null}
@@ -620,7 +621,7 @@ function StepAccess() {
           );
         })}
       </div>
-      {cfUntested ? <p className="mt-6 text-sm text-gold-bright">{cfUntested}</p> : null}
+      {cfUntested ? <p className="mt-6 text-sm text-muted">{cfUntested}</p> : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ function composeProfiles(answers: WizardAnswers): string[] {
   if (answers.intent.movies) p.push("movies");
   if (answers.intent.tv || answers.intent.anime) p.push("tv");
   if (answers.intent.music) p.push("music");
+  if (answers.intent.books) p.push("books");
   if (answers.intent.movies || answers.intent.tv || answers.intent.anime) p.push("subtitles");
   if (answers.frontend === "jellyfin" || answers.frontend === "both") {
     p.push("jellyfin");

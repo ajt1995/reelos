@@ -6,6 +6,7 @@
  */
 export function versionKey(v) {
   return String(v || "0")
+    .replace(/-/g, ".")
     .split(".")
     .map((n) => parseInt(n, 10) || 0);
 }
@@ -31,7 +32,7 @@ export function cmpVer(a, b) {
  * @returns {string}
  */
 export function noteVersion(line) {
-  const m = String(line || "").match(/^(\d+(?:\.\d+)*)\s*:/);
+  const m = String(line || "").match(/^(\d+(?:\.\d+)*(?:-beta\.\d+)?)\s*:/);
   return m ? m[1] : "";
 }
 
@@ -41,7 +42,7 @@ export function noteVersion(line) {
  */
 export function stripVersionPrefix(line) {
   return String(line || "")
-    .replace(/^\d+(?:\.\d+)*:\s*/, "")
+    .replace(/^\d+(?:\.\d+)*(?:-beta\.\d+)?:\s*/, "")
     .trim();
 }
 

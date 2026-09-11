@@ -105,8 +105,8 @@ export function DiscoverView() {
   }, [q, rememberTitles]);
 
   return (
-    <div className="px-5 py-6 md:px-10 md:py-8">
-      <h1 className="font-display text-3xl font-semibold tracking-tight">Discover</h1>
+    <div className="arena-page">
+      <h1 className="font-display text-2xl font-semibold tracking-tight">Discover</h1>
       <p className="mt-2 text-sm text-muted">Titles this box does not have. Search to find something else.</p>
       <div className="relative mt-6 max-w-xl">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint" />

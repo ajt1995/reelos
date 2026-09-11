@@ -24,6 +24,7 @@ export function LibraryPanel() {
             ["anime", "Anime"],
             ["kids", "Kids"],
             ["music", "Music"],
+            ["books", "Books"],
           ] as const
         ).map(([k, label]) => (
           <button
@@ -39,8 +40,8 @@ export function LibraryPanel() {
               });
             }}
             className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              answers.intent[k] ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+              "h-8 rounded-full px-3 text-sm",
+              answers.intent[k] ? "bg-circuit/15 text-circuit shadow-[var(--shadow-circuit)]" : "bg-card-2 text-muted",
             )}
           >
             {label}
@@ -74,8 +75,8 @@ export function QualityPanel() {
               });
             }}
             className={cn(
-              "h-9 rounded-full px-4 text-sm",
-              answers.quality === q ? "bg-gold text-gold-fg" : "bg-card-2 text-muted",
+              "h-8 rounded-full px-3 text-sm",
+              answers.quality === q ? "bg-circuit/15 text-circuit shadow-[var(--shadow-circuit)]" : "bg-card-2 text-muted",
             )}
           >
             {qualityLabel[q]}

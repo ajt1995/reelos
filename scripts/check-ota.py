@@ -87,6 +87,14 @@ CONTRACTS = (
     ("src/components/wizard.tsx", "TOTAL = 7"),
     ("src/components/wizard.tsx", "Untested"),
     ("src/lib/store.ts", 'source: "torbox"'),
+    ("daemon/reelos-update.sh", "ui_wants_beta"),
+    ("daemon/reelos-update.sh", "beta channel from ui-settings.json"),
+    ("scripts/reelos-lookup-plugin.mjs", "dispatchBooksApi"),
+    ("scripts/reelos-lookup-plugin.mjs", "ui apply using local mailman"),
+    ("compose/docker-compose.yml", 'profiles: ["books"]'),
+    ("compose/Caddyfile", "handle /kavita*"),
+    ("src/components/books-view.tsx", "Download"),
+    ("src/components/splash.tsx", "Begin"),
 )
 
 
@@ -99,8 +107,11 @@ def main() -> int:
     apply = "--apply" in sys.argv
     args = [a for a in sys.argv[1:] if a != "--apply"]
     root = Path(args[0] if args else ".").resolve()
+    import json
+
     ver = (root / "VERSION").read_text().strip()
-    chan = __import__("json").loads((root / "channel.json").read_text()).get("version")
+    chan_doc = json.loads((root / "channel.json").read_text())
+    chan = chan_doc.get("version")
     stamp_path = root / "src/lib/version-stamp.ts"
     store_path = root / "src/lib/store.ts"
     text = stamp_path.read_text() if stamp_path.is_file() else store_path.read_text()
@@ -108,7 +119,30 @@ def main() -> int:
     latest = re.search(r'LATEST_VERSION = "([^"]+)"', text)
     s = shipped.group(1) if shipped else ""
     l = latest.group(1) if latest else ""
-    if ver != chan or ver != s or ver != l:
+    stable = "1.2.50.38"
+    if "1.2.51" in ver or ver.startswith("1.2.51"):
+        return fail("1.2.51 is parked; do not stamp it")
+    if "-beta" in ver:
+        if ver != s or ver != l:
+            return fail(f"VERSION skew VERSION={ver} shipped={s} latest={l}")
+        if chan != stable:
+            return fail(f"stable channel.json must stay {stable} on a beta tree, got {chan}")
+        if chan_doc.get("channel") != "stable" or "main.tar.gz" not in str(chan_doc.get("tarball") or ""):
+            return fail("stable channel.json must stay channel=stable tarball=main.tar.gz")
+        beta_path = root / "channel-beta.json"
+        if not beta_path.is_file():
+            return fail("beta tree missing channel-beta.json")
+        beta_doc = json.loads(beta_path.read_text())
+        if beta_doc.get("version") != ver or beta_doc.get("channel") != "beta":
+            return fail(
+                f"channel-beta.json must match VERSION={ver} channel=beta, got {beta_doc.get('version')} {beta_doc.get('channel')}"
+            )
+        tar = str(beta_doc.get("tarball") or "")
+        if "main.tar.gz" in tar:
+            return fail("beta tarball must not be main.tar.gz")
+        if "beta-arena-books" not in tar:
+            return fail("beta tarball must be the beta-arena-books branch")
+    elif ver != chan or ver != s or ver != l:
         return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
 
     updater = (root / "daemon/reelos-update.sh").read_text()

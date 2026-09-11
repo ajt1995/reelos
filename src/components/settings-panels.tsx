@@ -95,7 +95,7 @@ export function PerformanceRow() {
           </p>
         </div>
       </div>
-      <Button variant={low ? "gold" : "ghost"} onClick={() => void toggle()} disabled={busy}>
+      <Button variant={low ? "circuit" : "ghost"} onClick={() => void toggle()} disabled={busy}>
         {busy ? <LoaderCircle className="size-4 animate-spin" /> : null}
         {low ? "On" : "Off"}
       </Button>
