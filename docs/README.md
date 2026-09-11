@@ -23,7 +23,7 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | Path | What it is |
 |---|---|
 | `src/` | ReelOS web UI. This is what boots on `:8080`. |
-| `scripts/` | Vite plugins (`/api/lookup`, `/api/box`). |
+| `scripts/` | Vite plugins (`/api/lookup`, `/api/box`). `house-bench.sh` is the read-only SSH probe of the house HP. |
 | `daemon/` | OTA updater, engine wiring, doctor. Copied to `/opt/reelos/bin`. |
 | `install/` | Disc payload: compose stack, systemd, installer. |
 | `iso/` | Bake a USB. Output is **not** committed. |
@@ -35,6 +35,16 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | `STATUS.md` | xorriso → Hal. |
 | `docs/OTA-APPLY-AUDIT.md` | Whether Phone Check→Apply is trustworthy. House verify checklist. |
 | `docs/STACK-RISK.md` | Stacked `#45`–`#51` go/no-go + merge order for house Apply. |
+
+## House bench (agents)
+
+The integration bench is the house HP over Tailscale SSH (`reelos@100.100.154.16`), not this cloud checkout and not a Cloud Agent snapshot. Hardware is HP 15-bs0xx, 4GB, HDD — not a Pi.
+
+```
+bash scripts/house-bench.sh
+```
+
+FUSE, ffprobe, mailman Apply, and dump import are proven there. Cloud `npm test` / `start:box` is not that proof. The script is read-only (`HOUSE_BENCH_WRITE=0`). It will not Apply.
 
 ## Rules that belong here, not in README
 

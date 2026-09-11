@@ -1,0 +1,41 @@
+---
+description: House HP is the integration bench — SSH via Tailscale; cloud npm test is not proof
+alwaysApply: true
+---
+
+# House bench (not this cloud VM)
+
+**Do what works** means: think in the cloud, poke the house over SSH. This Cloud Agent pod is not the house. Do not install a Cursor/node agent stack on the HP. Do not `take-environment-snapshot` of this cloud VM and pretend it is the appliance.
+
+## Hardware
+
+HP Laptop **15-bs0xx**, ~4GB RAM (MemTotal ~3.2Gi), 4× Pentium N3710, HDD **WD5000LPCX**. **Not a Pi.** Do not call the box a Pi. Do not size mailman/FUSE/import as if it were a Pi image.
+
+## How to poke it
+
+User **`reelos` only**. Hosts: `reelos@100.100.154.16` or `reelos.tail977fee.ts.net` (MagicDNS; some pods cannot resolve it — use the Tailscale IP).
+
+```
+bash scripts/house-bench.sh
+```
+
+Read-only (`HOUSE_BENCH_WRITE=0`). If Tailscale is in check-mode, the script prints the first line (`login.tailscale.com`).
+
+Prints: `VERSION`, door `:80`/`:8080`, `fuse.decypharr` count, ffprobe D-state count, load vs `nproc`, catch-up unit (masked / static / running), `library-progress.json` status, orphan `start:box` on `:8080`.
+
+## What cloud tests are not
+
+Cloud `npm test` and cloud `start:box` are not proof of **FUSE**, **ffprobe**, **mailman Apply**, or **dump import**. Those must be verified on the house via this script / SSH.
+
+This repo does **not** ship `.cursor/environment.json`. A personal Cloud Agent environment is for reading the tree and running tests. It is not a substitute for the HP.
+
+## Do not (from the house)
+
+- Apply (owner/phone, or not at all unless the ticket *is* Apply)
+- Delete `ota.lock`
+- Wipe `/media`
+- `docker restart` Sonarr (or any *arr) while ffprobe may be D-state
+- Install Cursor / node agent stacks on the laptop
+- Print `adminPassword`
+- Check out a second `/opt/reelos` on the house
+- Run `npm` / `vite` on the house as a debug step
