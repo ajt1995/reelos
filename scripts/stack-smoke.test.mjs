@@ -52,18 +52,18 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.30)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.31)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.30");
-  assert.equal(chan.version, "1.2.50.30");
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.30"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.30"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.30"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.30"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.30/);
+  assert.equal(ver, "1.2.50.31");
+  assert.equal(chan.version, "1.2.50.31");
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.31"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.31"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.31"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.31"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.31/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
@@ -157,6 +157,34 @@ test("stack: TV season import stays on sonarr dumps and twins", () => {
   assert.match(part, /return heal_after_import\(\)/);
   assert.equal(read("install/bin/relink_dumps.py"), read("daemon/relink_dumps.py"));
   assert.match(read("install/bin/relink_dumps.py"), /relink created/);
+});
+
+test("stack: firstboot loop guards (provisioned latch, no self-cp, mailman does not enable)", () => {
+  const install = read("install/reelos-install.sh");
+  const updater = read("daemon/reelos-update.sh");
+  const plugin = read("scripts/reelos-lookup-plugin.mjs");
+  const unit = read("install/systemd/reelos-firstboot.service");
+  assert.equal(install, read("daemon/install.sh"));
+  assert.equal(unit, read("firstboot/reelos-firstboot.service"));
+  assert.match(unit, /ConditionPathExists=!\/var\/lib\/reelos\/stack-installed/);
+  assert.match(unit, /Restart=on-failure/);
+  assert.match(install, /Already provisioned — stamped stack-installed/);
+  assert.match(install, /not enabling firstboot/);
+  const binCp = install.indexOf('cp -a "$HERE/bin/."');
+  const guard = install.lastIndexOf('if [ "$HERE" != "$ROOT" ]', binCp);
+  assert.ok(binCp > 0 && guard >= 0 && guard < binCp, "bin copy must sit inside HERE != ROOT");
+  assert.match(install, /if \[ -f "\$HERE\/VERSION" \] && \[ "\$HERE" != "\$ROOT" \]/);
+  const enableIdx = install.indexOf("enable_unit reelos-firstboot");
+  const gate = install.lastIndexOf('if [ ! -f "$STATE/provisioned" ]', enableIdx);
+  assert.ok(enableIdx > 0 && gate >= 0 && gate < enableIdx);
+  assert.match(updater, /stack-installed latched \(provisioned box — firstboot stays a no-op\)/);
+  assert.match(updater, /Do not systemctl-enable the firstboot unit/);
+  assert.match(updater, /cp "\$WORK\/src\/install\/reelos-install\.sh" "\$ROOT\/install\.sh"/);
+  assert.equal(updater.includes("enable reelos-firstboot"), false);
+  assert.equal(updater.includes("enable --now reelos-firstboot"), false);
+  assert.match(plugin, /function latchStackInstalled/);
+  assert.match(plugin, /printf '1\\\\n' > \/var\/lib\/reelos\/stack-installed/);
+  assert.match(read("src/lib/provision-appliance.ts"), /stack-installed/);
 });
 
 test("stack: wire-engines parts compile and stay twins after #47/#49/#50", () => {

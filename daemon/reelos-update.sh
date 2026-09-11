@@ -174,6 +174,14 @@ if [ "$MODE" = "apply" ]; then
     echo "apply already running"
     exit 0
   fi
+  # Wizard wrote provisioned but never stack-installed. firstboot's
+  # ConditionPathExists=!stack-installed + Restart=on-failure looped
+  # install.sh (HERE==ROOT cp same-file). Latch so a re-enabled unit is a no-op.
+  # Never systemctl-enable the firstboot unit on Apply — ISO owns that unit.
+  if [ -f "$STATE/provisioned" ]; then
+    echo 1 >"$STATE/stack-installed"
+    log "stack-installed latched (provisioned box — firstboot stays a no-op)"
+  fi
 fi
 
 if ! newer "$REMOTE" "$LOCAL"; then
@@ -762,9 +770,16 @@ cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
 cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
+# firstboot ExecStart=/opt/reelos/install.sh — refresh so a re-enabled unit
+# gets the HERE==ROOT / already-provisioned no-op, not the ISO copy.
+if [ -f "$WORK/src/install/reelos-install.sh" ]; then
+  cp "$WORK/src/install/reelos-install.sh" "$ROOT/install.sh"
+  chmod 755 "$ROOT/install.sh" || true
+fi
 rm -rf "$NEXT"
 
 log "starting shell"
+# Do not systemctl-enable the firstboot unit. ISO owns it; Apply must not bring the loop back.
 systemctl enable reelos reelos-ensure caddy >/dev/null 2>&1 || true
 if [ -f "$ROOT/systemd/reelos-ensure.service" ]; then
   cp "$ROOT/systemd/reelos-ensure.service" /etc/systemd/system/reelos-ensure.service

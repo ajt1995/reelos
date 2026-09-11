@@ -20,6 +20,15 @@ exec > >(tee -a "$LOG") 2>&1
 
 echo "ReelOS · installing the appliance"
 
+# Wizard writes `provisioned` but historically never `stack-installed`.
+# firstboot ConditionPathExists=!/var/lib/reelos/stack-installed and
+# Restart=on-failure every 30s — latch and leave so a live house is a no-op.
+if [ -f "$STATE/provisioned" ]; then
+  echo 1 >"$STATE/stack-installed"
+  echo "Already provisioned — stamped stack-installed; not re-running install; not enabling firstboot."
+  exit 0
+fi
+
 . /etc/os-release
 case "${ID:-}-${VERSION_ID:-}" in
   ubuntu-24.*|ubuntu-25.*|ubuntu-26.*|debian-12*|debian-13*) ;;
@@ -126,6 +135,8 @@ mkdir -p "$ROOT" "$STATE" \
   "$MEDIA/movies" "$MEDIA/tv" "$MEDIA/anime" "$MEDIA/music" "$MEDIA/downloads" \
   /mnt/debrid /mnt/symlinks
 
+# Firstboot ExecStart is this script in /opt/reelos (HERE==ROOT). GNU cp
+# dies with "are the same file" — that was the 1722-restart loop.
 if [ "$HERE" != "$ROOT" ]; then
   if [ -d "$HERE/app" ]; then
     rm -rf "$ROOT/app"
@@ -135,8 +146,15 @@ if [ "$HERE" != "$ROOT" ]; then
     rm -rf "$ROOT/compose"
     cp -a "$HERE/compose" "$ROOT/compose"
   fi
+  mkdir -p "$ROOT/bin"
+  if [ -d "$HERE/bin" ]; then
+    cp -a "$HERE/bin/." "$ROOT/bin/"
+  fi
 fi
-mkdir -p "$ROOT/compose/configs/decypharr"
+mkdir -p "$ROOT/bin" "$ROOT/compose/configs/decypharr"
+if [ -d "$ROOT/bin" ]; then
+  chmod 755 "$ROOT/bin/"* || true
+fi
 
 if [ -d "$HERE/avahi" ]; then
   cp -a "$HERE/avahi/reelos.service" /etc/avahi/services/reelos.service
@@ -160,11 +178,6 @@ if [ -f "$HERE/systemd/reelos-lock-clients.timer" ]; then
 fi
 if [ -f "$HERE/systemd/reelos-mnt-rshared.service" ]; then
   cp "$HERE/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
-fi
-mkdir -p /opt/reelos/bin
-if [ -d "$HERE/bin" ]; then
-  cp -a "$HERE/bin/." /opt/reelos/bin/
-  chmod 755 /opt/reelos/bin/* || true
 fi
 
 apply_caddy
@@ -201,9 +214,16 @@ fi
 chmod 700 "$STATE"
 rm -f "$STATE/install-failed"
 echo 1 >"$STATE/stack-installed"
-[ -f "$HERE/VERSION" ] && cp "$HERE/VERSION" "$ROOT/VERSION"
+if [ -f "$HERE/VERSION" ] && [ "$HERE" != "$ROOT" ]; then
+  cp "$HERE/VERSION" "$ROOT/VERSION"
+fi
 [ -f "$ROOT/VERSION" ] || echo 1.2.0 >"$ROOT/VERSION"
-enable_unit reelos-firstboot
+# ISO already enabled firstboot so a half-finished install can finish.
+# Do not enable it on a box that already finished the wizard — Restart=on-failure
+# loops install.sh if a later cp same-file exits 1.
+if [ ! -f "$STATE/provisioned" ]; then
+  enable_unit reelos-firstboot
+fi
 enable_unit reelos-console
 systemctl enable reelos-lock-clients.timer >/dev/null 2>&1 || true
 systemctl enable --now reelos-mnt-rshared >/dev/null 2>&1 || enable_unit reelos-mnt-rshared

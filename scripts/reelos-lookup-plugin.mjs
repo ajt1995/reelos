@@ -37,6 +37,18 @@ const libraryCache = createLibraryCache();
 const seeded = readLibraryCacheFile(LIBRARY_CACHE_FILE);
 if (seeded) libraryCache.write(seeded.titles, { now: seeded.at, complete: seeded.complete });
 
+function latchStackInstalled() {
+  try {
+    if (!existsSync("/var/lib/reelos/provisioned")) return;
+    if (existsSync("/var/lib/reelos/stack-installed")) return;
+    mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+    writeFileSync("/var/lib/reelos/stack-installed", "1\n");
+  } catch {
+    /* cloud / non-appliance */
+  }
+}
+latchStackInstalled();
+
 function persistLibraryCache() {
   const entry = libraryCache.read();
   if (!entry) return;
@@ -399,7 +411,7 @@ async function probeJson(url, ms = 3000) {
 }
 
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.30"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.31"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -2125,6 +2137,7 @@ async function handleProvision(req, res) {
       // a 15-minute pull wedges the Vite event loop (phone TypeError: Failed to fetch).
       "if docker compose up -d; then",
       "  printf '1\\n' > /var/lib/reelos/provisioned",
+      "  printf '1\\n' > /var/lib/reelos/stack-installed",
       existsSync(wire) ? `  python3 ${JSON.stringify(wire)} || true` : "  true",
       "else",
       "  printf 'compose up failed\\n' > /var/lib/reelos/provision.error",
