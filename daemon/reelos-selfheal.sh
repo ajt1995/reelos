@@ -102,8 +102,8 @@ ensure_door
 # Apply stamps first, then this recover job dumps/heals in the background.
 # Persistent reelos-library-catchup.service outlives TimeoutStartSec=90.
 # systemd-run / nohup 9>&- is the fallback if the unit is missing.
-# Do not walk FUSE dfs. Start catch-up before idle/ffprobe skip so a 4GB box
-# still queues the worker; the worker backs off when D-state is high.
+# Do not walk FUSE dfs. Keep the catch-up request flag while ffprobe is
+# D-state, but do not start the oneshot every two minutes (FUSE wedge).
 start_library_catchup() {
   log "library catch-up in background"
   if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
@@ -140,10 +140,14 @@ start_library_catchup() {
   fi
 }
 
-if [ -f "$STATE/library-catchup" ]; then
-  start_library_catchup
-fi
 d=$(ffprobe_d_state)
+if [ -f "$STATE/library-catchup" ]; then
+  if [ "${d:-0}" -gt 0 ]; then
+    log "library catch-up deferred — ffprobe D-state $d (not piling more)"
+  else
+    start_library_catchup
+  fi
+fi
 if [ "${d:-0}" -gt 0 ]; then
   log "skip compose up — ffprobe D-state $d"
   log "skip engines — ffprobe D-state $d (not walking FUSE)"

@@ -106,16 +106,25 @@ export function hardwareLimits(profile) {
   let nice;
   let ioprio;
   if (tiny) {
+    // Keep RAM caps. Scale CPU/SSD; HDD stays on today's 6/12/8/20. Not a Pi.
     catchupMemoryMax = "768M";
     jellyfinMem = null;
     sonarrMem = null;
     radarrMem = null;
-    catchupFolders = 6;
-    provisionFolders = 12;
-    catchupChunk = 8;
-    provisionChunk = 20;
     nice = 10;
-    ioprio = 7;
+    if (kind === "ssd") {
+      catchupFolders = Math.min(24, Math.max(6, cpus * 2));
+      provisionFolders = Math.min(48, Math.max(12, cpus * 4));
+      catchupChunk = Math.min(24, Math.max(8, cpus * 2));
+      provisionChunk = Math.min(40, Math.max(20, cpus * 4));
+      ioprio = 4;
+    } else {
+      catchupFolders = 6;
+      provisionFolders = 12;
+      catchupChunk = 8;
+      provisionChunk = 20;
+      ioprio = 7;
+    }
   } else {
     catchupMemoryMax = ramGb < 12 ? "1G" : ramGb < 20 ? "2G" : ramGb < 28 ? "4G" : "8G";
     jellyfinMem = `${Math.max(2, Math.trunc(ramGb * 0.35))}G`;

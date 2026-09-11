@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""ReelOS hardware profile — use the machine, throttle when the machine is small or FUSE is wedged.
+"""ReelOS hardware profile — use the machine, throttle when small or FUSE is wedged.
 
-Measures CPU (nproc), RAM (MemTotal), disk (SSD vs rotational, free space).
-4GB fixture keeps today's conservative path. 16–32GB must not stay on
-MemoryMax 768M / 4G docker / Pi folder caps. FUSE ffprobe D-state is I/O
+Measures CPU (nproc), RAM (MemTotal + DirectMap vs cgroup), disk (SSD vs HDD).
+A 4GB DIMM with ~3.2Gi visible is a laptop, not a Pi — keep RAM caps, scale
+CPU/SSD, throttle HDD. If a cgroup hid 8/16GB DIMMs, un-hide them. Do not
+invent 32GB headroom from a 4GB fixture. FUSE ffprobe D-state is I/O
 backpressure: concurrency 0 on any hardware.
 """
 from __future__ import annotations
@@ -15,8 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-SMALL_MEM_KB = 4_718_592  # 4.5 Gi — tiny fixture (Pi / 4GB laptop)
+SMALL_MEM_KB = 4_718_592  # 4.5 Gi — tiny fixture (4GB laptop, not a Pi)
 TINY_RAM_GB = 4.5
+CGROUP_HIDE_SLACK_KB = 262_144  # 256 Mi — iGPU steal is not a cgroup hide
 
 # House HP 15-bs0xx (2026-09-11): 3383440 kB, 4× Pentium N3710, WD5000LPCX HDD.
 FIXTURE_TINY_4GB = {
@@ -149,6 +151,105 @@ def disk_free_gb(path: str = "/") -> float:
         return 0.0
 
 
+def direct_map_kb(text: str | None = None) -> int:
+    """Kernel DirectMap* is mapped physical RAM (DIMMs), not a cgroup view."""
+    raw = text
+    if raw is None:
+        try:
+            raw = Path("/proc/meminfo").read_text()
+        except OSError:
+            return 0
+    total = 0
+    for line in str(raw).splitlines():
+        if line.startswith("DirectMap"):
+            try:
+                total += int(line.split()[1])
+            except (ValueError, IndexError):
+                continue
+    return total
+
+
+def cgroup_memory_max_kb(text: str | None = None) -> int | None:
+    """None = unlimited/unknown. Finite max can hide DIMMs from MemTotal in some boxes."""
+    raw = text
+    if raw is None:
+        for p in (
+            "/sys/fs/cgroup/memory.max",
+            "/sys/fs/cgroup/user.slice/memory.max",
+        ):
+            try:
+                raw = Path(p).read_text().strip()
+                break
+            except OSError:
+                continue
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s or s == "max":
+        return None
+    try:
+        n = int(s)
+    except ValueError:
+        return None
+    return n // 1024  # cgroup v2 memory.max is bytes
+
+
+def product_name() -> str:
+    for p in (
+        "/sys/devices/virtual/dmi/id/product_name",
+        "/sys/firmware/devicetree/base/model",
+        "/proc/device-tree/model",
+    ):
+        try:
+            t = Path(p).read_text().strip().replace("\x00", "")
+            if t:
+                return t
+        except OSError:
+            continue
+    return ""
+
+
+def is_pi(name: str | None = None) -> bool:
+    n = str(name if name is not None else product_name()).lower()
+    return "raspberry" in n or n.startswith("raspberry") or "raspberrypi" in n
+
+
+def ram_choice(
+    *,
+    mem_total_kb: int,
+    direct_kb: int = 0,
+    cgroup_max_kb: int | None = None,
+) -> dict:
+    """If cgroup hides DIMMs, use DirectMap. Else use MemTotal (visible).
+
+    House HP 15-bs0xx: DirectMap ~3.91Gi, MemTotal 3.23Gi, cgroup max=unlimited
+    → iGPU/reserved steal on a 4GB DIMM, not a hidden 8/16/32GB stick.
+    """
+    visible = int(mem_total_kb or 0)
+    physical = int(direct_kb or 0) or visible
+    hide = (
+        cgroup_max_kb is not None
+        and int(cgroup_max_kb) > 0
+        and physical > 0
+        and int(cgroup_max_kb) + CGROUP_HIDE_SLACK_KB < physical
+    )
+    if hide:
+        return {
+            "ram_kb": physical,
+            "ram_source": "cgroup-hidden",
+            "visible_kb": visible,
+            "physical_kb": physical,
+            "cgroup_hiding": True,
+        }
+    return {
+        "ram_kb": visible,
+        "ram_source": "memtotal",
+        "visible_kb": visible,
+        "physical_kb": physical or visible,
+        "cgroup_hiding": False,
+    }
+
+
 def has_vaapi_dri(dri: str | Path = "/dev/dri") -> bool:
     p = Path(dri)
     if not p.exists():
@@ -160,15 +261,39 @@ def has_vaapi_dri(dri: str | Path = "/dev/dri") -> bool:
 
 
 def measure(*, meminfo: str | None = None, nproc_text: str | None = None, root: str = "/") -> dict:
-    ram_kb = mem_total_kb(meminfo)
+    live = meminfo is None and nproc_text is None
+    info = None
+    if meminfo is not None:
+        info = meminfo
+    elif live:
+        try:
+            info = Path("/proc/meminfo").read_text()
+        except OSError:
+            info = None
+    ram_visible = mem_total_kb(info)
+    direct = direct_map_kb(info)
+    cgroup = cgroup_memory_max_kb() if live else None
+    choice = ram_choice(mem_total_kb=ram_visible, direct_kb=direct, cgroup_max_kb=cgroup)
     cpus = nproc_count(nproc_text)
-    kind = disk_kind_from_sys(root=root) if meminfo is None and nproc_text is None else "unknown"
-    free = disk_free_gb(root) if meminfo is None and nproc_text is None else 0.0
-    if meminfo is not None or nproc_text is not None:
-        # Caller is injecting a fixture; don't probe live disk unless asked.
+    if live:
+        kind = disk_kind_from_sys(root=root)
+        free = disk_free_gb(root)
+        product = product_name()
+    else:
         kind = "unknown"
         free = 0.0
-    return profile_from_facts(ram_kb=ram_kb, cpus=cpus, disk_kind=kind, disk_free_gb=free)
+        product = ""
+    return profile_from_facts(
+        ram_kb=choice["ram_kb"],
+        cpus=cpus,
+        disk_kind=kind,
+        disk_free_gb=free,
+        ram_source=choice["ram_source"],
+        visible_kb=choice["visible_kb"],
+        physical_kb=choice["physical_kb"],
+        cgroup_hiding=choice["cgroup_hiding"],
+        product=product,
+    )
 
 
 def profile_from_facts(
@@ -177,9 +302,17 @@ def profile_from_facts(
     cpus: int,
     disk_kind: str = "unknown",
     disk_free_gb: float = 0.0,
+    ram_source: str = "memtotal",
+    visible_kb: int | None = None,
+    physical_kb: int | None = None,
+    cgroup_hiding: bool = False,
+    product: str = "",
 ) -> dict:
     ram_gb = ram_gb_from_kb(int(ram_kb or 0))
     tiny = 0 < int(ram_kb or 0) <= SMALL_MEM_KB
+    vis = int(visible_kb if visible_kb is not None else ram_kb or 0)
+    phys = int(physical_kb if physical_kb is not None else ram_kb or 0)
+    name = str(product or "")
     return {
         "ram_kb": int(ram_kb or 0),
         "ram_gb": ram_gb,
@@ -188,6 +321,12 @@ def profile_from_facts(
         "disk_free_gb": float(disk_free_gb or 0),
         "tiny": tiny,
         "box_is_small": tiny,
+        "ram_source": ram_source if ram_source in {"memtotal", "cgroup-hidden"} else "memtotal",
+        "visible_kb": vis,
+        "physical_kb": phys,
+        "cgroup_hiding": bool(cgroup_hiding),
+        "product": name,
+        "not_a_pi": (not is_pi(name)) if name else True,
     }
 
 
@@ -201,16 +340,24 @@ def limits_for(profile: dict) -> dict:
     tiny = bool(profile.get("tiny")) or (0 < ram_kb <= SMALL_MEM_KB) or ram_gb <= TINY_RAM_GB
 
     if tiny:
+        # Keep RAM caps. Scale CPU/SSD; HDD stays on today's 6/12/8/20.
         catchup_mem = "768M"
         jellyfin_mem = None
         sonarr_mem = None
         radarr_mem = None
-        catchup_folders = 6
-        provision_folders = 12
-        catchup_chunk = 8
-        provision_chunk = 20
         nice = 10
-        ioprio = 7
+        if kind == "ssd":
+            catchup_folders = min(24, max(6, cpus * 2))
+            provision_folders = min(48, max(12, cpus * 4))
+            catchup_chunk = min(24, max(8, cpus * 2))
+            provision_chunk = min(40, max(20, cpus * 4))
+            ioprio = 4
+        else:
+            catchup_folders = 6
+            provision_folders = 12
+            catchup_chunk = 8
+            provision_chunk = 20
+            ioprio = 7
     else:
         if ram_gb < 12:
             catchup_mem = "1G"
@@ -331,19 +478,24 @@ def apply_runtime_files(
     lim = limits_for(prof)
     dri = has_vaapi_dri() if has_dri is None else bool(has_dri)
     out = {"profile": prof, "limits": lim, "has_dri": dri}
-    text = compose_override_text(prof, has_dri=dri)
     cdir = Path(compose_dir or COMPOSE)
     override = cdir / "compose.override.yml"
-    try:
-        cdir.mkdir(parents=True, exist_ok=True)
-        if text:
-            override.write_text(text)
-            out["compose_override"] = str(override)
-        elif override.exists():
-            override.unlink()
-            out["compose_override"] = "removed"
-    except OSError as e:
-        out["compose_error"] = str(e)
+    # Tiny 4GB: do not rewrite compose.override.yml (a devices-only change
+    # would recreate Jellyfin/Sonarr next to ffprobe D-state).
+    if lim.get("tiny"):
+        out["compose_override"] = "unchanged-tiny"
+    else:
+        text = compose_override_text(prof, has_dri=dri)
+        try:
+            cdir.mkdir(parents=True, exist_ok=True)
+            if text:
+                override.write_text(text)
+                out["compose_override"] = str(override)
+            elif override.exists():
+                override.unlink()
+                out["compose_override"] = "removed"
+        except OSError as e:
+            out["compose_error"] = str(e)
 
     dropin = Path(dropin_path or CATCHUP_DROPIN)
     try:
@@ -368,9 +520,16 @@ def apply_runtime_files(
 def log_line(profile: dict | None = None) -> str:
     prof = profile or measure()
     lim = limits_for(prof)
+    pi = "Pi" if is_pi(str(prof.get("product") or "")) else "not a Pi"
     return (
-        f"hardware profile ram_gb={prof['ram_gb']} cpus={prof['cpus']} "
-        f"disk_kind={prof['disk_kind']} tiny={str(prof['tiny']).lower()} "
+        f"hardware profile ram_gb={prof['ram_gb']} "
+        f"visible_kb={prof.get('visible_kb') or prof['ram_kb']} "
+        f"physical_kb={prof.get('physical_kb') or prof['ram_kb']} "
+        f"ram_source={prof.get('ram_source') or 'memtotal'} "
+        f"cgroup_hiding={str(bool(prof.get('cgroup_hiding'))).lower()} "
+        f"product={prof.get('product') or 'unknown'} ({pi}) "
+        f"cpus={prof['cpus']} disk_kind={prof['disk_kind']} "
+        f"tiny={str(prof['tiny']).lower()} "
         f"catchup_memory_max={lim['catchup_memory_max']} "
         f"jellyfin_mem={lim['jellyfin_mem'] or 'unset'} "
         f"import_folder_cap_catchup={lim['import_folder_cap_catchup']}"
@@ -417,6 +576,36 @@ def _self_test() -> int:
     assert "MemoryMax=8G" in drop
     drop_t = catchup_dropin_text(tiny)
     assert "MemoryMax=768M" in drop_t
+    # Tiny + SSD: keep 768M RAM cap, scale folders with nproc.
+    tiny_ssd = profile_from_facts(ram_kb=3_383_440, cpus=4, disk_kind="ssd", disk_free_gb=200.0)
+    ts = limits_for(tiny_ssd)
+    assert ts["catchup_memory_max"] == "768M"
+    assert ts["jellyfin_mem"] is None
+    assert ts["import_folder_cap_catchup"] > 6
+    # DIMM vs cgroup: house 4GB DirectMap + unlimited cgroup is not hiding.
+    house = ram_choice(mem_total_kb=3_383_440, direct_kb=4_098_112, cgroup_max_kb=None)
+    assert house["cgroup_hiding"] is False
+    assert house["ram_source"] == "memtotal"
+    assert house["ram_kb"] == 3_383_440
+    # Hidden 16GB DIMM behind a 4GB cgroup → use DirectMap, stop hiding.
+    hid = ram_choice(mem_total_kb=3_383_440, direct_kb=16 * 1024 * 1024, cgroup_max_kb=3_383_440)
+    assert hid["cgroup_hiding"] is True
+    assert hid["ram_kb"] == 16 * 1024 * 1024
+    assert hid["ram_source"] == "cgroup-hidden"
+    hp = profile_from_facts(
+        ram_kb=house["ram_kb"],
+        cpus=4,
+        disk_kind="rotational",
+        disk_free_gb=410.0,
+        ram_source=house["ram_source"],
+        visible_kb=house["visible_kb"],
+        physical_kb=house["physical_kb"],
+        product="HP Laptop 15-bs0xx",
+    )
+    assert hp["tiny"] is True
+    assert hp["not_a_pi"] is True
+    assert "not a Pi" in log_line(hp)
+    assert "cgroup_hiding=false" in log_line(hp)
     # Live disk probe shouldn't crash
     kind = disk_kind_from_sys()
     assert kind in {"ssd", "rotational", "unknown"}

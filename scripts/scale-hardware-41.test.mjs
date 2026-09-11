@@ -26,6 +26,25 @@ function py(args, extra = {}) {
   return spawnSync("python3", args, { encoding: "utf8", cwd: root, ...extra });
 }
 
+test("tiny + SSD keeps 768M RAM cap but scales folders with nproc", () => {
+  const tinySsd = hardwareProfile({ ramKb: 3_383_440, cpus: 4, diskKind: "ssd", diskFreeGb: 200 });
+  const lim = hardwareLimits(tinySsd);
+  assert.equal(tinySsd.tiny, true);
+  assert.equal(lim.catchupMemoryMax, "768M");
+  assert.equal(lim.jellyfinMem, null);
+  assert.ok(lim.importFolderCapCatchup > 6);
+  assert.ok(lim.importChunkCatchup >= 8);
+});
+
+test("selfheal defers catch-up while ffprobe is D-state", () => {
+  const heal = read("daemon/reelos-selfheal.sh");
+  assert.match(heal, /library catch-up deferred/);
+  assert.equal(heal, read("install/bin/reelos-selfheal.sh"));
+  const call = heal.indexOf('log "library catch-up deferred');
+  const start = heal.indexOf("start_library_catchup");
+  assert.ok(call > start, "defer gate must wrap the start");
+});
+
 test("4GB fixture keeps today's conservative path", () => {
   assert.equal(SMALL_MEM_KB, 4_718_592);
   assert.equal(boxIsSmall(FIXTURE_TINY_4GB.ramKb), true);
@@ -115,6 +134,8 @@ test("mailman logs hardware profile; catch-up default MemoryMax stays 768M for t
   assert.match(read("daemon/wire-engines.parts/06.part"), /def box_is_small/);
   assert.match(read("daemon/wire-engines.parts/06.part"), /if box_is_small\(\):\n        return True/);
   assert.match(read("daemon/sonarr_manual_import.py"), /concurrency 0/);
+  assert.match(read("daemon/reelos_hardware.py"), /not a Pi/);
+  assert.match(read("daemon/reelos_hardware.py"), /cgroup_hiding/);
   assert.doesNotMatch(updater, /enable reelos-firstboot/);
   assert.doesNotMatch(updater, /umount -l \/media/);
 });

@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.41 is the ship.*** ReelOS measures CPU (`nproc`), RAM (MemTotal), and disk (SSD vs rotational) and scales catch-up MemoryMax, docker mem, and import concurrency to the box. 4GB stays on 40's conservative path. 16–32GB laptops are not stuck at MemoryMax 768M / 4G docker / Pi folder caps. FUSE ffprobe D-state is I/O backpressure — concurrency 0 on any hardware. Prebuilt UI stays in the tarball (Apply does not compile). 40's Apply vs library catch-up split stays. Settings **Beta channel** still fetches **2.0.0** Arena+Books as a separate tarball. 1.2.51 parked. **No house Apply from the agent.**
+***1.2.50.41 is the ship.*** Hardware profile uses nproc, MemTotal, DirectMap vs cgroup, and SSD vs HDD. The house HP 15-bs0xx is a **4GB DIMM** (~3.2Gi visible after iGPU/reserved; cgroup is not hiding 8/16/32GB) — a laptop, not a Pi. Conservative RAM caps stay on ≤4.5Gi. CPU/SSD can raise import caps; this box is an HDD so catch-up stays throttled. D-state concurrency 0; one fuse.decypharr; selfheal does not restart catch-up while ffprobe is D-state. Prebuilt hashed UI. 40's Apply vs library split stays. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. **House Apply 41 once after merge (Jellyfin image pull off).**
 
 ## Stamp
 
@@ -36,7 +36,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ### Scale to the hardware (not a fake Pi)
 
-`reelos_hardware.py` / `hardwareProfile()` measure ram_gb, cpus, disk_kind. Tiny (≤4.5Gi) keeps MemoryMax 768M, no docker mem_limit, folder cap 6/12. 16GB SSD catch-up is 2G + Jellyfin 5G; 32GB catch-up is 8G + Jellyfin >4G. High ffprobe D-state → import concurrency 0 on any box. Healthy FUSE + many cores walk more dump folders. Mailman logs the profile and writes the systemd drop-in. Prebuilt UI is packaging, not a RAM throttle.
+`reelos_hardware.py` / `hardwareProfile()` measure ram_gb, cpus, disk_kind, DirectMap vs cgroup. Tiny (≤4.5Gi **visible or un-hidden**) keeps MemoryMax 768M and no docker mem_limit. HDD folder cap stays 6/12; SSD on 4GB can use nproc. If MemTotal is actually 16GB, catch-up is 2G + Jellyfin 5G — that path is measurement, not an assumption about this HP. High ffprobe D-state → import concurrency 0 on any box. Selfheal **defers** catch-up while D-state is high instead of starting the oneshot every two minutes. Mailman logs the profile and writes the systemd drop-in. Tiny Apply does not rewrite `compose.override.yml` (would recreate *arr next to D-state). Prebuilt UI is packaging, not a RAM throttle.
 
 ### Apply vs library catch-up (the law)
 
@@ -95,7 +95,7 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House is **1.2.50.40**. **Do not Apply from the agent.** Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
+House is **1.2.50.40**. After this PR is on `origin/main` and OTA is idle: **Check/Apply 1.2.50.41 once** (Jellyfin image pull off). Do not tap twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
 
 ## Do not
 
@@ -108,5 +108,5 @@ House is **1.2.50.40**. **Do not Apply from the agent.** Do not re-enable `reelo
 - Tap Apply 39 again
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
-- Post house Apply from the agent
+- Tap Apply 41 twice
 - Re-enable `reelos-firstboot` or re-run house `/opt/reelos/install.sh`
