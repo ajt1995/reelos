@@ -20,7 +20,7 @@ test("Settings autoUpdate write is best-effort and does not 500 the JSON", () =>
   );
 });
 
-test("Check can target the beta channel stub", () => {
+test("Check can target the beta channel sidecar", () => {
   assert.match(src, /channel-beta\.json/);
   assert.match(src, /betaChannel === true/);
   assert.match(src, /betaChannelStub/);

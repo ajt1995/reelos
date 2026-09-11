@@ -78,7 +78,7 @@ test("splash shows warming steps when provisioned; Begin setup only when not", (
   assert.match(splash, /Requests/);
   assert.match(splash, /Begin setup/);
   assert.match(splash, /showWarming/);
-  assert.match(splash, /spinRing=\{showWarming\}/);
+  assert.match(splash, /spinRing=\{showWarming/);
   assert.match(gate, /<Splash warming \/>/);
   assert.match(gate, /phase === "splash"\) return <Splash \/>/);
   assert.match(rootFile, /\/api\/ready\?limit=24/);

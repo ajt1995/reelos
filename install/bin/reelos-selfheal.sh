@@ -106,21 +106,45 @@ ensure_compose() {
 
 ensure_door
 # Apply stamps first, then this recover job dumps/heals in the background.
-# systemd-run escapes TimeoutStartSec=90, KillMode=control-group, and flock fd 9
-# (a nohup child would inherit the lock and block the 2min timer). Do not walk FUSE dfs.
-# Start catch-up before idle/ffprobe skip so a 4GB box still imports after stamp.
-if [ -f "$STATE/library-catchup" ]; then
-  rm -f "$STATE/library-catchup"
+# Persistent reelos-library-catchup.service outlives TimeoutStartSec=90.
+# systemd-run / nohup 9>&- is the fallback if the unit is missing.
+# Do not walk FUSE dfs. Start catch-up before idle/ffprobe skip so a 4GB box
+# still queues the worker; the worker backs off when D-state is high.
+start_library_catchup() {
   log "library catch-up in background"
-  if [ -x "$ROOT/bin/wire-engines.py" ]; then
-    systemctl reset-failed reelos-library-catchup.service >/dev/null 2>&1 || true
+  if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
+    cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service 2>/dev/null || true
+    chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+  systemctl reset-failed reelos-library-catchup.service >/dev/null 2>&1 || true
+  if systemctl is-active --quiet reelos-library-catchup.service; then
+    log "library catch-up already running"
+    return 0
+  fi
+  if systemctl start --no-block reelos-library-catchup.service >/dev/null 2>&1; then
+    return 0
+  fi
+  if [ -x "$ROOT/bin/reelos-library-catchup.sh" ]; then
     if ! systemd-run --quiet --collect --unit=reelos-library-catchup \
-      --property=Type=oneshot --property=TimeoutStartSec=600 \
+      --property=Type=oneshot --property=TimeoutStartSec=3600 --property=KillMode=process \
+      /bin/bash "$ROOT/bin/reelos-library-catchup.sh" >/dev/null 2>&1; then
+      nohup bash "$ROOT/bin/reelos-library-catchup.sh" >/dev/null 2>&1 9>&- &
+    fi
+    return 0
+  fi
+  if [ -x "$ROOT/bin/wire-engines.py" ]; then
+    if ! systemd-run --quiet --collect --unit=reelos-library-catchup \
+      --property=Type=oneshot --property=TimeoutStartSec=3600 \
       /bin/bash -c 'python3 "$1" import --catch-up >>"$2" 2>&1' \
-      bash "$ROOT/bin/wire-engines.py" "$STATE/wire.log" >/dev/null 2>&1; then
-      nohup python3 "$ROOT/bin/wire-engines.py" import --catch-up >>"$STATE/wire.log" 2>&1 9>&- &
+      bash "$ROOT/bin/wire-engines.py" "$STATE/library.log" >/dev/null 2>&1; then
+      nohup python3 "$ROOT/bin/wire-engines.py" import --catch-up >>"$STATE/library.log" 2>&1 9>&- &
     fi
   fi
+}
+
+if [ -f "$STATE/library-catchup" ]; then
+  start_library_catchup
 fi
 d=$(ffprobe_d_state)
 if [ "${d:-0}" -gt 0 ]; then

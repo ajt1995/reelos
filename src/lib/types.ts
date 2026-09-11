@@ -16,6 +16,18 @@ export type AdapterKind = "decypharr" | "torbox" | "qbittorrent";
 export type AdapterHealth = "offline" | "healthy" | "degraded";
 export type BuildStatus = "pending" | "running" | "done" | "error";
 export type UpdateStatus = "idle" | "checking" | "available" | "applying" | "current" | "error";
+export type LibraryCatchupStatus = "idle" | "running" | "backoff" | "done";
+
+export interface LibraryCatchupState {
+  status: LibraryCatchupStatus;
+  message: string;
+  folder: number;
+  total: number;
+  skipped: number;
+  timeouts: number;
+  needsImport: boolean;
+  splashLock: boolean;
+}
 
 export interface Intent {
   movies: boolean;
@@ -135,4 +147,5 @@ export interface UpdateState {
   checkedAt: number | null;
   steps: BuildStep[];
   notes: string[];
+  rollback?: boolean;
 }

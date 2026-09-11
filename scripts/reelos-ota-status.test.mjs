@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyIsRunning, applyTargetFromLog, lockIsHeld } from "./reelos-ota-status.mjs";
+import { applyIsRunning, applyProductRunning, applyTargetFromLog, lockIsHeld, parseLibraryProgress, productSwapDone } from "./reelos-ota-status.mjs";
 
 test("leftover ota.lock file is not running", () => {
   const dir = mkdtempSync(join(tmpdir(), "reelos-ota-"));
@@ -50,3 +50,26 @@ test("applyTargetFromLog reads the last arrow, then channel", () => {
   assert.equal(applyTargetFromLog("channel 1.2.50.23\ncanaries ok\n"), "1.2.50.23");
   assert.equal(applyTargetFromLog(""), null);
 });
+
+test("product swap done ends the Applying clock while lock/unit can still refuse a second Apply", () => {
+  const log = "ReelOS 1.2.50.38 → 1.2.50.40\nengines may still be configuring\nReelOS 1.2.50.40 applied.\nlibrary catch-up in background\n";
+  assert.equal(productSwapDone(log), true);
+  assert.equal(productSwapDone("ReelOS 1.2.50.38 → 1.2.50.40\nhops\n"), false);
+  assert.equal(
+    applyProductRunning({ env: {}, lockPath: "/no/such/ota.lock", logText: log }),
+    false,
+  );
+});
+
+test("library progress splash-locks only when running and dumps need import", () => {
+  const running = parseLibraryProgress(
+    JSON.stringify({ status: "running", needsImport: true, folder: 3, total: 16, skipped: 4, timeouts: 1, message: "Library catching up — folder 3 of 16" }),
+  );
+  assert.equal(running.splashLock, true);
+  assert.match(running.message, /folder 3 of 16/);
+  const skipped = parseLibraryProgress(JSON.stringify({ status: "running", needsImport: false, skipped: 12 }));
+  assert.equal(skipped.splashLock, false);
+  const back = parseLibraryProgress(JSON.stringify({ status: "backoff", needsImport: true }));
+  assert.equal(back.splashLock, false);
+});
+

@@ -23,6 +23,7 @@ function Changelog({ title, version, lines }: { title: string; version?: string 
 
 export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => void }) {
   const update = useReelStore((s) => s.update);
+  const libraryCatchup = useReelStore((s) => s.libraryCatchup);
   const autoUpdate = useReelStore((s) => s.settings.autoUpdate);
   const stackImages = useReelStore((s) => s.settings.stackImages);
   const betaChannel = useReelStore((s) => s.settings.betaChannel);
@@ -37,7 +38,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
   const hint =
     update.status === "applying"
       ? `Applying ${update.target ?? ""}`
-      : update.status === "available"
+      : libraryCatchup.status === "running" || libraryCatchup.status === "backoff"
+        ? libraryCatchup.message || "Library catching up"
+        : update.status === "available"
         ? `${update.target} is ready`
         : update.status === "checking"
           ? betaChannel
@@ -60,8 +63,18 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       <p className="mt-2 text-sm text-muted">
         {update.status === "applying"
           ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
-          : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
+          : libraryCatchup.status === "running" || libraryCatchup.status === "backoff"
+            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply."
+            : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
+      {libraryCatchup.status === "running" || libraryCatchup.status === "backoff" ? (
+        <p className="mt-2 text-sm">
+          {libraryCatchup.message || "Library catching up"}
+          {libraryCatchup.folder && libraryCatchup.total
+            ? ` · folder ${libraryCatchup.folder} of ${libraryCatchup.total}`
+            : null}
+        </p>
+      ) : null}
       {update.status === "error" && update.notes[0] ? (
         <p className="mt-2 text-sm text-danger">{update.notes[0].slice(0, 180)}</p>
       ) : null}
@@ -105,7 +118,7 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         </Button>
         {update.status === "available" ? (
           <Button size="sm" onClick={startUpdate}>
-            Apply {update.target}
+            {update.rollback ? `Roll back to ${update.target}` : `Apply ${update.target}`}
           </Button>
         ) : null}
       </div>
@@ -141,9 +154,15 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         />
       </label>
       <p className="mt-2 text-xs text-muted">
-        Off by default. Check then reads channel-beta (a stub today). Arena chrome and Books are not in this stamp.
-        Apply still comes from main.
+        Off by default. Check then reads channel-beta. Arena chrome and Books ship on 2.0.0 as a separate tarball — not
+        inside main.tar.gz. Leave beta and Check to roll back to last stable 1.2.50.x (40 once this house has it).
+        Stable Check stays 1.2.50.40 on main.tar.gz.
       </p>
+      {update.rollback && update.status === "available" ? (
+        <p className="mt-2 text-xs text-muted">
+          Roll back returns this box to {update.target}. Libraries stay. Arena chrome and Books leave with 2.0.
+        </p>
+      ) : null}
     </Row>
   );
 }

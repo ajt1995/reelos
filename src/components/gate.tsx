@@ -29,12 +29,15 @@ export function Boot() {
   const hydrated = useReelStore((s) => s.hydrated);
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
+  const splashLock = useReelStore((s) => s.libraryCatchup.splashLock);
+  const applying = useReelStore((s) => s.update.status === "applying");
 
   if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;
   if (phase === "building") return <Provision />;
   if (phase === "ready" && !provisioned) return <Provision />;
   if (provisioned) {
+    if (splashLock && !applying) return <Splash warming />;
     return (
       <Shell>
         <HomeView />

@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 
 export const OTA_LOCK = "/var/lib/reelos/ota.lock";
+export const LIBRARY_PROGRESS = "/var/lib/reelos/library-progress.json";
 
 /** Leftover ota.lock on disk is normal. Only a held flock means Apply is running. Never delete the file. */
 export function lockIsHeld(lockPath = OTA_LOCK, run = spawnSync) {
@@ -31,4 +33,73 @@ export function applyTargetFromLog(text) {
   const channels = [...raw.matchAll(/^channel\s+(\S+)/gm)];
   if (channels.length) return channels[channels.length - 1][1];
   return null;
+}
+
+/** True once ota.log printed `ReelOS <target> applied.` for the latest arrow. */
+export function productSwapDone(text) {
+  const raw = String(text || "");
+  const target = applyTargetFromLog(raw);
+  if (!target) return false;
+  const escaped = String(target).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`ReelOS\\s+${escaped}\\s+applied\\.`).test(raw);
+}
+
+/**
+ * Phone Applying clock. Lock/unit still refuse a second Apply via applyIsRunning.
+ * After stamp, compose pull / library worker must not look like a stuck Apply.
+ */
+export function applyProductRunning({
+  env = process.env,
+  lockPath = OTA_LOCK,
+  run = spawnSync,
+  logText = "",
+} = {}) {
+  if (!applyIsRunning({ env, lockPath, run })) return false;
+  if (logText && productSwapDone(logText)) return false;
+  return true;
+}
+
+export function idleLibraryProgress() {
+  return {
+    status: "idle",
+    message: "",
+    folder: 0,
+    total: 0,
+    skipped: 0,
+    timeouts: 0,
+    needsImport: false,
+    splashLock: false,
+  };
+}
+
+export function parseLibraryProgress(raw) {
+  const idle = idleLibraryProgress();
+  try {
+    const doc = JSON.parse(String(raw || "{}"));
+    if (!doc || typeof doc !== "object") return idle;
+    const status = String(doc.status || "idle");
+    const needsImport = Boolean(doc.needsImport);
+    const splashLock = status === "running" && needsImport;
+    return {
+      status,
+      message: String(doc.message || ""),
+      folder: Number(doc.folder || 0) || 0,
+      total: Number(doc.total || 0) || 0,
+      skipped: Number(doc.skipped || 0) || 0,
+      timeouts: Number(doc.timeouts || 0) || 0,
+      needsImport,
+      splashLock: Boolean(doc.splashLock) || splashLock,
+    };
+  } catch {
+    return idle;
+  }
+}
+
+export function readLibraryProgress(filePath = LIBRARY_PROGRESS) {
+  try {
+    if (!existsSync(filePath)) return idleLibraryProgress();
+    return parseLibraryProgress(readFileSync(filePath, "utf8"));
+  } catch {
+    return idleLibraryProgress();
+  }
 }

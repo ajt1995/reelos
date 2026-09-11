@@ -9,6 +9,7 @@ import type {
   HouseholdUser,
   IndexerEntry,
   Intent,
+  LibraryCatchupState,
   MediaRequest,
   Phase,
   QualityFloor,
@@ -59,8 +60,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.39";
-export const SHIPPED_VERSION = "1.2.50.39";
+export const LATEST_VERSION = "1.2.50.40";
+export const SHIPPED_VERSION = "1.2.50.40";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -82,7 +83,8 @@ export type ReadyPayload = {
   provisioned?: boolean;
   answers?: Partial<WizardAnswers>;
   jellyfin?: unknown;
-  update?: { running?: boolean; local?: string; target?: string | null; log?: string };
+  update?: { running?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState };
+  libraryCatchup?: LibraryCatchupState;
   titles?: Title[];
   requests?: MediaRequest[];
   pipeline?: unknown;
@@ -90,6 +92,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.40: Check/Apply only swaps the product (tarball, restart, splash, stamp). Library catch-up is its own worker with its own phone clock — folder N, skips, timeouts — not buried in wire.log while Apply looks frozen. Indexers/import/heal never block stamp. Catch-up is a persistent oneshot (not killed when selfheal exits); backs off when ffprobe is D-state; does not stack another FUSE. Splash-locks Home only while dumps still need import. Settings Beta ON then Check fetches 2.0.0 Arena+Books as a separate tarball (not this stamp); OFF stays 1.2.50.x. 4GB prebuilt UI. Complements #120. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.39: Check/Apply stamps after hops and the door — dump import/heal runs in the background so the phone is not frozen on import after hops. Import/heal red does not un-stamp a UI swap. Skip Sonarr dump folders that already have files; do not RescanSeries all shows; do not list host+container paths twice; skip a FUSE folder on a short list timeout. No hybrid 1080 grab on Apply. Background import is capped on 4GB. First provision can still do a long walk. Never /media. Complements #117. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.38: Wizard stays seven steps; TorBox is the working source (Validate hits api.torbox.app with User-Agent ReelOS; Continue needs that OK). Real-Debrid, AllDebrid, Premiumize, Local+VPN, Plex claim, and Cloudflare Tunnel are labeled untested; Validate and Finish refuse (no fake always-ok). No GPU (/dev/dri render/card): persist Jellyfin encoding.xml DirectPlay/DirectStream only and disable user video/audio transcode (remux stays) so a 4GB box cannot CPU-ffmpeg-storm. VAAPI when a GPU is present; low-perf still caps threads. 37 prebuilt hashed UI stays in the tarball. Complements #115. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -145,6 +148,19 @@ function makeAdapter(answers: WizardAnswers): AdapterState {
   };
 }
 
+function idleLibraryCatchup(): LibraryCatchupState {
+  return {
+    status: "idle",
+    message: "",
+    folder: 0,
+    total: 0,
+    skipped: 0,
+    timeouts: 0,
+    needsImport: false,
+    splashLock: false,
+  };
+}
+
 function idleUpdate(current = SHIPPED_VERSION): UpdateState {
   return {
     status: "idle",
@@ -153,6 +169,7 @@ function idleUpdate(current = SHIPPED_VERSION): UpdateState {
     checkedAt: null,
     steps: [],
     notes: [],
+    rollback: false,
   };
 }
 
@@ -184,6 +201,7 @@ export interface ReelState {
   users: HouseholdUser[];
   settings: Settings;
   update: UpdateState;
+  libraryCatchup: LibraryCatchupState;
   adapter: AdapterState;
   indexers: IndexerEntry[];
   remoteTitles: Title[];
@@ -447,6 +465,7 @@ const initial = {
     betaChannel: false,
   } as Settings,
   update: idleUpdate(),
+  libraryCatchup: idleLibraryCatchup(),
   adapter: makeAdapter(defaultAnswers),
   indexers: [] as IndexerEntry[],
   remoteTitles: [] as Title[],
@@ -503,6 +522,21 @@ export const useReelStore = create<ReelState>()(
           s.factoryReset();
         }
         const st = ready?.update;
+        const lib = ready?.libraryCatchup || ready?.update?.library;
+        if (lib && typeof lib === "object") {
+          set({
+            libraryCatchup: {
+              status: (lib.status as LibraryCatchupState["status"]) || "idle",
+              message: String(lib.message || ""),
+              folder: Number(lib.folder || 0) || 0,
+              total: Number(lib.total || 0) || 0,
+              skipped: Number(lib.skipped || 0) || 0,
+              timeouts: Number(lib.timeouts || 0) || 0,
+              needsImport: Boolean(lib.needsImport),
+              splashLock: Boolean(lib.splashLock),
+            },
+          });
+        }
         if (st) {
           const cur = get();
           const last = (st.log || "").trim().split("\n").pop() || "";
@@ -632,9 +666,23 @@ export const useReelStore = create<ReelState>()(
       syncUpdateFromBox: () => {
         void fetch("/api/update/status", { cache: "no-store" })
           .then((r) => r.json())
-          .then((st: { running?: boolean; local?: string; target?: string | null; log?: string }) => {
+          .then((st: { running?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState }) => {
             const cur = get();
             const last = (st.log || "").trim().split("\n").pop() || "";
+            if (st.library && typeof st.library === "object") {
+              set({
+                libraryCatchup: {
+                  status: (st.library.status as LibraryCatchupState["status"]) || "idle",
+                  message: String(st.library.message || ""),
+                  folder: Number(st.library.folder || 0) || 0,
+                  total: Number(st.library.total || 0) || 0,
+                  skipped: Number(st.library.skipped || 0) || 0,
+                  timeouts: Number(st.library.timeouts || 0) || 0,
+                  needsImport: Boolean(st.library.needsImport),
+                  splashLock: Boolean(st.library.splashLock),
+                },
+              });
+            }
             if (st.running) {
               const steps = (cur.update.steps?.length ? cur.update.steps : updatePlan()).map((x) => ({ ...x }));
               if (steps[0]) {
@@ -689,7 +737,7 @@ export const useReelStore = create<ReelState>()(
         });
         void fetch("/api/update/check", { cache: "no-store" })
           .then((r) => r.json())
-          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string }) => {
+          .then((r: { ok?: boolean; available?: boolean; local?: string; remote?: string; notes?: string[]; pendingNotes?: string[]; error?: string; rollback?: boolean }) => {
             const cur = get();
             const pending = Array.isArray(r.pendingNotes) ? r.pendingNotes : Array.isArray(r.notes) ? r.notes : [];
             if (r.ok && r.available) {
@@ -700,6 +748,7 @@ export const useReelStore = create<ReelState>()(
                   current: r.local || cur.update.current,
                   target: r.remote || null,
                   notes: pending,
+                  rollback: r.rollback === true,
                   checkedAt: Date.now(),
                 },
               });
@@ -711,6 +760,7 @@ export const useReelStore = create<ReelState>()(
                   current: r.local || cur.update.current,
                   target: null,
                   notes: r.ok ? [] : [r.error ?? "Channel unreachable"],
+                  rollback: false,
                   checkedAt: Date.now(),
                 },
               });
@@ -751,10 +801,24 @@ export const useReelStore = create<ReelState>()(
             const tick = () => {
               void fetch("/api/update/status", { cache: "no-store" })
                 .then((r) => r.json())
-                .then((st: { running?: boolean; local?: string; log?: string }) => {
+                .then((st: { running?: boolean; local?: string; log?: string; library?: LibraryCatchupState }) => {
                   const cur = get();
                   const steps2 = (cur.update.steps || []).map((x) => ({ ...x }));
                   const last = (st.log || "").trim().split("\n").pop() || "";
+                  if (st.library && typeof st.library === "object") {
+                    set({
+                      libraryCatchup: {
+                        status: (st.library.status as LibraryCatchupState["status"]) || "idle",
+                        message: String(st.library.message || ""),
+                        folder: Number(st.library.folder || 0) || 0,
+                        total: Number(st.library.total || 0) || 0,
+                        skipped: Number(st.library.skipped || 0) || 0,
+                        timeouts: Number(st.library.timeouts || 0) || 0,
+                        needsImport: Boolean(st.library.needsImport),
+                        splashLock: Boolean(st.library.splashLock),
+                      },
+                    });
+                  }
                   if (steps2[0]) {
                     steps2[0].status = "running";
                     steps2[0].log = last.slice(0, 160);
@@ -936,6 +1000,7 @@ export const useReelStore = create<ReelState>()(
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.update = idleUpdate();
+        state.libraryCatchup = idleLibraryCatchup();
         if (state.shelf?.length) state.shelfReady = true;
       },
     },
