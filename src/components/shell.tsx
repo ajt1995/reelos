@@ -12,7 +12,7 @@ import { ApplyingBar } from "@/components/applying-bar";
 import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
-import { isInFlightRequest } from "@/lib/sync-requests";
+import { inFlightRequests } from "@/lib/sync-requests";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -27,7 +27,9 @@ const NAV = [
 export function Shell({ children }: { children: React.ReactNode }) {
   const path = useRouterState({ select: (s) => s.location.pathname });
   const frontend = useReelStore((s) => s.answers.frontend);
-  const transferring = useReelStore((s) => s.requests.filter(isInFlightRequest).length);
+  const transferring = useReelStore(
+    (s) => inFlightRequests(s.requests, { libraryIds: s.library, titles: s.shelf }).length,
+  );
 
   return (
     <div className="min-h-dvh bg-background">

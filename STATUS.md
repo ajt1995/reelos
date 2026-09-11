@@ -1,43 +1,40 @@
 # STATUS.md
 
-***1.2.50.29 is the ship.*** 2026-09-10. Apply of 28 starved the 4GB box copying FUSE dumps (`decypharr/cache/dfs`) so Vite never bound; the phone saw Begin setup on a provisioned house. This stamp skips those dumps, restarts hung Vite at 15s, and boots through one `/api/ready` fan-in with an honest warming splash. Does not take Tron (#52 / #70).
+***1.2.50.30 is the ship.*** 2026-09-10. Owner Home showed Night at the Museum (Cached), John Wick (Available now), Coyote vs. Acme (Available now) plus "25 transferring" in **Your requests** at the top — redundant with On this box. 1.2.50.29 (splash /api/ready / rsync overlay) did not change that row. This stamp hides shelf/library hits on Home and counts transferring with the same in-flight definition. Requests still lists everything. Does not take Tron (#52 / #70).
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.29`
-- **Base:** `main` at 1.2.50.28
+- **VERSION / channel:** `1.2.50.30`
+- **Base:** `main` at 1.2.50.29
 - Did **not** take Tron chrome from #52 / #70
 
 ## Changelog
 
-### Apply does not copy FUSE dumps
+### Home Your requests is in-flight only
 
-`rsync` overlays `compose/configs` excluding `decypharr/cache/`, `**/cache/dfs/`, Jellyfin cache/transcodes, MediaCover, logs, and sqlite sidecars. If `rsync` is missing, copy only top-level app dirs without cache/dfs.
+Hide rows already on the shelf/library: status available, engine downloaded, overlay library hit, Cached / Available now. Keep searching, grabbing, and linked waiting for import. The row disappears when nothing is in flight.
 
-### probe_home restarts hung Vite at 15s
+### Transferring chip uses the same definition
 
-`systemctl start` is a no-op on a hung unit. After ~15s without :8080 200, `systemctl restart reelos` once. `daemon-reload` first if the unit changed.
+Do not show "25 transferring" when those 25 are mostly available. Overlay library presence first, then count downloading/waiting only. Nav Requests badge matches Home.
 
-### GET `/api/ready` — one fan-in
+### Requests page unchanged
 
-Parallel, short timeouts: provisioned + answers (handleBox sync slice, no await Jellyfin), update status, library shelf (limit 24, prefer cache), request list (progress-plugin assembler, no per-title Seerr fan-out). `start_fuse_readers` equivalent docker-starts *arr in the background and does not block the response. Omits `adminPassword`.
-
-### Warming splash
-
-When persist or the box says provisioned, splash spins the cyan ring and shows Local state / This house / Library / Requests. After `/api/ready` or a 4s abort, Home opens even if library/requests are still filling. Marketing Begin setup only when not provisioned.
+Filters still list available / downloading / waiting / failed. Honesty overlay still upgrades library hits to available there.
 
 ## Proof
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-request-status.test.mjs scripts/jellyfin-seed.test.mjs scripts/reelos-ready.test.mjs
+node --experimental-strip-types --test src/lib/sync-requests.test.ts
+node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/reelos-settings.test.mjs scripts/reelos-request-status.test.mjs scripts/jellyfin-seed.test.mjs scripts/reelos-ready.test.mjs scripts/reelos-library.test.mjs
 ```
 
 ## Owner / house Apply
 
-1. Merge this to **main**. Phone **Check → Apply once**. 27/28 already restore the door; 29 should not 502 from a FUSE config copy.
-2. Splash should show warming steps, then Home — not Begin setup.
-3. Radarr/Sonarr should come back from `/api/ready` without SSH.
+1. Merge this to **main**. Phone **Check → Apply once**.
+2. Home top row should not repeat On this box. Idle library → "Library idle", not a fake transferring count.
+3. Requests still has the full household list.
 
 ## Do not
 
@@ -45,3 +42,4 @@ node --test scripts/stack-smoke.test.mjs scripts/reelos-seerr.test.mjs scripts/r
 - Tap Apply twice
 - Delete `ota.lock`
 - Wipe `/media` or TorBox
+- Post house Apply from the agent (door was flaky; owner Applies)
