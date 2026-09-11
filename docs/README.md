@@ -35,6 +35,7 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 | `STATUS.md` | xorriso → Hal. |
 | `docs/OTA-APPLY-AUDIT.md` | Whether Phone Check→Apply is trustworthy. House verify checklist. |
 | `docs/STACK-RISK.md` | Stacked `#45`–`#51` go/no-go + merge order for house Apply. |
+| `docs/ARENA.md` | Parked Arena design (black floor, cyan circuit, gold Watch/Download/Begin). Not a stamp. Not 1.2.51. |
 
 ## Rules that belong here, not in README
 
