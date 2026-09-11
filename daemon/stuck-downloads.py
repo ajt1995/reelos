@@ -886,11 +886,16 @@ def ensure_radarr_hybrid_recycle(app: dict, key: str, quality: str | None = None
         return False
     if not isinstance(cfg, dict) or not cfg.get("id"):
         return False
-    if str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/") and int(cfg.get("recycleBinCleanupDays") or -1) == 0:
+    if (
+        str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/")
+        and int(cfg.get("recycleBinCleanupDays") or -1) == 0
+        and cfg.get("enableMediaInfo") is False
+    ):
         return True
     body = dict(cfg)
     body["recycleBin"] = rec
     body["recycleBinCleanupDays"] = 0
+    body["enableMediaInfo"] = False
     try:
         call(f"{app['base']}/config/mediamanagement/{cfg['id']}", key, method="PUT", body=body)
         log("radarr hybrid recycle keeps upgraded 1080")
@@ -2255,6 +2260,7 @@ def _self_test() -> int:
                     and p["body"]
                     and p["body"].get("recycleBin") == "/mnt/symlinks/.reel-recycle"
                     and p["body"].get("recycleBinCleanupDays") == 0
+                    and p["body"].get("enableMediaInfo") is False
                     for p in posts
                 )
             )
@@ -2270,6 +2276,29 @@ def _self_test() -> int:
                     quality="hybrid",
                 )
             )
+
+        def test_hybrid_recycle_put_keeps_mediainfo_off(self):
+            puts = []
+
+            def fake_call(url, key=None, method="GET", body=None, form=None):
+                if "mediamanagement" in str(url) and method != "PUT":
+                    return {
+                        "id": 1,
+                        "recycleBin": "/mnt/symlinks/.reel-recycle",
+                        "recycleBinCleanupDays": 0,
+                        "enableMediaInfo": True,
+                    }
+                puts.append(body or {})
+                return {}
+
+            orig = call
+            try:
+                globals()["call"] = fake_call
+                app = {"name": "radarr", "base": "http://127.0.0.1:7878/api/v3"}
+                self.assertTrue(ensure_radarr_hybrid_recycle(app, "k", quality="hybrid"))
+            finally:
+                globals()["call"] = orig
+            self.assertTrue(any(b.get("enableMediaInfo") is False for b in puts), puts)
 
         def test_relink_hybrid_companions_1080_next_to_4k(self):
             import tempfile

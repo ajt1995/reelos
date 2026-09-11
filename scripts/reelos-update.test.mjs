@@ -129,3 +129,14 @@ test("second Apply is refused; ota.lock is never deleted", () => {
   assert.equal(updater.includes("stale ota.lock — taking lock"), false);
   assert.equal(updater.includes('rm -f "$STATE/ota.lock"'), false);
 });
+
+test("nudge_fuse does not stack a live Decypharr mount; no-ffprobe always runs", () => {
+  assert.match(updater, /fuse_count\(\) \{/);
+  assert.match(updater, /fuse stacked \$n — live, not unmounting/);
+  assert.match(updater, /fuse already on host \(\$n mount\(s\)\) — not remounting/);
+  assert.match(updater, /python3 "\$ROOT\/bin\/wire-engines.py" no-ffprobe/);
+  assert.match(updater, /seed_arr_debrid_json/);
+  assert.match(updater, /reelos-debrid\.json/);
+  assert.doesNotMatch(updater, /umount -l \/media/);
+  assert.doesNotMatch(updater, /rm -rf \/media/);
+});

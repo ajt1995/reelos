@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.35**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta channel is wired in this stamp; Arena+Books are not shipped here.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.36**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta channel is wired in this stamp; Arena+Books are not shipped here.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,25 +21,29 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.35 is the ship.*** 2026-09-11. Dry-run of 34 against a live house snapshot (1.2.50.31, 3.2Gi, 4× FUSE, Sonarr ffprobe D-state) is a **no-go**. 34 would `npm ci` (start:box script) and attempt a staging `vite build` on 4GB. This stamp reuses node_modules when the lockfile matches, skips vite build on 4GB, and self-heal skips compose/recover while ffprobe is D-state. 34's Settings Advanced / production start:box / beta stub stay. Does not take Tron (#52 / #70 / #59). 1.2.51 parked.
+***1.2.50.36 is the ship.*** 2026-09-11. 35 made Apply safe on 4GB (skip npm ci / vite build; self-heal skips while ffprobe is D-state). It did **not** stop Sonarr ffprobe or stacked FUSE. This stamp is 35 **plus** the real storm fix: *arr `enableMediaInfo` off on debrid/FUSE, persisted in compose configs so Apply cannot turn it back on; mailman/`nudge_fuse` do not stack another Decypharr FUSE on a live `/mnt/debrid`. Jellyfin trickplay/extraction stays off. Does not take Tron (#52 / #70 / #59). 1.2.51 parked. **No house Apply from the agent.**
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.35`
+- **VERSION / channel:** `1.2.50.36`
 - **channel tarball:** `main.tar.gz`
-- **Base:** `main` at 1.2.50.34 ([#111](https://github.com/ajt1995/reelos/pull/111) self-heal, Settings Advanced, production start:box)
-- **House snapshot:** 1.2.50.31; firstboot disabled; `stack-installed` latched; compose yml identical; lockfile identical
+- **Base:** `main` at 1.2.50.35 ([#112](https://github.com/ajt1995/reelos/pull/112) 4GB Apply skip)
+- **House snapshot:** 1.2.50.31; firstboot disabled; `stack-installed` latched; compose yml identical vs 35 (no recreate)
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
 
-### 4GB Apply does not npm ci or vite-build
+### Sonarr/Radarr do not ffprobe FUSE dumps
 
-House `package.json` only differs in `scripts.start:box`. Lockfile matches. Mailman reuses `node_modules` when the lockfile matches. Staging `vite build` is skipped on ≤4.5Gi MemTotal (or <1.8Gi MemAvailable). `start:box` still falls back to `vite --host :8080`. Overlay rsync excludes stay (dfs/cache). Apply does not enable firstboot. Compose yml is unchanged vs house — no recreate.
+`enableMediaInfo` is PUT false on Sonarr, Radarr, and Lidarr. Recycle-bin PUTs keep it false. `compose/configs/{sonarr,radarr,lidarr}/reelos-debrid.json` ships in the tarball and is re-copied after house overlay so Apply cannot turn analysis back on. Import/grab still use filenames and dump-folder scans. Jellyfin trickplay / chapter / subtitle extraction stay off (`no-ffprobe` re-applies those flags).
 
-### Self-heal does not ffprobe-storm
+### One Decypharr FUSE — do not stack
 
-Timer still restores the door. It does not walk FUSE, talk to TorBox, or enable firstboot. It skips `compose up` and recover/unstick while any `ffprobe` is D-state (Sonarr probing FUSE dumps).
+`nudge_fuse` / `ensure_fuse` / `patch_decypharr` do not remount or restart Decypharr when `/mnt/debrid` already lists. Extra layers are lazy-unmounted **only when the mount is stale** (ENOTCONN). A live stacked mount is left alone (unmounting the top layer would drop the working library). Never umount `/media`.
+
+### 4GB Apply / self-heal (from 35)
+
+House `package.json` only differs in `scripts.start:box`. Lockfile matches. Mailman reuses `node_modules` when the lockfile matches. Staging `vite build` is skipped on ≤4.5Gi MemTotal (or <1.8Gi MemAvailable). Self-heal skips `compose up` and recover while any `ffprobe` is D-state.
 
 ### Settings / production start / beta (from 34)
 
@@ -49,7 +53,7 @@ Check / Apply stay on Box; Heal/Hops/Doctor behind Advanced. `start:box` → `re
 
 ```
 python3 scripts/check-ota.py .
-node --test scripts/stack-smoke.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs
+node --test scripts/stack-smoke.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box
 # GET / and GET /api/ready → 200
@@ -57,7 +61,7 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-**Do not Apply 1.2.50.34.** House stays **1.2.50.31**. Do not Apply from the agent. After **1.2.50.35** is on **main AND booted**, and house `ffprobe` D-state is 0, owner phone **Check → Apply once**. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
+House stays **1.2.50.31**. **Do not Apply 35.** Do not Apply from the agent. Wait until house `ffprobe` D-state is ~0, then phone **Check → Apply 1.2.50.36 once**. 36 includes 35. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`.
 
 ## Do not
 

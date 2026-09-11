@@ -175,12 +175,21 @@ def patch_decypharr() -> None:
     text = json.dumps(cfg, indent=2) + "\n"
     prev = DECYPHARR.read_text() if DECYPHARR.exists() else ""
     if text == prev:
-        log_wire("decypharr config unchanged — restart to remount")
+        if fuse_on_host():
+            n = fuse_host_mount_count()
+            log_wire(f"decypharr config unchanged — fuse live ({n}), not restarting")
+            return
+        log_wire("decypharr config unchanged — fuse stale, remount")
+        fuse_unstack_stale()
         subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
         time.sleep(5)
         restart_fuse_readers()
         return
     DECYPHARR.write_text(text)
+    if fuse_on_host():
+        log_wire("decypharr config changed — fuse live, not recreating")
+        return
+    fuse_unstack_stale()
     compose("up", "-d", "--force-recreate", "decypharr")
     time.sleep(5)
     restart_fuse_readers()
@@ -188,7 +197,7 @@ def patch_decypharr() -> None:
 
 def restart_fuse_readers() -> None:
     """Containers started before FUSE cannot see /mnt/debrid. Restart after mount."""
-    if not Path("/mnt/debrid/version.txt").exists() and not Path("/mnt/debrid/__all__").exists():
+    if not fuse_on_host():
         log_wire("fuse not up — skip reader restart")
         return
     subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True)
@@ -210,26 +219,90 @@ def fuse_on_host() -> bool:
         return False
 
 
-def fuse_clear_stale() -> None:
-    """Compose stop leaves /mnt/debrid mounted and ENOTCONN. mkdir then FileExistsError."""
+def fuse_mount_count_from_mountinfo(text: str, mountpoint: str = "/mnt/debrid") -> int:
+    """Count host fuse.decypharr layers on mountpoint. Never /media."""
+    n = 0
+    mp = mountpoint.rstrip("/") or "/"
+    for line in text.splitlines():
+        if " - " not in line:
+            continue
+        left, right = line.split(" - ", 1)
+        fields = left.split()
+        if len(fields) < 5:
+            continue
+        if fields[4].replace("\\040", " ") != mp:
+            continue
+        bits = right.split()
+        fstype = bits[0] if bits else ""
+        source = bits[1] if len(bits) > 1 else ""
+        if "decypharr" in fstype or "decypharr" in source:
+            n += 1
+    return n
+
+
+def fuse_mount_count_from_mount(text: str, mountpoint: str = "/mnt/debrid") -> int:
+    n = 0
+    needle = f" on {mountpoint} "
+    tail = f" on {mountpoint}"
+    for line in text.splitlines():
+        if needle not in line and not line.rstrip().endswith(tail):
+            continue
+        if "fuse.decypharr" in line or ("decypharr" in line and "fuse" in line):
+            n += 1
+    return n
+
+
+def fuse_host_mount_count() -> int:
     try:
-        os.listdir("/mnt/debrid")
-        return
-    except FileNotFoundError:
-        return
+        n = fuse_mount_count_from_mountinfo(Path("/proc/self/mountinfo").read_text())
+        if n:
+            return n
     except OSError:
-        log_wire("stale /mnt/debrid FUSE — lazy unmount")
-    for _ in range(8):
-        subprocess.run(["fusermount", "-uz", "/mnt/debrid"], check=False, capture_output=True)
-        subprocess.run(["umount", "-l", "/mnt/debrid"], check=False, capture_output=True)
-        time.sleep(0.4)
+        pass
+    try:
+        r = subprocess.run(["mount"], capture_output=True, text=True, check=False)
+        return fuse_mount_count_from_mount(r.stdout or "")
+    except OSError:
+        return 0
+
+
+def fuse_unstack_stale() -> None:
+    """Unmount extra/stale /mnt/debrid FUSE only. Never /media. Leave a live mount alone."""
+    if fuse_on_host():
+        n = fuse_host_mount_count()
+        if n > 1:
+            log_wire(f"fuse stacked {n} — live, not unmounting")
+        return
+    n = fuse_host_mount_count()
+    if n == 0:
         try:
             os.listdir("/mnt/debrid")
             return
         except FileNotFoundError:
             return
         except OSError:
-            continue
+            log_wire("stale /mnt/debrid FUSE — lazy unmount")
+    else:
+        log_wire(f"stale /mnt/debrid FUSE — unmount {n} layer(s)")
+    for _ in range(12):
+        subprocess.run(["fusermount", "-uz", "/mnt/debrid"], check=False, capture_output=True)
+        subprocess.run(["umount", "-l", "/mnt/debrid"], check=False, capture_output=True)
+        time.sleep(0.4)
+        if fuse_on_host():
+            return
+        if fuse_host_mount_count() == 0:
+            try:
+                os.listdir("/mnt/debrid")
+                return
+            except FileNotFoundError:
+                return
+            except OSError:
+                continue
+
+
+def fuse_clear_stale() -> None:
+    """Compose stop leaves /mnt/debrid mounted and ENOTCONN. mkdir then FileExistsError."""
+    fuse_unstack_stale()
 
 
 def persist_mnt_shared() -> None:

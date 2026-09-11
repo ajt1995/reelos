@@ -20,8 +20,12 @@ OS_OTA") and not prowlarr_has_hosts():
         "--force-recreate",
         "--no-deps",
         "prowlarr",
-        "decypharr",
     ]
+    if fuse_on_host():
+        log_wire("fuse live — recreate prowlarr only, not decypharr")
+    else:
+        fuse_unstack_stale()
+        cmd.append("decypharr")
     r = subprocess.run(
         cmd,
         cwd=str(COMPOSE),
