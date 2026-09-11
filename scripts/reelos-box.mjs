@@ -2,18 +2,22 @@
 /**
  * Appliance production door on :8080.
  *
- * Highest-leverage speedup that still is this product: `vite build` then
- * `vite preview` (this app's nitro output has no dist/index.html) plus the
- * existing /api Vite plugins. A static file server is used when a classic
- * dist/index.html exists. No Go rewrite. If no build is present, fall back
- * to `vite --host :8080` so the door still binds.
+ * Highest-leverage speedup that still is this product: serve the shipped
+ * nitro static UI (hashed /assets/...) plus the existing /api Vite plugins.
+ * Not a Go rewrite. Not vite --host on the house when prebuilt exists.
+ * Leftover Vite is `vite preview` only if nitro+api cannot bind.
  */
 import { spawn } from "node:child_process";
 import { createReadStream, existsSync, realpathSync, statSync } from "node:fs";
 import http from "node:http";
 import { extname, join, normalize, relative, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { mergeAppEnv, readAppEnv } from "./with-app-env.mjs";
+import {
+  anythingPlaying,
+  readHostLoad1,
+  shouldSkipIdleWork,
+} from "./reelos-box-scale.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT || 8080);
@@ -39,18 +43,24 @@ const MIME = {
 };
 
 export function findClientRoot(root = ROOT) {
-  for (const rel of ["dist/client", "dist", ".output/public"]) {
+  for (const rel of ["prebuilt/client", "dist/client", "dist", ".output/public"]) {
     const dir = join(root, rel);
     if (existsSync(join(dir, "index.html"))) return dir;
   }
   return null;
 }
 
-export function findPreviewBuild(root = ROOT) {
-  const nitro = join(root, ".vercel/output/nitro.json");
-  const staticDir = join(root, ".vercel/output/static");
-  if (existsSync(nitro) || existsSync(staticDir)) return join(root, ".vercel/output");
+export function findNitroOutput(root = ROOT) {
+  for (const rel of ["prebuilt/vercel-output", ".vercel/output"]) {
+    const dir = join(root, rel);
+    const entry = join(dir, "functions/__server.func/index.mjs");
+    if (existsSync(join(dir, "nitro.json")) || existsSync(entry)) return dir;
+  }
   return null;
+}
+
+export function findPreviewBuild(root = ROOT) {
+  return findNitroOutput(root);
 }
 
 function viteBin(root = ROOT) {
@@ -97,39 +107,126 @@ export async function dispatchBoxApi(req, res) {
   return false;
 }
 
-function startStatic(clientRoot) {
+function staticRoots(root, clientRoot) {
+  const dirs = [];
+  if (clientRoot) dirs.push(clientRoot);
+  const pub = join(root, "public");
+  if (existsSync(pub)) dirs.push(pub);
+  return dirs;
+}
+
+function tryStatic(res, roots, urlPath) {
+  for (const dir of roots) {
+    const file = safeJoin(dir, urlPath);
+    if (file && existsSync(file) && statSync(file).isFile()) {
+      sendFile(res, file);
+      return true;
+    }
+  }
+  return false;
+}
+
+function nodeHeaders(req) {
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const v of value) headers.append(key, v);
+    } else {
+      headers.set(key, String(value));
+    }
+  }
+  return headers;
+}
+
+async function nodeToFetch(req) {
+  const host = String(req.headers.host || `${HOST}:${PORT}`);
+  const url = `http://${host}${req.url || "/"}`;
+  const method = (req.method || "GET").toUpperCase();
+  const headers = nodeHeaders(req);
+  if (method === "GET" || method === "HEAD") {
+    return new Request(url, { method, headers });
+  }
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  return new Request(url, { method, headers, body: body.length ? body : undefined });
+}
+
+async function sendFetch(res, response) {
+  res.statusCode = response.status;
+  const cookies =
+    typeof response.headers.getSetCookie === "function" ? response.headers.getSetCookie() : [];
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") return;
+    res.setHeader(key, value);
+  });
+  for (const cookie of cookies) {
+    res.appendHeader("set-cookie", cookie);
+  }
+  const buf = Buffer.from(await response.arrayBuffer());
+  res.end(buf);
+}
+
+function startHttpApi(handler) {
   const server = http.createServer(async (req, res) => {
     try {
       if (await dispatchBoxApi(req, res)) return;
+      await handler(req, res);
     } catch (e) {
       if (!res.headersSent) {
         res.statusCode = 500;
         res.setHeader("content-type", "application/json; charset=utf-8");
         res.end(JSON.stringify({ error: String(e) }));
       }
-      return;
     }
+  });
+  return new Promise((resolve, reject) => {
+    server.on("error", reject);
+    server.listen(PORT, HOST, () => resolve(server));
+  });
+}
+
+function startStatic(clientRoot, root = ROOT) {
+  const roots = staticRoots(root, clientRoot);
+  return startHttpApi(async (req, res) => {
     const urlPath = (req.url || "/").split("?")[0] || "/";
-    let file = safeJoin(clientRoot, urlPath === "/" ? "/index.html" : urlPath);
-    if (file && existsSync(file) && statSync(file).isFile()) {
-      sendFile(res, file);
-      return;
-    }
+    if (urlPath !== "/" && tryStatic(res, roots, urlPath)) return;
     const index = join(clientRoot, "index.html");
     if (wantsHtml(req) && existsSync(index) && (req.method || "GET").toUpperCase() === "GET") {
       sendFile(res, index);
       return;
     }
+    if (urlPath === "/" && tryStatic(res, roots, "/index.html")) return;
     res.statusCode = 404;
     res.end("not found");
+  }).then((server) => {
+    console.log(`[reelos-box] serving built UI ${clientRoot} on http://${HOST}:${PORT}/`);
+    return server;
   });
-  return new Promise((resolve, reject) => {
-    server.on("error", reject);
-    server.listen(PORT, HOST, () => {
-      console.log(`[reelos-box] serving built UI ${clientRoot} on http://${HOST}:${PORT}/`);
-      resolve(server);
-    });
+}
+
+export async function startNitroPlusApi(outputDir, root = ROOT) {
+  const staticDir = join(outputDir, "static");
+  const entry = join(outputDir, "functions/__server.func/index.mjs");
+  if (!existsSync(entry)) {
+    throw new Error("nitro server entry missing");
+  }
+  const mod = await import(pathToFileURL(entry).href);
+  const fetchHandler = mod?.default?.fetch;
+  if (typeof fetchHandler !== "function") {
+    throw new Error("nitro fetch handler missing");
+  }
+  const roots = staticRoots(root, existsSync(staticDir) ? staticDir : null);
+  const server = await startHttpApi(async (req, res) => {
+    const urlPath = (req.url || "/").split("?")[0] || "/";
+    if (urlPath !== "/" && tryStatic(res, roots, urlPath)) return;
+    const request = await nodeToFetch(req);
+    const response = await fetchHandler(request);
+    await sendFetch(res, response);
   });
+  console.log(`[reelos-box] nitro+api ${outputDir} on http://${HOST}:${PORT}/`);
+  return server;
 }
 
 function startVite(mode = "dev") {
@@ -153,7 +250,33 @@ function startVite(mode = "dev") {
   return child;
 }
 
+async function readPsArgs() {
+  return await new Promise((resolve) => {
+    try {
+      const child = spawn("ps", ["-eo", "args"], { encoding: "utf8" });
+      let out = "";
+      child.stdout?.on("data", (d) => {
+        out += d;
+      });
+      child.on("close", () => resolve(out));
+      child.on("error", () => resolve(""));
+    } catch {
+      resolve("");
+    }
+  });
+}
+
 async function kickSelfHeal() {
+  const playing = anythingPlaying({ psArgs: await readPsArgs() });
+  const idle = shouldSkipIdleWork({
+    playing,
+    load1: readHostLoad1(),
+    ffprobeD: 0,
+  });
+  if (idle.skip) {
+    console.log(`[reelos-box] skip engines — ${idle.reason} (nothing playing)`);
+    return;
+  }
   try {
     const { runSelfHeal } = await import("./reelos-selfheal.mjs");
     await runSelfHeal();
@@ -162,13 +285,30 @@ async function kickSelfHeal() {
   }
 }
 
+function armSelfHeal() {
+  setTimeout(() => void kickSelfHeal(), 8000);
+  setInterval(() => void kickSelfHeal(), 120_000).unref();
+}
+
 export async function startBox({ root = ROOT } = {}) {
   const client = findClientRoot(root);
   if (client) {
-    const server = await startStatic(client);
-    setTimeout(() => void kickSelfHeal(), 8000);
-    setInterval(() => void kickSelfHeal(), 120_000).unref();
+    const server = await startStatic(client, root);
+    armSelfHeal();
     return { mode: "static", client, server };
+  }
+  const nitro = findNitroOutput(root);
+  if (nitro && existsSync(join(nitro, "functions/__server.func/index.mjs"))) {
+    try {
+      const server = await startNitroPlusApi(nitro, root);
+      armSelfHeal();
+      return { mode: "nitro+api", client: nitro, server };
+    } catch (e) {
+      console.log(`[reelos-box] nitro+api failed (${e}) — production preview`);
+      console.log(`[reelos-box] production preview ${nitro} on http://${HOST}:${PORT}/`);
+      startVite("preview");
+      return { mode: "preview", client: nitro };
+    }
   }
   const preview = findPreviewBuild(root);
   if (preview) {

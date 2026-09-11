@@ -91,7 +91,7 @@ export function PerformanceRow() {
         <div>
           <p className="font-display font-medium">Low performance mode</p>
           <p className="mt-1 text-sm text-muted">
-            Caps transcode to one thread, throttles ffmpeg, and uses the GPU when present. Scene previews and subtitle extraction stay off so Jellyfin does not read TorBox dumps. Default on for a 4GB box.
+            Caps transcode to one thread when a GPU (/dev/dri) is present. No GPU: Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. Scene previews and subtitle extraction stay off so Jellyfin does not read TorBox dumps. A box with ≤4.5Gi MemTotal stays in this mode even if the toggle is off.
           </p>
         </div>
       </div>

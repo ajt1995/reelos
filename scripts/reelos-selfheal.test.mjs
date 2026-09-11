@@ -29,6 +29,8 @@ test("self-heal shell never walks FUSE, TorBox, or firstboot", () => {
   assert.match(heal, /ffprobe D-state/);
   assert.match(heal, /skip engines — ffprobe D-state/);
   assert.match(heal, /skip compose up — ffprobe D-state/);
+  assert.match(heal, /skip engines — idle load/);
+  assert.match(heal, /skip compose up — idle load/);
   assert.doesNotMatch(heal, /ffprobe -/);
 });
 

@@ -17,6 +17,8 @@ test("SKIP_NPM reuses node_modules when the lockfile matches", () => {
   assert.match(updater, /package-lock.json unchanged — reused node_modules/);
   assert.match(updater, /package\.json or package-lock\.json changed — running npm ci/);
   assert.match(updater, /vite build skipped — 4GB box/);
+  assert.match(updater, /prebuilt client staged/);
+  assert.match(updater, /4GB box never compiles/);
   assert.doesNotMatch(
     updater,
     /if cmp -s "\$ROOT\/app\/package\.json" "\$NEXT\/app\/package\.json"; then\n    SKIP_NPM=1/,

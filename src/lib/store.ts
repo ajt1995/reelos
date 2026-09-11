@@ -59,8 +59,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.36";
-export const SHIPPED_VERSION = "1.2.50.36";
+export const LATEST_VERSION = "1.2.50.37";
+export const SHIPPED_VERSION = "1.2.50.37";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -90,6 +90,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.37: Detect 4GB from MemTotal (≤4.5Gi) even if the low-perf toggle is off. Cap *arr/Jellyfin library scans; keep MediaInfo off. Do not remount Decypharr FUSE when /mnt/debrid lists. Idle high-load skips extra recover/compose/heal (D-state skip stays). Channel tarball ships a prebuilt UI so Apply never compiles on 4GB; npm ci only if the lockfile changed. start:box serves that hashed UI plus /api (not vite --host). No GPU (/dev/dri): Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. VAAPI transcode when a GPU is present; low-perf still caps threads. Complements #113. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.36: Sonarr/Radarr stop ffprobe/MediaInfo on debrid FUSE dumps so Apply does not restorm. Mailman/nudge_fuse do not stack another Decypharr FUSE when /mnt/debrid is live; unmount extras only when stale. 35's 4GB skip-npm/skip-vite and self-heal D-state skip stay. Complements #106. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.35: House Apply of 34 would npm ci (start:box script) and vite-build on 4GB while Sonarr ffprobe-storms FUSE dumps. Reuse node_modules when lockfile matches; skip vite build on 4GB; self-heal skips compose/recover while ffprobe is D-state. Complements #111. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.34: Background self-heal keeps the door, compose/*arr/Seerr, Jellyfin token, and request recover going so you do not tap Heal. Settings is Check/Apply, not a repair bench. Production start serves the built UI when dist exists. Beta channel is a stub for later Arena+Books. Complements #95. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -248,7 +249,7 @@ function logFor(id: string, label: string) {
     gluetun: "Killswitch on. qBittorrent on the VPN network.",
     debrid: "Decypharr registered as the download client. Engines send work here.",
     caddy: "reelos.local → shell. Engines on /advanced.",
-    transcode: "No discrete GPU. Software encode with a Settings note.",
+    transcode: "No /dev/dri. DirectPlay/DirectStream only — no CPU ffmpeg.",
     link: "Engines, request UI, and media server agree on paths.",
     tailscale: "tailscaled running. Auth URL copied to finish screen.",
     cf: "Tunnel service installed from token.",

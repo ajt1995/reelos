@@ -478,17 +478,26 @@ need daemon/reelos-selfheal.sh 'not enabling firstboot'
 need daemon/reelos-selfheal.sh 'ffprobe D-state'
 need daemon/reelos-update.sh 'vite build for production door'
 need daemon/reelos-update.sh 'vite build skipped — 4GB box'
+need daemon/reelos-update.sh 'prebuilt client staged'
+need daemon/reelos-update.sh '4GB box never compiles'
 need daemon/reelos-update.sh 'package-lock.json unchanged — reused node_modules'
 need daemon/wire-engines.parts/00.part 'fuse stacked'
 need daemon/wire-engines.parts/00.part 'not restarting'
+need daemon/wire-engines.parts/02.part 'do not remount if listed'
+need daemon/wire-engines.parts/06.part 'box_is_small'
 need daemon/wire-engines.parts/07.part 'enableMediaInfo'
+need daemon/wire-engines.parts/07.part 'rescanAfterRefresh'
 need daemon/wire-engines.parts/09.part 'no-ffprobe'
 need daemon/reelos-update.sh 'no-ffprobe'
 need daemon/reelos-update.sh 'fuse stacked'
+need daemon/reelos-update.sh 'do not remount if listed'
 need install/compose/configs/sonarr/reelos-debrid.json 'enableMediaInfo'
+need install/compose/configs/sonarr/reelos-debrid.json 'rescanAfterRefresh'
 need install/compose/configs/radarr/reelos-debrid.json 'enableMediaInfo'
 need scripts/reelos-box.mjs 'production preview'
 need scripts/reelos-box.mjs 'serving built UI'
+need scripts/reelos-box.mjs 'nitro+api'
+need daemon/reelos-selfheal.sh 'idle load'
 need scripts/reelos-lookup-plugin.mjs 'This box is behind the latest code even though the version number matches.'
 need daemon/reelos-update.sh 'not printing applied'
 need daemon/reelos-update.sh 'package.json or package-lock.json changed'
@@ -523,6 +532,7 @@ if [ -d "$WORK/src/src" ]; then
   cp -a "$WORK/src/src" "$NEXT/app/src"
   [ -d "$WORK/src/server" ] && cp -a "$WORK/src/server" "$NEXT/app/server"
   [ -d "$WORK/src/scripts" ] && cp -a "$WORK/src/scripts" "$NEXT/app/scripts"
+  [ -d "$WORK/src/prebuilt" ] && cp -a "$WORK/src/prebuilt" "$NEXT/app/prebuilt"
   mkdir -p "$NEXT/app/public"
   if [ -d "$WORK/src/public" ]; then
     cp -a "$WORK/src/public/." "$NEXT/app/public/" || true
@@ -640,22 +650,41 @@ if [ "$SKIP_NPM" = 0 ] && [ -f "$NEXT/app/package.json" ]; then
   fi
 fi
 
+if [ -f "$NEXT/app/package.json" ]; then
+  stage_prebuilt_client() {
+    local app=$1
+    if [ -f "$app/prebuilt/client/index.html" ]; then
+      mkdir -p "$app/dist"
+      cp -a "$app/prebuilt/client/." "$app/dist/"
+      log "prebuilt client staged — 4GB box never compiles"
+    fi
+    if [ -d "$app/prebuilt/vercel-output" ]; then
+      mkdir -p "$app/.vercel/output"
+      cp -a "$app/prebuilt/vercel-output/." "$app/.vercel/output/"
+      log "prebuilt client staged — 4GB box never compiles"
+    fi
+  }
+  stage_prebuilt_client "$NEXT/app"
+fi
+
 if [ -f "$NEXT/app/package.json" ] && [ -d "$NEXT/app/node_modules" ]; then
   mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
   avail_kb=$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
   # House is 3.2Gi. Staging vite build next to live :8080 is an OOM even when
-  # fail-soft — 28 starved Home. Skip on 4GB / low MemAvailable; start:box
-  # already falls back to vite --host :8080.
-  if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4608000 ]; then
-    log "vite build skipped — 4GB box (start:box falls back to vite --host :8080)"
+  # fail-soft — 28 starved Home. Ship a prebuilt client; never compile on 4GB.
+  if [ -f "$NEXT/app/dist/index.html" ] || [ -f "$NEXT/app/.vercel/output/nitro.json" ] \
+    || [ -f "$NEXT/app/prebuilt/vercel-output/nitro.json" ]; then
+    log "vite build skipped — 4GB box never compiles (using prebuilt client)"
+  elif [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4718592 ]; then
+    log "vite build skipped — 4GB box (start:box uses prebuilt / vite preview)"
   elif [ "${avail_kb:-0}" -gt 0 ] && [ "$avail_kb" -lt 1843200 ]; then
-    log "vite build skipped — 4GB box (start:box falls back to vite --host :8080)"
+    log "vite build skipped — 4GB box (start:box uses prebuilt / vite preview)"
   else
     log "vite build for production door (8080 still on previous tree)"
     if (cd "$NEXT/app" && PATH="$PWD/node_modules/.bin:$PATH" NODE_ENV=production timeout 180 node scripts/with-app-env.mjs vite build); then
       log "production client built"
     else
-      log "vite build skipped — start:box falls back to vite --host :8080"
+      log "vite build skipped — start:box uses prebuilt / vite preview"
     fi
   fi
 fi
@@ -1055,7 +1084,9 @@ nudge_fuse() {
   local n
   n=$(fuse_count)
   if fuse_live; then
-    log "fuse already on host ($n mount(s)) — not remounting"
+    mkdir -p "$STATE"
+    echo 1 >"$STATE/fuse-listed" 2>/dev/null || true
+    log "fuse already on host ($n mount(s)) — do not remount if listed"
   elif [ -x "$ROOT/bin/wire-engines.py" ]; then
     log "fuse not on host — remount decypharr"
     python3 "$ROOT/bin/wire-engines.py" fuse || log "fuse remount non-fatal"

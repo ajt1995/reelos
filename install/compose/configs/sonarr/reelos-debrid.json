@@ -1,5 +1,6 @@
 {
   "enableMediaInfo": false,
   "ffprobeLibrary": false,
+  "rescanAfterRefresh": "Never",
   "note": "Debrid/FUSE dumps. Import and grab still use filenames. Apply must not turn this back on."
 }

@@ -213,7 +213,52 @@ def log_wire(msg: str) -> None:
         pass
 
 
+SMALL_MEM_KB = 4_718_592  # 4.5 Gi
+
+
+def mem_total_kb(text: str | None = None) -> int:
+    raw = text
+    if raw is None:
+        try:
+            raw = Path("/proc/meminfo").read_text()
+        except OSError:
+            return 0
+    for line in raw.splitlines():
+        if line.startswith("MemTotal:"):
+            try:
+                return int(line.split()[1])
+            except (ValueError, IndexError):
+                return 0
+    return 0
+
+
+def loadavg_1(text: str | None = None) -> float:
+    raw = text
+    if raw is None:
+        try:
+            raw = Path("/proc/loadavg").read_text()
+        except OSError:
+            return 0.0
+    try:
+        return float(raw.split()[0])
+    except (ValueError, IndexError):
+        return 0.0
+
+
+def box_is_small(mem_kb: int | None = None) -> bool:
+    """≤4.5Gi MemTotal is small even if the low-perf toggle is off/weird."""
+    n = mem_total_kb() if mem_kb is None else mem_kb
+    return 0 < n <= SMALL_MEM_KB
+
+
+def box_load_high(load1: float | None = None) -> bool:
+    n = loadavg_1() if load1 is None else load1
+    return n >= 2.0
+
+
 def performance_low() -> bool:
+    if box_is_small():
+        return True
     p = STATE / "performance.json"
     if not p.exists():
         try:

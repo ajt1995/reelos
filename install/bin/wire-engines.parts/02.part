@@ -3,10 +3,11 @@ ef ensure_fuse() -> None:
     share_mnt()
     n = fuse_host_mount_count()
     if fuse_on_host():
+        persist_fuse_listed()
         if n > 1:
-            log_wire(f"fuse already on host — stacked {n}, not remounting")
+            log_wire(f"fuse already on host — stacked {n}, do not remount if listed")
         else:
-            log_wire("fuse already on host")
+            log_wire("fuse already on host — do not remount if listed")
         subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
         log_wire("door caddy/reelos started after fuse")
         return

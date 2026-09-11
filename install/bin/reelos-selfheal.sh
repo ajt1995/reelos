@@ -48,9 +48,36 @@ ffprobe_d_state() {
   ps -eo state,comm 2>/dev/null | awk '$1 ~ /D/ && $2 ~ /ffprobe/ { n++ } END { print n+0 }'
 }
 
+SMALL_MEM_KB=4718592
+
+box_is_small() {
+  local mem_kb
+  mem_kb=$(awk '/MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+  [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le "$SMALL_MEM_KB" ]
+}
+
+load_high() {
+  awk '{ exit !($1+0 >= 2) }' /proc/loadavg 2>/dev/null
+}
+
+anything_playing() {
+  ps -eo args 2>/dev/null | grep -i '[j]ellyfin' | grep -qi ffmpeg
+}
+
+idle_load_skip() {
+  if anything_playing; then
+    return 1
+  fi
+  if load_high; then
+    return 0
+  fi
+  return 1
+}
+
 # Core stack only. --no-recreate: do not bounce healthy containers.
 # Do not pull compose images. Do not walk /mnt or /media.
 # Do not compose-up / recover while Sonarr is ffprobe-D on FUSE dumps.
+# Idle + high load: don't start extra recover/compose/heal (D-state skip stays first).
 ensure_compose() {
   if [ ! -f "$STATE/provisioned" ]; then
     return 0
@@ -64,6 +91,10 @@ ensure_compose() {
     log "skip compose up — ffprobe D-state $d"
     return 0
   fi
+  if idle_load_skip; then
+    log "skip compose up — idle load (nothing playing)"
+    return 0
+  fi
   cd "$ROOT/compose" || return 0
   docker compose up -d --no-recreate >/dev/null 2>&1 || true
 }
@@ -74,6 +105,17 @@ ensure_compose() {
 # not talking to TorBox
 
 ensure_door
+d=$(ffprobe_d_state)
+if [ "${d:-0}" -gt 0 ]; then
+  log "skip compose up — ffprobe D-state $d"
+  log "skip engines — ffprobe D-state $d (not walking FUSE)"
+  exit 0
+fi
+if idle_load_skip; then
+  log "skip compose up — idle load (nothing playing)"
+  log "skip engines — idle load (nothing playing)"
+  exit 0
+fi
 ensure_compose
 
 APP_HEAL=""
