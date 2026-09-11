@@ -44,13 +44,24 @@ ensure_door() {
   fi
 }
 
+ffprobe_d_state() {
+  ps -eo state,comm 2>/dev/null | awk '$1 ~ /D/ && $2 ~ /ffprobe/ { n++ } END { print n+0 }'
+}
+
 # Core stack only. --no-recreate: do not bounce healthy containers.
 # Do not pull compose images. Do not walk /mnt or /media.
+# Do not compose-up / recover while Sonarr is ffprobe-D on FUSE dumps.
 ensure_compose() {
   if [ ! -f "$STATE/provisioned" ]; then
     return 0
   fi
   if [ ! -f "$ROOT/compose/docker-compose.yml" ]; then
+    return 0
+  fi
+  local d
+  d=$(ffprobe_d_state)
+  if [ "${d:-0}" -gt 0 ]; then
+    log "skip compose up — ffprobe D-state $d"
     return 0
   fi
   cd "$ROOT/compose" || return 0
@@ -71,7 +82,10 @@ if [ -f "$ROOT/app/scripts/reelos-selfheal.mjs" ]; then
 elif [ -f "/workspace/scripts/reelos-selfheal.mjs" ]; then
   APP_HEAL="/workspace/scripts/reelos-selfheal.mjs"
 fi
-if [ -n "$APP_HEAL" ]; then
+d=$(ffprobe_d_state)
+if [ "${d:-0}" -gt 0 ]; then
+  log "skip engines — ffprobe D-state $d (not walking FUSE)"
+elif [ -n "$APP_HEAL" ]; then
   node "$APP_HEAL" >>"$LOG" 2>&1 || true
 fi
 exit 0
