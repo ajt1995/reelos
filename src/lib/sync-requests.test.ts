@@ -112,7 +112,7 @@ test("25 mostly-available rows are not 25 transferring", () => {
   assert.deepEqual(inflight.map((r) => r.id), ["wait", "grab"]);
 });
 
-test("Home filters in-flight; Requests page still lists everything", () => {
+test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
@@ -121,8 +121,57 @@ test("Home filters in-flight; Requests page still lists everything", () => {
   assert.match(home, /transferring = inflight\.length/);
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
   assert.match(shell, /inFlightRequests\(s\.requests/);
-  assert.doesNotMatch(reqs, /inFlightRequests/);
-  assert.match(reqs, /filter === "all" \? true : r\.status === filter/);
+  assert.match(reqs, /inFlightRequests\(requests, \{ libraryIds: library, titles: shelf \}\)/);
+  assert.match(reqs, /inflight\.filter\(\(r\) => \(filter === "all" \? true : r\.status === filter\)\)/);
+  assert.doesNotMatch(reqs, /id: "available"/);
+  assert.doesNotMatch(reqs, /id: "failed"/);
+  assert.doesNotMatch(reqs, /to="\/play\/\$id"/);
+  assert.doesNotMatch(reqs, />\s*Play\s*</);
+  assert.match(reqs, /cancel\(r\.id\)/);
+  assert.match(reqs, />\s*Cancel\s*</);
+});
+
+test("Requests page drops Available now / Play movies; keeps searching Rick and Morty", () => {
+  const requests = [
+    row({
+      id: "rm-s3",
+      titleId: "tmdb-tv-60625",
+      title: "Rick and Morty",
+      status: "waiting",
+      season: 3,
+      reason: "Searching — no file yet",
+    }),
+    row({
+      id: "rm-s4",
+      titleId: "tmdb-tv-60625",
+      title: "Rick and Morty",
+      status: "waiting",
+      season: 4,
+      reason: "Searching — no file yet",
+    }),
+    row({ id: "coyote", titleId: "tmdb-1012201", title: "Coyote vs. Acme", status: "available" }),
+    row({ id: "odyssey", titleId: "tmdb-1241982", title: "The Odyssey", status: "available" }),
+    row({ id: "toy", titleId: "tmdb-1019412", title: "Toy Story 5", status: "available" }),
+    row({ id: "spiderman", titleId: "tmdb-1064028", title: "Spider-Man: Brand New Day", status: "available" }),
+    row({ id: "coyote-stale", titleId: "tmdb-1012201", title: "Coyote vs. Acme", status: "downloading" }),
+  ];
+  const inflight = inFlightRequests(requests, {
+    libraryIds: ["tmdb-1012201", "tmdb-1241982", "tmdb-1019412", "tmdb-1064028"],
+    titles: [
+      { id: "tmdb-1012201", kind: "movie" },
+      { id: "tmdb-1241982", kind: "movie" },
+      { id: "tmdb-1019412", kind: "movie" },
+      { id: "tmdb-1064028", kind: "movie" },
+    ],
+  });
+  assert.deepEqual(
+    inflight.map((r) => r.id),
+    ["rm-s3", "rm-s4"],
+  );
+  assert.equal(
+    inflight.every((r) => r.status === "waiting" && r.title === "Rick and Morty"),
+    true,
+  );
 });
 
 test("server available upgrades a stale local downloading row for the same titleId", () => {

@@ -8,7 +8,7 @@ export function isInFlightRequest(r: { status: string; engine?: string }): boole
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
-/** Home "Your requests" + transferring chip: overlay library hits, then keep in-flight only. */
+/** Home "Your requests", Requests page, and transferring chip: overlay library hits, then keep in-flight only. */
 export function inFlightRequests(
   requests: MediaRequest[],
   opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "kind">[] } = {},

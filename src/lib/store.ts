@@ -58,8 +58,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.31";
-export const SHIPPED_VERSION = "1.2.50.31";
+export const LATEST_VERSION = "1.2.50.35";
+export const SHIPPED_VERSION = "1.2.50.35";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 
 export type BootStepId = "local" | "house" | "library" | "requests";
@@ -88,6 +88,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.35: Requests page only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/Play belong on Library / On this box. Cancel stays for in-flight. Complements #90. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.31: Firstboot does not loop on a provisioned box. Wizard and Apply stamp stack-installed; install.sh does not cp onto itself when HERE==ROOT; Apply does not enable firstboot. Complements #86. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.30: Home Your requests only lists in-flight titles (searching, grabbing, linked waiting for import). Available/Cached/library hits stay on Requests and On this box — not the top row. Transferring chip uses the same in-flight count. Complements #85. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.29: Apply skips FUSE dumps so Vite can bind. probe_home restarts hung reelos after 15s. GET /api/ready fans in box+library+requests; splash shows honest warming steps instead of Begin setup on a provisioned house. *arr start from ready in the background. Complements #84. Not 1.2.51 (Tron).",
