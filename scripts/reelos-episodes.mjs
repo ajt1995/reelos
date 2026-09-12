@@ -8,7 +8,6 @@ import {
   seasonIsUnreleased,
   findLibraryTitle,
   UNRELEASED_SEASON_COPY,
-  IMPORTING_SEASON_COPY,
 } from "./reelos-seerr.mjs";
 import { arrApiKey, arrJson, loadPresenceFacts } from "./reelos-request-status.mjs";
 

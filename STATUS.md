@@ -28,7 +28,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - **VERSION / channel:** `1.2.50.56`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.55; On this box dump-twin collapse. 55 unreleased season honesty. 54 Caddy 2.6 Updating page. 53 overlay heartbeat. 52 lookupKey. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
+- **Base:** `main` at 1.2.50.55; Rookie honesty + On this box dump-twin collapse. 55 unreleased season honesty. 54 Caddy 2.6 Updating page. 53 overlay heartbeat. 52 lookupKey. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.55** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
@@ -36,7 +36,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ### 1.2.50.56 named titles win / Importing ≠ Watch / Rookie 0%
 
-Austin house screenshot: On this box still painted `www UIndex org - Silo`, Torrenting Silo, `Reacher Il Ponte`, and Rookie at **0%**. Named Silo / Reacher / The Rookie already exist. 56 named title wins — dump/hash/UIndex twins collapse when a JF/TMDB/TVDB card exists. Dump files waiting for Sonarr import paint **Importing**, not Watch. Linked-at-0% paints Importing / Searching / Grabbing, never a fake **0%**. TBA seasons stay Coming (55). Empty art is a placeholder; titles wrap; year 0 stays off. Wizard stays 7. Beta off. Skip 49. Do not house-Apply until told.
+Austin house screenshot: On this box still painted `www UIndex org - Silo`, Torrenting Silo, `Reacher Il Ponte`, and Rookie at **0%**. Named Silo / Reacher / The Rookie already exist. S02 said Watch then opened empty Requested. 56 named title wins — dump/hash/UIndex twins collapse when a JF/TMDB/TVDB card exists. Dump files waiting for Sonarr import paint **Importing** / **On disk, importing**, not Watch and not infinite Request. Home does not hero a 0% Rookie when the named series is On this box. S09 stays Coming (55). Discover hides owned. Remove dump does not hide named Rookie. Empty art is a placeholder; titles wrap; year 0 stays off. Wizard stays 7. Beta off. Skip 49. Do not house-Apply until told.
 
 ### 1.2.50.55 unreleased seasons are Coming, not Request/Watch
 
