@@ -44,6 +44,12 @@ import { cmpVer, isBetaLine, isRollback, notesForVersion, pendingNotes } from ".
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
+  dispatchProfilesApi,
+  filterDiscoverForProfile,
+  profilesStore,
+  refuseIfKidsLocked,
+} from "./reelos-profiles.mjs";
+import {
   forgetRemovedTitleIds,
   readRemovedTitleIds,
   rememberRemovedTitleIds,
@@ -403,7 +409,7 @@ async function handleLookup(req, res) {
       return;
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
+    titles.push(...applyProfileDiscover(req, mapSeerrSearchResults(hits, { q, limit: 16 })));
     note(`seerr hits=${hits.length} titles=${titles.length}`);
   } catch (e) {
     error = lookupFailureMessage(e);
@@ -424,7 +430,13 @@ function ownedDiscoverIds() {
   return ids;
 }
 
-async function handleDiscover(_req, res) {
+function applyProfileDiscover(req, titles) {
+  const { profile } = profilesStore().resolveProfile(req);
+  const curator = profilesStore().readCurator(profile.id);
+  return filterDiscoverForProfile(titles, { curator, profile });
+}
+
+async function handleDiscover(req, res) {
   const movies = [];
   const tv = [];
   let error = null;
@@ -461,12 +473,19 @@ async function handleDiscover(_req, res) {
       ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
     ];
     if (movieRes.ok || movieRes2.ok) {
-      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }));
+      movies.push(
+        ...applyProfileDiscover(
+          req,
+          mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }),
+        ),
+      );
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
     if (tvRes.ok || tvRes2.ok) {
-      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds }));
+      tv.push(
+        ...applyProfileDiscover(req, mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds })),
+      );
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
@@ -1449,6 +1468,7 @@ async function handleRequest(req, res) {
     send(res, 405, { ok: false, error: "POST only" });
     return;
   }
+  if (refuseIfKidsLocked(req, res, send, { request: true })) return;
   const body = await readBody(req);
   const tmdb = String(body.tmdb || body.tmdbId || "").trim();
   const tvdb = String(body.tvdb || body.tvdbId || "").trim();
@@ -1957,6 +1977,7 @@ async function handleSettings(req, res) {
     send(res, 200, { ok: true, ...readUiSettings() });
     return;
   }
+  if (refuseIfKidsLocked(req, res, send, { settings: true })) return;
   if ((req.method || "GET").toUpperCase() !== "POST") {
     send(res, 405, { ok: false });
     return;
@@ -2641,6 +2662,16 @@ async function handleHardware(req, res) {
 export async function dispatchReelOsApi(req, res) {
   const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
   const method = (req.method || "GET").toUpperCase();
+  if (await dispatchProfilesApi(req, res, { send, readBody })) return true;
+  if (
+    method === "POST" &&
+    ["/api/update/apply", "/api/update/run", "/api/reset", "/api/password", "/api/quality", "/api/intent"].includes(
+      pathOnly,
+    ) &&
+    refuseIfKidsLocked(req, res, send, { settings: true })
+  ) {
+    return true;
+  }
   if (pathOnly.startsWith("/api/books")) {
     if (!betaEnabled()) {
       send(res, 404, { ok: false, error: "Books is off. Settings → Updates → Beta channel." });

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
+import { useHouseholdProfile } from "@/lib/profiles";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Kind, MediaRequest, Title } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { installHonestRequest } from "@/lib/honest-request";
 
 function isKind(t: Title | undefined, want: Kind) {
@@ -34,6 +36,7 @@ export function DiscoverView() {
   const requests = useReelStore((s) => s.requests);
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const inflight = inFlightRequests(requests, { titles: shelf });
+  const { votes, vote } = useHouseholdProfile();
   useSyncRequests();
 
   useEffect(() => {
@@ -174,7 +177,7 @@ export function DiscoverView() {
         hits.length > 0 ? (
           <Row label="Results">
             {hits.map((t) => (
-              <TitleCard key={t.id} title={t} />
+              <DiscoverTitleCard key={t.id} title={t} vote={votes[t.id]} onVote={vote} />
             ))}
           </Row>
         ) : looking ? (
@@ -191,8 +194,17 @@ export function DiscoverView() {
             onBox={movieShelf}
             finishing={finishingMovies}
             pick={browseMovies}
+            votes={votes}
+            onVote={vote}
           />
-          <DiscoverKind heading="Shows" onBox={tvShelf} finishing={finishingTv} pick={browseTv} />
+          <DiscoverKind
+            heading="Shows"
+            onBox={tvShelf}
+            finishing={finishingTv}
+            pick={browseTv}
+            votes={votes}
+            onVote={vote}
+          />
           {booksOn && bookFeatured.length > 0 ? (
             <section className="mt-10">
               <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
@@ -233,11 +245,15 @@ function DiscoverKind({
   onBox,
   finishing,
   pick,
+  votes,
+  onVote,
 }: {
   heading: string;
   onBox: Title[];
   finishing: { r: MediaRequest; t: Title }[];
   pick: Title[];
+  votes: Record<string, "up" | "down">;
+  onVote: (id: string, v: "up" | "down") => void;
 }) {
   if (!onBox.length && !finishing.length && !pick.length) return null;
   return (
@@ -259,11 +275,59 @@ function DiscoverKind({
       ) : null}
       {pick.length ? (
         <Row label="Pick tonight">
-          {pick.map((t) => (
-            <TitleCard key={t.id} title={t} />
+          {pick.filter((t) => votes[t.id] !== "down").map((t) => (
+            <DiscoverTitleCard key={t.id} title={t} vote={votes[t.id]} onVote={onVote} />
           ))}
         </Row>
       ) : null}
+    </div>
+  );
+}
+
+function DiscoverTitleCard({
+  title,
+  vote,
+  onVote,
+}: {
+  title: Title;
+  vote?: "up" | "down";
+  onVote: (id: string, v: "up" | "down") => void;
+}) {
+  return (
+    <div className="w-[148px] shrink-0 sm:w-[168px]">
+      <TitleCard title={title} className="w-auto" />
+      <div className="mt-1 flex gap-1">
+        <button
+          type="button"
+          aria-label="Like"
+          className={cn(
+            "flex h-8 flex-1 items-center justify-center rounded-lg bg-card-2",
+            vote === "up" && "bg-gold text-gold-fg",
+          )}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onVote(title.id, "up");
+          }}
+        >
+          <ThumbsUp className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Dislike"
+          className={cn(
+            "flex h-8 flex-1 items-center justify-center rounded-lg bg-card-2",
+            vote === "down" && "bg-danger/20 text-danger",
+          )}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onVote(title.id, "down");
+          }}
+        >
+          <ThumbsDown className="size-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

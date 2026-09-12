@@ -66,6 +66,8 @@ export interface Title {
   onDiskSeasons?: number[];
   tracks?: number;
   rating: number;
+  adult?: boolean;
+  certification?: string;
   genres: string[];
   overview: string;
   director?: string;
@@ -124,6 +126,7 @@ export interface HouseholdUser {
   id: string;
   name: string;
   role: "admin" | "member";
+  kind?: "adult" | "kids";
 }
 
 export interface Disk {

@@ -20,6 +20,7 @@ import {
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
+import { useHouseholdProfile } from "@/lib/profiles";
 
 function looksLikeHashTitle(name?: string) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
@@ -88,6 +89,7 @@ export function TitleView({ id }: { id: string }) {
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watchDoor = useReelStore((s) => s.watch);
   const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
+  const { kids } = useHouseholdProfile();
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
@@ -299,11 +301,13 @@ export function TitleView({ id }: { id: string }) {
                 In library
               </span>
             ) : null}
-            {available ? <RemoveFromBox title={resolved} /> : null}
+            {available && !kids ? <RemoveFromBox title={resolved} /> : null}
             {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
+            ) : kids ? (
+              <p className="self-center text-sm text-muted">Kids profile cannot Request. Switch profiles in the header.</p>
             ) : showRequestQueueControls({
                 kind: resolved.kind,
                 available: series ? thisSeasonOnBox : available,
@@ -361,7 +365,7 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {!available && !blocked && hashPaste ? (
+          {!available && !blocked && !kids && hashPaste ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {

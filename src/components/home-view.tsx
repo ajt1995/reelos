@@ -6,6 +6,7 @@ import { RemoveFromBox } from "@/components/remove-from-box";
 import { HOSTNAME, rememberCatalogTitles } from "@/lib/catalog";
 import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
+import { useHouseholdProfile } from "@/lib/profiles";
 import {
   collapseHomeRequestCards,
   inFlightRequests,
@@ -31,6 +32,7 @@ export function HomeView() {
   const requests = useReelStore((s) => s.requests);
   const library = useReelStore((s) => s.library);
   const watch = useReelStore((s) => s.watchProgress);
+  const { continueWatching, kids } = useHouseholdProfile();
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
@@ -109,10 +111,11 @@ export function HomeView() {
     .filter((x) => x.t && !isGhostRequestLabel(x.t.title, x.t.id))
     .slice(0, 12);
 
-  const continueWatch = Object.entries(watch)
+  const continueWatch = Object.entries({ ...watch, ...continueWatching })
     .filter(([, v]) => v > 0.03 && v < 0.96)
     .map(([id, v]) => ({ t: getTitle(id), v }))
-    .filter((x) => x.t && library.includes(x.t.id));
+    .filter((x) => x.t && library.includes(x.t.id))
+    .filter((x) => !(kids && x.t && (x.t.adult || (x.t.genres || []).some((g) => /adult|erotic|nc-17/i.test(g)))));
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
@@ -210,12 +213,15 @@ export function HomeView() {
         </Row>
       ) : null}
 
-      {shelf.length > 0 ? (
+      {shelf.filter((t) => !(kids && (t.adult || (t.genres || []).some((g) => /adult|erotic|nc-17/i.test(g))))).length > 0 ? (
         <Row label="On this box">
-          {shelf.slice(0, 24).map((t) => (
+          {shelf
+            .filter((t) => !(kids && (t.adult || (t.genres || []).some((g) => /adult|erotic|nc-17/i.test(g)))))
+            .slice(0, 24)
+            .map((t) => (
             <div key={t.id} className="w-[148px] shrink-0 sm:w-[168px]">
               <TitleCard title={t} className="w-auto" />
-              <RemoveFromBox title={t} compact />
+              {kids ? null : <RemoveFromBox title={t} compact />}
             </div>
           ))}
         </Row>

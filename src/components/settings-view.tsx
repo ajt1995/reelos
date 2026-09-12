@@ -7,6 +7,7 @@ import {
   KeyRound,
   Shield,
   SlidersHorizontal,
+  ThumbsUp,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
   LibraryPanel,
   NotesPanel,
   QualityPanel,
+  TastePanel,
   UsersPanel,
 } from "@/components/settings-accordions";
 import { HardwareDetectedCard, PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panels";
@@ -156,6 +158,15 @@ export function SettingsView() {
           onClick={() => setPanel(panel === "users" ? null : "users")}
         >
           <UsersPanel />
+        </Row>
+        <Row
+          icon={ThumbsUp}
+          title="Taste"
+          hint="Like/dislike on Discover. Google TV: no. Trakt: optional free."
+          open={panel === "taste"}
+          onClick={() => setPanel(panel === "taste" ? null : "taste")}
+        >
+          <TastePanel />
         </Row>
         <Row
           icon={Shield}
