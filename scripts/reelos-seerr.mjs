@@ -168,11 +168,26 @@ export function findLibraryTitle(titles, id) {
   );
   return (
     (titles || []).find((t) => {
+      const kind = t?.kind === "tv" || t?.kind === "anime" ? "tv" : t?.kind === "movie" ? "movie" : null;
+      if (parsed?.mediaType === "movie" && kind === "tv") return false;
+      if (parsed?.mediaType === "tv" && kind === "movie") return false;
       const ids = collectTitleIds(t);
       if (ids.some((x) => keys.has(x) || (hash && String(x).toLowerCase() === hash))) return true;
       if (hash && String(t?.path || "").toLowerCase().includes(hash)) return true;
       return false;
     }) || null
+  );
+}
+
+/** tmdb-155 is Dark Knight in Radarr. tmdb-tv-155 is 3rd Rock in Sonarr. Numeric tmdb is not enough. */
+export function sonarrSeriesForParsed(parsed, series = []) {
+  if (!parsed || parsed.mediaType !== "tv") return null;
+  return (
+    (series || []).find(
+      (s) =>
+        (parsed.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
+        (parsed.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
+    ) || null
   );
 }
 
@@ -1072,11 +1087,7 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
       movies: facts.movies,
     });
     const arrDisk = onDiskSeasonsFor(parsed, index);
-    const seriesHit = (facts.series || []).find(
-      (s) =>
-        (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-        (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-    );
+    const seriesHit = sonarrSeriesForParsed(parsed, facts.series);
     const importingRaw = [
       ...new Set(
         [
@@ -1192,11 +1203,7 @@ export function titleRequestSeasonPayload({
   ].sort((a, b) => a - b);
   const seasonN = season != null && season !== "" && Number.isFinite(Number(season)) ? Number(season) : undefined;
   const seasonOnDisk = seasonN != null && disk.includes(seasonN);
-  const seriesRow = (facts?.series || []).find(
-    (s) =>
-      (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-      (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-  );
+  const seriesRow = sonarrSeriesForParsed(parsed, facts?.series);
   const fromTitle = [
     ...(title?.unreleasedSeasons || []),
     ...unreleasedSeasonNumbers(title?.seasonFacts),
