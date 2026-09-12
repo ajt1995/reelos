@@ -100,6 +100,20 @@ services:
     ports:
       - "127.0.0.1:8686:8686"
 
+  kavita:
+    profiles: ["books"]
+    image: lscr.io/linuxserver/kavita:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./configs/kavita:/config
+      - /srv/media/books:/media
+    ports:
+      - "0.0.0.0:5000:5000"
+
   bazarr:
     profiles: ["subtitles"]
     image: lscr.io/linuxserver/bazarr:latest

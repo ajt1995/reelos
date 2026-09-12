@@ -375,6 +375,12 @@ export function ensureHardwareProfile(root = ROOT) {
   return { ran: true, skippedSync: false, status: r.status };
 }
 
+function idleOffBooks() {
+  void import("./reelos-beta-sidecar.mjs")
+    .then((m) => m.idleOffBooksIfNeeded())
+    .catch(() => {});
+}
+
 export async function startBox({ root = ROOT } = {}) {
   ensureHardwareProfile(root);
   killOrphan8080();
@@ -382,6 +388,7 @@ export async function startBox({ root = ROOT } = {}) {
   if (client) {
     const server = await startStatic(client, root);
     armSelfHeal();
+    idleOffBooks();
     return { mode: "static", client, server };
   }
   const nitro = findNitroOutput(root);
@@ -389,6 +396,7 @@ export async function startBox({ root = ROOT } = {}) {
     try {
       const server = await startNitroPlusApi(nitro, root);
       armSelfHeal();
+      idleOffBooks();
       return { mode: "nitro+api", client: nitro, server };
     } catch (e) {
       console.log(`[reelos-box] nitro+api failed (${e}) — production preview`);

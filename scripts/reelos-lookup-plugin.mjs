@@ -43,6 +43,8 @@ import {
   rememberRemovedTitleIds,
   removeLibraryTitle,
 } from "./reelos-library-remove.mjs";
+import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
+import { dispatchBooksApi } from "./reelos-books.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -1057,7 +1059,8 @@ function otaNote(msg) {
 async function handleUpdateCheck(_req, res) {
   const local = localVersion();
   const beta = readUiSettings().betaChannel === true;
-  const channel = beta ? "beta" : "stable";
+  const inTreeArena = existsSync(new URL("./reelos-beta-sidecar.mjs", import.meta.url));
+  const channel = beta && !inTreeArena ? "beta" : "stable";
   const best = await loadChannel(channel);
   if (!best) {
     send(res, 200, {
@@ -1967,7 +1970,15 @@ async function handleSettings(req, res) {
     if (next.stackImages) writeFileSync(flag, "1\n");
     else spawnSync("rm", ["-f", flag], { encoding: "utf8" });
   }
-  send(res, 200, { ok: true, ...next });
+  let beta = undefined;
+  if ("betaChannel" in body) {
+    try {
+      beta = applyBetaSidecar(Boolean(next.betaChannel));
+    } catch (e) {
+      beta = { ok: false, error: String(e) };
+    }
+  }
+  send(res, 200, { ok: true, ...next, beta });
 }
 
 async function handlePorts(_req, res) {
@@ -2325,6 +2336,7 @@ async function handleReady(req, res) {
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,
     hardware: slice.hardware || publicHardware(loadSavedHardware(), readHostMemKb()),
+    betaChannel: betaEnabled(),
     timings: { ...timings, total: Date.now() - started },
   });
 }
@@ -2397,6 +2409,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (betaEnabled()) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") {
     p.push("jellyfin");
@@ -2632,6 +2645,13 @@ async function handleHardware(req, res) {
 export async function dispatchReelOsApi(req, res) {
   const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
   const method = (req.method || "GET").toUpperCase();
+  if (pathOnly.startsWith("/api/books")) {
+    if (!betaEnabled()) {
+      send(res, 404, { ok: false, error: "Books is off. Settings → Updates → Beta channel." });
+      return true;
+    }
+    if (await dispatchBooksApi(req, res)) return true;
+  }
   if (pathOnly === "/api/lookup") {
     await handleLookup(req, res);
     return true;
@@ -2778,6 +2798,9 @@ export async function dispatchReelOsApi(req, res) {
 }
 
 function attachLookupApi(server) {
+  void import("./reelos-beta-sidecar.mjs")
+    .then((m) => m.idleOffBooksIfNeeded())
+    .catch(() => {});
   server.middlewares.use(async (req, res, next) => {
     try {
       if (await dispatchReelOsApi(req, res)) return;

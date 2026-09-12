@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HOSTNAME } from "@/lib/catalog";
 import {
@@ -13,6 +13,16 @@ import { DisksPanel } from "@/components/settings-panels";
 export function LibraryPanel() {
   const answers = useReelStore((s) => s.answers);
   const patchIntent = useReelStore((s) => s.patchIntent);
+  const booksOn = useReelStore((s) => s.settings.betaChannel);
+  const [booksKey, setBooksKey] = useState("");
+  const [booksKeySaved, setBooksKeySaved] = useState("");
+  useEffect(() => {
+    if (!booksOn) return;
+    void fetch("/api/settings", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ googleBooksApiKey?: string }>)
+      .then((j) => setBooksKey(j.googleBooksApiKey || ""))
+      .catch(() => {});
+  }, [booksOn]);
   return (
     <>
       <p className="text-sm text-muted">Collections installed from your wizard answers.</p>
@@ -47,6 +57,36 @@ export function LibraryPanel() {
           </button>
         ))}
       </div>
+      {booksOn ? (
+        <div className="mt-4">
+          <p className="text-sm font-medium">Google Books API key</p>
+          <p className="mt-1 text-xs text-muted">
+            Optional. Metadata, previews, and buy links — not a novel fetcher. A key cannot download Hunger Games onto
+            this box. Licensed titles are buy / borrow / sideload.
+          </p>
+          <form
+            className="mt-2 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              persistUi({ googleBooksApiKey: booksKey.trim() });
+              setBooksKeySaved(booksKey.trim() ? "saved" : "cleared");
+            }}
+          >
+            <input
+              type="password"
+              autoComplete="off"
+              value={booksKey}
+              onChange={(e) => setBooksKey(e.target.value)}
+              placeholder="AIza… (optional)"
+              className="h-10 min-w-0 flex-1 rounded-xl bg-card-2 px-3 font-mono text-sm"
+            />
+            <Button size="sm" type="submit">
+              Save
+            </Button>
+          </form>
+          {booksKeySaved ? <p className="mt-1 text-xs text-muted">Key {booksKeySaved}.</p> : null}
+        </div>
+      ) : null}
       <DisksPanel />
     </>
   );

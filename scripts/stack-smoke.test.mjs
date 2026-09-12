@@ -66,11 +66,12 @@ test("stack: VERSION / channel / stamps agree (1.2.50.50)", () => {
   assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
   assert.match(beta.tarball, /beta-arena-books-5ba6/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
-  assert.match(beta.notes[0], /separate beta tarball|Not inside main/);
+  assert.match(beta.notes[0], /in place|Not inside main|not inside main/);
   assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.50"/);
   assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.50"/);
   assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.50"/);
   assert.match(store, /LATEST_VERSION = "1\.2\.50\.50"/);
+  assert.match(store, /betaChannel: false/);
   assert.match(read("STATUS.md"), /1\.2\.50\.50/);
   assert.match(read("STATUS.md"), /1\.2\.50\.48/);
   assert.match(read("STATUS.md"), /1\.2\.50\.46/);

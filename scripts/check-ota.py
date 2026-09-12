@@ -160,7 +160,8 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if a != "--apply"]
     root = Path(args[0] if args else ".").resolve()
     ver = (root / "VERSION").read_text().strip()
-    chan = json.loads((root / "channel.json").read_text()).get("version")
+    chan_doc = json.loads((root / "channel.json").read_text())
+    chan = chan_doc.get("version")
     stamp_path = root / "src/lib/version-stamp.ts"
     store_path = root / "src/lib/store.ts"
     text = stamp_path.read_text() if stamp_path.is_file() else store_path.read_text()
@@ -170,11 +171,37 @@ def main() -> int:
     l = latest.group(1) if latest else ""
     if "1.2.51" in ver or ver.startswith("1.2.51"):
         return fail("1.2.51 is parked; do not stamp it")
-    if ver != chan or ver != s or ver != l:
+    beta_tree = ver.startswith("2.") or "-beta" in ver
+    if beta_tree:
+        if ver != s or ver != l:
+            return fail(f"VERSION skew VERSION={ver} shipped={s} latest={l}")
+        if not str(chan).startswith("1.2.50."):
+            return fail(f"stable channel.json must stay 1.2.50.x on a beta tree, got {chan}")
+        if chan_doc.get("channel") != "stable" or "main.tar.gz" not in str(chan_doc.get("tarball") or ""):
+            return fail("stable channel.json must stay channel=stable tarball=main.tar.gz")
+        beta_path = root / "channel-beta.json"
+        if not beta_path.is_file():
+            return fail("beta tree missing channel-beta.json")
+        beta_doc = json.loads(beta_path.read_text())
+        if beta_doc.get("version") != ver or beta_doc.get("channel") != "beta":
+            return fail(
+                f"channel-beta.json must match VERSION={ver} channel=beta, got {beta_doc.get('version')} {beta_doc.get('channel')}"
+            )
+        tar = str(beta_doc.get("tarball") or "")
+        if "main.tar.gz" in tar:
+            return fail("beta tarball must not be main.tar.gz")
+        if "beta-arena-books" not in tar:
+            return fail("beta tarball must be the beta-arena-books branch")
+        sidecar = (root / "scripts/reelos-beta-sidecar.mjs").read_text() if (root / "scripts/reelos-beta-sidecar.mjs").is_file() else ""
+        if "applyBetaSidecar" not in sidecar or "stopBooks" not in sidecar:
+            return fail("beta tree must ship applyBetaSidecar/stopBooks")
+        if "betaChannel: false" not in (root / "src/lib/store.ts").read_text():
+            return fail("beta toggle must default off")
+    elif ver != chan or ver != s or ver != l:
         return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
 
     beta_path = root / "channel-beta.json"
-    if beta_path.is_file():
+    if beta_path.is_file() and not beta_tree:
         beta_doc = json.loads(beta_path.read_text())
         bver = str(beta_doc.get("version") or "")
         tar = str(beta_doc.get("tarball") or "")
@@ -188,7 +215,14 @@ def main() -> int:
             return fail("sidecar beta tarball must be the beta-arena-books branch")
         styles = (root / "src/styles.css").read_text() if (root / "src/styles.css").is_file() else ""
         if ".arena-page" in styles:
-            return fail("stable sidecar must not ship Arena CSS onto main.tar.gz")
+            store = (root / "src/lib/store.ts").read_text() if (root / "src/lib/store.ts").is_file() else ""
+            sidecar = (root / "scripts/reelos-beta-sidecar.mjs").read_text() if (root / "scripts/reelos-beta-sidecar.mjs").is_file() else ""
+            if "betaChannel: false" not in store:
+                return fail("Arena CSS on a stable stamp requires betaChannel default off")
+            if "applyBetaSidecar" not in sidecar or "stopBooks" not in sidecar:
+                return fail("Arena CSS on a stable stamp requires in-tree applyBetaSidecar/stopBooks")
+            if "idleOffBooksIfNeeded" not in sidecar:
+                return fail("Arena CSS on a stable stamp requires idleOffBooksIfNeeded so toggle-off does not leave Kavita")
 
     updater = (root / "daemon/reelos-update.sh").read_text()
     for rel, needle in CONTRACTS:

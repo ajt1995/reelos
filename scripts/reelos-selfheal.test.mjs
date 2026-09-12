@@ -60,7 +60,8 @@ test("beta sidecar is infrastructure only", () => {
   assert.match(read("channel-beta.json"), /Arena chrome and Books/);
   assert.match(read("channel-beta.json"), /2\.0\.0/);
   assert.doesNotMatch(JSON.parse(read("channel-beta.json")).tarball, /main\.tar\.gz/);
-  assert.doesNotMatch(read("src/styles.css"), /\.arena-page/);
+  assert.match(read("src/styles.css"), /\.arena-page/);
+  assert.match(read("src/lib/store.ts"), /betaChannel: false/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /betaChannel === true/);
 });
 

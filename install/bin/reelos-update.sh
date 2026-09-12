@@ -150,10 +150,20 @@ LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
 MODE="${1:-check}"
 echo "---- $(date -Is) $MODE local=$LOCAL ----" >>"$LOG"
 
+# Arena/Books already live in this stamp (1.2.50.50). Toggle is in-place.
+# Do not Apply the 2.0.0 sidecar tarball over movies/TV.
+in_tree_arena() {
+  [ -f "$ROOT/app/scripts/reelos-beta-sidecar.mjs" ] \
+    || [ -f "$ROOT/scripts/reelos-beta-sidecar.mjs" ] \
+    || [ -f /opt/reelos/app/scripts/reelos-beta-sidecar.mjs ]
+}
+
 CHANNEL_FILE=channel.json
-if [ "$(ui_wants_beta)" = "1" ]; then
+if [ "$(ui_wants_beta)" = "1" ] && ! in_tree_arena; then
   CHANNEL_FILE=channel-beta.json
   log "beta channel from ui-settings.json"
+elif [ "$(ui_wants_beta)" = "1" ]; then
+  log "beta toggle in-tree — stay on stable 1.2.50.x (do not Apply 2.0.0)"
 fi
 fetch_channel "$CHANNEL_FILE" || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
 REMOTE=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')
