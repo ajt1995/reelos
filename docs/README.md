@@ -47,8 +47,8 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 ## Cutting a disc
 
 ```
-node iso/pack-appliance.mjs
-bash iso/remaster-iso.sh
+bash iso/build-iso.sh
 ```
 
-Only when the installer itself is dead. Point updates are OTA.
+Writes `/opt/cursor/artifacts/reelos-ubuntu.iso`. Flash with `dd` / balenaEtcher
+(see `iso/README.md`). Only when the installer itself is dead. Point updates are OTA.

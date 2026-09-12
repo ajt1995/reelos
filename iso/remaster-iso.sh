@@ -1,24 +1,39 @@
 #!/bin/bash
-# Remaster Ubuntu 26.04 live-server into a bootable ReelOS ISO.
+# Remaster Ubuntu 26.04 LTS live-server into a bootable ReelOS USB/ISO.
+# Overlay is nocloud autoinstall + a ReelOS seed. Not a custom desktop.
 set -euo pipefail
-XORRISO="${XORRISO:-/tmp/xorriso-prefix/bin/xorriso}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+XORRISO="${XORRISO:-$(command -v xorriso || true)}"
+if [ -z "$XORRISO" ] && [ -x /tmp/xorriso-prefix/bin/xorriso ]; then
+  XORRISO=/tmp/xorriso-prefix/bin/xorriso
+fi
+if [ -z "$XORRISO" ]; then
+  echo "xorriso is not installed. apt-get install xorriso" >&2
+  exit 1
+fi
 SRC="${SRC:-/tmp/iso-build/ubuntu-26.04.1-live-server-amd64.iso}"
-OUT="${OUT:-/workspace/public/install/reelos-1.2.iso}"
-WORK=/tmp/iso-build/reelos-overlay
-ROOT=/workspace
+ART="${ART:-/opt/cursor/artifacts}"
+mkdir -p "$ART" "$ROOT/public/install"
+OUT="${OUT:-$ART/reelos-ubuntu.iso}"
+WORK="${WORK:-/tmp/iso-build/reelos-overlay}"
+
+if [ ! -f "$SRC" ]; then
+  echo "Ubuntu live-server ISO missing: $SRC" >&2
+  echo "Run: bash $ROOT/iso/build-iso.sh" >&2
+  exit 1
+fi
 
 mkdir -p "$WORK/nocloud" /tmp/iso-build/extract
-cp "$ROOT/install/autoinstall/user-data" "$WORK/nocloud/user-data"
-cp "$ROOT/install/autoinstall/meta-data" "$WORK/nocloud/meta-data"
-cp "$ROOT/install/autoinstall/live-wifi.sh" "$WORK/nocloud/live-wifi.sh"
-chmod 755 "$WORK/nocloud/live-wifi.sh"
+cp -a "$ROOT/install/autoinstall/." "$WORK/nocloud/"
+chmod 755 "$WORK/nocloud/"*.sh 2>/dev/null || true
 
-# Bundle (zip pack) already built by pack-appliance.mjs — reuse tarball if present
 BUNDLE=/tmp/reelos-pack/cidata/reelos-bundle.tar.gz
 if [ ! -f "$BUNDLE" ]; then
   node "$ROOT/scripts/pack-appliance.mjs"
 fi
-cp "$BUNDLE" "$WORK/nocloud/reelos-bundle.tar.gz"
+if [ -f "$BUNDLE" ]; then
+  cp "$BUNDLE" "$WORK/nocloud/reelos-bundle.tar.gz"
+fi
 
 cat > /tmp/iso-build/extract/grub.cfg <<'GRUB'
 set timeout=2
@@ -71,5 +86,6 @@ rm -f "$OUT"
   -map /tmp/iso-build/extract/grub.cfg /boot/grub/grub.cfg \
   -map /tmp/iso-build/extract/loopback.cfg /boot/grub/loopback.cfg \
   -commit
+ln -sfn "$OUT" "$ROOT/public/install/reelos-1.2.iso" 2>/dev/null || cp -f "$OUT" "$ROOT/public/install/reelos-1.2.iso"
 ls -lh "$OUT"
 echo "OK $OUT"
