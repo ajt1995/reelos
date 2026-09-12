@@ -49,6 +49,10 @@ import {
   lookupPayloadForId,
   pickSeerrSearchForLibrary,
   onDiskSeasonsFor,
+  expandTvSeasonRows,
+  decorateTitlesWithDiskSeasons,
+  titleRequestSeasonPayload,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -405,7 +409,7 @@ test("Sonarr season hasFile upgrades that season only", () => {
   assert.equal(honest.find((r) => r.season === 2)?.progress, 0);
 });
 
-test("whole-series grabbing row upgrades when Sonarr has any season files", () => {
+test("whole-series grabbing row expands so mixed seasons stay mixed", () => {
   const row = seerrRequestRow(
     {
       id: 11,
@@ -413,17 +417,108 @@ test("whole-series grabbing row upgrades when Sonarr has any season files", () =
       status: 2,
       createdAt: "2026-09-09T00:00:00.000Z",
       updatedAt: "2026-09-09T00:00:00.000Z",
-      media: { tmdbId: 1408, status: 3 },
+      seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
+      media: { tmdbId: 1408, status: 4 },
     },
     {},
   );
   assert.equal(row.season, undefined);
+  assert.deepEqual(row.requestedSeasons, [1, 2]);
   const arrIndex = buildArrIndex({
-    series: [{ tmdbId: 1408, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 13 } }] }],
+    series: [
+      {
+        tmdbId: 1408,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+          { seasonNumber: 2, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
   });
-  const honest = honestifyRequests([row], { arrIndex, arrReady: true });
+  const honest = honestifyRequests([row], {
+    arrIndex,
+    arrReady: true,
+    series: [
+      {
+        tmdbId: 1408,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+          { seasonNumber: 2, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
+  });
+  assert.equal(honest.find((r) => r.season === 1)?.status, "available");
+  assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
+  assert.equal(honest.find((r) => r.season == null), undefined);
+});
+
+test("all on-disk seasons hide a whole-show Request row", () => {
+  const row = seerrRequestRow(
+    {
+      id: 12,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
+      media: { tmdbId: 1408, status: 4 },
+    },
+    {},
+  );
+  const series = {
+    tmdbId: 1408,
+    tvdbId: 81189,
+    seasons: [
+      { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+      { seasonNumber: 2, statistics: { episodeFileCount: 13 } },
+    ],
+  };
+  const honest = honestifyRequests([row], {
+    arrIndex: buildArrIndex({ series: [series] }),
+    arrReady: true,
+    series: [series],
+  });
+  assert.equal(honest.length, 1);
   assert.equal(honest[0].status, "available");
-  assert.equal(honest[0].progress, 100);
+});
+
+test("Rick title chips do not fake S05/S09 in from series-in-library", () => {
+  const index = buildArrIndex({
+    series: [
+      {
+        tmdbId: 60625,
+        tvdbId: 275274,
+        seasons: [
+          { seasonNumber: 2, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 3, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 4, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 5, statistics: { episodeFileCount: 0 } },
+          { seasonNumber: 6, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 9, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
+  });
+  const parsed = { mediaType: "tv", tmdb: "60625", tvdb: "275274", titleId: "tmdb-tv-60625" };
+  assert.deepEqual(onDiskSeasonsFor(parsed, index), [2, 3, 4, 6]);
+  const s5 = titleRequestSeasonPayload({
+    id: "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    season: 5,
+    parsed,
+    facts: { arrIndex: index },
+    honest: { engine: "downloaded", status: "available", titleId: "tmdb-tv-60625", progress: 100 },
+    title: { title: "Rick and Morty", seasonList: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+  });
+  assert.equal(s5.status === "downloaded" || s5.requestStatus === "available", false);
+  assert.equal(s5.onDiskSeasons.includes(5), false);
+  assert.equal(s5.onDiskSeasons.includes(9), false);
+  assert.ok(s5.onDiskSeasons.includes(4));
+  const titles = decorateTitlesWithDiskSeasons(
+    [{ id: "tmdb-tv-60625", kind: "tv", ids: ["tmdb-tv-60625", "tvdb-275274"] }],
+    { arrIndex: index, series: [{ tmdbId: 60625, tvdbId: 275274, seasons: [{ seasonNumber: 5 }, { seasonNumber: 4 }] }] },
+  );
+  assert.deepEqual(titles[0].onDiskSeasons, [2, 3, 4, 6]);
 });
 
 test("duplicate Seerr rows for the same title+season collapse when one is done", () => {
@@ -1148,11 +1243,16 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /ms: 4000/);
   assert.match(progress, /spawnWireImport/);
   assert.match(progress, /maybeImportAvailable/);
+  assert.match(progress, /mergeRequestListTitles/);
+  assert.match(lookup, /mergeRequestListTitles/);
+  assert.match(seerr, /mergeRequestListTitles/);
+  assert.match(requestsView, /tvSeasonChips/);
   assert.match(lookup, /scheduleBoxProbe/);
   assert.match(sync, /\/api\/request\?recover=1/);
   assert.doesNotMatch(sync, /recoveredOnce/);
   assert.match(requestsView, /requestShowsRetry/);
-  assert.match(progress, /honest\.reason/);
+  assert.match(progress, /titleRequestSeasonPayload/);
+  assert.match(seerr, /honest\?\.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);

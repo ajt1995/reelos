@@ -28,6 +28,7 @@ import {
   resolveRemoveTarget,
   titleInDropSet,
   unmonitorArrBody,
+  isHashDumpRemoveTarget,
 } from "./reelos-library-remove.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -275,4 +276,32 @@ test("helpers: drop cache + merge/forget ids + arr path", () => {
   );
   assert.equal(arrItemPath({ path: "/movies/X" }), "/movies/X");
   assert.ok(libraryDropKeys("tmdb-tv-1402").includes("tmdb-1402"));
+});
+
+test("Remove on a hash leftover does not target the named Rick series in Sonarr", () => {
+  const hash = "73ceff573dc30bebc3fcf26f61de07b25f927a74";
+  const jf = "103ae87fbbbd9bb920ee3803dcffc570";
+  assert.equal(isHashDumpRemoveTarget(hash, [`jf-${jf}`]), true);
+  assert.equal(isHashDumpRemoveTarget("tvdb-275274", ["tmdb-tv-60625"]), false);
+  const collapsed = {
+    id: "tvdb-275274",
+    kind: "tv",
+    ids: ["tvdb-275274", "tmdb-tv-60625", hash, `jf-${jf}`],
+    jellyfinId: "2e58b382fb6f70f674e1e7273b2d05f8",
+  };
+  const keys = expandDropKeys({ titleId: `jf-${jf}`, extraIds: [hash, jf], shelf: [collapsed] });
+  assert.equal(keys.has("tvdb-275274"), false);
+  assert.equal(keys.has("tmdb-60625"), false);
+  assert.equal(keys.has("tmdb-tv-60625"), false);
+  assert.equal(keys.has(hash), true);
+  const target = resolveRemoveTarget({
+    titleId: `jf-${jf}`,
+    jellyfinId: jf,
+    ids: [hash, jf],
+    mediaType: "tv",
+    shelf: [collapsed],
+  });
+  assert.equal(target.tmdb, null);
+  assert.equal(target.tvdb, null);
+  assert.equal(target.jellyfinId, jf);
 });

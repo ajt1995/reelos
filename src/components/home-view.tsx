@@ -13,6 +13,7 @@ import {
   titleForRequest,
   transferringChipCount,
 } from "@/lib/sync-requests";
+import { homeShelfRows } from "@/lib/shelf";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ export function HomeView() {
   const [bookShelf, setBookShelf] = useState<{ title: string; author: string; rel: string }[]>([]);
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
+  const boxShelf = useMemo(() => homeShelfRows(shelf), [shelf]);
   const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = transferringChipCount(inflight);
   useSyncRequests();
@@ -210,9 +212,9 @@ export function HomeView() {
         </Row>
       ) : null}
 
-      {shelf.length > 0 ? (
+      {boxShelf.length > 0 ? (
         <Row label="On this box">
-          {shelf.slice(0, 24).map((t) => (
+          {boxShelf.slice(0, 24).map((t) => (
             <div key={t.id} className="w-[148px] shrink-0 sm:w-[168px]">
               <TitleCard title={t} className="w-auto" />
               <RemoveFromBox title={t} compact />

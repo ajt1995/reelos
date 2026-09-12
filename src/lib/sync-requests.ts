@@ -29,9 +29,42 @@ export function isInFlightRequest(r: { status: string; engine?: string }): boole
 /** Home "Your requests", Requests page, and transferring chip: overlay library hits, then keep in-flight only. */
 export function inFlightRequests(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind">[] } = {},
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] } = {},
 ): MediaRequest[] {
   return overlayLibraryPresence(requests, opts).filter(isInFlightRequest);
+}
+
+export function isTvRequestRow(row: Pick<MediaRequest, "titleId" | "season">): boolean {
+  const id = String(row.titleId || "");
+  return id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || row.season != null;
+}
+
+/** Per-season Watch vs Request from files on disk — series AVAILABLE is not S05 Watch. */
+export function tvSeasonChips(
+  titleId: string,
+  requests: MediaRequest[],
+  titles: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] = [],
+): { season: number; label: "Watch" | "Request" }[] {
+  const keys = new Set(titlePresenceKeys(titleId));
+  const bySeason = new Map<number, "Watch" | "Request">();
+  for (const t of titles) {
+    if (!titleMatchesId(t, titleId)) continue;
+    for (const n of t.onDiskSeasons || []) {
+      const season = Number(n);
+      if (Number.isFinite(season) && season > 0) bySeason.set(season, "Watch");
+    }
+  }
+  for (const row of requests) {
+    if (!titlePresenceKeys(row.titleId).some((k) => keys.has(k))) continue;
+    if (row.season == null) continue;
+    const n = Number(row.season);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (bySeason.get(n) === "Watch") continue;
+    bySeason.set(n, "Request");
+  }
+  return [...bySeason.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([season, label]) => ({ season, label }));
 }
 
 /** Movies: hide Request/Grabbing/Waiting once the title is available. TV/anime: hide only when this season is available. */
@@ -274,6 +307,11 @@ export function titleForRequest(
   };
 }
 
+function isHashDumpId(id: string) {
+  const s = String(id || "");
+  return /^[0-9a-f]{32,64}$/i.test(s) || /^jf-[0-9a-f]{32,64}$/i.test(s);
+}
+
 function titleInDropSet(t: Pick<Title, "id" | "ids" | "jellyfinId">, keys: Set<string>): boolean {
   const ids = titlePresenceKeys(t.id, t.ids || []);
   if (t.jellyfinId) {
@@ -289,19 +327,36 @@ export function dropLibraryOverlay(
   extraIds: string[] = [],
 ): { shelf: Title[]; library: string[]; requests: MediaRequest[]; keys: string[] } {
   const keys = new Set(titlePresenceKeys(titleId, extraIds));
+  const hashOnly = [...keys].some(isHashDumpId) && ![...keys].some((k) => /^(tmdb-|tvdb-)/.test(k));
   for (const t of state.shelf || []) {
     if (!titleInDropSet(t, keys)) continue;
-    for (const k of titlePresenceKeys(t.id, t.ids || [])) keys.add(k);
-    if (t.jellyfinId) {
+    for (const k of titlePresenceKeys(t.id, t.ids || [])) {
+      if (hashOnly && /^(tmdb-|tvdb-)/.test(k)) continue;
+      if (hashOnly && !isHashDumpId(k) && !k.startsWith("jf-")) continue;
+      keys.add(k);
+    }
+    if (t.jellyfinId && !hashOnly) {
       keys.add(String(t.jellyfinId));
       keys.add(`jf-${t.jellyfinId}`);
+    } else if (t.jellyfinId && hashOnly) {
+      const jf = String(t.jellyfinId);
+      if ([titleId, ...extraIds].some((id) => String(id) === jf || String(id) === `jf-${jf}`)) {
+        keys.add(jf);
+        keys.add(`jf-${jf}`);
+      }
     }
   }
   const gone = (id: string) => keys.has(id) || titlePresenceKeys(id).some((k) => keys.has(k));
+  const keepNamed = (t: Pick<Title, "id" | "ids">) =>
+    hashOnly && [t.id, ...(t.ids || [])].some((id) => /^(tmdb-|tvdb-)/.test(String(id)));
   return {
-    shelf: (state.shelf || []).filter((t) => !titleInDropSet(t, keys)),
-    library: (state.library || []).filter((id) => !gone(String(id))),
-    requests: (state.requests || []).filter((r) => !r?.titleId || !gone(r.titleId)),
+    shelf: (state.shelf || []).filter((t) => keepNamed(t) || !titleInDropSet(t, keys)),
+    library: (state.library || []).filter((id) => (hashOnly && /^(tmdb-|tvdb-)/.test(String(id))) || !gone(String(id))),
+    requests: (state.requests || []).filter((r) => {
+      if (!r?.titleId) return true;
+      if (hashOnly && /^(tmdb-|tvdb-)/.test(String(r.titleId))) return true;
+      return !gone(r.titleId);
+    }),
     keys: [...keys],
   };
 }
@@ -376,15 +431,25 @@ export function applyTitleRequestPoll(
 /** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
 export function overlayLibraryPresence(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId">[] },
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] },
 ): MediaRequest[] {
   const movieKeys = new Set<string>();
+  const tvDisk = new Map<string, Set<number>>();
   for (const id of opts.libraryIds || []) {
     if (id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || id.startsWith("jf-")) continue;
     for (const k of titlePresenceKeys(id)) movieKeys.add(k);
   }
   for (const t of opts.titles || []) {
-    if (t.kind === "tv" || t.kind === "anime") continue;
+    if (t.kind === "tv" || t.kind === "anime") {
+      const disk = (t.onDiskSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      if (!disk.length) continue;
+      for (const k of titlePresenceKeys(t.id, t.ids || [])) {
+        const set = tvDisk.get(k) || new Set<number>();
+        disk.forEach((n) => set.add(n));
+        tvDisk.set(k, set);
+      }
+      continue;
+    }
     // Discover/lookup memory is not the JF shelf — National Treasure must stay in-flight.
     if (!t.jellyfinId) continue;
     for (const k of titlePresenceKeys(t.id, t.ids || [])) {
@@ -396,9 +461,13 @@ export function overlayLibraryPresence(
     if (row.status === "available" || row.engine === "downloaded") {
       return row.status === "available" ? row : markAvailable(row);
     }
-    if (!isMovieRequest(row)) return row;
-    if (titlePresenceKeys(row.titleId).some((k) => movieKeys.has(k))) return markAvailable(row);
-    return row;
+    if (isMovieRequest(row)) {
+      if (titlePresenceKeys(row.titleId).some((k) => movieKeys.has(k))) return markAvailable(row);
+      return row;
+    }
+    if (row.season == null) return row;
+    const onDisk = titlePresenceKeys(row.titleId).some((k) => tvDisk.get(k)?.has(Number(row.season)));
+    return onDisk ? markAvailable(row) : row;
   });
   return collapseDuplicateRequests(overlaid);
 }

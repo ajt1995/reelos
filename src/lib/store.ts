@@ -21,7 +21,7 @@ import type {
 } from "./types";
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
-import { mergeShelf } from "./shelf";
+import { homeShelfRows, mergeShelf } from "./shelf";
 import { normalizeLibraryCatchup } from "./library-catchup";
 import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
@@ -61,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.50";
-export const SHIPPED_VERSION = "1.2.50.50";
+export const LATEST_VERSION = "1.2.50.52";
+export const SHIPPED_VERSION = "1.2.50.52";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -97,6 +97,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.52: Home hides hash dump cards when the same files are a named show (73ceff is Rick S04, not a year-0 empty poster). Title season chips and the Request list use files on the box on load — S5/S9 are not In/Watch unless those seasons exist. Remove on a hash leftover does not delete the named series. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.50: OTA includes a cleaner (orphan :8080, retired containers, ghost JF ids, OS tune, tmp leftovers) and a full-screen Updating ReelOS splash until the door accepts browse/request. Probe this computer (RAM, CPU, HDD vs SSD, USB root, kdump, zram), persist /var/lib/reelos/hardware-profile.json, and drive knobs from that profile — 1 FUSE and skip dump ffprobe on 4GB HDD. Settings shows what was detected; splash can say Tuning for 4GB HDD…. Knaben/TorrentsCSV SeasonSearch. Arena+Books sit behind Settings Beta (default off) — no second 2.0.0 Apply. Library catch-up stays a banner — Request still works. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE + skip-nanosecond); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -960,7 +961,7 @@ export const useReelStore = create<ReelState>()(
             const titles = Array.isArray(j.titles) ? j.titles : [];
             rememberCatalogTitles(titles);
             const cur = get();
-            const shelf = mergeShelf(cur.shelf, titles, Boolean(limit));
+            const shelf = homeShelfRows(mergeShelf(cur.shelf, titles, Boolean(limit)));
             const library = [...new Set(shelf.map((t) => t.id))];
             const requests = overlayLibraryPresence(cur.requests, {
               titles: shelf,
