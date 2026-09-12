@@ -72,6 +72,8 @@ export interface Title {
   poster: string;
   jellyfinId?: string;
   ids?: string[];
+  inLibrary?: boolean;
+  collection?: { id: number; name: string; poster?: string };
   maxQuality: "1080p" | "4k";
   popularity: number;
 }

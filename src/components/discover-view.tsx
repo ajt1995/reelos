@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
+import { filterCuratorHidden } from "@/lib/discover-curator";
 import { filterDiscoverCatalog } from "@/lib/discover-owned";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Kind, MediaRequest, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
+
+type PersonHit = { id: string; tmdbId?: number; name: string; poster?: string; knownForDepartment?: string };
+type CollectionHit = { id: string; tmdbId?: number; name: string; poster?: string };
 
 function isKind(t: Title | undefined, want: Kind) {
   if (!t) return false;
@@ -18,12 +23,15 @@ function isKind(t: Title | undefined, want: Kind) {
 export function DiscoverView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const [peopleHits, setPeopleHits] = useState<PersonHit[]>([]);
+  const [collectionHits, setCollectionHits] = useState<CollectionHit[]>([]);
   const [looking, setLooking] = useState(false);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const [browseMovies, setBrowseMovies] = useState<Title[]>([]);
   const [browseTv, setBrowseTv] = useState<Title[]>([]);
   const [browseErr, setBrowseErr] = useState<string | null>(null);
   const [browseReady, setBrowseReady] = useState(false);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
   const booksOn = useReelStore((s) => s.settings.betaChannel);
   const [bookFeatured, setBookFeatured] = useState<
     { id: string; title: string; author: string; year?: number | null; source: string; downloadUrl: string }[]
@@ -44,6 +52,13 @@ export function DiscoverView() {
   useEffect(() => {
     hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
+
+  useEffect(() => {
+    void fetch("/api/curator", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
+      .then((j) => setHiddenIds(Array.isArray(j.hidden) ? j.hidden : []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +111,22 @@ export function DiscoverView() {
     };
   }, [booksOn]);
 
+  const hideTitle = (title: Title) => {
+    // Discover Not interested — box-local /api/curator. Home/Library stay.
+    const extra = [title.id, ...(title.ids || [])].filter(Boolean);
+    setHiddenIds((cur) => [...new Set([...cur, ...extra])]);
+    void fetch("/api/curator", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: title.id, ids: title.ids, jellyfinId: title.jellyfinId, title: title.title }),
+    })
+      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
+      .then((j) => {
+        if (Array.isArray(j.hidden)) setHiddenIds(j.hidden);
+      })
+      .catch(() => {});
+  };
+
   const finishing = useMemo(() => {
     return collapseHomeRequestCards(inflight)
       .map((r) => ({ r, t: titleForRequest(r, catalog) }))
@@ -104,30 +135,33 @@ export function DiscoverView() {
   const finishingIds = useMemo(() => new Set(finishing.map((x) => x.t.id)), [finishing]);
   const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
   const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);
+  const skipIds = useMemo(() => [...finishingIds, ...hiddenIds], [finishingIds, hiddenIds]);
   const pickMovies = useMemo(
-    () => filterDiscoverCatalog(browseMovies, shelf, finishingIds),
-    [browseMovies, shelf, finishingIds],
+    () => filterCuratorHidden(filterDiscoverCatalog(browseMovies, shelf, skipIds), hiddenIds),
+    [browseMovies, shelf, skipIds, hiddenIds],
   );
   const pickTv = useMemo(
-    () => filterDiscoverCatalog(browseTv, shelf, finishingIds),
-    [browseTv, shelf, finishingIds],
+    () => filterCuratorHidden(filterDiscoverCatalog(browseTv, shelf, skipIds), hiddenIds),
+    [browseTv, shelf, skipIds, hiddenIds],
   );
 
   const hits = useMemo(() => {
     const seen = new Set<string>();
     const out: Title[] = [];
-    for (const t of filterDiscoverCatalog(remoteHits, shelf)) {
+    for (const t of filterCuratorHidden(filterDiscoverCatalog(remoteHits, shelf), hiddenIds)) {
       if (seen.has(t.id)) continue;
       seen.add(t.id);
       out.push(t);
     }
     return out;
-  }, [remoteHits, shelf]);
+  }, [remoteHits, shelf, hiddenIds]);
 
   useEffect(() => {
     const term = q.trim();
     if (term.length < 2) {
       setRemoteHits([]);
+      setPeopleHits([]);
+      setCollectionHits([]);
       setLookupErr(null);
       setLooking(false);
       return;
@@ -140,20 +174,31 @@ export function DiscoverView() {
       void fetch(`/api/lookup?q=${encodeURIComponent(term)}&scope=discover`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
-          return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
+          return res.json() as Promise<{
+            titles?: Title[];
+            people?: PersonHit[];
+            collections?: CollectionHit[];
+            error?: string | null;
+          }>;
         })
         .then((r) => {
           if (cancelled) return;
           const titles = Array.isArray(r?.titles) ? r.titles : [];
+          const people = Array.isArray(r?.people) ? r.people : [];
+          const collections = Array.isArray(r?.collections) ? r.collections : [];
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
-          setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
+          setPeopleHits(people);
+          setCollectionHits(collections);
+          setLookupErr(titles.length || people.length || collections.length ? null : r?.error || "Seerr returned no titles");
           setLooking(false);
         })
         .catch((e) => {
           if (cancelled || e?.name === "AbortError") return;
           setRemoteHits([]);
+          setPeopleHits([]);
+          setCollectionHits([]);
           setLookupErr(String(e?.name === "AbortError" ? "Seerr lookup timed out. Try the search again." : e));
           setLooking(false);
         });
@@ -176,17 +221,69 @@ export function DiscoverView() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Find a title"
+          placeholder="Find a title, actor, or collection"
           className="h-12 w-full rounded-2xl bg-card pl-11 pr-4 text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
         />
       </div>
       {q.trim().length >= 2 ? (
-        hits.length > 0 ? (
-          <Row label="Results">
-            {hits.map((t) => (
-              <TitleCard key={t.id} title={t} />
-            ))}
-          </Row>
+        hits.length > 0 || peopleHits.length > 0 || collectionHits.length > 0 ? (
+          <>
+            {peopleHits.length ? (
+              <section className="mt-8">
+                <h2 className="mb-3 font-display text-lg font-medium tracking-tight">People</h2>
+                <ul className="divide-y divide-border">
+                  {peopleHits.map((p) => (
+                    <li key={p.id}>
+                      <Link
+                        to="/person/$id"
+                        params={{ id: String(p.tmdbId || p.id.replace(/^person-/, "")) }}
+                        className="flex items-center gap-3 py-3 text-sm"
+                      >
+                        {p.poster ? (
+                          <img src={p.poster} alt="" className="size-10 rounded-full object-cover" />
+                        ) : (
+                          <span className="size-10 rounded-full bg-card-2" />
+                        )}
+                        <span className="flex-1 truncate">{p.name}</span>
+                        <span className="text-xs text-muted">{p.knownForDepartment || "Actor"}</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {collectionHits.length ? (
+              <section className="mt-8">
+                <h2 className="mb-3 font-display text-lg font-medium tracking-tight">Collections</h2>
+                <ul className="divide-y divide-border">
+                  {collectionHits.map((c) => (
+                    <li key={c.id}>
+                      <Link
+                        to="/collection/$id"
+                        params={{ id: String(c.tmdbId || c.id.replace(/^collection-/, "")) }}
+                        className="flex items-center gap-3 py-3 text-sm"
+                      >
+                        {c.poster ? (
+                          <img src={c.poster} alt="" className="h-14 w-10 rounded object-cover" />
+                        ) : (
+                          <span className="h-14 w-10 rounded bg-card-2" />
+                        )}
+                        <span className="flex-1 truncate">{c.name}</span>
+                        <span className="text-xs text-muted">Collection</span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {hits.length ? (
+              <Row label="Results">
+                {hits.map((t) => (
+                  <TitleCard key={t.id} title={t} onHide={hideTitle} />
+                ))}
+              </Row>
+            ) : null}
+          </>
         ) : looking ? (
           <p className="mt-10 text-sm text-muted">Looking up movies and shows…</p>
         ) : (
@@ -196,8 +293,8 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          <DiscoverKind heading="Movies" finishing={finishingMovies} pick={pickMovies} />
-          <DiscoverKind heading="Shows" finishing={finishingTv} pick={pickTv} />
+          <DiscoverKind heading="Movies" finishing={finishingMovies} pick={pickMovies} onHide={hideTitle} />
+          <DiscoverKind heading="Shows" finishing={finishingTv} pick={pickTv} onHide={hideTitle} />
           {booksOn && bookFeatured.length > 0 ? (
             <section className="mt-10">
               <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
@@ -233,10 +330,12 @@ function DiscoverKind({
   heading,
   finishing,
   pick,
+  onHide,
 }: {
   heading: string;
   finishing: { r: MediaRequest; t: Title }[];
   pick: Title[];
+  onHide: (title: Title) => void;
 }) {
   if (!finishing.length && !pick.length) return null;
   return (
@@ -252,7 +351,7 @@ function DiscoverKind({
       {pick.length ? (
         <Row label="Pick tonight">
           {pick.map((t) => (
-            <TitleCard key={t.id} title={t} />
+            <TitleCard key={t.id} title={t} onHide={onHide} />
           ))}
         </Row>
       ) : null}

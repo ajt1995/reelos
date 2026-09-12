@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
+import { Row, TitleCard } from "@/components/title-card";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
 import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
@@ -44,7 +45,7 @@ export function TitleView({ id }: { id: string }) {
   const [detail, setDetail] = useState<Title | null>(null);
   const [seasonErr, setSeasonErr] = useState<string | null>(null);
   const [seasonsLoading, setSeasonsLoading] = useState(true);
-  const [lookupKey, setLookupKey] = useState(0);
+  const [similar, setSimilar] = useState<Title[]>([]);
   const raw = detail ?? title;
   const hashName = looksLikeHashTitle(raw?.title);
   const resolved = hashName
@@ -125,6 +126,28 @@ export function TitleView({ id }: { id: string }) {
       window.clearTimeout(timer);
     };
   }, [id, rememberTitles, lookupKey]);
+
+  useEffect(() => {
+    let stop = false;
+    const ac = new AbortController();
+    setSimilar([]);
+    void fetch(`/api/similar?id=${encodeURIComponent(id)}`, { cache: "no-store", signal: ac.signal })
+      .then((r) => r.json() as Promise<{ titles?: Title[] }>)
+      .then((j) => {
+        if (stop) return;
+        const titles = Array.isArray(j.titles) ? j.titles : [];
+        rememberCatalogTitles(titles);
+        rememberTitles?.(titles);
+        setSimilar(titles);
+      })
+      .catch(() => {
+        if (!stop) setSimilar([]);
+      });
+    return () => {
+      stop = true;
+      ac.abort();
+    };
+  }, [id, rememberTitles]);
 
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
     setReqErr(null);
@@ -401,6 +424,15 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
         </div>
       </div>
+      {similar.length ? (
+        <div className="mx-auto max-w-5xl px-5 md:px-10">
+          <Row label="More like this">
+            {similar.map((t) => (
+              <TitleCard key={t.id} title={t} />
+            ))}
+          </Row>
+        </div>
+      ) : null}
     </div>
   );
 }

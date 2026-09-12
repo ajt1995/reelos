@@ -49,7 +49,7 @@ test("Discover rows are finishing / pick tonight; library stays on Home; search 
   assert.match(discover, /Finishing/);
   assert.match(discover, /Pick tonight/);
   assert.match(discover, /filterDiscoverCatalog/);
-  assert.match(discover, /<TitleCard key=\{t\.id\} title=\{t\} \/>/);
+  assert.match(discover, /<TitleCard key=\{t\.id\} title=\{t\} onHide=/);
   assert.match(discover, /request=\{r\}/);
   assert.doesNotMatch(discover, /progress=\{/);
   assert.doesNotMatch(discover, /In progress/i);

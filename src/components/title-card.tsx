@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { ThumbsDown } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { titleInCache } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
@@ -22,11 +23,13 @@ export function TitleCard({
   request,
   progress,
   className,
+  onHide,
 }: {
   title: Title;
   request?: MediaRequest;
   progress?: number;
   className?: string;
+  onHide?: (title: Title) => void;
 }) {
   const status = request?.status;
   const source = useReelStore((s) => s.answers.source);
@@ -54,6 +57,21 @@ export function TitleCard({
             <div className="h-full bg-gold" style={{ width: `${request?.progress ?? 0}%` }} />
           </div>
         ) : null}
+        {onHide ? (
+          <button
+            type="button"
+            aria-label="Not interested"
+            title="Not interested"
+            className="absolute right-2 top-2 z-10 rounded-full bg-background/80 p-1.5 text-muted opacity-90 shadow-[var(--shadow-border)] hover:bg-background hover:text-foreground"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onHide(title);
+            }}
+          >
+            <ThumbsDown className="size-3.5" />
+          </button>
+        ) : null}
         {typeof progress === "number" && progress > 0 && progress < 0.97 ? (
           <div className="absolute inset-x-0 bottom-0 h-0.5 bg-background/40">
             <div className="h-full bg-live" style={{ width: `${progress * 100}%` }} />
@@ -62,7 +80,7 @@ export function TitleCard({
       </div>
       <p className="mt-2 truncate text-sm font-medium">{title.title}</p>
       <p className="text-xs text-muted">
-        {title.year}
+        {title.year ? title.year : null}
         {status === "available" ? (request?.via === "cache" ? " · Cached" : " · Available now") : null}
         {status === "downloading"
           ? request?.via === "cache"

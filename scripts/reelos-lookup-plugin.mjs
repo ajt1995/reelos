@@ -21,6 +21,11 @@ import {
   attachSeerrDetailTitles,
   mapSeerrSearchResults,
   mapSeerrDiscoverResults,
+  mapSeerrPersonHits,
+  mapSeerrCollectionHits,
+  mapSeerrPersonDetail,
+  mapSeerrCollectionDetail,
+  mapSeerrSimilarResults,
   discoverOwnedIndex,
   lookupFailureMessage,
   buildSeerrAddPayload,
@@ -52,6 +57,12 @@ import {
 } from "./reelos-library-remove.mjs";
 import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
+import {
+  curatorPublic,
+  hideCuratorTitle,
+  readCurator,
+  resetCurator,
+} from "./reelos-curator.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -406,13 +417,18 @@ async function handleLookup(req, res) {
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
     const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned }));
-    note(`seerr hits=${hits.length} titles=${titles.length} discover=${discoverScope ? "yes" : "no"}`);
+    const excludeHidden = discoverScope ? readCurator() : undefined;
+    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned, excludeHidden }));
+    const people = mapSeerrPersonHits(hits);
+    const collections = mapSeerrCollectionHits(hits);
+    note(`seerr hits=${hits.length} titles=${titles.length} people=${people.length} collections=${collections.length} discover=${discoverScope ? "yes" : "no"}`);
+    send(res, 200, { titles, people, collections, error });
+    return;
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
   }
-  send(res, 200, { titles, error });
+  send(res, 200, { titles, people: [], collections: [], error });
 }
 
 async function ownedDiscoverExclude() {
@@ -454,6 +470,7 @@ async function handleDiscover(_req, res) {
       return;
     }
     const excludeIds = await ownedDiscoverExclude();
+    const excludeHidden = readCurator();
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
@@ -463,12 +480,12 @@ async function handleDiscover(_req, res) {
       ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
     ];
     if (movieRes.ok || movieRes2.ok) {
-      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }));
+      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
     if (tvRes.ok || tvRes2.ok) {
-      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds }));
+      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
@@ -481,6 +498,141 @@ async function handleDiscover(_req, res) {
     note(`seerr discover ${e}`);
   }
   send(res, 200, { movies, tv, error });
+}
+
+function tmdbIdFromQuery(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return 0;
+  const n = Number(s.replace(/^(person-|collection-|tmdb-tv-|tmdb-|tvdb-)/, ""));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function handlePerson(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
+  const key = seerrApiKey();
+  if (!id) {
+    send(res, 200, { person: null, error: "Need a TMDB person id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, { person: null, error: "Request UI (Seerr) has no API key yet." });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/person/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, { person: null, error: r.status === 404 ? "TMDB has no person with that id." : `seerr ${r.status}` });
+      return;
+    }
+    const person = mapSeerrPersonDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: readCurator() });
+    send(res, 200, { person, error: person ? null : "TMDB has no person with that id." });
+  } catch (e) {
+    send(res, 200, { person: null, error: lookupFailureMessage(e) });
+  }
+}
+
+async function handleCollection(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
+  const key = seerrApiKey();
+  if (!id) {
+    send(res, 200, { collection: null, error: "Need a TMDB collection id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, { collection: null, error: "Request UI (Seerr) has no API key yet." });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/collection/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, { collection: null, error: r.status === 404 ? "TMDB has no collection with that id." : `seerr ${r.status}` });
+      return;
+    }
+    const collection = mapSeerrCollectionDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: readCurator() });
+    send(res, 200, { collection, error: collection ? null : "TMDB has no collection with that id." });
+  } catch (e) {
+    send(res, 200, { collection: null, error: lookupFailureMessage(e) });
+  }
+}
+
+async function handleSimilar(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const parsed = parseTitleId(u.searchParams.get("id") || "") || parseTitleId(`tmdb-${u.searchParams.get("id") || ""}`);
+  const titles = [];
+  let error = null;
+  const key = seerrApiKey();
+  if (!parsed?.tmdb) {
+    send(res, 200, { titles, error: "Need a TMDB title id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, { titles, error: "Request UI (Seerr) has no API key yet." });
+    return;
+  }
+  try {
+    const kind = parsed.mediaType === "tv" ? "tv" : "movie";
+    const base = kind === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+    const [sim, rec] = await Promise.all([
+      seerrFetch(`${base}/similar`, { key, ms: 20000 }),
+      seerrFetch(`${base}/recommendations`, { key, ms: 20000 }),
+    ]);
+    const hits = [
+      ...(Array.isArray(sim.json) ? sim.json : sim.json?.results || []),
+      ...(Array.isArray(rec.json) ? rec.json : rec.json?.results || []),
+    ];
+    const excludeIds = discoverOwnedIndex(titlesForResolve());
+    titles.push(
+      ...mapSeerrSimilarResults(hits, {
+        mediaType: kind,
+        limit: 16,
+        excludeIds,
+        excludeHidden: readCurator(),
+      }),
+    );
+    if (!titles.length) error = "Seerr has nothing similar to show yet.";
+  } catch (e) {
+    error = lookupFailureMessage(e);
+  }
+  send(res, 200, { titles, error });
+}
+
+async function handleCurator(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "GET") {
+    send(res, 200, curatorPublic(readCurator()));
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const id = String(body?.id || body?.titleId || "").trim();
+  if (!id) {
+    send(res, 400, { ok: false, error: "Need a title id" });
+    return;
+  }
+  const next = hideCuratorTitle(
+    {
+      id,
+      ids: Array.isArray(body?.ids) ? body.ids : [],
+      jellyfinId: body?.jellyfinId,
+      title: body?.title,
+    },
+    process.env.REELOS_STATE,
+  );
+  send(res, next.ok ? 200 : 400, curatorPublic(next));
+}
+
+async function handleCuratorReset(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const next = resetCurator(process.env.REELOS_STATE);
+  send(res, 200, curatorPublic(next));
 }
 
 async function probeJson(url, ms = 3000) {
@@ -2656,6 +2808,26 @@ export async function dispatchReelOsApi(req, res) {
   }
   if (pathOnly === "/api/discover") {
     await handleDiscover(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/person") {
+    await handlePerson(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/collection") {
+    await handleCollection(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/similar") {
+    await handleSimilar(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator") {
+    await handleCurator(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator/reset") {
+    await handleCuratorReset(req, res);
     return true;
   }
   if (pathOnly === "/api/box") {

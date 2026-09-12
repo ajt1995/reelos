@@ -17,7 +17,9 @@ import { Route as DiscoverRouteImport } from './routes/discover'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as RequestsRouteImport } from './routes/requests'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as CollectionIdRouteImport } from './routes/collection.$id'
 import { Route as EngineIdRouteImport } from './routes/engine.$id'
+import { Route as PersonIdRouteImport } from './routes/person.$id'
 import { Route as PlayIdRouteImport } from './routes/play.$id'
 import { Route as SettingsAdvancedRouteImport } from './routes/settings.advanced'
 import { Route as TitleIdRouteImport } from './routes/title.$id'
@@ -62,9 +64,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CollectionIdRoute = CollectionIdRouteImport.update({
+  id: '/collection/$id',
+  path: '/collection/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EngineIdRoute = EngineIdRouteImport.update({
   id: '/engine/$id',
   path: '/engine/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PersonIdRoute = PersonIdRouteImport.update({
+  id: '/person/$id',
+  path: '/person/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlayIdRoute = PlayIdRouteImport.update({
@@ -92,7 +104,9 @@ export interface FileRoutesByFullPath {
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/collection/$id': typeof CollectionIdRoute
   '/engine/$id': typeof EngineIdRoute
+  '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
@@ -106,7 +120,9 @@ export interface FileRoutesByTo {
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/collection/$id': typeof CollectionIdRoute
   '/engine/$id': typeof EngineIdRoute
+  '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
@@ -121,7 +137,9 @@ export interface FileRoutesById {
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
+  '/collection/$id': typeof CollectionIdRoute
   '/engine/$id': typeof EngineIdRoute
+  '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
@@ -137,7 +155,9 @@ export interface FileRouteTypes {
     | '/library'
     | '/requests'
     | '/settings'
+    | '/collection/$id'
     | '/engine/$id'
+    | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
@@ -151,7 +171,9 @@ export interface FileRouteTypes {
     | '/library'
     | '/requests'
     | '/settings'
+    | '/collection/$id'
     | '/engine/$id'
+    | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
@@ -165,7 +187,9 @@ export interface FileRouteTypes {
     | '/library'
     | '/requests'
     | '/settings'
+    | '/collection/$id'
     | '/engine/$id'
+    | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
@@ -180,7 +204,9 @@ export interface RootRouteChildren {
   LibraryRoute: typeof LibraryRoute
   RequestsRoute: typeof RequestsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
+  CollectionIdRoute: typeof CollectionIdRoute
   EngineIdRoute: typeof EngineIdRoute
+  PersonIdRoute: typeof PersonIdRoute
   PlayIdRoute: typeof PlayIdRoute
   TitleIdRoute: typeof TitleIdRoute
 }
@@ -243,11 +269,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/collection/$id': {
+      id: '/collection/$id'
+      path: '/collection/$id'
+      fullPath: '/collection/$id'
+      preLoaderRoute: typeof CollectionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/engine/$id': {
       id: '/engine/$id'
       path: '/engine/$id'
       fullPath: '/engine/$id'
       preLoaderRoute: typeof EngineIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/person/$id': {
+      id: '/person/$id'
+      path: '/person/$id'
+      fullPath: '/person/$id'
+      preLoaderRoute: typeof PersonIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/play/$id': {
@@ -295,7 +335,9 @@ const rootRouteChildren: RootRouteChildren = {
   LibraryRoute: LibraryRoute,
   RequestsRoute: RequestsRoute,
   SettingsRoute: SettingsRouteWithChildren,
+  CollectionIdRoute: CollectionIdRoute,
   EngineIdRoute: EngineIdRoute,
+  PersonIdRoute: PersonIdRoute,
   PlayIdRoute: PlayIdRoute,
   TitleIdRoute: TitleIdRoute,
 }
