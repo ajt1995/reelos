@@ -2,9 +2,9 @@ import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { o as getTitle } from "./appliance-Dk74LcNF.mjs";
-import { E as titleMatchesId, p as useReelStore, r as Route$2 } from "./router-DBLDJZqG.mjs";
-import { f as jellyfinWatchHref, i as Gate } from "./gate-3oBxy5qy.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/play._id-CeYhI6K-.js
+import { E as titleMatchesId, p as useReelStore, r as Route$2 } from "./router-BAvapKev.mjs";
+import { f as jellyfinWatchHref, i as Gate } from "./gate-BGuBQR0D.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/play._id-BcM6HDGn.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 /** Opens the working Jellyfin door (LAN/Tailscale IP:8096), never hostname:8096. */

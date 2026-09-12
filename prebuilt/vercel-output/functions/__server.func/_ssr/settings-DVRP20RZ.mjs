@@ -3,10 +3,10 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as adapterProfile, n as HOSTNAME } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, C as Cpu, D as ChevronRight, M as Bell, a as SlidersHorizontal, b as HardDrive, l as ScrollText, m as LoaderCircle, n as Users, o as Shield, r as TriangleAlert, t as Wrench, u as RefreshCw, v as KeyRound, y as House } from "../_libs/lucide-react.mjs";
-import { O as catchupLocksHome, a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-DBLDJZqG.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-3oBxy5qy.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-CSxNTXC7.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/settings-BtJ1pHT8.js
+import { O as catchupLocksHome, a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-BAvapKev.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-BGuBQR0D.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-Ek4OIv_D.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/settings-DVRP20RZ.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {
@@ -629,7 +629,7 @@ function UpdatesRow({ open, onClick }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-sm text-muted",
-				children: update.status === "applying" ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again." : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply." : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."
+				children: update.status === "applying" ? "An Apply is running — phone, CLI, or both. Full-screen splash stays until browse and request work. Do not tap Apply again." : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply. Request still works." : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."
 			}),
 			catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-2 text-sm",

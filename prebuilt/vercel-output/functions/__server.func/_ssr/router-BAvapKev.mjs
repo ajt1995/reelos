@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-DBLDJZqG.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-BAvapKev.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -295,6 +295,10 @@ function catchupLocksHome(c) {
 	if (SETTLED.has(status)) return false;
 	if (status !== "running") return false;
 	return Boolean(c.needsImport);
+}
+/** Full-screen Updating ReelOS splash until the door is actually accepting browse/request. */
+function updateLocksUi(status) {
+	return String(status || "").toLowerCase() === "applying";
 }
 function honestCatchupMessage(c, splashLock) {
 	const status = String(c.status || "idle").toLowerCase();
@@ -670,7 +674,7 @@ var defaultAnswers = {
 	tunnelToken: ""
 };
 var CHANNEL = "stable";
-var SHIPPED_VERSION = "1.2.50.48";
+var SHIPPED_VERSION = "1.2.50.50";
 function idleBootSteps() {
 	return {
 		local: "pending",
@@ -680,6 +684,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
+	"1.2.50.50: OTA includes a cleaner (orphan :8080, retired containers, ghost JF ids, OS tune, tmp leftovers) and a full-screen Updating ReelOS splash until the door accepts browse/request. Library catch-up stays a banner — Request still works. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE + skip-nanosecond); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff… is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff… /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it — Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -1733,27 +1738,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-BYDV30rl.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-EXq8FhAT.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BoOTC9NQ.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-CqxnuHTx.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-DHVFSvkH.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-CpGly6D8.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-DUBQUzj_.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-DmDZ_Qf2.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-Dpxfl-VM.mjs");
+var $$splitComponentImporter$6 = () => import("./library-6UvI8OI8.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-ZKar4pEB.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-CRaRjpfi.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-BtJ1pHT8.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-DVRP20RZ.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-1yzphFEJ.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-EyKpGrIz.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-CeYhI6K-.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-BcM6HDGn.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-iyz5SN_L.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-BZd8JVwY.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-D71jVB3B.mjs");
+var $$splitComponentImporter = () => import("./title._id-HsAe8cP1.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
@@ -1832,4 +1837,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { showHashAdapter as C, titlePresenceKeys as D, titleMatchesId as E, catchupLocksHome as O, requestTitleIdForPage as S, titleForRequest as T, isGhostRequestLabel as _, CHANNEL as a, requestMediaTypeForPage as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as w, requestShowsRetry as x, overlayLibraryPresence as y };
+export { showHashAdapter as C, titlePresenceKeys as D, titleMatchesId as E, catchupLocksHome as O, requestTitleIdForPage as S, titleForRequest as T, isGhostRequestLabel as _, CHANNEL as a, requestMediaTypeForPage as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, updateLocksUi as k, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as w, requestShowsRetry as x, overlayLibraryPresence as y };

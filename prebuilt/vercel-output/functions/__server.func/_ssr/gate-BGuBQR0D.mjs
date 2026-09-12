@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { E as titleMatchesId, O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-DBLDJZqG.mjs";
+import { E as titleMatchesId, O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, k as updateLocksUi, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-BAvapKev.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/gate-3oBxy5qy.js
+//#region node_modules/.nitro/vite/services/ssr/assets/gate-BGuBQR0D.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -1075,7 +1075,7 @@ function ApplyingBar() {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoaderCircle, { className: "size-3.5 shrink-0 animate-spin" }),
 					"Applying ",
 					name,
-					". Home can open — engines are still configuring."
+					". Updating ReelOS — engines are still configuring."
 				]
 			}),
 			log ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -1304,7 +1304,7 @@ function stepLabel(status) {
 	if (status === "running") return "Working";
 	return "Waiting";
 }
-function Splash({ compact = false, warming = false }) {
+function Splash({ compact = false, warming = false, updating = false }) {
 	const provisioned = useReelStore((s) => s.provisioned);
 	const bootSteps = useReelStore((s) => s.bootSteps);
 	const catchup = useReelStore((s) => s.libraryCatchup);
@@ -1315,6 +1315,31 @@ function Splash({ compact = false, warming = false }) {
 		useReelStore.getState().setPhase("wizard");
 		useReelStore.getState().setWizardStep(1);
 	};
+	if (updating) return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				"aria-hidden": true,
+				className: "pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+				className: "rise relative",
+				children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Wordmark, {
+					className: "flex-col gap-5",
+					markClassName: "size-20",
+					spinRing: true
+				})
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase",
+				children: "Updating ReelOS…"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted",
+				children: "Download, extract, clean leftover builds, restart the door. Honest wait — Not a percent. Browse and request come back when this page lifts."
+			})
+		]
+	});
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center",
 		children: [
@@ -2036,9 +2061,11 @@ function Gate({ children, chrome = true }) {
 	const hydrated = useReelStore((s) => s.hydrated);
 	const provisioned = useReelStore((s) => s.provisioned);
 	const phase = useReelStore((s) => s.phase);
+	const applying = useReelStore((s) => updateLocksUi(s.update.status));
 	if (!hydrated) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, { warming: true });
 	if (!provisioned || phase === "wizard") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Navigate, { to: "/" });
 	if (phase === "building") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Provision, {});
+	if (applying) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, { updating: true });
 	if (!chrome) return children;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Shell, { children });
 }
@@ -2047,15 +2074,13 @@ function Boot() {
 	const hydrated = useReelStore((s) => s.hydrated);
 	const provisioned = useReelStore((s) => s.provisioned);
 	const phase = useReelStore((s) => s.phase);
-	const catchup = useReelStore((s) => s.libraryCatchup);
-	const applying = useReelStore((s) => s.update.status === "applying");
-	const splashLock = catchupLocksHome(catchup);
+	const applying = useReelStore((s) => updateLocksUi(s.update.status));
 	if (!hydrated) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, { warming: true });
 	if (phase === "wizard") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Wizard, {});
 	if (phase === "building") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Provision, {});
 	if (phase === "ready" && !provisioned) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Provision, {});
 	if (provisioned) {
-		if (splashLock && !applying) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, { warming: true });
+		if (applying) return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, { updating: true });
 		return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Shell, { children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HomeView, {}) });
 	}
 	if (phase === "splash") return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Splash, {});

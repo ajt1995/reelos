@@ -1562,7 +1562,7 @@ fi
 # python3 "$ROOT/bin/wire-engines.py" indexers then import --catch-up (library worker).
 # Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only).
 # wire.log: heal red|torznab |search indexers  (library worker, never un-stamp)
-log "library catch-up in background"
+log "library catch-up in background — engines may still be configuring"
 mkdir -p "$STATE"
 echo 1 >"$STATE/library-catchup" 2>/dev/null || true
 if [ -f /etc/systemd/system/reelos-library-catchup.service ] || [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then

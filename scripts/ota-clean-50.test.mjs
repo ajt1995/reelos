@@ -26,7 +26,7 @@ test("OTA cleaner twins, never /media or ota.lock, self-test", () => {
   assert.match(sh, /OTA cleaner done/);
   assert.doesNotMatch(sh, /rm -rf \/media/);
   assert.doesNotMatch(sh, /rm .*ota\.lock/);
-  assert.doesNotMatch(sh, /docker restart.*sonarr/i);
+  assert.doesNotMatch(sh, /^\s*docker restart/m);
   const py = spawnSync("python3", [join(root, "daemon/reelos_ota_clean.py"), "--self-test"], {
     encoding: "utf8",
     cwd: root,

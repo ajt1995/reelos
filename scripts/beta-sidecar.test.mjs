@@ -56,5 +56,5 @@ test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
 test("sidecar: check-ota stays green without Arena CSS", () => {
   const r = spawnSync("python3", ["scripts/check-ota.py", "."], { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr || r.stdout);
-  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.48/);
+  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.50/);
 });

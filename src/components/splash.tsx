@@ -44,7 +44,7 @@ export function Splash({ compact = false, warming = false, updating = false }: {
           Updating ReelOS…
         </p>
         <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">
-          Download, extract, clean leftover builds, restart the door. Honest wait — not a percent.
+          Download, extract, clean leftover builds, restart the door. Honest wait — Not a percent.
           Browse and request come back when this page lifts.
         </p>
       </div>
