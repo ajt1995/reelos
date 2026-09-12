@@ -1234,6 +1234,8 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.doesNotMatch(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
   assert.doesNotMatch(titleView, /Play in Jellyfin/);
   assert.match(titleView, /Unknown on this box/);
+  assert.match(titleView, /if \(!seasonsLoading\)/);
+  assert.match(titleView, /seasonErr \|\| "Seerr did not find that title"/);
   assert.match(titleView, /series && !onBox/);
   assert.match(lookup, /lookupPayloadForId/);
   assert.match(lookup, /findLibraryTitle/);
@@ -1629,6 +1631,7 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(caddy, /ReelOS shell player/);
   assert.match(caddy, /handle_errors/);
   assert.match(caddy, /Updating ReelOS/);
+  assert.doesNotMatch(caddy, /<<HTML/);
 });
 
 test("needsRequestTitle treats tmdb-2059 as unnamed", () => {

@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.53**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.54**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,18 +21,22 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.53 is the ship.*** Apply splash Copying house settings during house overlay (not Extracting 98%). Caddy handle_errors Updating ReelOS on door 502. Catch-up banner/chip once Home is usable. Hash dump Remove does not hide Rick. Passengers Watch on Home and Library when JF has it. Discover hides owned; Movies/Shows headers open genre/category scroll. Title lookupKey stays. Continue watching stays. 1.2.50.52 lookupKey, 51 rollup, 50 OTA cleaner stay. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.52**. **Do not house-Apply until told.** Never twice.
+***1.2.50.54 is the ship.*** Caddy `handle_errors` Updating ReelOS page parses on Ubuntu Caddy 2.6.2 (53's `<<HTML` heredoc does not — Apply would leave `:80` dead). 53 overlay Copying house settings, byte %, Discover browse, lookupKey, Passengers Watch stay. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.52**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.53`
+- **VERSION / channel:** `1.2.50.54`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.52; harvest #152 overlay heartbeat. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
+- **Base:** `main` at 1.2.50.53; Caddy 2.6-safe Updating page. 53 overlay heartbeat. 52 lookupKey. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.52** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
+
+### 1.2.50.54 Caddy 2.6 Updating page actually loads
+
+53 copied a `handle_errors` heredoc (`respond <<HTML`) Ubuntu Caddy **2.6.2** cannot parse. `caddy adapt` fails; Apply would restart Caddy onto that file and leave `:80` dead (empty Chrome 502). 54 uses a backtick `respond` string 2.6 accepts and still paints **Updating ReelOS**. Bogus `/title/tmdb-*` miss paints Seerr did not find (Retry), not Looking up forever. Overlay Copying house settings / byte % / Discover browse / lookupKey stay. Do not house-Apply until told.
 
 ### 1.2.50.53 overlay splash, door 502, Discover browse, Passengers Watch
 
@@ -130,7 +134,7 @@ Seven-step wizard is unchanged. Default source is TorBox. Continue on the source
 ## Proof
 
 ```
-python3 scripts/check-ota.py .   # ok version=1.2.50.53
+python3 scripts/check-ota.py .   # ok version=1.2.50.54
 node --test scripts/stack-smoke.test.mjs scripts/apply-stamp-first-39.test.mjs scripts/apply-library-split-40.test.mjs scripts/scale-hardware-41.test.mjs scripts/fuse-no-ffprobe-42.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs scripts/sonarr-manual-import.test.mjs scripts/relink-dumps.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box

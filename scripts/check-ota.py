@@ -161,12 +161,14 @@ CONTRACTS = (
     ("src/components/settings-updates.tsx", "Roll back"),
     ("compose/Caddyfile", "handle_errors"),
     ("compose/Caddyfile", "Updating ReelOS"),
+    ("compose/Caddyfile", "respond `"),
     ("install/compose/Caddyfile", "handle_errors"),
     ("src/lib/library-catchup.ts", "catchupShowsBanner"),
     ("src/components/home-view.tsx", "catchupShowsBanner"),
     ("src/components/discover-view.tsx", "/discover/movies"),
     ("src/components/discover-view.tsx", "/discover/shows"),
     ("src/components/title-view-live.tsx", "resolved.jellyfinId"),
+    ("src/components/title-view-live.tsx", "Seerr did not find that title"),
     ("scripts/reelos-seerr.mjs", "discoverBrowseSeerrPath"),
 )
 
@@ -333,6 +335,8 @@ def main() -> int:
     install_caddy = root / "install/compose/Caddyfile"
     if caddy.is_file() and install_caddy.is_file() and caddy.read_text() != install_caddy.read_text():
         return fail("OTA contract: install/compose/Caddyfile must match compose/")
+    if caddy.is_file() and "<<HTML" in caddy.read_text():
+        return fail("OTA contract: compose/Caddyfile must not use Caddy 2.8 heredoc respond (Ubuntu is 2.6)")
     for rel_a, rel_b in (
         ("daemon/reelos-ota-clean.sh", "install/bin/reelos-ota-clean.sh"),
         ("daemon/reelos_ota_clean.py", "install/bin/reelos_ota_clean.py"),
