@@ -109,7 +109,8 @@ test("update splash covers Apply; library banner does not freeze Request", () =>
   assert.match(gate, /updateLocksUi/);
   assert.doesNotMatch(gate, /if \(splashLock && !applying\) return <Splash/);
   assert.match(read("src/components/library-catchup-bar.tsx"), /Library catching up/);
-  assert.match(read("src/components/splash.tsx"), /Not a percent/);
+  assert.match(read("src/components/splash.tsx"), /stalled/);
+  assert.doesNotMatch(read("src/components/splash.tsx"), /Not a percent/);
   const req = read("scripts/reelos-lookup-plugin.mjs");
   assert.match(req, /pathOnly === "\/api\/request"/);
   assert.doesNotMatch(req, /library-catchup.*return/);
