@@ -13,6 +13,7 @@ function read(rel) {
 test("client splash-locks chrome via updateLocksUi while applying; catch-up is a banner", () => {
   const helper = read("src/lib/library-catchup.ts");
   assert.match(helper, /export function catchupLocksHome/);
+  assert.match(helper, /export function catchupShowsBanner/);
   assert.match(helper, /export function updateLocksUi/);
   assert.match(helper, /needsImport/);
   assert.match(helper, /SETTLED/);
@@ -20,6 +21,8 @@ test("client splash-locks chrome via updateLocksUi while applying; catch-up is a
   assert.match(read("src/components/gate.tsx"), /Splash updating/);
   assert.match(read("src/components/splash.tsx"), /catchupLocksHome/);
   assert.match(read("src/components/splash.tsx"), /Updating ReelOS/);
+  assert.match(read("src/components/library-catchup-bar.tsx"), /catchupShowsBanner/);
+  assert.match(read("src/components/home-view.tsx"), /catchupShowsBanner/);
 });
 
 test("skip-only leftover JSON does not splash-lock when catch-up is idle", () => {

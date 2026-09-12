@@ -31,6 +31,11 @@ import {
   discoverOwnedIndex,
   lookupFailureMessage,
   buildSeerrAddPayload,
+  discoverBrowseKind,
+  discoverBrowseSeerrPath,
+  mapSeerrGenres,
+  FALLBACK_MOVIE_GENRES,
+  FALLBACK_TV_GENRES,
   resolveParsedTitle,
   attachTitleAliases,
   libraryHasTitle,
@@ -592,7 +597,82 @@ async function ownedDiscoverExclude() {
   return discoverOwnedIndex(titlesForResolve());
 }
 
-async function handleDiscover(_req, res) {
+async function handleDiscoverBrowse(req, res, u) {
+  const kind = discoverBrowseKind(u.searchParams.get("kind"));
+  const page = Math.max(1, Number(u.searchParams.get("page") || 1) || 1);
+  const genre = String(u.searchParams.get("genre") || "").replace(/\D/g, "");
+  const category = String(u.searchParams.get("category") || "popular").toLowerCase();
+  const fallback = kind === "tv" ? FALLBACK_TV_GENRES : FALLBACK_MOVIE_GENRES;
+  const empty = {
+    titles: [],
+    genres: fallback,
+    page,
+    totalPages: page,
+    kind,
+    genre,
+    category,
+    error: null,
+  };
+  const key = seerrApiKey();
+  if (!kind) {
+    send(res, 200, { ...empty, error: "Need kind=movie or kind=tv." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, {
+      ...empty,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const path = discoverBrowseSeerrPath({ kind, genre, category, page });
+    const genrePath = kind === "tv" ? "/api/v1/genres/tv" : "/api/v1/genres/movie";
+    const [listRes, genreRes] = await Promise.all([
+      seerrFetch(path, { key, ms: 45000 }),
+      seerrFetch(genrePath, { key, ms: 15000 }),
+    ]);
+    const genres = mapSeerrGenres(genreRes.ok ? genreRes.json : null, fallback);
+    if (!listRes.ok) {
+      const error =
+        listRes.status === 403
+          ? "Request UI is still finishing setup. Wait, then refresh Discover."
+          : `seerr ${listRes.status}`;
+      send(res, 200, { ...empty, genres, error });
+      return;
+    }
+    const json = listRes.json || {};
+    const hits = Array.isArray(json) ? json : json.results || [];
+    const excludeIds = await ownedDiscoverExclude();
+    const excludeHidden = readCurator();
+    const titles = mapSeerrDiscoverResults(hits, {
+      mediaType: kind,
+      limit: 40,
+      excludeIds,
+      excludeHidden,
+    });
+    const totalPages = Math.max(1, Number(json.totalPages || json.total_pages || page) || page);
+    send(res, 200, {
+      titles,
+      genres,
+      page: Number(json.page || page) || page,
+      totalPages,
+      kind,
+      genre,
+      category,
+      error: titles.length ? null : "Seerr has nothing new to show yet.",
+    });
+  } catch (e) {
+    send(res, 200, { ...empty, error: lookupFailureMessage(e) });
+  }
+}
+
+async function handleDiscover(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  if (discoverBrowseKind(u.searchParams.get("kind"))) {
+    await handleDiscoverBrowse(req, res, u);
+    return;
+  }
   const movies = [];
   const tv = [];
   let error = null;

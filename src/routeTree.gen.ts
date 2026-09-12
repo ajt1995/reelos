@@ -18,6 +18,9 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as RequestsRouteImport } from './routes/requests'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as CollectionIdRouteImport } from './routes/collection.$id'
+import { Route as DiscoverIndexRouteImport } from './routes/discover.index'
+import { Route as DiscoverMoviesRouteImport } from './routes/discover.movies'
+import { Route as DiscoverShowsRouteImport } from './routes/discover.shows'
 import { Route as EngineIdRouteImport } from './routes/engine.$id'
 import { Route as PersonIdRouteImport } from './routes/person.$id'
 import { Route as PlayIdRouteImport } from './routes/play.$id'
@@ -69,6 +72,21 @@ const CollectionIdRoute = CollectionIdRouteImport.update({
   path: '/collection/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiscoverIndexRoute = DiscoverIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DiscoverRoute,
+} as any)
+const DiscoverMoviesRoute = DiscoverMoviesRouteImport.update({
+  id: '/movies',
+  path: '/movies',
+  getParentRoute: () => DiscoverRoute,
+} as any)
+const DiscoverShowsRoute = DiscoverShowsRouteImport.update({
+  id: '/shows',
+  path: '/shows',
+  getParentRoute: () => DiscoverRoute,
+} as any)
 const EngineIdRoute = EngineIdRouteImport.update({
   id: '/engine/$id',
   path: '/engine/$id',
@@ -100,32 +118,37 @@ export interface FileRoutesByFullPath {
   '/activity': typeof ActivityRoute
   '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
-  '/discover': typeof DiscoverRoute
+  '/discover': typeof DiscoverRouteWithChildren
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/collection/$id': typeof CollectionIdRoute
+  '/discover/movies': typeof DiscoverMoviesRoute
+  '/discover/shows': typeof DiscoverShowsRoute
   '/engine/$id': typeof EngineIdRoute
   '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
+  '/discover/': typeof DiscoverIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
   '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
-  '/discover': typeof DiscoverRoute
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/collection/$id': typeof CollectionIdRoute
+  '/discover/movies': typeof DiscoverMoviesRoute
+  '/discover/shows': typeof DiscoverShowsRoute
   '/engine/$id': typeof EngineIdRoute
   '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
+  '/discover': typeof DiscoverIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -133,16 +156,19 @@ export interface FileRoutesById {
   '/activity': typeof ActivityRoute
   '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
-  '/discover': typeof DiscoverRoute
+  '/discover': typeof DiscoverRouteWithChildren
   '/library': typeof LibraryRoute
   '/requests': typeof RequestsRoute
   '/settings': typeof SettingsRouteWithChildren
   '/collection/$id': typeof CollectionIdRoute
+  '/discover/movies': typeof DiscoverMoviesRoute
+  '/discover/shows': typeof DiscoverShowsRoute
   '/engine/$id': typeof EngineIdRoute
   '/person/$id': typeof PersonIdRoute
   '/play/$id': typeof PlayIdRoute
   '/settings/advanced': typeof SettingsAdvancedRoute
   '/title/$id': typeof TitleIdRoute
+  '/discover/': typeof DiscoverIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -156,27 +182,32 @@ export interface FileRouteTypes {
     | '/requests'
     | '/settings'
     | '/collection/$id'
+    | '/discover/movies'
+    | '/discover/shows'
     | '/engine/$id'
     | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
+    | '/discover/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/activity'
     | '/books'
     | '/connect'
-    | '/discover'
     | '/library'
     | '/requests'
     | '/settings'
     | '/collection/$id'
+    | '/discover/movies'
+    | '/discover/shows'
     | '/engine/$id'
     | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
+    | '/discover'
   id:
     | '__root__'
     | '/'
@@ -188,11 +219,14 @@ export interface FileRouteTypes {
     | '/requests'
     | '/settings'
     | '/collection/$id'
+    | '/discover/movies'
+    | '/discover/shows'
     | '/engine/$id'
     | '/person/$id'
     | '/play/$id'
     | '/settings/advanced'
     | '/title/$id'
+    | '/discover/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -200,7 +234,7 @@ export interface RootRouteChildren {
   ActivityRoute: typeof ActivityRoute
   BooksRoute: typeof BooksRoute
   ConnectRoute: typeof ConnectRoute
-  DiscoverRoute: typeof DiscoverRoute
+  DiscoverRoute: typeof DiscoverRouteWithChildren
   LibraryRoute: typeof LibraryRoute
   RequestsRoute: typeof RequestsRoute
   SettingsRoute: typeof SettingsRouteWithChildren
@@ -276,6 +310,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CollectionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/discover/': {
+      id: '/discover/'
+      path: '/'
+      fullPath: '/discover/'
+      preLoaderRoute: typeof DiscoverIndexRouteImport
+      parentRoute: typeof DiscoverRoute
+    }
+    '/discover/movies': {
+      id: '/discover/movies'
+      path: '/movies'
+      fullPath: '/discover/movies'
+      preLoaderRoute: typeof DiscoverMoviesRouteImport
+      parentRoute: typeof DiscoverRoute
+    }
+    '/discover/shows': {
+      id: '/discover/shows'
+      path: '/shows'
+      fullPath: '/discover/shows'
+      preLoaderRoute: typeof DiscoverShowsRouteImport
+      parentRoute: typeof DiscoverRoute
+    }
     '/engine/$id': {
       id: '/engine/$id'
       path: '/engine/$id'
@@ -314,6 +369,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DiscoverRouteChildren {
+  DiscoverMoviesRoute: typeof DiscoverMoviesRoute
+  DiscoverShowsRoute: typeof DiscoverShowsRoute
+  DiscoverIndexRoute: typeof DiscoverIndexRoute
+}
+
+const DiscoverRouteChildren: DiscoverRouteChildren = {
+  DiscoverMoviesRoute: DiscoverMoviesRoute,
+  DiscoverShowsRoute: DiscoverShowsRoute,
+  DiscoverIndexRoute: DiscoverIndexRoute,
+}
+
+const DiscoverRouteWithChildren = DiscoverRoute._addFileChildren(
+  DiscoverRouteChildren,
+)
+
 interface SettingsRouteChildren {
   SettingsAdvancedRoute: typeof SettingsAdvancedRoute
 }
@@ -331,7 +402,7 @@ const rootRouteChildren: RootRouteChildren = {
   ActivityRoute: ActivityRoute,
   BooksRoute: BooksRoute,
   ConnectRoute: ConnectRoute,
-  DiscoverRoute: DiscoverRoute,
+  DiscoverRoute: DiscoverRouteWithChildren,
   LibraryRoute: LibraryRoute,
   RequestsRoute: RequestsRoute,
   SettingsRoute: SettingsRouteWithChildren,

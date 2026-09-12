@@ -11,6 +11,14 @@ export function catchupLocksHome(c?: Partial<LibraryCatchupState> | null): boole
   return Boolean(c.needsImport);
 }
 
+/** Banner + Home chip as soon as Home is usable — not a splash lock. */
+export function catchupShowsBanner(c?: Partial<LibraryCatchupState> | null): boolean {
+  if (!c) return false;
+  const status = String(c.status || "idle").toLowerCase();
+  if (status === "backoff") return true;
+  return catchupLocksHome(c);
+}
+
 export const WAIT_FUSE_BUSY = "TorBox filesystem busy — not copying to disk";
 export const WAIT_APPLY = "swapping the app";
 export const WAIT_SMALL_BOX = "4GB + HDD, small-box limits";
@@ -40,8 +48,7 @@ export function honestCatchupMessage(c: Partial<LibraryCatchupState>, splashLock
 
 export function normalizeLibraryCatchup(lib: Partial<LibraryCatchupState> | Record<string, unknown> | null | undefined): LibraryCatchupState {
   const src = lib && typeof lib === "object" ? lib : {};
-  let status = String((src as LibraryCatchupState).status || "idle") as LibraryCatchupStatus;
-  if (status === "backoff") status = "idle";
+  const status = String((src as LibraryCatchupState).status || "idle") as LibraryCatchupStatus;
   const needsImport = Boolean((src as LibraryCatchupState).needsImport);
   const skipped = Number((src as LibraryCatchupState).skipped || 0) || 0;
   const timeouts = Number((src as LibraryCatchupState).timeouts || 0) || 0;

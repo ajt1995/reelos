@@ -13,6 +13,7 @@ import {
   titleForRequest,
   transferringChipCount,
 } from "@/lib/sync-requests";
+import { catchupShowsBanner } from "@/lib/library-catchup";
 import { homeShelfRows } from "@/lib/shelf";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { CollectionHit, PersonHit, Title } from "@/lib/types";
@@ -43,6 +44,8 @@ export function HomeView() {
   const boxShelf = useMemo(() => homeShelfRows(shelf), [shelf]);
   const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = transferringChipCount(inflight);
+  const libraryCatchup = useReelStore((s) => s.libraryCatchup);
+  const catchupChip = catchupShowsBanner(libraryCatchup);
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {
@@ -217,7 +220,13 @@ export function HomeView() {
           {adapter.status === "healthy" ? " live" : ""}
         </Chip>
         <Chip>{HOSTNAME}</Chip>
-        {transferring > 0 ? <Chip gold>{transferring} transferring</Chip> : <Chip>Library idle</Chip>}
+        {catchupChip ? (
+          <Chip gold>{libraryCatchup.message || "Library catching up"}</Chip>
+        ) : transferring > 0 ? (
+          <Chip gold>{transferring} transferring</Chip>
+        ) : (
+          <Chip>Library idle</Chip>
+        )}
       </div>
 
       {booksOn && bookShelf.length > 0 ? (

@@ -73,8 +73,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.52";
-export const SHIPPED_VERSION = "1.2.50.52";
+export const LATEST_VERSION = "1.2.50.53";
+export const SHIPPED_VERSION = "1.2.50.53";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -110,6 +110,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.53: Apply splash leaves Extracting for Copying house settings during house overlay rsync (not stuck at 98%). Byte % only when bytes are real. Door restart Caddy handle_errors shows Updating ReelOS, not Chrome 502. Catch-up banner and Home chip as soon as Home is usable if library work is still running. Hash dump Remove does not hide named Rick; Remove is reversible via Request. Finished Requests (Passengers) Watch on Home and Library when Jellyfin has the title. Discover still hides owned library. Movies and Shows headers open genre/category endless scroll, still excluding owned. Title pages keep lookupKey. Continue watching, capped poster, season accordion stay. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.52: Title page defines lookupKey so /title/tmdb-* / tmdb-tv-* / jf-* no longer white-screens lookupKey is not defined. Retry seasons reloads Seerr. Collections and More like this stay. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.51: Post-50 rollup on gold chrome. Discover hides owned library (Home keeps On this box). Finished titles (Passengers) stay on Requests until Watch; existing request poll refreshes the JF shelf. Honest Apply splash percent (tarball/extract bytes or stage N of 7 + heartbeat — never a fake 99%). Splash copy is Tuning for 4GB RAM · spinning disk. Wizard stays 7 steps. Search people and collections. Title page More like this. Discover Not interested (no Google); Settings Reset curator preferences. Home Continue watching uses Jellyfin-synced play progress on the existing library fetch. Capped title poster, TV season chips and episode accordion. No Arena. Skip 49. Do not house-Apply until told. Prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.50: OTA includes a cleaner (orphan :8080, retired containers, ghost JF ids, OS tune, tmp leftovers) and a full-screen Updating ReelOS splash until the door accepts browse/request. Probe this computer (RAM, CPU, HDD vs SSD, USB root, kdump, zram), persist /var/lib/reelos/hardware-profile.json, and drive knobs from that profile — 1 FUSE and skip dump ffprobe on 4GB HDD. Settings shows what was detected; splash can say Tuning for 4GB HDD…. Knaben/TorrentsCSV SeasonSearch. Arena+Books sit behind Settings Beta (default off) — no second 2.0.0 Apply. Library catch-up stays a banner — Request still works. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE + skip-nanosecond); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",

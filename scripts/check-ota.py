@@ -155,8 +155,19 @@ CONTRACTS = (
     ("scripts/reelos-lookup-plugin.mjs", "/api/update/progress"),
     ("scripts/reelos-ota-progress.mjs", "honestApplyProgress"),
     ("daemon/reelos-update.sh", "apply-progress.json"),
+    ("daemon/reelos-update.sh", "Copying house settings"),
+    ("daemon/reelos-update.sh", 'write_progress extract "${EX_BYTES:-1}" "${EX_BYTES:-1}" "Extracted"'),
     ("daemon/reelos_apply_progress.py", "byte_percent"),
     ("src/components/settings-updates.tsx", "Roll back"),
+    ("compose/Caddyfile", "handle_errors"),
+    ("compose/Caddyfile", "Updating ReelOS"),
+    ("install/compose/Caddyfile", "handle_errors"),
+    ("src/lib/library-catchup.ts", "catchupShowsBanner"),
+    ("src/components/home-view.tsx", "catchupShowsBanner"),
+    ("src/components/discover-view.tsx", "/discover/movies"),
+    ("src/components/discover-view.tsx", "/discover/shows"),
+    ("src/components/title-view-live.tsx", "resolved.jellyfinId"),
+    ("scripts/reelos-seerr.mjs", "discoverBrowseSeerrPath"),
 )
 
 
@@ -318,6 +329,10 @@ def main() -> int:
     install_up = root / "install/bin/reelos-update.sh"
     if install_up.is_file() and install_up.read_text() != updater:
         return fail("OTA contract: install/bin/reelos-update.sh must match daemon/")
+    caddy = root / "compose/Caddyfile"
+    install_caddy = root / "install/compose/Caddyfile"
+    if caddy.is_file() and install_caddy.is_file() and caddy.read_text() != install_caddy.read_text():
+        return fail("OTA contract: install/compose/Caddyfile must match compose/")
     for rel_a, rel_b in (
         ("daemon/reelos-ota-clean.sh", "install/bin/reelos-ota-clean.sh"),
         ("daemon/reelos_ota_clean.py", "install/bin/reelos_ota_clean.py"),

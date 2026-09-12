@@ -36,7 +36,7 @@ export function useSyncRequests() {
         });
         const s = useReelStore.getState();
         if (s.requests.some((r) => requestNeedsLibraryHandoff(r, { titles: s.shelf }))) {
-          s.hydrateShelf({ limit: 24, force: true, fresh: true });
+          s.hydrateShelf({ force: true, fresh: true });
         }
       } catch {
         /* Seerr down — keep local rows */

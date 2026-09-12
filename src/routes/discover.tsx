@@ -1,5 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { DiscoverView } from "@/components/discover-view";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { Gate } from "@/components/gate";
 
 export const Route = createFileRoute("/discover")({ component: Page });
@@ -7,7 +6,7 @@ export const Route = createFileRoute("/discover")({ component: Page });
 function Page() {
   return (
     <Gate>
-      <DiscoverView />
+      <Outlet />
     </Gate>
   );
 }

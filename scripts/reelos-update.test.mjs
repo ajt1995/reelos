@@ -73,6 +73,22 @@ test("house compose/configs overlay onto staging (no dest-exists nest)", () => {
   assert.doesNotMatch(updater, /cp -a "\$ROOT\/compose\/configs\/\." "\$NEXT\/compose\/configs\/"/);
 });
 
+test("extract splash hits 100% after tar; overlay heartbeats so 98% is not sticky", () => {
+  assert.match(updater, /write_progress extract "\$\{EX_BYTES:-1\}" "\$\{EX_BYTES:-1\}" "Extracted"/);
+  assert.doesNotMatch(
+    updater,
+    /write_progress extract "\$\{EX_BYTES:-0\}" "\$\{UNCOMP:-\$EX_BYTES\}" "Extracting"/,
+  );
+  assert.match(updater, /watch_progress_detail extract "Copying house settings"/);
+  const extracted = updater.indexOf(
+    'write_progress extract "${EX_BYTES:-1}" "${EX_BYTES:-1}" "Extracted"',
+  );
+  const overlayHb = updater.indexOf('watch_progress_detail extract "Copying house settings"');
+  const overlayFn = updater.indexOf("overlay_house_configs() {");
+  assert.ok(extracted >= 0 && overlayHb > extracted, "overlay heartbeat must follow extract 100%");
+  assert.ok(overlayHb > overlayFn, "Copying house settings heartbeat must live inside overlay_house_configs");
+});
+
 test("Stage 3 node_modules copy heartbeats so a long cp does not look wedged", () => {
   assert.match(updater, /copy_node_modules_with_heartbeat/);
   assert.match(updater, /still copying node_modules/);
