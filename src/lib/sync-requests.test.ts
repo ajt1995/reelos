@@ -24,6 +24,7 @@ import {
   titlePresenceKeys,
   requestProgressLabel,
   tvSeasonChips,
+  importingSeasonNumbersForTitle,
 } from "./sync-requests.ts";
 import type { MediaRequest, Title } from "./types.ts";
 
@@ -720,6 +721,53 @@ test("Rookie dump S02 is Importing not Watch; 0% linked files paint Importing", 
     requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", status: "downloading", progress: 0 })),
     "0%",
   );
+});
+
+test("Rookie files-linked S03-S08 Importing; S05 searching stays Request", () => {
+  const requests = [
+    row({
+      id: "s2",
+      titleId: "tmdb-tv-79744",
+      season: 2,
+      status: "downloading",
+      reason: "Files linked — waiting for Sonarr import",
+    }),
+    ...[3, 4, 6, 7, 8].map((n) =>
+      row({
+        id: `s${n}`,
+        titleId: "tmdb-tv-79744",
+        season: n,
+        status: "failed",
+        reason: "Files linked — waiting for Sonarr import",
+      }),
+    ),
+    row({
+      id: "s5",
+      titleId: "tmdb-tv-79744",
+      season: 5,
+      status: "downloading",
+      reason: "Searching — no file yet",
+    }),
+    row({
+      id: "s9",
+      titleId: "tmdb-tv-79744",
+      season: 9,
+      status: "downloading",
+      reason: "Announced — not released yet",
+    }),
+  ];
+  const titles = [{ id: "tvdb-350665", kind: "tv" as const, ids: ["tmdb-tv-79744"], onDiskSeasons: [1], importingSeasons: [2], unreleasedSeasons: [9] }];
+  const chips = tvSeasonChips("tmdb-tv-79744", requests, titles);
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label}`),
+    ["1:Watch", "2:Importing", "3:Importing", "4:Importing", "5:Request", "6:Importing", "7:Importing", "8:Importing", "9:Coming"],
+  );
+  assert.deepEqual(importingSeasonNumbersForTitle("tvdb-350665", requests, ["tmdb-tv-79744"]), [2, 3, 4, 6, 7, 8]);
+  const overlaid = overlayLibraryPresence(requests, {
+    titles: [{ ...titles[0], onDiskSeasons: [1, 2], importingSeasons: [2] }],
+  });
+  assert.equal(overlaid.find((r) => r.season === 2)?.status, "downloading");
+  assert.notEqual(overlaid.find((r) => r.season === 2)?.status, "available");
 });
 
 test("title poll does not demote Rookie files-linked S03 to failed or 0%", () => {

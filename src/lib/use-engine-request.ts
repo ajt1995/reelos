@@ -30,10 +30,14 @@ export function useEngineRequest(id: string, season?: number) {
         if (hit) {
           aliases = [...new Set([...aliases, ...titlePresenceKeys(hit.id, hit.ids || [])])];
           setExtraIds(aliases);
-          const disk = seasonNumbersFrom(hit.onDiskSeasons);
-          if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
           const importing = seasonNumbersFrom((hit as { importingSeasons?: number[] }).importingSeasons);
-          if (importing.length) setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
+          const disk = seasonNumbersFrom(hit.onDiskSeasons).filter((n) => !importing.includes(n));
+          if (importing.length) {
+            setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
+          }
+          setOnDiskSeasons((prev) =>
+            [...new Set([...prev, ...disk])].filter((n) => !importing.includes(n)).sort((a, b) => a - b),
+          );
         }
         // TV: series-in-library is not every season. Do not mark a whole-show row available.
         if (!hit || id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || id.startsWith("jf-")) return;
@@ -67,10 +71,16 @@ export function useEngineRequest(id: string, season?: number) {
           setEngineStatus(j.status || null);
           const fromApi = seasonNumbersFrom(j.seasonList);
           if (fromApi.length) setSeasonList(fromApi);
-          const disk = seasonNumbersFrom(j.onDiskSeasons);
-          if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
           const importing = seasonNumbersFrom(j.importingSeasons);
-          if (importing.length) setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
+          const disk = seasonNumbersFrom(j.onDiskSeasons).filter((n) => !importing.includes(n));
+          if (importing.length) {
+            setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
+          }
+          if (disk.length || importing.length) {
+            setOnDiskSeasons((prev) =>
+              [...new Set([...prev, ...disk])].filter((n) => !importing.includes(n)).sort((a, b) => a - b),
+            );
+          }
           const coming = seasonNumbersFrom(j.unreleasedSeasons);
           if (coming.length) setUnreleasedSeasons((prev) => [...new Set([...prev, ...coming])].sort((a, b) => a - b));
           const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
@@ -80,11 +90,14 @@ export function useEngineRequest(id: string, season?: number) {
               : typeof j.percent === "number"
                 ? j.percent
                 : undefined;
-          const diskNow = seasonNumbersFrom(j.onDiskSeasons);
+          const diskNow = disk;
+          const thisImporting = season != null && importing.includes(Number(season));
           const pollStatus =
-            season != null && (j.status === "downloaded" || j.status === "available") && !diskNow.includes(Number(season))
-              ? "unknown"
-              : j.status;
+            thisImporting && (j.status === "downloaded" || j.status === "available")
+              ? "downloading"
+              : season != null && (j.status === "downloaded" || j.status === "available") && !diskNow.includes(Number(season))
+                ? "unknown"
+                : j.status;
           useReelStore.setState((s) => ({
             requests: applyTitleRequestPoll(s.requests, {
               titleId: id,

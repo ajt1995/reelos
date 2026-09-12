@@ -40,7 +40,7 @@ function houseFixture() {
     importingSeasons: [2],
   });
   const rookie = named("tvdb-350665", "The Rookie", 2018, ["tvdb-350665", "tmdb-tv-79744"], "rook", [1], {
-    importingSeasons: [2, 3, 4, 5, 6, 7, 8],
+    importingSeasons: [2, 3, 4, 6, 7, 8],
     unreleasedSeasons: [9],
   });
   const shelf = [
@@ -66,7 +66,7 @@ function houseFixture() {
     pages: {
       Silo: chipsFor(silo, [1, 2, 3, 4]),
       Reacher: chipsFor(reacher, [1, 2]),
-      "The Rookie": chipsFor(rookie, [1, 2, 3, 8, 9]),
+      "The Rookie": chipsFor(rookie, [1, 2, 3, 5, 8, 9]),
     },
   };
 }
@@ -135,6 +135,7 @@ test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%"
   assert.ok(data.pages.Silo.includes("S4 · Coming"));
   assert.ok(data.pages["The Rookie"].includes("S1 · Watch"));
   assert.ok(data.pages["The Rookie"].includes("S2 · Importing"));
+  assert.ok(data.pages["The Rookie"].includes("S5 · Request"));
   assert.ok(data.pages["The Rookie"].includes("S8 · Importing"));
   assert.ok(data.pages["The Rookie"].includes("S9 · Coming"));
   assert.equal(seasonChipLabel({ importing: true }), "Importing");
@@ -181,7 +182,8 @@ test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%"
     if (name === "The Rookie") {
       assert.match(chips, /Importing/);
       assert.match(chips, /Coming/);
-      assert.doesNotMatch(chips, /S2 · Watch/);
+      assert.match(chips, /S5 · Request/);
+      assert.doesNotMatch(chips, /S2 · Watch|S5 · Importing/);
     }
     await page.screenshot({ path: join(outDir, `house-home-${name.toLowerCase().replace(/\s+/g, "-")}.png`) });
     await page.locator(`[data-page="${name}"] [data-back]`).click();
@@ -193,6 +195,23 @@ test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%"
   );
   await browser.close();
 });
+
+function isImportingCopy(reason) {
+  return /on disk, importing|files linked|waiting for.*import/i.test(String(reason || ""));
+}
+
+function goldHit(gold, id) {
+  return gold.byId[id] || gold.named.rookie;
+}
+
+function goldImportingSeasons(gold, hit) {
+  const keys = new Set([hit.id, ...(hit.ids || [])]);
+  const fromReqs = gold.requests
+    .filter((r) => keys.has(r.titleId) && isImportingCopy(r.reason))
+    .map((r) => Number(r.season))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return [...new Set([...(hit.importingSeasons || []), ...fromReqs])];
+}
 
 function houseGoldTitles() {
   const base = {
@@ -232,10 +251,10 @@ function houseGoldTitles() {
     id: "tvdb-350665",
     title: "The Rookie",
     year: 2018,
-    ids: ["tvdb-350665", "tmdb-tv-79744"],
+    ids: ["tvdb-350665", "tmdb-tv-79744", "tmdb-79744"],
     jellyfinId: "rook",
     onDiskSeasons: [1],
-    importingSeasons: [2, 3, 4, 5, 6, 7, 8],
+    importingSeasons: [2],
     unreleasedSeasons: [9],
     seasonList: [1, 2, 3, 4, 5, 6, 7, 8, 9],
     seasonFacts: [{ season: 9, episodeCount: 0, airDate: "2027-01-01", unreleased: true }],
@@ -260,19 +279,21 @@ function houseGoldTitles() {
     ...named,
   ];
   const now = Date.now();
+  const rookReq = (season, reason) => ({
+    id: `req-rook-s${season}`,
+    titleId: "tmdb-tv-79744",
+    title: "The Rookie",
+    status: "downloading",
+    progress: 0,
+    reason,
+    season,
+    createdAt: now,
+    updatedAt: now,
+    requester: "Austin",
+  });
   const requests = [
-    {
-      id: "req-rook-s2",
-      titleId: "tmdb-tv-79744",
-      title: "The Rookie",
-      status: "downloading",
-      progress: 0,
-      reason: "On disk, importing",
-      season: 2,
-      createdAt: now,
-      updatedAt: now,
-      requester: "Austin",
-    },
+    ...[2, 3, 4, 6, 7, 8].map((n) => rookReq(n, "Files linked — waiting for Sonarr import")),
+    rookReq(5, "Searching — no file yet"),
   ];
   const byId = {};
   for (const t of named) {
@@ -390,15 +411,19 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
       if (path === "/api/request") {
         const id = url.searchParams.get("id");
         if (id) {
-          const hit = gold.byId[id] || gold.named.silo;
+          const hit = goldHit(gold, id);
+          const importing = goldImportingSeasons(gold, hit);
+          const seasonN = Number(url.searchParams.get("season"));
+          const thisImporting = Number.isFinite(seasonN) && importing.includes(seasonN);
           await route.fulfill({
             status: 200,
             contentType: "application/json",
             body: JSON.stringify({
-              status: "available",
+              status: thisImporting ? "downloading" : "available",
+              reason: thisImporting ? "On disk, importing" : undefined,
               seasonList: hit.seasonList || [],
-              onDiskSeasons: hit.onDiskSeasons || [],
-              importingSeasons: hit.importingSeasons || [],
+              onDiskSeasons: (hit.onDiskSeasons || []).filter((n) => !importing.includes(n)),
+              importingSeasons: importing,
               unreleasedSeasons: hit.unreleasedSeasons || [],
             }),
           });
@@ -417,10 +442,16 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
       if (path === "/api/lookup") {
         const id = url.searchParams.get("id") || "";
         const hit = gold.byId[id];
+        const titled = hit
+          ? {
+              ...hit,
+              importingSeasons: goldImportingSeasons(gold, hit),
+            }
+          : null;
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(hit ? { titles: [hit] } : { titles: [], error: "Seerr did not find that title" }),
+          body: JSON.stringify(titled ? { titles: [titled] } : { titles: [], error: "Seerr did not find that title" }),
         });
         return;
       }
@@ -429,7 +460,57 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
         return;
       }
       if (path === "/api/episodes") {
-        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ episodes: [] }) });
+        const season = Number(url.searchParams.get("season") || "0");
+        const id = url.searchParams.get("id") || "";
+        const hit = goldHit(gold, id);
+        const importing = goldImportingSeasons(gold, hit);
+        if ((hit.unreleasedSeasons || []).includes(season)) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ episodes: [], unreleased: true }),
+          });
+          return;
+        }
+        if (importing.includes(season)) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              episodes: [{ episodeNumber: 1, title: "Impact", status: "importing", label: "On disk, importing" }],
+            }),
+          });
+          return;
+        }
+        if ((hit.onDiskSeasons || []).includes(season)) {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              episodes: [{ episodeNumber: 1, title: "Pilot", status: "in-library", label: "In library" }],
+            }),
+          });
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            episodes: [{ episodeNumber: 1, title: "The Roundup", status: "requested", label: "Requested" }],
+          }),
+        });
+        return;
+      }
+      if (path === "/api/discover") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ movies: [], tv: [] }),
+        });
+        return;
+      }
+      if (path === "/api/curator") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ hidden: [] }) });
         return;
       }
       if (path === "/api/update/status" || path === "/api/update/check") {
@@ -482,13 +563,53 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
       if (name === "The Rookie") {
         assert.match(body, /Season 1 · Watch/);
         assert.match(body, /Season 2 · Importing/);
+        assert.match(body, /Season 3 · Importing/);
+        assert.match(body, /Season 5 · Request/);
+        assert.match(body, /Season 8 · Importing/);
         assert.match(body, /Season 9 · Coming/);
         assert.doesNotMatch(body, /Season 2 · Watch/);
+        assert.doesNotMatch(body, /Season 5 · Importing/);
+        await page.getByRole("button", { name: /Season 2 · Importing/ }).click();
+        await page.getByText("On disk, importing — Sonarr has not taken the files yet.").waitFor({ timeout: 8000 });
+        const s2 = await page.locator("body").innerText();
+        assert.match(s2, /Impact/);
+        assert.doesNotMatch(s2, /Request this season/);
+        await page.getByRole("button", { name: /Season 9 · Coming/ }).click();
+        await page.getByText(/Announced — not released yet/).waitFor({ timeout: 8000 });
+        const s9 = await page.locator("body").innerText();
+        assert.doesNotMatch(s9, /Impact/);
+        assert.doesNotMatch(s9, /Request this season/);
+        await page.getByRole("button", { name: /Season 5 · Request/ }).click();
+        await page.getByRole("button", { name: /Request this season/ }).waitFor({ timeout: 8000 });
       }
       await page.screenshot({ path: join(outDir, `hashed-home-${name.toLowerCase().replace(/\s+/g, "-")}.png`) });
       await page.goBack({ waitUntil: "domcontentloaded" });
       await page.getByText("On this box", { exact: true }).waitFor({ timeout: 15000 });
     }
+
+    await page.getByRole("link", { name: "Library", exact: true }).click();
+    await page.getByRole("heading", { name: "Library", exact: true }).waitFor({ timeout: 15000 });
+    const library = await page.locator("body").innerText();
+    assert.match(library, /The Rookie/);
+    assert.doesNotMatch(library, /UIndex|Torrenting|org-Silo|Ponte/i);
+    await page.screenshot({ path: join(outDir, "hashed-library-named-rookie.png") });
+
+    await page.getByRole("link", { name: "Requests", exact: true }).click();
+    await page.getByRole("heading", { name: "Requests", exact: true }).waitFor({ timeout: 15000 });
+    const reqs = await page.locator("body").innerText();
+    assert.match(reqs, /The Rookie/);
+    assert.match(reqs, /S02 Importing|S2 Importing|Season 2 · Importing/);
+    assert.match(reqs, /S05 Request|S5 Request/);
+    assert.doesNotMatch(reqs, /0%/);
+    await page.screenshot({ path: join(outDir, "hashed-requests-rookie-importing.png") });
+
+    await page.getByRole("link", { name: "Discover", exact: true }).click();
+    await page.getByRole("heading", { name: "Discover", exact: true }).waitFor({ timeout: 15000 });
+    const discover = await page.locator("body").innerText();
+    assert.match(discover, /Movies/);
+    assert.match(discover, /Shows/);
+    assert.doesNotMatch(discover, /UIndex|Torrenting/i);
+    await page.screenshot({ path: join(outDir, "hashed-discover-no-rookie.png") });
     writeFileSync(
       join(outDir, "hashed-home-click-verdict.json"),
       JSON.stringify({ ok: true, homeTitles: data.homeTitles, pages: data.pages, hashed: true }, null, 2),

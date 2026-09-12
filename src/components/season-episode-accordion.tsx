@@ -62,6 +62,7 @@ export function SeasonEpisodeAccordion({
     if (!open) return;
     let stop = false;
     const ac = new AbortController();
+    setEpisodes([]);
     setLoading(true);
     setErr(null);
     setUnreleasedOpen(false);
@@ -101,6 +102,9 @@ export function SeasonEpisodeAccordion({
       setOpen(false);
       return;
     }
+    setEpisodes([]);
+    setErr(null);
+    setUnreleasedOpen(false);
     onSelectSeason(n);
     setOpen(true);
   };
@@ -137,9 +141,9 @@ export function SeasonEpisodeAccordion({
         {seasonNumbers.map((n) => {
           const selected = selectedSeason === n;
           const expanded = selected && open;
-          const onDisk = diskSeasons.includes(n) && !removedHere;
-          const importing = Boolean(importingSeasons?.includes(n)) && !onDisk;
           const unreleased = Boolean(unreleasedSeasons?.includes(n));
+          const onDisk = diskSeasons.includes(n) && !removedHere && !unreleased;
+          const importing = Boolean(importingSeasons?.includes(n)) && !onDisk && !unreleased;
           const chip = seasonChipLabel({ onDisk, importing, unreleased, removedHere });
           return (
             <button
@@ -168,7 +172,7 @@ export function SeasonEpisodeAccordion({
           <div className="flex flex-wrap items-center justify-between gap-2 py-2">
             <p className="text-sm text-muted">
               S{String(selectedSeason).padStart(2, "0")} episodes
-              {episodes.length ? ` · ${episodes.length}` : ""}
+              {episodes.length && !thisUnreleased ? ` · ${episodes.length}` : ""}
             </p>
             {showSeasonRequest ? (
               <Button
@@ -200,6 +204,7 @@ export function SeasonEpisodeAccordion({
               Episode names land once Sonarr or Seerr has this season. Request this season without hunting.
             </p>
           ) : null}
+          {thisUnreleased ? null : (
           <ul className="divide-y divide-border">
             {episodes.map((ep) => {
               const action = episodeRequestAction(ep.status, Boolean(removedHere));
@@ -240,6 +245,7 @@ export function SeasonEpisodeAccordion({
               );
             })}
           </ul>
+          )}
         </div>
       ) : null}
     </div>
