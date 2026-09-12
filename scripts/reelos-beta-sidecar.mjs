@@ -93,7 +93,7 @@ export function stopBooks() {
   if (existsSync(cfg)) {
     try {
       for (const name of readdirSync(cfg)) {
-        if (name === ".gitkeep") continue;
+        if (name === ".gitkeep" || name === ".gitignore") continue;
         rmSync(join(cfg, name), { recursive: true, force: true });
         notes.push(`dropped kavita index ${name}`);
       }
@@ -124,7 +124,7 @@ export function leftoverList() {
     "Kavita image lscr.io/linuxserver/kavita (optional docker rmi — OTA cleaner can sweep)",
     "User sideloads in /srv/media/books (kept; not the movie/TV library)",
     "Caddy handle /kavita* (502s when Kavita is stopped; harmless)",
-    "compose/configs/kavita/.gitkeep (empty dir)",
+    "compose/configs/kavita/.gitkeep + .gitignore (runtime DBs are dropped; ignorefile stays)",
     "/var/lib/reelos/beta-arena-books flag (removed on toggle-off)",
   ];
 }
