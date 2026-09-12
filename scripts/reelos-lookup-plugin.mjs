@@ -19,6 +19,8 @@ import {
   honestifyRequests,
   assembleRequestPayload,
   attachSeerrDetailTitles,
+  mergeRequestListTitles,
+  onDiskSeasonsFor,
   mapSeerrSearchResults,
   mapSeerrDiscoverResults,
   lookupFailureMessage,
@@ -1372,7 +1374,12 @@ async function handleRequestList(res) {
     }
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
     const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
-    send(res, 200, { requests: filled.rows, titles: filled.titles, engine: "seerr", pipeline: assembled.pipeline });
+    send(res, 200, {
+      requests: filled.rows,
+      titles: mergeRequestListTitles(filled.titles, facts),
+      engine: "seerr",
+      pipeline: assembled.pipeline,
+    });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -1418,13 +1425,21 @@ async function handleRequestStatus(req, res) {
       season,
     });
     const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
+    if (season != null && Number.isFinite(season)) mapped.season = season;
     const facts = await loadPresenceFacts();
+    const resolved = resolveParsedTitle(parsed, {
+      titles: facts.libraryTitles,
+      series: facts.series,
+      movies: facts.movies,
+    });
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
-    const status = honest.engine || "unknown";
+    const diskSeasons = onDiskSeasonsFor(resolved, facts.arrIndex, facts);
+    const seasonOnDisk = season != null && diskSeasons.includes(Number(season));
+    const status = seasonOnDisk ? "downloaded" : honest.engine || "unknown";
     if (status === "downloaded") await jellyfinRefresh(id);
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
-      parsed,
+      resolved,
     );
     send(res, 200, {
       status,
@@ -1433,8 +1448,9 @@ async function handleRequestStatus(req, res) {
       titleId: mapped.titleId,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
-      progress: honest.status === "available" ? 100 : honest.progress,
-      requestStatus: honest.status,
+      onDiskSeasons: diskSeasons,
+      progress: seasonOnDisk || honest.status === "available" ? 100 : honest.progress,
+      requestStatus: seasonOnDisk ? "available" : honest.status,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });

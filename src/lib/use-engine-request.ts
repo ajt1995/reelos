@@ -20,7 +20,7 @@ export function useEngineRequest(id: string, season?: number) {
     let stop = false;
     const ac = new AbortController();
     void fetch("/api/library", { cache: "no-store", signal: ac.signal })
-      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string }[] }>)
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string; onDiskSeasons?: number[] }[] }>)
       .then((j) => {
         if (stop) return;
         const hit = (j.titles || []).find((t) => titleMatchesId(t, id));
@@ -28,8 +28,10 @@ export function useEngineRequest(id: string, season?: number) {
         if (hit) {
           aliases = [...new Set([...aliases, ...titlePresenceKeys(hit.id, hit.ids || [])])];
           setExtraIds(aliases);
+          const disk = seasonNumbersFrom(hit.onDiskSeasons);
+          if (disk.length) setOnDiskSeasons((cur) => [...new Set([...cur, ...disk])].sort((a, b) => a - b));
         }
-        if (!hit || id.startsWith("tmdb-tv-")) return;
+        if (!hit || id.startsWith("tmdb-tv-") || id.startsWith("tvdb-")) return;
         useReelStore.setState((s) => ({
           requests: s.requests.map((x) =>
             x.titleId === id && x.status !== "available" && x.season == null

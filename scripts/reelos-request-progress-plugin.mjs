@@ -15,6 +15,7 @@ import {
   libraryHasTitle,
   onDiskSeasonsFor,
   titleIdFor,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import {
@@ -128,7 +129,7 @@ export async function collectRequestList() {
     const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
     return {
       requests: filled.rows,
-      titles: filled.titles,
+      titles: mergeRequestListTitles(filled.titles, facts),
       engine: "seerr",
       pipeline: assembled.pipeline,
     };
@@ -200,9 +201,14 @@ async function handleGet(req, res) {
     mapped.titleId = mapped.titleId || titleIdFor(parsed.mediaType, parsed.tmdb);
     if (season != null && Number.isFinite(season)) mapped.season = season;
     facts = facts || (await loadPresenceFacts());
+    parsed = resolveParsedTitle(parsed, {
+      titles: facts.libraryTitles,
+      series: facts.series,
+      movies: facts.movies,
+    });
     const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId })[0] || mapped;
-    const diskSeasons = onDiskSeasonsFor(parsed, facts.arrIndex);
+    const diskSeasons = onDiskSeasonsFor(parsed, facts.arrIndex, facts);
     const seasonOnDisk = season != null && diskSeasons.includes(Number(season));
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),

@@ -20,6 +20,7 @@ import {
   titleForRequest,
   titleMatchesId,
   titlePresenceKeys,
+  tvSeasonChips,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
 
@@ -135,7 +136,8 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
   assert.doesNotMatch(shell, /aria-label="Search"/);
-  assert.match(reqs, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(reqs, /inFlightRequests\(requests, \{ titles: \[\.\.\.shelf, \.\.\.remoteTitles\] \}\)/);
+  assert.match(reqs, /tvSeasonChips/);
   assert.match(reqs, /inflight\.filter\(\(r\) => \(filter === "all" \? true : r\.status === filter\)\)/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
@@ -306,6 +308,23 @@ test("TV library series does not mark a grabbing season available on the client"
   });
   assert.equal(honest[0]?.status, "downloading");
   assert.equal(honest[0]?.progress, 0);
+});
+
+test("TV onDiskSeasons marks that season Watch without a title click", () => {
+  const requests = [
+    row({ id: "seerr-5", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
+    row({ id: "seerr-6", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 2 }),
+  ];
+  const honest = overlayLibraryPresence(requests, {
+    titles: [{ id: "tmdb-tv-1402", kind: "tv", onDiskSeasons: [1] }],
+  });
+  assert.equal(honest.find((r) => r.season === 1)?.status, "available");
+  assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
+  const chips = tvSeasonChips("tmdb-tv-1402", honest, [{ id: "tmdb-tv-1402", kind: "tv", onDiskSeasons: [1] }]);
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label.toLowerCase()}`),
+    ["1:watch", "2:request"],
+  );
 });
 
 test("title-page poll does not paint another season available", () => {

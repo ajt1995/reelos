@@ -90,6 +90,7 @@ export interface MediaRequest {
   via?: RequestVia;
   release?: string;
   engine?: string;
+  requestedSeasons?: number[];
 }
 
 export interface AdapterState {

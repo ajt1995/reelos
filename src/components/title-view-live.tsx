@@ -249,7 +249,7 @@ export function TitleView({ id }: { id: string }) {
                     }
                   >
                     Season {n}
-                    {diskSeasons.includes(n) ? " · in" : ""}
+                    {diskSeasons.includes(n) ? " · Watch" : " · Request"}
                   </button>
                 ))
               )}
@@ -268,7 +268,7 @@ export function TitleView({ id }: { id: string }) {
                   }
                 >
                   Season {n}
-                  {diskSeasons.includes(n) ? " · in" : ""}
+                  {diskSeasons.includes(n) ? " · Watch" : " · Request"}
                 </button>
               ))}
             </div>
