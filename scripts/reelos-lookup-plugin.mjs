@@ -91,12 +91,9 @@ async function refreshLibraryFull(host) {
     const a = answers();
     const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     if (!auth?.token) return;
-    const r = await fetch(libraryItemsUrl(), {
-      headers: jellyfinAuthedHeaders(auth.token),
-      signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
-    });
-    if (!r.ok) return;
-    const data = await r.json();
+    const pulled = await jellyfinFetchItems(auth);
+    if (!pulled.ok) return;
+    const data = pulled.json;
     const items = Array.isArray(data.Items) ? data.Items : [];
     libraryCache.write(dedupeLibraryTitles(mapJellyfinItems(items, host)), { complete: true });
     persistLibraryCache();
@@ -490,8 +487,9 @@ async function probeJson(url, ms = 3000) {
   }
 }
 
+// Unique DeviceId: doctor + selfheal used to share "reelos" and revoke the box token (401 / red chip).
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.33"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos-box", Version="1.2.50.33"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -626,7 +624,7 @@ async function jellyfinToken(user, password) {
         "X-Emby-Authorization": JF_AUTH,
       },
       body: JSON.stringify({ Username: user, Pw: password }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(4000),
     });
     if (!r.ok) return null;
     const j = await r.json();
@@ -637,6 +635,27 @@ async function jellyfinToken(user, password) {
   } catch {
     return null;
   }
+}
+
+async function jellyfinFetchItems(auth, { limit, timeout = JELLYFIN_ITEMS_TIMEOUT_MS } = {}) {
+  const pull = (token) =>
+    fetch(libraryItemsUrl({ limit }), {
+      headers: jellyfinAuthedHeaders(token),
+      signal: AbortSignal.timeout(timeout),
+    });
+  let token = auth?.token;
+  if (!token) return { ok: false, status: 0, json: null };
+  let r = await pull(token);
+  if (r.status === 401 || r.status === 403) {
+    jellyfinTokens.clear();
+    const a = answers();
+    const next = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    if (!next?.token) return { ok: false, status: r.status, json: null };
+    token = next.token;
+    r = await pull(token);
+  }
+  if (!r.ok) return { ok: false, status: r.status, json: null };
+  return { ok: true, status: r.status, json: await r.json() };
 }
 
 async function jellyfinState(ip) {
@@ -651,11 +670,16 @@ async function jellyfinState(ip) {
     }
     // Loopback is the playback path; a miss on the LAN/Tailscale IP is not a red box.
   }
-  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  let auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
   if (!auth?.token) {
     return { state: "red", detail: "Jellyfin has no matching user/PIN", libraries: [] };
   }
-  const folders = await readJellyfinVirtualFolders(auth.token);
+  let folders = await readJellyfinVirtualFolders(auth.token);
+  if (!folders) {
+    jellyfinTokens.clear();
+    auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    folders = auth?.token ? await readJellyfinVirtualFolders(auth.token) : null;
+  }
   if (!folders) {
     return { state: "red", detail: "Cannot read virtual folders", libraries: [] };
   }
@@ -680,8 +704,9 @@ async function readJellyfinVirtualFolders(token) {
     try {
       const r = await fetch(url, {
         headers: jellyfinAuthedHeaders(token),
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(4000),
       });
+      if (r.status === 401 || r.status === 403) continue;
       if (!r.ok) continue;
       const folders = await r.json();
       if (Array.isArray(folders)) return folders;
@@ -2095,12 +2120,9 @@ async function handleLibrary(req, res) {
       return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     },
     fetchItems: async (auth, limit) => {
-      const r = await fetch(libraryItemsUrl({ limit }), {
-        headers: jellyfinAuthedHeaders(auth.token),
-        signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
-      });
-      if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
-      return r.json();
+      const pulled = await jellyfinFetchItems(auth, { limit });
+      if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
+      return pulled.json;
     },
     refresh: () => refreshLibraryFull(host),
   });
@@ -2251,12 +2273,12 @@ async function handleReady(req, res) {
           return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
         },
         fetchItems: async (auth, lim) => {
-          const r = await fetch(libraryItemsUrl({ limit: lim }), {
-            headers: jellyfinAuthedHeaders(auth.token),
-            signal: AbortSignal.timeout(Math.min(JELLYFIN_ITEMS_TIMEOUT_MS, 2500)),
+          const pulled = await jellyfinFetchItems(auth, {
+            limit: lim,
+            timeout: Math.min(JELLYFIN_ITEMS_TIMEOUT_MS, 2500),
           });
-          if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
-          return r.json();
+          if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
+          return pulled.json;
         },
         refresh: () => refreshLibraryFull(host),
       });

@@ -110,6 +110,12 @@ test("stack: VERSION / channel / stamps agree (1.2.50.48)", () => {
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
 });
 
+test("stack: pack-prebuilt never ships USB ISOs from public/install", () => {
+  const pack = read("scripts/pack-prebuilt.mjs");
+  assert.match(pack, /name === "install"/);
+  assert.match(pack, /4GB box never compiles/);
+});
+
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {
   const pkg = JSON.parse(read("package.json"));
   const lock = JSON.parse(read("package-lock.json"));

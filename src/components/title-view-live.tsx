@@ -184,9 +184,9 @@ export function TitleView({ id }: { id: string }) {
     request?.status === "available" ||
     engineStatus === "downloaded" ||
     engineStatus === "available";
-  const seasonReady = thisSeasonOnBox && series;
-  const onBox = inJellyfin || inLibrary || seasonReady;
-  const available = series ? thisSeasonOnBox || inJellyfin || inLibrary : onBox;
+  // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
+  const onBox = series ? thisSeasonOnBox : inJellyfin || inLibrary;
+  const available = onBox;
   const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
   const hashPaste = showHashAdapter({ pageId: id, title: resolved.title });
   const blocked =
@@ -249,6 +249,7 @@ export function TitleView({ id }: { id: string }) {
                     }
                   >
                     Season {n}
+                    {diskSeasons.includes(n) ? " · in" : ""}
                   </button>
                 ))
               )}
@@ -267,6 +268,7 @@ export function TitleView({ id }: { id: string }) {
                   }
                 >
                   Season {n}
+                  {diskSeasons.includes(n) ? " · in" : ""}
                 </button>
               ))}
             </div>
@@ -285,7 +287,7 @@ export function TitleView({ id }: { id: string }) {
                 <Play className="size-4" fill="currentColor" />
                 Watch
               </Button>
-            ) : (
+            ) : request?.status === "downloading" || request?.status === "waiting" ? null : (
               <Button size="lg" disabled>
                 <Play className="size-4" />
                 Available after request

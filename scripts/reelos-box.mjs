@@ -8,7 +8,8 @@
  * Leftover Vite is `vite preview` only if nitro+api cannot bind.
  */
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, realpathSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { parseListenerInodes } from "./preview.mjs";
 import http from "node:http";
 import { extname, join, normalize, relative, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -290,7 +291,77 @@ function armSelfHeal() {
   setInterval(() => void kickSelfHeal(), 120_000).unref();
 }
 
+export function killOrphanPortPids(pids, { kill = process.kill, selfPid = process.pid } = {}) {
+  const targets = [...new Set((pids || []).map(Number).filter((n) => n > 1 && n !== selfPid))];
+  for (const pid of targets) {
+    try {
+      kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
+  return targets;
+}
+
+export function orphanPidsOnPort(
+  port = PORT,
+  {
+    readFile = readFileSync,
+    readdir = readdirSync,
+    readlink = readlinkSync,
+    selfPid = process.pid,
+  } = {},
+) {
+  const inodes = new Set();
+  for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let dump = "";
+    try {
+      dump = readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const inode of parseListenerInodes(dump, Number(port))) inodes.add(inode);
+  }
+  if (!inodes.size) return [];
+  const targets = new Set([...inodes].map((inode) => `socket:[${inode}]`));
+  const pids = [];
+  let entries = [];
+  try {
+    entries = readdir("/proc");
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid <= 1 || pid === selfPid) continue;
+    let fds;
+    try {
+      fds = readdir(`/proc/${pid}/fd`);
+    } catch {
+      continue;
+    }
+    for (const fd of fds) {
+      try {
+        if (targets.has(readlink(`/proc/${pid}/fd/${fd}`))) {
+          pids.push(pid);
+          break;
+        }
+      } catch {
+        /* fd closed */
+      }
+    }
+  }
+  return pids;
+}
+
+/** One Node on :8080. Kill leftover vite/nitro from a previous start. */
+export function killOrphan8080({ port = PORT, kill = process.kill, selfPid = process.pid, ...scan } = {}) {
+  const pids = orphanPidsOnPort(port, { ...scan, selfPid });
+  return killOrphanPortPids(pids, { kill, selfPid });
+}
+
 export async function startBox({ root = ROOT } = {}) {
+  killOrphan8080();
   const client = findClientRoot(root);
   if (client) {
     const server = await startStatic(client, root);

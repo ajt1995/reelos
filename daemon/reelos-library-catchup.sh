@@ -75,7 +75,7 @@ limit=$(d_limit)
 d=$(ffprobe_d_state)
 if [ "${d:-0}" -ge "$limit" ] && ! ffprobe_stubbed; then
   log "import catch-up idle — ffprobe D-state $d (not piling more)"
-  write_progress idle "" false false
+  write_progress backoff "TorBox filesystem busy — not copying to disk" false false
   # Keep the request flag so the 2min selfheal timer retries when D-state cools.
   exit 0
 fi
@@ -83,7 +83,14 @@ if [ "${d:-0}" -ge "$limit" ]; then
   log "import catch-up — ffprobe stubbed, skip-existing dumps (D-state $d)"
 fi
 
-write_progress running "Library catching up" false false
+running_msg="Library catching up"
+if [ -f "$ROOT/bin/reelos_os_tune.py" ]; then
+  plan=$(python3 "$ROOT/bin/reelos_os_tune.py" --plan 2>/dev/null || true)
+  case "$plan" in
+    *"4GB + HDD"*) running_msg="Library catching up — 4GB + HDD, small-box limits" ;;
+  esac
+fi
+write_progress running "$running_msg" false false
 
 WIRE="$ROOT/bin/wire-engines.py"
 if [ ! -x "$WIRE" ]; then

@@ -406,7 +406,7 @@ need src/lib/repairs.ts 'One poster per movie'
 need scripts/reelos-lookup-plugin.mjs '/api/intent'
 need scripts/reelos-lookup-plugin.mjs 'applyIsRunning'
 need scripts/reelos-ota-status.mjs 'lockIsHeld'
-need src/components/applying-bar.tsx 'engines are still configuring'
+need src/components/applying-bar.tsx 'swapping the app'
 need src/routes/__root.tsx 'syncUpdateFromBox'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
@@ -440,6 +440,10 @@ need scripts/reelos-lookup-plugin.mjs 'kickArrRecover'
 need daemon/wire-engines.parts/09.part 'seerr_needs_search_enable'
 need daemon/public_indexers.py 'ReelOS-eztv'
 need daemon/public_indexers.py 'ReelOS-showrss'
+need daemon/public_indexers.py 'ReelOS-knaben'
+need daemon/public_indexers.py 'ReelOS-torrentcsv'
+need daemon/public_indexers.py 'prowlarr_indexer_write_url'
+need daemon/public_indexers.py 'required_tv_search_names'
 need daemon/public_indexers.py 'TorrentRssIndexer'
 need daemon/public_indexers.py 'doctor_releases_detail'
 need daemon/public_indexers.py 'apply_public_indexers'
@@ -447,6 +451,9 @@ need daemon/wire-engines.parts/04.part 'OTA: public indexer add pass complete'
 need daemon/wire-engines.parts/04.part 'rss fallback'
 need daemon/wire-engines.parts/04.part 'apply_public_indexers'
 need daemon/wire-engines.parts/04.part 'schema {e} — RSS fallback'
+need daemon/wire-engines.parts/04.part 'forceSave=true'
+need daemon/wire-engines.parts/03.part 'forceSave=true'
+need daemon/wire-engines.parts/05.part 'keep for house/LAN'
 need daemon/wire-engines.parts/02.part 'fullSync'
 need daemon/wire-engines.parts/09.part 'widen_sonarr_hybrid'
 need daemon/wire-engines.parts/09.part 'research-missing'
@@ -517,6 +524,9 @@ need daemon/reelos_hardware.py 'disk_kind'
 need daemon/reelos_hardware.py 'catchup_memory_max'
 need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
+need daemon/reelos_os_tune.py 'zram on rotational disk'
+need daemon/reelos_os_tune.py 'do not reserve 512M kdump'
+need daemon/reelos-library-catchup.sh 'TorBox filesystem busy'
 need daemon/reelos-update.sh 'hardware profile'
 need daemon/reelos-library-catchup.sh 'do not remount if listed'
 need daemon/reelos-library-catchup.sh 'ffprobe D-state'
@@ -1534,7 +1544,7 @@ log "ReelOS $REMOTE applied."
 # whole library. Persistent reelos-library-catchup oneshot outlives selfheal 90s.
 # Do not await kick_imports. Do not let a later import/heal red un-stamp this.
 # python3 "$ROOT/bin/wire-engines.py" indexers then import --catch-up (library worker).
-# Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only).
+# Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; Knaben/TorrentsCSV/1337x/TPB search; YTS is movies-only).
 # wire.log: heal red|torznab |search indexers  (library worker, never un-stamp)
 log "library catch-up in background"
 mkdir -p "$STATE"

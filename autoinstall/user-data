@@ -1,0 +1,51 @@
+#cloud-config
+# ReelOS autoinstall for a stock Ubuntu LTS live-server ISO.
+# Austin supplies the ISO. This file never downloads one.
+#
+# Creates user reelos, then late-commands run install-reelos.sh:
+# Docker, Caddy, ReelOS from GitHub main.tar.gz, firstboot once, :80 wizard.
+# OS tune on the seed: zram on rotational disk; no 512M kdump on ≤4.5Gi RAM.
+# No TorBox key. No wizard admin PIN. The 7-step wizard still runs.
+# Never wipes /media. Never deletes ota.lock. No secrets in this file.
+autoinstall:
+  version: 1
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+  timezone: UTC
+  refresh-installer:
+    update: false
+  updates: none
+  apt:
+    fallback: offline-install
+  identity:
+    hostname: reelos
+    username: reelos
+    password: '$6$dTG7jXc7/PdyOZp5$/GLYde1iiJMYlB3fINRjsdrWLOS4YwEspcvTZK/7XhrpS3dQnhBH.8Cs5nb8VbCorWc3aE/kSxDIidPtJsP.M.'
+  ssh:
+    allow-pw: true
+    install-server: true
+  storage:
+    layout:
+      name: direct
+  network:
+    version: 2
+    ethernets:
+      all-en:
+        match:
+          name: en*
+        dhcp4: true
+      all-eth:
+        match:
+          name: eth*
+        dhcp4: true
+  early-commands:
+    - /bin/bash /cdrom/nocloud/live-wifi.sh || true
+  late-commands:
+    - mkdir -p /target/opt/reelos/seed /target/var/lib/reelos /target/etc/systemd/system
+    - cp -a /cdrom/nocloud/. /target/opt/reelos/seed/ || true
+    - chmod 755 /target/opt/reelos/seed/install-reelos.sh /target/opt/reelos/seed/live-wifi.sh || true
+    - rm -f /target/etc/resolv.conf
+    - printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\n' > /target/etc/resolv.conf
+    - curtin in-target -- bash /opt/reelos/seed/install-reelos.sh
+  shutdown: reboot

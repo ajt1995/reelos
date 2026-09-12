@@ -29,7 +29,7 @@ import { spawnSync } from "node:child_process";
 const STATE = "/var/lib/reelos";
 const RECOVER_COOLDOWN_MS = 120_000;
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos-selfheal", Version="1.2.50"';
 
 export function answersFromDisk() {
   try {
