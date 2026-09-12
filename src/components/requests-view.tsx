@@ -24,7 +24,7 @@ export function RequestsView() {
   const cancel = useReelStore((s) => s.cancelRequest);
   useSyncRequests();
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
 
   const catalog = [...shelf, ...remoteTitles];
