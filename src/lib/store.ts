@@ -253,7 +253,7 @@ export interface ReelState {
   removeIndexer: (id: string) => void;
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
-  hydrateShelf: (opts?: { limit?: number }) => void;
+  hydrateShelf: (opts?: { limit?: number; force?: boolean; fresh?: boolean }) => void;
   dropLibraryTitle: (titleId: string, extraIds?: string[]) => void;
 }
 
@@ -949,11 +949,16 @@ export const useReelStore = create<ReelState>()(
         set({ shelf: overlay.shelf, library: overlay.library, requests: overlay.requests });
       },
       hydrateShelf: (opts) => {
-        if (get().shelfReady) return;
         const limit = opts?.limit;
-        const key = limit ? `n${limit}` : "all";
+        const force = Boolean(opts?.force);
+        const fresh = Boolean(opts?.fresh) || force;
+        if (!force && get().shelfReady) return;
+        const key = `${force ? "f" : ""}${limit ? `n${limit}` : "all"}`;
         if (shelfFetches.has(key)) return;
-        const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+        const q = new URLSearchParams();
+        if (limit) q.set("limit", String(limit));
+        if (fresh) q.set("fresh", "1");
+        const qs = q.toString() ? `?${q.toString()}` : "";
         const p = fetch(`/api/library${qs}`, { cache: "no-store" })
           .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
           .then((j) => {

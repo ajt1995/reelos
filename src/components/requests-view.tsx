@@ -24,7 +24,7 @@ export function RequestsView() {
   const cancel = useReelStore((s) => s.cancelRequest);
   useSyncRequests();
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
 
   const catalog = [...shelf, ...remoteTitles];
@@ -36,7 +36,7 @@ export function RequestsView() {
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
       <p className="mt-2 text-sm text-muted">
-        In flight — searching, grabbing, waiting to import. Playable titles are in Library.
+        Searching, grabbing, or finished and waiting for Watch on Home. Playable titles are On this box.
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (

@@ -10,6 +10,7 @@ import {
   inFlightRequests,
   isGhostRequestLabel,
   isInFlightRequest,
+  requestIsWatchableOnShelf,
   mergeServerRequests,
   overlayLibraryPresence,
   requestMediaTypeForPage,
@@ -21,7 +22,7 @@ import {
   titleMatchesId,
   titlePresenceKeys,
 } from "./sync-requests.ts";
-import type { MediaRequest } from "./types.ts";
+import type { MediaRequest, Title } from "./types.ts";
 
 function row(partial: Partial<MediaRequest> & Pick<MediaRequest, "id" | "titleId" | "status">): MediaRequest {
   return {
@@ -31,6 +32,10 @@ function row(partial: Partial<MediaRequest> & Pick<MediaRequest, "id" | "titleId
     requester: "Ada",
     ...partial,
   };
+}
+
+function jfMovie(id: string): Pick<Title, "id" | "kind" | "jellyfinId"> {
+  return { id, kind: "movie", jellyfinId: `jf-${id}` };
 }
 
 test("available movie hides Request even if a stale downloading row exists", () => {
@@ -71,6 +76,26 @@ test("transferring chip never counts available", () => {
   assert.equal(isInFlightRequest({ status: "downloading", engine: "downloaded" }), false);
 });
 
+test("Seerr-available Passengers stays on Requests until JF Watch is on the shelf", () => {
+  const passengers = row({ id: "debrid-pass", titleId: "tmdb-274870", title: "Passengers", status: "available" });
+  const pending = inFlightRequests([passengers], { titles: [] });
+  assert.equal(pending.length, 1);
+  assert.equal(requestIsWatchableOnShelf(passengers, { titles: [] }), false);
+  const watchable = inFlightRequests([passengers], {
+    titles: [{ id: "tmdb-274870", kind: "movie", ids: ["tmdb-274870"], jellyfinId: "de7507" }],
+  });
+  assert.equal(watchable.length, 0);
+  assert.equal(transferringChipCount(pending), 0, "available waiting for Watch is not transferring");
+  const engineDone = row({
+    id: "debrid-pass-eng",
+    titleId: "tmdb-274870",
+    title: "Passengers",
+    status: "downloading",
+    engine: "downloaded",
+  });
+  assert.equal(inFlightRequests([engineDone], { titles: [] }).length, 1);
+});
+
 test("Home Your requests hides shelf hits; keeps searching/grabbing/linked waiting", () => {
   const requests = [
     row({ id: "museum", titleId: "tmdb-1593", status: "downloading", via: "cache" }),
@@ -83,15 +108,11 @@ test("Home Your requests hides shelf hits; keeps searching/grabbing/linked waiti
   ];
   const inflight = inFlightRequests(requests, {
     libraryIds: ["tmdb-1593", "tmdb-245891", "tmdb-1012201"],
-    titles: [
-      { id: "tmdb-1593", kind: "movie" },
-      { id: "tmdb-245891", kind: "movie" },
-      { id: "tmdb-1012201", kind: "movie" },
-    ],
+    titles: [jfMovie("tmdb-1593"), jfMovie("tmdb-245891"), jfMovie("tmdb-1012201")],
   });
   assert.deepEqual(
     inflight.map((r) => r.id),
-    ["searching", "grabbing", "linked"],
+    ["searching", "grabbing", "linked", "engine-done"],
   );
 });
 
@@ -117,7 +138,7 @@ test("25 mostly-available rows are not 25 transferring", () => {
     row({ id: "fail", titleId: "tmdb-902", status: "failed" }),
   ];
   const libraryIds = requests.filter((r) => r.titleId !== "tmdb-900" && r.titleId !== "tmdb-901" && r.titleId !== "tmdb-902").map((r) => r.titleId);
-  const inflight = inFlightRequests(requests, { libraryIds, titles: libraryIds.map((id) => ({ id, kind: "movie" as const })) });
+  const inflight = inFlightRequests(requests, { libraryIds, titles: libraryIds.map((id) => jfMovie(id)) });
   assert.equal(inflight.length, 2);
   assert.deepEqual(inflight.map((r) => r.id), ["wait", "grab"]);
 });
@@ -142,6 +163,11 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.doesNotMatch(reqs, /to="\/play\/\$id"/);
   assert.doesNotMatch(reqs, />\s*Play\s*</);
   assert.match(reqs, />\s*Cancel\s*</);
+  const sync = readFileSync(new URL("./use-sync-requests.ts", import.meta.url), "utf8");
+  assert.match(sync, /requestNeedsLibraryHandoff/);
+  assert.match(sync, /hydrateShelf\(\{ limit: 24, force: true, fresh: true \}\)/);
+  assert.doesNotMatch(home, /setInterval/);
+  assert.doesNotMatch(reqs, /setInterval/);
 });
 
 test("Requests page drops Available now / Play movies; keeps searching Rick and Morty", () => {
@@ -171,10 +197,10 @@ test("Requests page drops Available now / Play movies; keeps searching Rick and 
   const inflight = inFlightRequests(requests, {
     libraryIds: ["tmdb-1012201", "tmdb-1241982", "tmdb-1019412", "tmdb-1064028"],
     titles: [
-      { id: "tmdb-1012201", kind: "movie" },
-      { id: "tmdb-1241982", kind: "movie" },
-      { id: "tmdb-1019412", kind: "movie" },
-      { id: "tmdb-1064028", kind: "movie" },
+      jfMovie("tmdb-1012201"),
+      jfMovie("tmdb-1241982"),
+      jfMovie("tmdb-1019412"),
+      jfMovie("tmdb-1064028"),
     ],
   });
   assert.deepEqual(
@@ -462,8 +488,16 @@ test("stale local waiting rows drop when Seerr returns a shorter list", () => {
   ];
   const merged = mergeServerRequests(local, server);
   const inflight = inFlightRequests(merged, { titles: [] });
-  assert.equal(inflight.length, 1);
-  assert.equal(inflight[0]?.titleId, "tmdb-2059");
+  assert.equal(inflight.length, 2);
+  assert.deepEqual(
+    inflight.map((r) => r.titleId).sort(),
+    ["tmdb-2059", "tmdb-tv-63639"],
+  );
+  const onBox = inFlightRequests(merged, {
+    titles: [{ id: "tvdb-280619", kind: "tv", ids: ["tmdb-tv-63639", "tvdb-280619"], jellyfinId: "exp" }],
+  });
+  assert.equal(onBox.length, 1);
+  assert.equal(onBox[0]?.titleId, "tmdb-2059");
 });
 
 test("optimistic local Request survives one poll before Seerr echoes it", () => {
