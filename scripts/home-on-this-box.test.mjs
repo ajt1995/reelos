@@ -60,7 +60,9 @@ const LIVE_NAMED = [
 test("live HP dump twin fixture collapses to named cards only", () => {
   assert.equal(stripIndexerPrefix("www UIndex org    -    The Rookie"), "The Rookie");
   assert.equal(humanTitleFromSceneName("www.UIndex.org    -    The.Rookie.S02E14.Casualties.1080p.mkv").title, "The Rookie");
-  assert.equal(dumpMatchesNamed(LIVE_DUMPS[0], LIVE_NAMED[0]), true);
+  assert.equal(dumpMatchesNamed(LIVE_DUMPS[0], LIVE_NAMED[1]), true);
+  assert.equal(dumpMatchesNamed(LIVE_DUMPS[1], LIVE_NAMED[0]), true);
+  assert.equal(dumpMatchesNamed({ title: "org-Silo" }, { title: "Silo" }), true);
   const shown = homeShelfRows([...LIVE_DUMPS, ...LIVE_NAMED].map((t) => ({ kind: "tv", ...t })));
   assert.deepEqual(
     shown.map((t) => t.title).sort(),

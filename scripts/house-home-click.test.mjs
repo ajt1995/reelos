@@ -181,7 +181,7 @@ test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%"
       assert.doesNotMatch(chips, /S2 · Watch/);
     }
     await page.screenshot({ path: join(outDir, `house-home-${name.toLowerCase().replace(/\s+/g, "-")}.png`) });
-    await page.locator("[data-back]").first().click();
+    await page.locator(`[data-page="${name}"] [data-back]`).click();
   }
   await page.screenshot({ path: join(outDir, "house-home-on-this-box.png") });
   writeFileSync(
