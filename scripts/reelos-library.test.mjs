@@ -19,6 +19,9 @@ import {
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
+  jellyfinResumeUrl,
+  resumeProgress,
+  mapResumeItems,
   shelfTitleKey,
   stripMatchingYear,
   stripCompletePackSuffix,
@@ -36,6 +39,8 @@ import {
   jellyfinHasPrimaryImage,
   UNKNOWN_ON_BOX,
   libraryRowHidden,
+  homeShelfRows,
+  healRemovedIds,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -71,6 +76,100 @@ test("Jellyfin Items URL is lean: no Overview, optional Limit", () => {
   const home = libraryItemsUrl({ limit: 24 });
   assert.match(home, /(?:\?|&)Limit=24/);
   assert.doesNotMatch(home, /Overview/);
+});
+
+test("Jellyfin Resume URL is per-user and asks for UserData", () => {
+  const url = jellyfinResumeUrl("user-1", { limit: 24 });
+  assert.match(url, /\/Users\/user-1\/Items\/Resume\?/);
+  assert.match(url, /EnableUserData=true/);
+  assert.match(url, /IncludeItemTypes=Movie%2CEpisode/);
+  assert.match(url, /(?:\?|&)Limit=24/);
+  assert.equal(jellyfinResumeUrl(""), "");
+});
+
+test("resume progress is ticks ratio; episodes map to the series", () => {
+  assert.equal(resumeProgress({ UserData: { PlaybackPositionTicks: 3 }, RunTimeTicks: 10 }), 0.3);
+  assert.equal(resumeProgress({ UserData: { PlaybackPositionTicks: 0 }, RunTimeTicks: 10 }), 0);
+  const series = titleFrom({
+    Id: "jf-rick",
+    Name: "Rick and Morty",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: { Tvdb: "275274" },
+    ImageTags: { Primary: "ser" },
+  });
+  const rows = mapResumeItems(
+    [
+      {
+        Id: "ep-1",
+        Type: "Episode",
+        Name: "Pilot",
+        SeriesId: "jf-rick",
+        SeriesName: "Rick and Morty",
+        SeriesPrimaryImageTag: "ser",
+        RunTimeTicks: 10,
+        UserData: { PlaybackPositionTicks: 4 },
+        ProviderIds: {},
+      },
+      {
+        Id: "jf-2",
+        Type: "Movie",
+        Name: "Night Harbor",
+        ProductionYear: 2024,
+        RunTimeTicks: 10,
+        UserData: { PlaybackPositionTicks: 5 },
+        ProviderIds: { Tmdb: "550" },
+        ImageTags: { Primary: "abc123" },
+      },
+      {
+        Id: "done",
+        Type: "Movie",
+        Name: "Finished",
+        RunTimeTicks: 10,
+        UserData: { PlaybackPositionTicks: 10 },
+        ProviderIds: { Tmdb: "1" },
+      },
+    ],
+    { host: "10.0.0.5", libraryTitles: [series] },
+  );
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].id, "tvdb-275274");
+  assert.equal(rows[0].progress, 0.4);
+  assert.equal(rows[1].id, "tmdb-550");
+  assert.equal(rows[1].progress, 0.5);
+});
+
+test("serveLibrary includes Continue watching from Resume on the same fetch", async () => {
+  const cache = createLibraryCache();
+  const out = await serveLibrary({
+    url: "/api/library?limit=24",
+    host: "10.0.0.5",
+    now: 5,
+    cache,
+    getAuth: async () => ({ token: "tok", id: "user-1" }),
+    fetchItems: async () => ({ Items: [sampleItem] }),
+    fetchResume: async (auth) => {
+      assert.equal(auth.id, "user-1");
+      return {
+        Items: [
+          {
+            Id: "jf-1",
+            Type: "Movie",
+            Name: "Night Harbor",
+            ProductionYear: 2024,
+            RunTimeTicks: 10,
+            UserData: { PlaybackPositionTicks: 4 },
+            ProviderIds: { Tmdb: "550" },
+            ImageTags: { Primary: "abc123" },
+          },
+        ],
+      };
+    },
+  });
+  assert.equal(out.titles[0].id, "tmdb-550");
+  assert.equal(out.continueWatching.length, 1);
+  assert.equal(out.continueWatching[0].id, "tmdb-550");
+  assert.equal(out.continueWatching[0].progress, 0.4);
 });
 
 test("mapJellyfinItem drops Overview and keeps real ids", () => {
@@ -570,6 +669,22 @@ test("full request serves a Home slice immediately and refreshes in the backgrou
   assert.ok(elapsed < 20, `stale serve took ${elapsed}ms`);
 });
 
+test("live Jellyfin fetch is not hidden by a stale Remove list", async () => {
+  const cache = createLibraryCache();
+  const out = await serveLibrary({
+    url: "/api/library",
+    host: "box.local",
+    now: 5,
+    cache,
+    removedIds: ["tmdb-550", "jf-abc"],
+    getAuth: async () => ({ token: "tok", id: "u" }),
+    fetchItems: async () => ({ Items: [sampleItem] }),
+  });
+  assert.equal(out.fromCache, false);
+  assert.equal(out.titles.length, 1);
+  assert.equal(out.titles[0].id, "tmdb-550");
+});
+
 test("plugin and Home wire the lean /api/library path", () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const plugin = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
@@ -580,7 +695,13 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(plugin, /handleJellyfinImage/);
   assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
-  assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
+  assert.match(home, /hydrateShelf\(\{ limit: 24, force: true \}\)/);
+  assert.doesNotMatch(home, /setInterval/);
+  assert.match(home, /label="Continue watching"/);
+  assert.match(plugin, /jellyfinResumeUrl/);
+  assert.match(plugin, /fetchResume/);
+  assert.match(plugin, /continueWatching/);
+  assert.doesNotMatch(home, /visibilitychange/);
   assert.match(home, /jfLive/);
   assert.match(home, /jellyfinHop/);
   assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
@@ -591,7 +712,9 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(rootFile, /\/api\/ready\?limit=24/);
   assert.match(rootFile, /applyReadyPayload/);
   assert.match(rootFile, /AbortSignal\.timeout\(4000\)/);
-  assert.match(store, /if \(get\(\)\.shelfReady\) return/);
+  assert.match(store, /if \(!force && get\(\)\.shelfReady\) return/);
+  const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
+  assert.match(sync, /hydrateShelf\(\{ limit: 24, force: true, fresh: true \}\)/);
 });
 
 test("cache freshness helper", () => {
@@ -736,7 +859,7 @@ test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.deepEqual(out[0].onDiskSeasons, [4]);
 });
 
-test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster", () => {
+test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.deepEqual(
     seasonsFromDumpNames(["Rick And Morty S04E01 Edge Of Tomorty.mkv", "Rick And Morty S04E10.mkv"]),
     [4],
@@ -760,4 +883,49 @@ test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster",
 test("Jellyfin Items URL asks for Path so hash dumps can be named from files", () => {
   assert.match(libraryItemsUrl(), /Fields=Path%2CProviderIds%2CImageTags|Fields=Path,ProviderIds,ImageTags/);
   assert.doesNotMatch(libraryItemsUrl(), /Overview/);
+});
+
+test("Home hides the hash leftover when named Rick is on the shelf", () => {
+  const named = {
+    id: "tvdb-275274",
+    kind: "tv",
+    title: "Rick and Morty",
+    year: 2013,
+    poster: "/api/jf/Items/named/Images/Primary",
+    ids: ["tvdb-275274", "tmdb-tv-60625", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    jellyfinId: "3d32e281cfcb09816952099c4ff468f6",
+  };
+  const hash = {
+    id: "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    kind: "tv",
+    title: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    year: 0,
+    poster: "",
+    ids: ["73ceff573dc30bebc3fcf26f61de07b25f927a74", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    jellyfinId: "103ae87fbbbd9bb920ee3803dcffc570",
+    fromHashDump: true,
+  };
+  const shown = homeShelfRows([hash, named]);
+  assert.deepEqual(shown.map((t) => t.id), ["tvdb-275274"]);
+  assert.equal(libraryRowHidden(named, [
+    "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    "tvdb-275274",
+    "tmdb-60625",
+    "tmdb-tv-60625",
+  ]), false);
+  assert.deepEqual(
+    healRemovedIds(
+      [
+        "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+        "jf-103ae87fbbbd9bb920ee3803dcffc570",
+        "tvdb-275274",
+        "tmdb-60625",
+        "tmdb-tv-60625",
+      ],
+      [named],
+    ).some((id) => /^(tmdb-|tvdb-)/.test(id)),
+    false,
+  );
+  assert.deepEqual(seasonsFromDumpNames(["Season 04", "Rick And Morty S04E01.mkv"]), [4]);
 });

@@ -86,6 +86,6 @@ test("splash shows warming steps when provisioned; Begin setup only when not", (
   assert.match(rootFile, /AbortSignal\.timeout\(4000\)/);
   assert.match(store, /applyReadyPayload/);
   assert.match(store, /bootSteps/);
-  assert.match(store, /if \(get\(\)\.shelfReady\) return/);
+  assert.match(store, /if \(!force && get\(\)\.shelfReady\) return/);
   assert.match(sync, /seeded \? 0 : 1500/);
 });

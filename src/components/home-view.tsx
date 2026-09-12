@@ -13,13 +13,16 @@ import {
   titleForRequest,
   transferringChipCount,
 } from "@/lib/sync-requests";
+import { homeShelfRows } from "@/lib/shelf";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
-import type { Title } from "@/lib/types";
+import type { CollectionHit, PersonHit, Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function HomeView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const [peopleHits, setPeopleHits] = useState<PersonHit[]>([]);
+  const [collectionHits, setCollectionHits] = useState<CollectionHit[]>([]);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
@@ -29,7 +32,6 @@ export function HomeView() {
   const shelfReady = useReelStore((s) => s.shelfReady);
   const navigate = useNavigate();
   const requests = useReelStore((s) => s.requests);
-  const library = useReelStore((s) => s.library);
   const watch = useReelStore((s) => s.watchProgress);
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
@@ -38,12 +40,13 @@ export function HomeView() {
   const [bookShelf, setBookShelf] = useState<{ title: string; author: string; rel: string }[]>([]);
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
+  const boxShelf = useMemo(() => homeShelfRows(shelf), [shelf]);
   const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = transferringChipCount(inflight);
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
   useEffect(() => {
     if (!booksOn) {
@@ -72,6 +75,8 @@ export function HomeView() {
     const term = q.trim();
     if (term.length < 2) {
       setRemoteHits([]);
+      setPeopleHits([]);
+      setCollectionHits([]);
       setLookupErr(null);
       return;
     }
@@ -81,19 +86,33 @@ export function HomeView() {
       void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
-          return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
+          return res.json() as Promise<{
+            titles?: Title[];
+            people?: PersonHit[];
+            collections?: CollectionHit[];
+            error?: string | null;
+          }>;
         })
         .then((r) => {
           if (cancelled) return;
           const titles = Array.isArray(r?.titles) ? r.titles : [];
+          const people = Array.isArray(r?.people) ? r.people : [];
+          const collections = Array.isArray(r?.collections) ? r.collections : [];
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
-          setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
+          setPeopleHits(people);
+          setCollectionHits(collections);
+          setLookupErr(titles.length || people.length || collections.length ? null : r?.error || "Seerr returned no titles");
+          if (titles.some((t) => t.jellyfinId)) {
+            useReelStore.getState().hydrateShelf({ limit: 24, force: true });
+          }
         })
         .catch((e) => {
           if (cancelled || e?.name === "AbortError") return;
           setRemoteHits([]);
+          setPeopleHits([]);
+          setCollectionHits([]);
           setLookupErr(String(e));
         });
     }, 280);
@@ -111,8 +130,8 @@ export function HomeView() {
 
   const continueWatch = Object.entries(watch)
     .filter(([, v]) => v > 0.03 && v < 0.96)
-    .map(([id, v]) => ({ t: getTitle(id), v }))
-    .filter((x) => x.t && library.includes(x.t.id));
+    .map(([id, v]) => ({ t: getTitle(id) || catalog.find((x) => x.id === id), v }))
+    .filter((x) => x.t);
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
@@ -121,16 +140,18 @@ export function HomeView() {
         onSubmit={(e) => {
           e.preventDefault();
           if (hits[0]) void navigate({ to: "/title/$id", params: { id: hits[0].id } });
+          else if (peopleHits[0]) void navigate({ to: "/person/$id", params: { id: String(peopleHits[0].id) } });
+          else if (collectionHits[0]) void navigate({ to: "/collection/$id", params: { id: String(collectionHits[0].id) } });
         }}
       >
         <Search className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-faint" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search movies, shows, music"
+          placeholder="Search movies, shows, people"
           className="h-14 w-full rounded-2xl bg-card pl-12 pr-4 text-base shadow-[var(--shadow-border)] placeholder:text-faint"
         />
-        {hits.length > 0 ? (
+        {hits.length > 0 || peopleHits.length > 0 || collectionHits.length > 0 ? (
           <ul className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl bg-card shadow-[var(--shadow-border)]">
             {hits.slice(0, 6).map((t) => (
               <li key={t.id}>
@@ -140,9 +161,41 @@ export function HomeView() {
                   className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-foreground/5"
                   onClick={() => setQ("")}
                 >
-                  <img src={t.poster} alt="" className="h-10 w-7 rounded object-cover" />
+                  {t.poster ? <img src={t.poster} alt="" className="h-10 w-7 rounded object-cover" /> : <span className="h-10 w-7 rounded bg-card-2" />}
                   <span className="flex-1 truncate">{t.title}</span>
                   <span className="text-xs text-muted">{t.year}</span>
+                </Link>
+              </li>
+            ))}
+            {peopleHits.slice(0, 3).map((p) => (
+              <li key={`person-${p.id}`}>
+                <Link
+                  to="/person/$id"
+                  params={{ id: String(p.id) }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-foreground/5"
+                  onClick={() => setQ("")}
+                >
+                  {p.poster ? (
+                    <img src={p.poster} alt="" className="h-10 w-10 rounded-full object-cover" />
+                  ) : (
+                    <span className="h-10 w-10 rounded-full bg-card-2" />
+                  )}
+                  <span className="flex-1 truncate">{p.name}</span>
+                  <span className="text-xs text-muted">Actor</span>
+                </Link>
+              </li>
+            ))}
+            {collectionHits.slice(0, 2).map((c) => (
+              <li key={`collection-${c.id}`}>
+                <Link
+                  to="/collection/$id"
+                  params={{ id: String(c.id) }}
+                  className="flex items-center gap-3 px-4 py-3 text-sm hover:bg-foreground/5"
+                  onClick={() => setQ("")}
+                >
+                  {c.poster ? <img src={c.poster} alt="" className="h-10 w-7 rounded object-cover" /> : <span className="h-10 w-7 rounded bg-card-2" />}
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <span className="text-xs text-muted">Collection</span>
                 </Link>
               </li>
             ))}
@@ -195,7 +248,7 @@ export function HomeView() {
       ) : null}
 
       {continueWatch.length > 0 ? (
-        <Row label="Continue">
+        <Row label="Continue watching">
           {continueWatch.map(({ t, v }) =>
             t ? <TitleCard key={t.id} title={t} progress={v} /> : null,
           )}
@@ -210,9 +263,9 @@ export function HomeView() {
         </Row>
       ) : null}
 
-      {shelf.length > 0 ? (
+      {boxShelf.length > 0 ? (
         <Row label="On this box">
-          {shelf.slice(0, 24).map((t) => (
+          {boxShelf.slice(0, 24).map((t) => (
             <div key={t.id} className="w-[148px] shrink-0 sm:w-[168px]">
               <TitleCard title={t} className="w-auto" />
               <RemoveFromBox title={t} compact />

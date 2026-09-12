@@ -72,8 +72,27 @@ export interface Title {
   poster: string;
   jellyfinId?: string;
   ids?: string[];
+  path?: string;
+  fromHashDump?: boolean;
+  inLibrary?: boolean;
+  collection?: { id: number; name: string; poster?: string };
   maxQuality: "1080p" | "4k";
   popularity: number;
+}
+
+export interface PersonHit {
+  id: number;
+  tmdbId?: number;
+  name: string;
+  poster?: string;
+  knownForDepartment?: string;
+}
+
+export interface CollectionHit {
+  id: number;
+  tmdbId?: number;
+  name: string;
+  poster?: string;
 }
 
 export interface MediaRequest {
@@ -84,6 +103,7 @@ export interface MediaRequest {
   progress: number;
   reason?: string;
   season?: number;
+  requestedSeasons?: number[];
   createdAt: number;
   updatedAt: number;
   requester: string;

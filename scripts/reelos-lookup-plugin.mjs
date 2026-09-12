@@ -20,7 +20,15 @@ import {
   assembleRequestPayload,
   attachSeerrDetailTitles,
   mapSeerrSearchResults,
+  mapSeerrPersonHits,
+  mapSeerrCollectionHits,
+  mapPersonDetail,
+  mapCollectionDetail,
+  collectionFromSeerrMovie,
+  overlayLibraryOnTitle,
   mapSeerrDiscoverResults,
+  mapSeerrSimilarResults,
+  discoverOwnedIndex,
   lookupFailureMessage,
   buildSeerrAddPayload,
   resolveParsedTitle,
@@ -28,9 +36,14 @@ import {
   libraryHasTitle,
   findLibraryTitle,
   lookupPayloadForId,
+  overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
   normalizeMediaType,
   titleIdFor,
+  onDiskSeasonsFor,
+  decorateTitlesWithDiskSeasons,
+  titleRequestSeasonPayload,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -40,35 +53,63 @@ import {
   applyTargetFromLog,
   readLibraryProgress,
 } from "./reelos-ota-status.mjs";
+import { readApplyProgress } from "./reelos-ota-progress.mjs";
 import { cmpVer, isBetaLine, isRollback, notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
+  forgetRemovedKeys,
   forgetRemovedTitleIds,
   readRemovedTitleIds,
   rememberRemovedTitleIds,
   removeLibraryTitle,
+  removedIdsStillOnShelf,
+  writeRemovedTitleIds,
 } from "./reelos-library-remove.mjs";
 import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
+import {
+  curatorPublic,
+  hideCuratorTitle,
+  readCurator,
+  resetCurator,
+  titleIsCuratorHidden,
+} from "./reelos-curator.mjs";
 import {
   createLibraryCache,
   createTokenCache,
   JELLYFIN_ITEMS_TIMEOUT_MS,
   LIBRARY_CACHE_FILE,
   libraryItemsUrl,
+  jellyfinResumeUrl,
   mapJellyfinItems,
+  mapResumeItems,
   readLibraryCacheFile,
   repairHashTitles,
   serveLibrary,
   writeLibraryCacheFile,
   dedupeLibraryTitles,
+  healRemovedIds,
 } from "./reelos-library.mjs";
 
 const jellyfinTokens = createTokenCache();
 const libraryCache = createLibraryCache();
 const seeded = readLibraryCacheFile(LIBRARY_CACHE_FILE);
 if (seeded) libraryCache.write(seeded.titles, { now: seeded.at, complete: seeded.complete });
+
+function healedLibraryRemovedIds() {
+  const prev = readRemovedTitleIds();
+  const next = healRemovedIds(prev, libraryCache.read()?.titles || []);
+  const same = prev.length === next.length && prev.every((id, i) => id === next[i]);
+  if (!same) {
+    try {
+      writeRemovedTitleIds(next);
+    } catch {
+      /* */
+    }
+  }
+  return next;
+}
 
 function latchStackInstalled() {
   try {
@@ -92,6 +133,12 @@ function persistLibraryCache() {
   }
 }
 
+function forgetRemovedIfStillOnShelf(titles) {
+  const still = removedIdsStillOnShelf(titles, readRemovedTitleIds());
+  if (!still.length) return;
+  forgetRemovedKeys(still);
+}
+
 let libraryRefresh = null;
 async function refreshLibraryFull(host) {
   if (libraryRefresh) return libraryRefresh;
@@ -103,8 +150,18 @@ async function refreshLibraryFull(host) {
     if (!pulled.ok) return;
     const data = pulled.json;
     const items = Array.isArray(data.Items) ? data.Items : [];
-    libraryCache.write(dedupeLibraryTitles(mapJellyfinItems(items, host)), { complete: true });
+    const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
+    const resumePulled = await jellyfinFetchResume(auth);
+    const writeOpts = { complete: true };
+    if (resumePulled.ok) {
+      writeOpts.continueWatching = mapResumeItems(
+        Array.isArray(resumePulled.json?.Items) ? resumePulled.json.Items : [],
+        { host, libraryTitles: titles },
+      );
+    }
+    libraryCache.write(titles, writeOpts);
     persistLibraryCache();
+    forgetRemovedIfStillOnShelf(titles);
   })()
     .catch(() => {})
     .finally(() => {
@@ -335,7 +392,9 @@ async function seerrTitleDetail(parsed) {
   const r = await seerrFetch(path, { key, ms: 20000 });
   if (!r.ok || !r.json) return { title: null, parsed: resolved };
   const hit = seerrSearchHit({ ...r.json, id: Number(resolved.tmdb) || r.json.id, mediaType: resolved.mediaType }, resolved.mediaType);
-  return { title: attachTitleAliases(hit, resolved), parsed: resolved };
+  const titled = attachTitleAliases(hit, resolved);
+  const collection = resolved.mediaType === "tv" ? null : collectionFromSeerrMovie(r.json);
+  return { title: titled && collection ? { ...titled, collection } : titled, parsed: resolved };
 }
 
 async function handleLookup(req, res) {
@@ -343,20 +402,23 @@ async function handleLookup(req, res) {
   const u = new URL(raw, "http://reelos.local");
   const q = u.searchParams.get("q")?.trim() || "";
   const id = u.searchParams.get("id")?.trim() || "";
+  const discoverScope = u.searchParams.get("scope")?.trim() === "discover";
   const titles = [];
+  const people = [];
+  const collections = [];
   let error = null;
   const key = seerrApiKey();
   note(`api q=${q} id=${id} seerr=${key ? "yes" : "NO"}`);
   if (id) {
     const libraryTitle = findLibraryTitle(titlesForResolve(), id);
     if (!key && libraryTitle) {
-      send(res, 200, { titles: [libraryTitle], error: null });
+      send(res, 200, { titles: [libraryTitle], people, collections, error: null });
       return;
     }
   }
   if (!key) {
     error = "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.";
-    send(res, 200, { titles, error });
+    send(res, 200, { titles, people, collections, error });
     return;
   }
   try {
@@ -387,41 +449,147 @@ async function handleLookup(req, res) {
       } else {
         missingTmdb = !libraryTitle;
       }
-      const payload = lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb });
+      const facts = await loadPresenceFacts().catch(() => null);
+      const payload = lookupPayloadForId({
+        seerrTitle,
+        libraryTitle,
+        missingTmdb,
+        onDiskSeasons: onDiskSeasonsFor(parsed, facts?.arrIndex),
+      });
+      if (facts) payload.titles = decorateTitlesWithDiskSeasons(payload.titles || [], facts);
       send(res, 200, payload);
       return;
     }
     if (q.length < 2) {
-      send(res, 200, { titles, error });
+      send(res, 200, { titles, people, collections, error });
       return;
     }
     const r = await seerrFetch(`/api/v1/search?query=${encodeURIComponent(q)}`, { key, ms: 45000 });
     if (!r.ok) {
       error = `seerr ${r.status}`;
       note(`seerr search ${r.status}`);
-      send(res, 200, { titles, error });
-      return;
+    } else {
+      const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
+      const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
+      titles.push(
+        ...mapSeerrSearchResults(hits, {
+          q,
+          limit: 16,
+          excludeOwned,
+          excludeHidden: discoverScope ? readCurator() : undefined,
+        }),
+      );
+      people.push(...mapSeerrPersonHits(hits));
+      collections.push(...mapSeerrCollectionHits(hits));
+      note(`seerr hits=${hits.length} titles=${titles.length} people=${people.length} collections=${collections.length} discover=${discoverScope ? "yes" : "no"}`);
     }
-    const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
-    note(`seerr hits=${hits.length} titles=${titles.length}`);
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
   }
-  send(res, 200, { titles, error });
+  if (q.length >= 2) {
+    const overlaid = overlayLookupWithLibrary(titles, titlesForResolve(), q);
+    titles.length = 0;
+    titles.push(...overlaid);
+    if (titles.length || people.length || collections.length) error = null;
+  }
+  send(res, 200, { titles, people, collections, error });
 }
 
-function ownedDiscoverIds() {
-  const ids = new Set();
-  const entry = libraryCache.read();
-  for (const t of entry?.titles || []) {
-    if (t?.id) ids.add(String(t.id));
-    for (const extra of t?.ids || []) {
-      if (extra) ids.add(String(extra));
-    }
+async function handleCollection(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
+  const key = seerrApiKey();
+  if (!id) {
+    send(res, 200, { collection: null, error: "Need a TMDB collection id." });
+    return;
   }
-  return ids;
+  if (!key) {
+    send(res, 200, {
+      collection: null,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/collection/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, {
+        collection: null,
+        error: r.status === 404 || !r.json ? "TMDB has no collection with that id." : `seerr ${r.status}`,
+      });
+      return;
+    }
+    const collection = mapCollectionDetail(r.json, titlesForResolve());
+    if (!collection) {
+      send(res, 200, { collection: null, error: "TMDB has no collection with that id." });
+      return;
+    }
+    const hidden = readCurator();
+    collection.parts = (collection.parts || []).filter(
+      (t) => t?.inLibrary || t?.jellyfinId || !titleIsCuratorHidden(t, hidden),
+    );
+    collection.onBox = collection.parts.filter((t) => t.inLibrary || t.jellyfinId).length;
+    send(res, 200, { collection, error: null });
+  } catch (e) {
+    send(res, 200, { collection: null, error: lookupFailureMessage(e) });
+  }
+}
+
+async function handlePerson(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
+  const key = seerrApiKey();
+  if (!id) {
+    send(res, 200, { person: null, error: "Need a TMDB person id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, {
+      person: null,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/person/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, {
+        person: null,
+        error: r.status === 404 || !r.json ? "TMDB has no person with that id." : `seerr ${r.status}`,
+      });
+      return;
+    }
+    let creditsJson = r.json.combinedCredits || r.json.combined_credits || null;
+    if (!creditsJson?.cast && !Array.isArray(creditsJson)) {
+      const c = await seerrFetch(`/api/v1/person/${id}/combined_credits`, { key, ms: 20000 });
+      creditsJson = c.ok ? c.json : null;
+    }
+    const person = mapPersonDetail(r.json, creditsJson, titlesForResolve());
+    if (!person) {
+      send(res, 200, { person: null, error: "TMDB has no person with that id." });
+      return;
+    }
+    const hidden = readCurator();
+    person.credits = (person.credits || []).filter(
+      (t) => t?.inLibrary || t?.jellyfinId || !titleIsCuratorHidden(t, hidden),
+    );
+    person.onBox = person.credits.filter((t) => t.inLibrary || t.jellyfinId).length;
+    send(res, 200, { person, error: null });
+  } catch (e) {
+    send(res, 200, { person: null, error: lookupFailureMessage(e) });
+  }
+}
+
+async function ownedDiscoverExclude() {
+  const entry = libraryCache.read();
+  if (!entry?.complete) {
+    await Promise.race([
+      refreshLibraryFull("127.0.0.1"),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).catch(() => {});
+  }
+  return discoverOwnedIndex(titlesForResolve());
 }
 
 async function handleDiscover(_req, res) {
@@ -451,7 +619,8 @@ async function handleDiscover(_req, res) {
       send(res, 200, { movies, tv, error });
       return;
     }
-    const excludeIds = ownedDiscoverIds();
+    const excludeIds = await ownedDiscoverExclude();
+    const excludeHidden = readCurator();
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
@@ -461,12 +630,12 @@ async function handleDiscover(_req, res) {
       ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
     ];
     if (movieRes.ok || movieRes2.ok) {
-      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }));
+      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
     if (tvRes.ok || tvRes2.ok) {
-      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds }));
+      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
@@ -479,6 +648,91 @@ async function handleDiscover(_req, res) {
     note(`seerr discover ${e}`);
   }
   send(res, 200, { movies, tv, error });
+}
+
+function tmdbIdFromQuery(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return 0;
+  const n = Number(s.replace(/^(person-|collection-|tmdb-tv-|tmdb-|tvdb-)/, ""));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function handleSimilar(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const parsed = parseTitleId(u.searchParams.get("id") || "") || parseTitleId(`tmdb-${u.searchParams.get("id") || ""}`);
+  const titles = [];
+  let error = null;
+  const key = seerrApiKey();
+  if (!parsed?.tmdb) {
+    send(res, 200, { titles, error: "Need a TMDB title id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, { titles, error: "Request UI (Seerr) has no API key yet." });
+    return;
+  }
+  try {
+    const kind = parsed.mediaType === "tv" ? "tv" : "movie";
+    const base = kind === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+    const [sim, rec] = await Promise.all([
+      seerrFetch(`${base}/similar`, { key, ms: 20000 }),
+      seerrFetch(`${base}/recommendations`, { key, ms: 20000 }),
+    ]);
+    const hits = [
+      ...(Array.isArray(sim.json) ? sim.json : sim.json?.results || []),
+      ...(Array.isArray(rec.json) ? rec.json : rec.json?.results || []),
+    ];
+    const excludeIds = discoverOwnedIndex(titlesForResolve());
+    titles.push(
+      ...mapSeerrSimilarResults(hits, {
+        mediaType: kind,
+        limit: 16,
+        excludeIds,
+        excludeHidden: readCurator(),
+      }),
+    );
+    if (!titles.length) error = "Seerr has nothing similar to show yet.";
+  } catch (e) {
+    error = lookupFailureMessage(e);
+  }
+  send(res, 200, { titles, error });
+}
+
+async function handleCurator(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "GET") {
+    send(res, 200, curatorPublic(readCurator()));
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const id = String(body?.id || body?.titleId || "").trim();
+  if (!id) {
+    send(res, 400, { ok: false, error: "Need a title id" });
+    return;
+  }
+  const next = hideCuratorTitle(
+    {
+      id,
+      ids: Array.isArray(body?.ids) ? body.ids : [],
+      jellyfinId: body?.jellyfinId,
+      title: body?.title,
+    },
+    process.env.REELOS_STATE,
+  );
+  send(res, next.ok ? 200 : 400, curatorPublic(next));
+}
+
+async function handleCuratorReset(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const next = resetCurator(process.env.REELOS_STATE);
+  send(res, 200, curatorPublic(next));
 }
 
 async function probeJson(url, ms = 3000) {
@@ -664,6 +918,33 @@ async function jellyfinFetchItems(auth, { limit, timeout = JELLYFIN_ITEMS_TIMEOU
   }
   if (!r.ok) return { ok: false, status: r.status, json: null };
   return { ok: true, status: r.status, json: await r.json() };
+}
+
+async function jellyfinFetchResume(auth, { limit = 24, timeout = JELLYFIN_ITEMS_TIMEOUT_MS } = {}) {
+  const url = jellyfinResumeUrl(auth?.id, { limit });
+  if (!url || !auth?.token) return { ok: false, status: 0, json: null };
+  const pull = (token) =>
+    fetch(url, {
+      headers: jellyfinAuthedHeaders(token),
+      signal: AbortSignal.timeout(timeout),
+    });
+  let token = auth.token;
+  let r = await pull(token);
+  if (r.status === 401 || r.status === 403) {
+    jellyfinTokens.clear();
+    const a = answers();
+    const next = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    if (!next?.token) return { ok: false, status: r.status, json: null };
+    token = next.token;
+    r = await pull(token);
+  }
+  if (!r.ok) return { ok: false, status: r.status, json: null };
+  return { ok: true, status: r.status, json: await r.json() };
+}
+
+async function libraryResumePayload(auth) {
+  const pulled = await jellyfinFetchResume(auth);
+  return pulled.ok ? pulled.json : null;
 }
 
 async function jellyfinState(ip) {
@@ -1256,6 +1537,10 @@ function lastOtaLines(n = 3) {
   }
 }
 
+function applyProgressPayload(running) {
+  return readApplyProgress({ running: Boolean(running) });
+}
+
 async function handleUpdateStatus(_req, res) {
   const logText = otaLogText();
   const running = applyProductRunning({ logText });
@@ -1268,7 +1553,14 @@ async function handleUpdateStatus(_req, res) {
     target: running ? applyTargetFromLog(logText) : null,
     log,
     library: readLibraryProgress(),
+    progress: applyProgressPayload(running),
   });
+}
+
+async function handleUpdateProgress(_req, res) {
+  const logText = otaLogText();
+  const running = applyProductRunning({ logText });
+  send(res, 200, { ok: true, ...applyProgressPayload(running) });
 }
 
 async function arrGet(url, key) {
@@ -1372,7 +1664,12 @@ async function handleRequestList(res) {
     }
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
     const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
-    send(res, 200, { requests: filled.rows, titles: filled.titles, engine: "seerr", pipeline: assembled.pipeline });
+    send(res, 200, {
+      requests: filled.rows,
+      titles: mergeRequestListTitles(filled.titles, facts),
+      engine: "seerr",
+      pipeline: assembled.pipeline,
+    });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -1391,16 +1688,25 @@ async function handleRequestStatus(req, res) {
   }
   try {
     const parsed = await resolveLiveParsed(parseTitleId(id));
+    const seasonRaw = u.searchParams.get("season");
+    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
     if (!parsed?.tmdb) {
-      if (libraryHasTitle(titlesForResolve(), id)) {
-        send(res, 200, {
-          status: "downloaded",
-          engine: "seerr",
-          titleId: id,
-          progress: 100,
-          requestStatus: "available",
-          reason: "On this box",
-        });
+      const titles = titlesForResolve();
+      if (libraryHasTitle(titles, id)) {
+        const facts = await loadPresenceFacts().catch(() => ({ arrIndex: null, libraryTitles: titles }));
+        send(
+          res,
+          200,
+          titleRequestSeasonPayload({
+            id,
+            season,
+            parsed,
+            facts,
+            libraryTitles: facts.libraryTitles || titles,
+            honest: { titleId: id, status: "unknown", engine: "unknown" },
+            title: findLibraryTitle(titles, id),
+          }),
+        );
         return;
       }
       send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
@@ -1410,8 +1716,6 @@ async function handleRequestStatus(req, res) {
     const r = await seerrFetch(path, { key, ms: 15000 });
     const media = r.json?.mediaInfo || r.json?.media || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
-    const seasonRaw = u.searchParams.get("season");
-    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
     const last = pickSeerrRequestForTitle(reqs, {
       media: { ...media, tmdbId: parsed.tmdb },
       mediaType: parsed.mediaType,
@@ -1420,22 +1724,21 @@ async function handleRequestStatus(req, res) {
     const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
     const facts = await loadPresenceFacts();
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
-    const status = honest.engine || "unknown";
-    if (status === "downloaded") await jellyfinRefresh(id);
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
       parsed,
     );
-    send(res, 200, {
-      status,
-      engine: "seerr",
-      title: title?.title,
-      titleId: mapped.titleId,
-      seasons: title?.seasons,
-      seasonList: title?.seasonList,
-      progress: honest.status === "available" ? 100 : honest.progress,
-      requestStatus: honest.status,
+    const body = titleRequestSeasonPayload({
+      id,
+      season,
+      parsed,
+      facts,
+      libraryTitles: facts.libraryTitles || titlesForResolve(),
+      honest,
+      title,
     });
+    if (body.status === "downloaded") await jellyfinRefresh(id);
+    send(res, 200, body);
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });
   }
@@ -1456,6 +1759,7 @@ async function handleRequest(req, res) {
   if (!titleId && tmdb) titleId = String(body.mediaType || "").toLowerCase() === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
   if (!titleId && tvdb) titleId = `tvdb-${tvdb}`;
   const season = body.season ?? body.data?.season;
+  const episode = body.episode ?? body.data?.episode;
   let parsed = parseTitleId(titleId);
   parsed = await resolveLiveParsed(parsed);
   const bodyType = normalizeMediaType(body.mediaType);
@@ -1499,7 +1803,7 @@ async function handleRequest(req, res) {
       note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${reuseSeason}`);
       let recover = null;
       if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-        recover = await kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, mediaType: parsed.mediaType });
+        recover = await kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, episode, mediaType: parsed.mediaType });
       }
       send(res, 200, {
         ok: recover ? recover.ok !== false : true,
@@ -1532,7 +1836,7 @@ async function handleRequest(req, res) {
     note(`seerr add ${added.status} type=${parsed.mediaType} season=${seasonN ?? ""}`);
     let recover = null;
     if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-      recover = await kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, mediaType: parsed.mediaType });
+      recover = await kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, episode, mediaType: parsed.mediaType });
     }
     send(res, 200, {
       ok: recover ? recover.ok !== false : true,
@@ -2132,7 +2436,7 @@ async function handleLibrary(req, res) {
     url: req.url || "/api/library",
     host,
     cache: libraryCache,
-    removedIds: readRemovedTitleIds(),
+    removedIds: healedLibraryRemovedIds(),
     getAuth: async () => {
       const a = answers();
       return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
@@ -2142,10 +2446,16 @@ async function handleLibrary(req, res) {
       if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
       return pulled.json;
     },
+    fetchResume: libraryResumePayload,
     refresh: () => refreshLibraryFull(host),
+    onLiveTitles: forgetRemovedIfStillOnShelf,
   });
   persistLibraryCache();
-  send(res, 200, { titles: result.titles, error: result.error });
+  send(res, 200, {
+    titles: result.titles,
+    continueWatching: result.continueWatching || [],
+    error: result.error,
+  });
 }
 
 async function jellyfinGetItem(id) {
@@ -2274,6 +2584,7 @@ async function handleReady(req, res) {
       target: running ? applyTargetFromLog(logText) : null,
       log: lastOtaLines(3),
       library: readLibraryProgress(),
+      progress: applyProgressPayload(running),
     };
     mark("update", t0);
     return payload;
@@ -2286,6 +2597,7 @@ async function handleReady(req, res) {
         url: `/api/library?limit=${encodeURIComponent(String(limit))}`,
         host,
         cache: libraryCache,
+        removedIds: healedLibraryRemovedIds(),
         getAuth: async () => {
           const a = answers();
           return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
@@ -2298,6 +2610,7 @@ async function handleReady(req, res) {
           if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
           return pulled.json;
         },
+        fetchResume: libraryResumePayload,
         refresh: () => refreshLibraryFull(host),
       });
       persistLibraryCache();
@@ -2305,7 +2618,7 @@ async function handleReady(req, res) {
       return result;
     } catch (e) {
       mark("library", t0);
-      return { titles: [], error: String(e) };
+      return { titles: [], continueWatching: [], error: String(e) };
     }
   })();
 
@@ -2339,6 +2652,7 @@ async function handleReady(req, res) {
     update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
     libraryCatchup: update?.library || readLibraryProgress(),
     titles: Array.isArray(library?.titles) ? library.titles : [],
+    continueWatching: Array.isArray(library?.continueWatching) ? library.continueWatching : [],
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,
     hardware: slice.hardware || publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
@@ -2652,8 +2966,28 @@ export async function dispatchReelOsApi(req, res) {
     await handleLookup(req, res);
     return true;
   }
+  if (pathOnly === "/api/collection") {
+    await handleCollection(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/person") {
+    await handlePerson(req, res);
+    return true;
+  }
   if (pathOnly === "/api/discover") {
     await handleDiscover(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/similar") {
+    await handleSimilar(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator") {
+    await handleCurator(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator/reset") {
+    await handleCuratorReset(req, res);
     return true;
   }
   if (pathOnly === "/api/box") {
@@ -2695,6 +3029,10 @@ export async function dispatchReelOsApi(req, res) {
   }
   if (pathOnly === "/api/update/status") {
     await handleUpdateStatus(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/progress") {
+    await handleUpdateProgress(req, res);
     return true;
   }
   if (pathOnly === "/api/request") {

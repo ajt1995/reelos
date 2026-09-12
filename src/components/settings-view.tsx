@@ -7,6 +7,7 @@ import {
   KeyRound,
   Shield,
   SlidersHorizontal,
+  ThumbsDown,
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,54 @@ import { TerminalRow } from "@/components/settings-terminal";
 import { Row, Section } from "@/components/settings-ui";
 
 export { TerminalRow };
+
+function CuratorResetRow() {
+  const [count, setCount] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    void fetch("/api/curator", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ count?: number }>)
+      .then((j) => setCount(Number(j.count) || 0))
+      .catch(() => {});
+  }, []);
+  const run = async () => {
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/curator/reset", { method: "POST" });
+      const j = (await r.json()) as { ok?: boolean; count?: number; error?: string };
+      if (!j.ok && j.ok !== undefined) {
+        setMsg(j.error || "Reset refused");
+        setBusy(false);
+        return;
+      }
+      setCount(Number(j.count) || 0);
+      setMsg("Discover Not interested list cleared. Library on this box is unchanged.");
+    } catch (e) {
+      setMsg(String(e));
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <div className="flex items-start gap-3">
+        <ThumbsDown className="mt-0.5 size-4 text-faint" />
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-medium">Reset curator preferences</p>
+          <p className="mt-1 text-sm text-muted">
+            Clears Not interested titles on Discover. Titles on this box stay on Home. No Google account.
+            {count ? ` ${count} hidden.` : ""}
+          </p>
+          <Button className="mt-3" variant="ghost" size="sm" disabled={busy} onClick={() => void run()}>
+            {busy ? "Resetting…" : "Reset curator preferences"}
+          </Button>
+          {msg ? <p className="mt-2 text-sm text-muted">{msg}</p> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function FactoryResetRow() {
   const [open, setOpen] = useState(false);
@@ -186,6 +235,7 @@ export function SettingsView() {
         />
         <PerformanceRow />
         <PwaRow />
+        <CuratorResetRow />
         <LogsRow
           open={panel === "logs"}
           onClick={() => setPanel(panel === "logs" ? null : "logs")}

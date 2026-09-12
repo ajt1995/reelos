@@ -73,14 +73,32 @@ export function titleInDropSet(t, keys) {
   return ids.some((id) => id && set.has(String(id)));
 }
 
+export function isHashDumpRemoveTarget(titleId, extraIds = []) {
+  const ids = [titleId, ...(extraIds || [])].map(String);
+  const hasHash = ids.some((id) => /^[0-9a-f]{32,64}$/i.test(id) || /^jf-[0-9a-f]{32,64}$/i.test(id));
+  const hasCatalog = ids.some((id) => /^(tmdb-|tvdb-)/.test(id));
+  return hasHash && !hasCatalog;
+}
+
 export function expandDropKeys({ titleId, extraIds = [], shelf = [] } = {}) {
   const keys = new Set(libraryDropKeys(titleId, extraIds));
+  const hashOnly = isHashDumpRemoveTarget(titleId, extraIds);
   for (const t of shelf || []) {
     if (!titleInDropSet(t, keys)) continue;
-    for (const k of libraryDropKeys(t.id, t.ids || [])) keys.add(k);
-    if (t.jellyfinId) {
+    for (const k of libraryDropKeys(t.id, t.ids || [])) {
+      if (hashOnly && /^(tmdb-|tvdb-)/.test(String(k))) continue;
+      if (hashOnly && !/^(jf-)?[0-9a-f]{32,64}$/i.test(String(k)) && !String(k).startsWith("jf-")) continue;
+      keys.add(k);
+    }
+    if (t.jellyfinId && !hashOnly) {
       keys.add(String(t.jellyfinId));
       keys.add(`jf-${t.jellyfinId}`);
+    } else if (t.jellyfinId && hashOnly) {
+      const jf = String(t.jellyfinId);
+      if ([titleId, ...(extraIds || [])].some((id) => String(id) === jf || String(id) === `jf-${jf}`)) {
+        keys.add(jf);
+        keys.add(`jf-${jf}`);
+      }
     }
   }
   return keys;
@@ -115,6 +133,25 @@ export function mergeRemovedIds(prev, next) {
 export function forgetRemovedIds(prev, dropKeys) {
   const keys = new Set(dropKeys || []);
   return (prev || []).filter((id) => !keys.has(String(id)));
+}
+
+/** Live JF rows that a failed Remove still hides — forget those keys so On this box matches Jellyfin. */
+export function removedIdsStillOnShelf(titles, removedIds) {
+  const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
+  if (!hide.size) return [];
+  const still = [];
+  for (const t of titles || []) {
+    if (!titleInDropSet(t, hide)) continue;
+    still.push(...libraryDropKeys(t.id, [...(t.ids || []), t.jellyfinId, t.jellyfinId ? `jf-${t.jellyfinId}` : ""]));
+  }
+  return [...new Set(still.filter(Boolean))];
+}
+
+export function forgetRemovedKeys(keys, { file = LIBRARY_REMOVED_FILE, read, write } = {}) {
+  const prev = readRemovedTitleIds(file, read ? { readFileSync: read.readFileSync, existsSync: read.existsSync } : {});
+  const ids = forgetRemovedIds(prev, keys);
+  writeRemovedTitleIds(ids, file, write);
+  return ids;
 }
 
 export function readRemovedTitleIds(file = LIBRARY_REMOVED_FILE, { readFileSync: read = readFileSync, existsSync: exists = existsSync } = {}) {
@@ -238,16 +275,21 @@ export function resolveRemoveTarget({ titleId, jellyfinId, tmdb, tvdb, mediaType
   if (!type && (parsed?.tvdb || String(titleId || "").startsWith("tvdb-") || String(titleId || "").startsWith("tmdb-tv-"))) {
     type = "tv";
   }
-  const tmdbOut = tmdb || parsed?.tmdb || (hit?.ids || []).map((id) => {
-    const s = String(id);
-    if (s.startsWith("tmdb-tv-")) return s.slice(8);
-    if (s.startsWith("tmdb-")) return s.slice(5);
-    return "";
-  }).find(Boolean);
-  const tvdbOut = tvdb || parsed?.tvdb || (hit?.ids || []).map((id) => {
-    const s = String(id);
-    return s.startsWith("tvdb-") ? s.slice(5) : "";
-  }).find(Boolean);
+  const hashOnly = isHashDumpRemoveTarget(titleId, extra);
+  const tmdbOut = hashOnly
+    ? null
+    : tmdb || parsed?.tmdb || (hit?.ids || []).map((id) => {
+        const s = String(id);
+        if (s.startsWith("tmdb-tv-")) return s.slice(8);
+        if (s.startsWith("tmdb-")) return s.slice(5);
+        return "";
+      }).find(Boolean);
+  const tvdbOut = hashOnly
+    ? null
+    : tvdb || parsed?.tvdb || (hit?.ids || []).map((id) => {
+        const s = String(id);
+        return s.startsWith("tvdb-") ? s.slice(5) : "";
+      }).find(Boolean);
   return {
     titleId: titleId || hit?.id || null,
     mediaType: type,

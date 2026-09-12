@@ -1,4 +1,5 @@
-/** Full-screen apply splash. Copy is contract: Updating ReelOS / Not a percent. Fail splash: Update failed, still on previous. */
+/** Full-screen apply splash. Copy: Updating ReelOS. Fail splash: Update failed, still on previous.
+ * Honest % is tarball/extract bytes — never a fake climbing percent. */
 import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,16 @@ const STEPS: { id: BootStepId; label: string }[] = [
   { id: "requests", label: "Requests" },
 ];
 
+type ApplyProgress = {
+  message?: string;
+  percent?: number | null;
+  stalled?: boolean;
+  label?: string;
+  stageIndex?: number;
+  stageCount?: number;
+  heartbeatAgo?: string;
+};
+
 function stepLabel(status: BootStepStatus) {
   if (status === "ok") return "Ready";
   if (status === "fail") return "Still filling";
@@ -22,12 +33,34 @@ function stepLabel(status: BootStepStatus) {
 
 function UpdatingSplash() {
   const [tune, setTune] = useState("");
+  const [progress, setProgress] = useState<ApplyProgress | null>(null);
   useEffect(() => {
     void fetch("/api/hardware", { cache: "no-store" })
       .then((r) => r.json() as Promise<{ splashTune?: string; summary?: string }>)
       .then((j) => setTune(j.splashTune || j.summary || ""))
       .catch(() => {});
   }, []);
+  useEffect(() => {
+    let alive = true;
+    const tick = () => {
+      void fetch("/api/update/status", { cache: "no-store" })
+        .then((r) => r.json() as Promise<{ progress?: ApplyProgress }>)
+        .then((j) => {
+          if (alive && j.progress) setProgress(j.progress);
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+  const pct = typeof progress?.percent === "number" ? progress.percent : null;
+  const line = progress?.stalled
+    ? "Download stalled — 0 bytes for 2+ minutes"
+    : progress?.message || "Download, extract, clean leftover builds, restart the door.";
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
       <div
@@ -40,8 +73,24 @@ function UpdatingSplash() {
       <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
         Updating ReelOS…
       </p>
-      <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">
-        Download, extract, clean leftover builds, restart the door. Honest wait — Not a percent.
+      <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted" aria-live="polite">
+        {line}
+      </p>
+      {pct != null ? (
+        <div className="rise rise-4 mx-auto mt-4 w-full max-w-xs">
+          <p className="font-display text-2xl tabular-nums text-gold-bright">{pct}%</p>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-faint">
+            <div className="h-full rounded-full bg-gold" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-muted">Tarball / extract bytes — not a timer.</p>
+        </div>
+      ) : progress?.stageIndex ? (
+        <p className="rise rise-4 mx-auto mt-3 max-w-md text-sm text-muted">
+          {progress.label || "Working"} · {progress.stageIndex}/{progress.stageCount || 7}
+          {progress.heartbeatAgo ? ` · ${progress.heartbeatAgo}` : ""}
+        </p>
+      ) : null}
+      <p className="rise rise-4 mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-muted">
         Browse and request come back when this page lifts.
       </p>
       {tune ? (

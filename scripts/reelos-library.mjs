@@ -30,6 +30,68 @@ export function libraryItemsUrl({ limit } = {}) {
   return `http://127.0.0.1:8096/Items?${q}`;
 }
 
+export function jellyfinResumeUrl(userId, { limit = 24 } = {}) {
+  const id = String(userId || "").trim();
+  if (!id) return "";
+  const q = new URLSearchParams({
+    IncludeItemTypes: "Movie,Episode",
+    Fields: "ProviderIds,ImageTags",
+    EnableUserData: "true",
+    EnableImages: "true",
+    ImageTypeLimit: "1",
+    Limit: String(limit || 24),
+  });
+  return `http://127.0.0.1:8096/Users/${encodeURIComponent(id)}/Items/Resume?${q}`;
+}
+
+/** PlaybackPositionTicks / RunTimeTicks. 0 when Jellyfin has no runtime. */
+export function resumeProgress(it) {
+  const pos = Number(it?.UserData?.PlaybackPositionTicks) || 0;
+  const runtime = Number(it?.RunTimeTicks) || 0;
+  if (!(pos > 0) || !(runtime > 0)) return 0;
+  return pos / runtime;
+}
+
+function libraryTitleForJellyfinId(titles, jellyfinId) {
+  const id = String(jellyfinId || "").trim();
+  if (!id) return null;
+  return (titles || []).find((t) => String(t?.jellyfinId || "") === id) || null;
+}
+
+/** Map JF Resume movies/episodes onto Home titles. Episodes become the series. */
+export function mapResumeItems(items, { host, libraryTitles = [] } = {}) {
+  const out = [];
+  const seen = new Set();
+  for (const it of items || []) {
+    const progress = resumeProgress(it);
+    if (progress <= 0.03 || progress >= 0.96) continue;
+    const episode = String(it?.Type || "") === "Episode";
+    const seriesId = episode ? it.SeriesId || it.ParentId : "";
+    const jfId = episode ? seriesId || it.Id : it.Id;
+    let title = libraryTitleForJellyfinId(libraryTitles, jfId);
+    if (!title) {
+      const imageTag = episode ? it.SeriesPrimaryImageTag : it.ImageTags?.Primary;
+      title = mapJellyfinItem(
+        {
+          Id: jfId || it.Id,
+          Name: episode ? it.SeriesName || it.Name : it.Name,
+          Type: episode ? "Series" : it.Type || "Movie",
+          ProductionYear: it.ProductionYear,
+          ProviderIds: (episode ? it.SeriesProviderIds : null) || it.ProviderIds || {},
+          ImageTags: imageTag ? { Primary: imageTag } : it.ImageTags || {},
+          Path: it.Path,
+        },
+        host,
+      );
+    }
+    if (!title?.id || seen.has(title.id)) continue;
+    seen.add(title.id);
+    out.push({ ...title, progress });
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
 export function jellyfinHasPrimaryImage(it) {
   const tags = it?.ImageTags;
   if (tags && typeof tags === "object") return Boolean(tags.Primary);
@@ -56,8 +118,11 @@ export function hashDumpIds(name, path) {
 export function seasonsFromDumpNames(files = []) {
   const out = new Set();
   for (const f of files || []) {
-    const m = /(?:^|[^a-z0-9])[Ss](\d{1,2})[Ee]\d{1,3}(?:[^a-z0-9]|$)/.exec(String(f));
-    if (m) out.add(Number(m[1]));
+    const s = String(f);
+    const ep = /(?:^|[^a-z0-9])[Ss](\d{1,2})[Ee]\d{1,3}(?:[^a-z0-9]|$)/.exec(s);
+    if (ep) out.add(Number(ep[1]));
+    const folder = /(?:^|\/)(?:Season[\s._-]*|S)(\d{1,2})(?:\/|$)/i.exec(s);
+    if (folder) out.add(Number(folder[1]));
   }
   return [...out].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
 }
@@ -203,9 +268,18 @@ export function mapJellyfinItems(items, host, { listFiles } = {}) {
     const files =
       typeof listFiles === "function"
         ? listFiles(it) || []
-        : looksLikeHashTitle(it?.Name) || looksLikeHashTitle(t.title)
-          ? dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p))
-          : [];
+        : dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => {
+            const names = listDumpNames(p);
+            if (t.kind !== "tv" && t.kind !== "anime") return names;
+            const nested = [];
+            for (const n of names.slice(0, 24)) {
+              if (!/^(?:Season[\s._-]*\d{1,2}|S\d{1,2})$/i.test(String(n).trim())) continue;
+              nested.push(
+                ...listDumpNames(`${p.replace(/\/$/, "")}/${n}`).map((f) => `${n}/${f}`),
+              );
+            }
+            return [...names, ...nested];
+          });
     const hashes = hashDumpIds(it?.Name, it?.Path);
     const disk = seasonsFromDumpNames(files);
     if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title) && !hashes.length) {
@@ -319,13 +393,84 @@ export function catalogIdsOf(t) {
   return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].map(String).filter((id) => /^(tmdb-|tvdb-)/.test(id));
 }
 
+export function isHashDumpId(id) {
+  const s = String(id || "").trim();
+  if (!s) return false;
+  if (looksLikeHashTitle(s)) return true;
+  if (s.startsWith("jf-") && looksLikeHashTitle(s.slice(3))) return true;
+  return false;
+}
+
+/** Hash leftover ids in library-removed.json must not tombstone the named show. */
+export function hideIdsForLibrary(removedIds) {
+  const ids = [...(removedIds || [])].map(String).filter(Boolean);
+  const set = new Set(ids);
+  if (![...set].some((id) => isHashDumpId(id))) return set;
+  for (const id of [...set]) {
+    if (/^(tmdb-|tvdb-)/.test(id)) set.delete(id);
+  }
+  return set;
+}
+
+/** Drop catalog ids a hash-card Remove used to expand, and stale leftover hashes once the dump is gone. */
+export function healRemovedIds(removedIds, titles = []) {
+  const set = hideIdsForLibrary(removedIds);
+  const leftoverOnDisk = (titles || []).some((t) => isHashDumpCard(t));
+  if (!leftoverOnDisk) {
+    for (const id of [...set]) {
+      if (isHashDumpId(id)) set.delete(id);
+    }
+  }
+  return [...set];
+}
+
+export function isHashDumpCard(t) {
+  if (!t) return false;
+  if (looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) return true;
+  if (t.fromHashDump && !(Number(t.year) > 0 && t.poster)) return true;
+  return false;
+}
+
+function titleAliasIds(t) {
+  return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""]
+    .filter(Boolean)
+    .map(String);
+}
+
+/** Home: never paint a 40-char hash / year-0 empty poster when the named show is on the shelf. */
+export function homeShelfRows(titles) {
+  const list = (titles || []).filter(Boolean);
+  const named = list.filter((t) => !isHashDumpCard(t) && t.title && t.title !== UNKNOWN_ON_BOX && !looksLikeHashTitle(t.title));
+  const namedIds = new Set(named.flatMap(titleAliasIds));
+  const namedNames = new Set(named.map((t) => normalizeTitle(t.title)));
+  return list.filter((t) => {
+    if (looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) {
+      if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
+      const name = normalizeTitle(t.title);
+      if (name && namedNames.has(name)) return false;
+      return false;
+    }
+    if (isHashDumpCard(t)) {
+      if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
+      const name = normalizeTitle(t.title);
+      if (name && namedNames.has(name)) return false;
+      if (!(Number(t.year) > 0) && !t.poster) return false;
+    }
+    return true;
+  });
+}
+
 /** Leftover dump jf-* in the removed list must not hide the real titled series. */
 export function libraryRowHidden(t, hide) {
-  const set = hide instanceof Set ? hide : new Set(hide || []);
+  const set = hide instanceof Set ? hideIdsForLibrary(hide) : hideIdsForLibrary(hide || []);
   if (!set.size) return false;
-  const catalog = catalogIdsOf(t);
-  if (catalog.length) return catalog.some((id) => set.has(id));
-  const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
+  if (!isHashDumpCard(t) && catalogIdsOf(t).length && ![...set].some((id) => isHashDumpId(id))) {
+    return catalogIdsOf(t).some((id) => set.has(id));
+  }
+  if (!isHashDumpCard(t) && catalogIdsOf(t).length) {
+    return false;
+  }
+  const ids = titleAliasIds(t);
   return ids.some((id) => id && set.has(String(id)));
 }
 
@@ -452,10 +597,12 @@ export function applyLibraryLimit(titles, limit) {
 }
 
 export function mergeShelf(prev, next, limited) {
-  if (!limited) return next;
-  if (!prev?.length) return next;
-  const have = new Set(next.map((t) => t.id));
-  return dedupeLibraryTitles([...next, ...prev.filter((t) => !have.has(t.id))]);
+  const incoming = homeShelfRows(next || []);
+  if (!limited) return incoming;
+  if (!prev?.length) return incoming;
+  const have = new Set(incoming.flatMap(titleAliasIds));
+  const extra = homeShelfRows(prev).filter((t) => !titleAliasIds(t).some((k) => have.has(k)));
+  return homeShelfRows([...incoming, ...extra]);
 }
 
 export function cacheIsFresh(entry, now, ttlMs = LIBRARY_CACHE_TTL_MS) {
@@ -494,8 +641,14 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
     read() {
       return mem;
     },
-    write(titles, { now = Date.now(), complete = true } = {}) {
-      mem = { at: now, complete, titles };
+    write(titles, { now = Date.now(), complete = true, continueWatching } = {}) {
+      mem = {
+        at: now,
+        complete,
+        titles,
+        continueWatching:
+          continueWatching !== undefined ? continueWatching : mem?.continueWatching || [],
+      };
       return mem;
     },
     drop(keys, { now = Date.now() } = {}) {
@@ -505,6 +658,7 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
         at: now,
         complete: mem.complete,
         titles: mem.titles.filter((t) => !libraryRowHidden(t, hide)),
+        continueWatching: (mem.continueWatching || []).filter((t) => !libraryRowHidden(t, hide)),
       };
       return mem;
     },
@@ -518,7 +672,12 @@ export function readLibraryCacheFile(file, { readFileSync: read = readFileSync }
   try {
     const j = JSON.parse(read(file, "utf8"));
     if (!Array.isArray(j?.titles)) return null;
-    return { at: Number(j.at) || 0, complete: j.complete !== false, titles: j.titles };
+    return {
+      at: Number(j.at) || 0,
+      complete: j.complete !== false,
+      titles: j.titles,
+      continueWatching: Array.isArray(j.continueWatching) ? j.continueWatching : [],
+    };
   } catch {
     return null;
   }
@@ -541,7 +700,9 @@ export async function serveLibrary({
   cache,
   getAuth,
   fetchItems,
+  fetchResume,
   refresh,
+  onLiveTitles,
   removedIds = [],
 }) {
   const u = new URL(url, "http://reelos.local");
@@ -551,45 +712,76 @@ export async function serveLibrary({
   const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
   const withoutRemoved = (titles) => {
     if (!hide.size) return titles || [];
-    return (titles || []).filter((t) => {
-      return !libraryRowHidden(t, hide);
-    });
+    return homeShelfRows((titles || []).filter((t) => !libraryRowHidden(t, hide)));
   };
 
-  const serve = (titles, extra = {}) => ({
-    titles: withPosterHost(
-      applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(withoutRemoved(titles))), limit),
-      host,
-    ),
-    error: extra.error ?? null,
-    fromCache: Boolean(extra.fromCache),
-  });
+  const serve = (titles, extra = {}) => {
+    const rows = extra.fromCache ? withoutRemoved(titles) : titles || [];
+    const resume = extra.continueWatching !== undefined
+      ? extra.continueWatching
+      : extra.fromCache
+        ? stale?.continueWatching || []
+        : [];
+    return {
+      titles: withPosterHost(
+        applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(rows)), limit),
+        host,
+      ),
+      continueWatching: withPosterHost(resume || [], host),
+      error: extra.error ?? null,
+      fromCache: Boolean(extra.fromCache),
+    };
+  };
 
   const staleCoversRequest = canServeStale(stale);
   if (!wantFresh && staleCoversRequest) {
     if ((!stale.complete || !cacheIsFresh(stale, now, ttlMs)) && typeof refresh === "function") {
       void refresh();
     }
-    return serve(stale.titles, { fromCache: true });
+    return serve(stale.titles, { fromCache: true, continueWatching: stale.continueWatching || [] });
   }
 
   const auth = await getAuth();
   if (!auth?.token) {
     if (canServeStale(stale)) {
-      return serve(stale.titles, { fromCache: true, error: "Jellyfin has no matching user/PIN" });
+      return serve(stale.titles, {
+        fromCache: true,
+        continueWatching: stale.continueWatching || [],
+        error: "Jellyfin has no matching user/PIN",
+      });
     }
-    return { titles: [], error: "Jellyfin has no matching user/PIN", fromCache: false };
+    return { titles: [], continueWatching: [], error: "Jellyfin has no matching user/PIN", fromCache: false };
   }
 
   try {
-    const data = await fetchItems(auth, limit);
+    const resumeP =
+      typeof fetchResume === "function"
+        ? fetchResume(auth).catch(() => null)
+        : Promise.resolve(undefined);
+    const [data, resumeJson] = await Promise.all([fetchItems(auth, limit), resumeP]);
     const items = Array.isArray(data?.Items) ? data.Items : [];
     const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
-    cache.write(titles, { now, complete: !limit });
+    const writeOpts = { now, complete: !limit };
+    let continueWatching = stale?.continueWatching || [];
+    if (resumeJson && typeof resumeJson === "object") {
+      continueWatching = mapResumeItems(Array.isArray(resumeJson.Items) ? resumeJson.Items : [], {
+        host,
+        libraryTitles: titles,
+      });
+      writeOpts.continueWatching = continueWatching;
+    }
+    cache.write(titles, writeOpts);
+    if (!limit && typeof onLiveTitles === "function") onLiveTitles(titles);
     if (limit && typeof refresh === "function") void refresh();
-    return serve(titles);
+    return serve(titles, { continueWatching });
   } catch (e) {
-    if (canServeStale(stale)) return serve(stale.titles, { fromCache: true, error: String(e) });
-    return { titles: [], error: String(e), fromCache: false };
+    if (canServeStale(stale)) {
+      return serve(stale.titles, {
+        fromCache: true,
+        continueWatching: stale.continueWatching || [],
+        error: String(e),
+      });
+    }
+    return { titles: [], continueWatching: [], error: String(e), fromCache: false };
   }
 }

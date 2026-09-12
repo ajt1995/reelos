@@ -4,7 +4,14 @@ import { getTitle } from "@/lib/catalog";
 import { viaLabel } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
-import { inFlightRequests, isGhostRequestLabel, requestShowsRetry, titleForRequest } from "@/lib/sync-requests";
+import {
+  inFlightRequests,
+  isGhostRequestLabel,
+  isTvRequestRow,
+  requestShowsRetry,
+  titleForRequest,
+  tvSeasonChips,
+} from "@/lib/sync-requests";
 import { cn, formatWhen } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -24,19 +31,26 @@ export function RequestsView() {
   const cancel = useReelStore((s) => s.cancelRequest);
   useSyncRequests();
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
 
   const catalog = [...shelf, ...remoteTitles];
-  const inflight = inFlightRequests(requests, { titles: shelf });
+  const inflight = inFlightRequests(requests, { titles: [...shelf, ...remoteTitles] });
   useResolveGhostRequestTitles(inflight, catalog);
-  const list = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
+  const filtered = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
+  const seenTv = new Set<string>();
+  const list = filtered.filter((r) => {
+    if (!isTvRequestRow(r)) return true;
+    if (seenTv.has(r.titleId)) return false;
+    seenTv.add(r.titleId);
+    return true;
+  });
 
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Requests</h1>
       <p className="mt-2 text-sm text-muted">
-        In flight — searching, grabbing, waiting to import. Playable titles are in Library.
+        Searching, grabbing, or finished and waiting for Watch on Home. Playable titles are On this box.
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
         {FILTERS.map((f) => (
@@ -62,6 +76,13 @@ export function RequestsView() {
           const titleId = t?.id || r.titleId;
           const raw = t?.title || r.title || "";
           const label = isGhostRequestLabel(raw, titleId) ? "Looking up title…" : raw || "Title";
+          const chips = isTvRequestRow(r) ? tvSeasonChips(r.titleId, requests, catalog) : [];
+          const seasonLabel =
+            chips.length > 1
+              ? ""
+              : r.season
+                ? ` · S${String(r.season).padStart(2, "0")}`
+                : "";
           return (
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
@@ -74,8 +95,17 @@ export function RequestsView() {
               <div className="min-w-0 flex-1">
                 <Link to="/title/$id" params={{ id: titleId }} className="truncate font-medium">
                   {label}
-                  {r.season ? ` · S${String(r.season).padStart(2, "0")}` : ""}
+                  {seasonLabel}
                 </Link>
+                {chips.length > 1 ? (
+                  <p className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted">
+                    {chips.map((c) => (
+                      <span key={c.season}>
+                        S{String(c.season).padStart(2, "0")} {c.label}
+                      </span>
+                    ))}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-xs text-muted">
                   {r.requester} · {formatWhen(r.createdAt)}
                 </p>

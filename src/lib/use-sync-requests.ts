@@ -1,7 +1,13 @@
 import { useEffect } from "react";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import { isGhostRequestLabel, mergeServerRequests, overlayLibraryPresence, titleForRequest } from "@/lib/sync-requests";
+import {
+  isGhostRequestLabel,
+  mergeServerRequests,
+  overlayLibraryPresence,
+  requestNeedsLibraryHandoff,
+  titleForRequest,
+} from "@/lib/sync-requests";
 import type { MediaRequest, Title } from "@/lib/types";
 
 /** Pull GET /api/request (list) into the persisted store. Home + Requests both call this.
@@ -22,11 +28,16 @@ export function useSyncRequests() {
         useReelStore.getState().rememberTitles?.(titles);
         const live = Array.isArray(j.requests) ? j.requests : [];
         useReelStore.setState((s) => {
+          const overlayTitles = [...s.shelf, ...titles];
           const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
-            titles: s.shelf,
+            titles: overlayTitles,
           });
           return { requests };
         });
+        const s = useReelStore.getState();
+        if (s.requests.some((r) => requestNeedsLibraryHandoff(r, { titles: s.shelf }))) {
+          s.hydrateShelf({ limit: 24, force: true, fresh: true });
+        }
       } catch {
         /* Seerr down — keep local rows */
       }

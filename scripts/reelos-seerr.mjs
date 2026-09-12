@@ -1,5 +1,6 @@
 /** Seerr/Jellyseerr helpers for /api/lookup and /api/request. */
 import { existsSync, readFileSync } from "node:fs";
+import { titleIsCuratorHidden } from "./reelos-curator.mjs";
 
 export const SEERR_ORIGIN = "http://127.0.0.1:5055";
 
@@ -164,21 +165,61 @@ export function attachLibraryPresence(title, libraryTitle) {
         .map(String),
     ),
   ];
+  const disk = [
+    ...new Set(
+      [...(title.onDiskSeasons || []), ...(libraryTitle.onDiskSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const listed = [
+    ...new Set(
+      [...(title.seasonList || []), ...(libraryTitle.seasonList || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
   return {
     ...title,
     ids,
     jellyfinId: title.jellyfinId || libraryTitle.jellyfinId,
     poster: title.poster || libraryTitle.poster,
+    inLibrary: Boolean(title.jellyfinId || libraryTitle.jellyfinId),
+    year: title.year || libraryTitle.year || 0,
+    onDiskSeasons: disk.length ? disk : title.onDiskSeasons || libraryTitle.onDiskSeasons,
+    seasonList: listed.length ? listed : title.seasonList || libraryTitle.seasonList,
   };
 }
 
 /** Seerr is for requests. A JF row already on the box is the title page. */
-export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb } = {}) {
+export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDiskSeasons, seasonList } = {}) {
+  const decorate = (title) => {
+    if (!title) return title;
+    const disk = [
+      ...new Set(
+        [...(title.onDiskSeasons || []), ...(onDiskSeasons || [])]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    const listed = [
+      ...new Set(
+        [...(title.seasonList || []), ...(seasonList || [])]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    return {
+      ...title,
+      onDiskSeasons: disk.length ? disk : title.onDiskSeasons,
+      seasonList: listed.length ? listed : title.seasonList,
+    };
+  };
   if (seerrTitle) {
-    return { titles: [attachLibraryPresence(seerrTitle, libraryTitle)], error: null };
+    return { titles: [decorate(attachLibraryPresence(seerrTitle, libraryTitle))], error: null };
   }
   if (libraryTitle) {
-    return { titles: [libraryTitle], error: null };
+    return { titles: [decorate(libraryTitle)], error: null };
   }
   if (missingTmdb) {
     return { titles: [], error: "Could not map that title to TMDB. Retry, or open it from Library." };
@@ -256,18 +297,117 @@ export function rankLookupTitles(titles, q) {
   });
 }
 
+/** Search hits must carry the JF row when the title is already on the box. JF-only names still appear. */
+export function overlayLookupWithLibrary(seerrTitles, libraryTitles, q) {
+  const mapped = (seerrTitles || []).map((t) => {
+    const hit =
+      findLibraryTitle(libraryTitles, t?.id) ||
+      (t?.ids || []).map((id) => findLibraryTitle(libraryTitles, id)).find(Boolean) ||
+      null;
+    const attached = attachLibraryPresence(t, hit && hit.jellyfinId ? hit : null);
+    return { ...attached, inLibrary: Boolean(attached.jellyfinId) };
+  });
+  const have = new Set();
+  for (const t of mapped) {
+    for (const id of [t?.id, ...(t?.ids || [])]) {
+      if (id) have.add(String(id));
+    }
+  }
+  const qn = String(q || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const extras = [];
+  for (const lib of libraryTitles || []) {
+    if (!lib?.jellyfinId) continue;
+    const ids = [lib.id, ...(lib.ids || [])].map(String);
+    if (ids.some((id) => have.has(id))) continue;
+    const name = String(lib.title || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    if (!qn || !name.includes(qn)) continue;
+    extras.push(lib);
+    for (const id of ids) have.add(id);
+  }
+  return rankLookupTitles([...extras, ...mapped], q);
+}
+
 /** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */
-export function mapSeerrSearchResults(hits, { q = "", limit = 16 } = {}) {
+export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned, excludeHidden } = {}) {
+  const owned = excludeOwned ? asDiscoverOwned(excludeOwned) : null;
   const titles = [];
   for (const h of hits || []) {
-    const mediaType = normalizeMediaType(h?.mediaType);
+    const mediaType = normalizeMediaType(h?.mediaType || h?.media_type);
     if (!mediaType) continue;
+    if (owned && seerrAlreadyHave(h)) continue;
     const t = seerrSearchHit(h, mediaType);
     if (!t) continue;
+    if (owned && discoverTitleIsOwned(t, owned)) continue;
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }
   return rankLookupTitles(titles, q);
+}
+
+function creditHits(json) {
+  const combined = json?.combinedCredits?.cast || json?.combined_credits?.cast || [];
+  const movies = json?.movieCredits?.cast || json?.movie_credits?.cast || [];
+  const shows = json?.tvCredits?.cast || json?.tv_credits?.cast || [];
+  return [...combined, ...movies, ...shows];
+}
+
+export function mapSeerrPersonDetail(json, { libraryTitles = [], excludeHidden } = {}) {
+  const id = Number(json?.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const credits = [];
+  const seen = new Set();
+  for (const h of creditHits(json)) {
+    const mediaType = normalizeMediaType(h?.mediaType || (h?.firstAirDate || h?.name ? "tv" : "movie"));
+    if (!mediaType) continue;
+    const t = seerrSearchHit({ ...h, mediaType }, mediaType);
+    if (!t || seen.has(t.id)) continue;
+    const libraryTitle = findLibraryTitle(libraryTitles, t.id);
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden) && !libraryTitle) continue;
+    seen.add(t.id);
+    credits.push(libraryTitle ? attachLibraryPresence(t, libraryTitle) : t);
+    if (credits.length >= 40) break;
+  }
+  return {
+    id,
+    name: String(json.name || "Unknown"),
+    biography: String(json.biography || ""),
+    poster: tmdbPoster(json.profilePath || json.posterPath),
+    knownForDepartment: String(json.knownForDepartment || "Acting"),
+    credits,
+    onBox: credits.filter((t) => t.inLibrary || t.jellyfinId).length,
+  };
+}
+
+export function mapSeerrCollectionDetail(json, { libraryTitles = [], excludeHidden } = {}) {
+  const id = Number(json?.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const parts = [];
+  const seen = new Set();
+  for (const h of json?.parts || []) {
+    const t = seerrSearchHit({ ...h, mediaType: "movie" }, "movie");
+    if (!t || seen.has(t.id)) continue;
+    const libraryTitle = findLibraryTitle(libraryTitles, t.id);
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden) && !libraryTitle) continue;
+    seen.add(t.id);
+    parts.push(libraryTitle ? attachLibraryPresence(t, libraryTitle) : t);
+  }
+  return {
+    id,
+    name: String(json.name || json.title || "Collection"),
+    overview: String(json.overview || ""),
+    poster: tmdbPoster(json.posterPath || json.backdropPath),
+    parts,
+    onBox: parts.filter((t) => t.inLibrary || t.jellyfinId).length,
+  };
+}
+
+export function mapSeerrSimilarResults(hits, { mediaType, limit = 16, excludeIds, excludeHidden } = {}) {
+  return mapSeerrDiscoverResults(hits, { mediaType, limit, excludeIds, excludeHidden });
 }
 
 /** Seerr/Jellyseerr: 4 = partially available, 5 = available. Those are already on the box. */
@@ -287,6 +427,55 @@ function titleIdSet(titles) {
   return ids;
 }
 
+export function discoverOwnedNameKey(t) {
+  const kind = t?.kind === "tv" || t?.kind === "anime" || t?.mediaType === "tv" ? "tv" : "movie";
+  const title = String(t?.title || t?.name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const year = Number(t?.year) || Number(String(t?.releaseDate || t?.firstAirDate || "").slice(0, 4)) || 0;
+  if (!title) return "";
+  return `${kind}:${title}:${year || ""}`;
+}
+
+export function discoverOwnedIndex(titles = []) {
+  const ids = titleIdSet(titles);
+  const names = new Set();
+  for (const t of titles || []) {
+    if (t?.jellyfinId) {
+      ids.add(String(t.jellyfinId));
+      ids.add(`jf-${t.jellyfinId}`);
+    }
+    const key = discoverOwnedNameKey(t);
+    if (key) names.add(key);
+  }
+  return { ids, names };
+}
+
+export function asDiscoverOwned(excludeIds) {
+  if (!excludeIds) return { ids: new Set(), names: new Set() };
+  if (excludeIds instanceof Set) return { ids: excludeIds, names: new Set() };
+  if (excludeIds.ids instanceof Set || excludeIds.names instanceof Set) {
+    return {
+      ids: excludeIds.ids instanceof Set ? excludeIds.ids : new Set(),
+      names: excludeIds.names instanceof Set ? excludeIds.names : new Set(),
+    };
+  }
+  return discoverOwnedIndex(excludeIds);
+}
+
+/** JF-available / in-library. In-progress Requests are not owned yet. */
+export function discoverTitleIsOwned(title, owned) {
+  if (!title) return false;
+  if (title.jellyfinId) return true;
+  const index = asDiscoverOwned(owned);
+  if (title.id && index.ids.has(String(title.id))) return true;
+  for (const extra of title.ids || []) {
+    if (index.ids.has(String(extra))) return true;
+  }
+  const key = discoverOwnedNameKey(title);
+  return Boolean(key && index.names.has(key));
+}
+
 /** Upcoming TMDB junk (Mutiny, live-action Moana, Paradise Hotel) is not "pick tonight". */
 export function discoverHitReleased(h, now = Date.now()) {
   const date = String(h?.releaseDate || h?.firstAirDate || "");
@@ -300,8 +489,8 @@ export function discoverHitReleased(h, now = Date.now()) {
 }
 
 /** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
-export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, now = Date.now() } = {}) {
-  const owned = excludeIds instanceof Set ? excludeIds : titleIdSet(excludeIds);
+export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, excludeHidden, now = Date.now() } = {}) {
+  const owned = asDiscoverOwned(excludeIds);
   const titles = [];
   for (const h of hits || []) {
     if (seerrAlreadyHave(h)) continue;
@@ -309,7 +498,8 @@ export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeId
     const type = normalizeMediaType(h?.mediaType || mediaType);
     if (!type) continue;
     const t = seerrSearchHit(h, type);
-    if (!t || owned.has(t.id)) continue;
+    if (!t || discoverTitleIsOwned(t, owned)) continue;
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }
@@ -525,8 +715,13 @@ export function libraryHit(row, libraryTitles) {
       return false;
     });
     if (!hit) continue;
-    // Movies: JF item is watchable. TV: series-in-library is not season proof.
-    return Boolean(wantMovie || (!wantTv && kind !== "tv"));
+    if (wantMovie) return true;
+    if (wantTv) {
+      const disk = Array.isArray(t?.onDiskSeasons) ? t.onDiskSeasons.map(Number) : [];
+      if (row.season == null) return false;
+      return disk.includes(Number(row.season));
+    }
+    return false;
   }
   return false;
 }
@@ -590,6 +785,117 @@ export function onDiskSeasonsFor(parsed, index) {
     if (Number.isFinite(n) && n > 0) out.push(n);
   }
   return [...new Set(out)].sort((a, b) => a - b);
+}
+
+export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
+  const index = facts.arrIndex || buildArrIndex({ series: facts.series, movies: facts.movies });
+  return (titles || []).map((t) => {
+    if (!t) return t;
+    const parsed = resolveParsedTitle(parseTitleId(t.id) || parseTitleId((t.ids || [])[0]), {
+      titles: [t, ...(facts.libraryTitles || [])],
+      series: facts.series,
+      movies: facts.movies,
+    });
+    const disk = [
+      ...new Set(
+        [...(t.onDiskSeasons || []), ...onDiskSeasonsFor(parsed, index)]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    const listed = realSeasonNumbers(
+      (facts.series || []).find(
+        (s) =>
+          (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
+          (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
+      )?.seasons,
+    );
+    const seasonList = [
+      ...new Set([...(t.seasonList || []), ...listed].map(Number).filter((n) => Number.isFinite(n) && n > 0)),
+    ].sort((a, b) => a - b);
+    return {
+      ...t,
+      onDiskSeasons: disk,
+      seasonList: seasonList.length ? seasonList : t.seasonList,
+    };
+  });
+}
+
+/** Whole-show Seerr rows with several seasons stay mixed — S01 on disk is not S05 in. */
+export function expandTvSeasonRows(rows, facts = {}) {
+  const out = [];
+  for (const row of rows || []) {
+    if (!row) continue;
+    const parsed = parseTitleId(row.titleId);
+    if (parsed?.mediaType !== "tv" || row.season != null) {
+      out.push(row);
+      continue;
+    }
+    const requested = [...new Set((row.requestedSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+    if (requested.length <= 1) {
+      out.push(row);
+      continue;
+    }
+    const disk = new Set(onDiskSeasonsFor(parsed, facts.arrIndex));
+    if (requested.every((n) => disk.has(n))) {
+      out.push({ ...row, status: "available", engine: "downloaded", progress: 100 });
+      continue;
+    }
+    for (const n of requested) {
+      out.push({
+        ...row,
+        id: `${row.id}-s${String(n).padStart(2, "0")}`,
+        season: n,
+        requestedSeasons: undefined,
+      });
+    }
+  }
+  return out;
+}
+
+/** GET /api/request body: season chips from *arr files, never series-in-JF as every season in. */
+export function titleRequestSeasonPayload({
+  id,
+  season,
+  parsed,
+  facts,
+  libraryTitles = [],
+  honest,
+  title,
+} = {}) {
+  const index = facts?.arrIndex;
+  const lib = findLibraryTitle(libraryTitles, id);
+  const disk = [
+    ...new Set(
+      [...onDiskSeasonsFor(parsed, index), ...(lib?.onDiskSeasons || []), ...(title?.onDiskSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const listed = [
+    ...new Set(
+      [...(title?.seasonList || []), ...(lib?.seasonList || []), ...disk]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const seasonN = season != null && season !== "" && Number.isFinite(Number(season)) ? Number(season) : undefined;
+  const seasonOnDisk = seasonN != null && disk.includes(seasonN);
+  const honestEngine = honest?.engine || honest?.status || "unknown";
+  const seriesAvailable = honest?.status === "available" || honestEngine === "downloaded";
+  const status = seasonN != null ? (seasonOnDisk ? "downloaded" : seriesAvailable ? "unknown" : honestEngine) : honestEngine;
+  return {
+    status,
+    engine: "seerr",
+    title: title?.title,
+    titleId: honest?.titleId || parsed?.titleId || id,
+    seasons: title?.seasons,
+    seasonList: listed.length ? listed : title?.seasonList,
+    onDiskSeasons: disk,
+    progress: seasonOnDisk ? 100 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
+    reason: seasonOnDisk ? undefined : honest?.reason,
+    requestStatus: seasonOnDisk ? "available" : seasonN != null && seriesAvailable ? undefined : honest?.status,
+  };
 }
 
 export function isTvSeasonRow(row) {
@@ -792,7 +1098,12 @@ export function overlayPresence(
     }
     const media = mediaOf(row);
     if (media) {
-      const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
+      const seasonSt = seerrSeasonStatus(media, row.season);
+      // Series AVAILABLE is not S05 in. Per-season chips / rows need that season's status or files.
+      const engine =
+        row.season != null && seasonSt !== 5 && seasonSt !== 3 && seasonSt !== 4 && seasonSt !== 1 && seasonSt !== 2
+          ? mapSeerrStatus(0, null, 0)
+          : mapSeerrStatus(media.status, null, seasonSt);
       if (engine === "downloaded") {
         const promoted = markAvailable(row);
         if (seerrAvailableIsGhost(promoted, presence)) return demoteGhost(row, facts);
@@ -831,8 +1142,53 @@ export function reconcileRequestRows(rows) {
   return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
+export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
+  const fromSeries = (facts.series || [])
+    .filter((s) => s?.tmdbId != null)
+    .map((s) => {
+      const parsed = {
+        mediaType: "tv",
+        tmdb: String(s.tmdbId),
+        tvdb: s.tvdbId != null ? String(s.tvdbId) : undefined,
+        titleId: titleIdFor("tv", s.tmdbId),
+      };
+      const disk = onDiskSeasonsFor(
+        parsed,
+        facts.arrIndex || buildArrIndex({ series: facts.series, movies: facts.movies }),
+      );
+      return {
+        id: parsed.titleId,
+        kind: "tv",
+        title: s.title || parsed.titleId,
+        ids: [parsed.titleId, `tmdb-${parsed.tmdb}`, parsed.tvdb ? `tvdb-${parsed.tvdb}` : ""].filter(Boolean),
+        onDiskSeasons: disk,
+      };
+    })
+    .filter((t) => t.onDiskSeasons.length);
+  const merged = new Map();
+  for (const t of [
+    ...fromSeries,
+    ...decorateTitlesWithDiskSeasons(facts.libraryTitles || [], facts),
+    ...decorateTitlesWithDiskSeasons(seerrTitles || [], facts),
+  ]) {
+    if (!t?.id) continue;
+    const prev = merged.get(t.id);
+    if (!prev) {
+      merged.set(t.id, t);
+      continue;
+    }
+    merged.set(t.id, {
+      ...prev,
+      ...t,
+      ids: [...new Set([...(prev.ids || []), ...(t.ids || [])])],
+      onDiskSeasons: [...new Set([...(prev.onDiskSeasons || []), ...(t.onDiskSeasons || [])])].sort((a, b) => a - b),
+    });
+  }
+  return [...merged.values()];
+}
+
 export function honestifyRequests(rows, facts = {}) {
-  return reconcileRequestRows(overlayPresence(rows, facts));
+  return reconcileRequestRows(overlayPresence(expandTvSeasonRows(rows, facts), facts));
 }
 
 export function looksLikeTvName(name) {
@@ -1180,6 +1536,7 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
   ];
   return {
     requests: attachRequestTitles(mergeUnfinishedRows(seerrRows, extras, facts), facts),
+    titles: mergeRequestListTitles([], facts),
     pipeline: buildPipeline({
       seerrRows,
       series: facts.series,
@@ -1192,12 +1549,12 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
-  const mediaType = normalizeMediaType(h?.mediaType || mediaTypeHint);
+  const mediaType = normalizeMediaType(h?.mediaType || h?.media_type || mediaTypeHint);
   if (!mediaType) return null;
   const tmdb = h?.id ?? h?.tmdbId ?? h?.mediaInfo?.tmdbId;
   if (!tmdb) return null;
   const title = String(h.title || h.name || "Untitled");
-  const date = String(h.releaseDate || h.firstAirDate || "");
+  const date = String(h.releaseDate || h.release_date || h.firstAirDate || h.first_air_date || "");
   const year = Number((date.match(/^(\d{4})/) || [])[1] || h.year || 0);
   const listed = realSeasonNumbers(h.mediaInfo?.seasons || h.seasons);
   const fromCount = Number(h.numberOfSeasons || 0);
@@ -1212,8 +1569,8 @@ export function seerrSearchHit(h, mediaTypeHint) {
     title,
     year,
     overview: String(h.overview || ""),
-    poster: tmdbPoster(h.posterPath || h.remotePoster),
-    rating: Number(h.voteAverage || 0),
+    poster: tmdbPoster(h.posterPath || h.poster_path || h.remotePoster),
+    rating: Number(h.voteAverage || h.vote_average || 0),
     genres: Array.isArray(h.genres)
       ? h.genres.map((g) => (typeof g === "string" ? g : g?.name || "")).filter(Boolean)
       : [],
@@ -1221,6 +1578,175 @@ export function seerrSearchHit(h, mediaTypeHint) {
     popularity: Number(h.popularity || 50),
     seasons,
     seasonList: mediaType === "tv" && listed.length ? listed : undefined,
+  };
+}
+
+/** TMDB collection/person ids are digits. tmdb-<n> is a movie namespace — do not reuse it here. */
+export function tmdbNumericId(raw) {
+  const s = String(raw ?? "").trim();
+  if (!/^\d+$/.test(s)) return 0;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Real TMDB franchise on a movie detail. Missing/empty → no collection chip. Never invent from similar titles. */
+export function collectionFromSeerrMovie(json) {
+  const raw = json?.collection || json?.belongsToCollection || json?.belongs_to_collection || null;
+  if (!raw || typeof raw !== "object") return null;
+  const id = tmdbNumericId(raw.id);
+  const name = String(raw.name || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(raw.posterPath || raw.poster_path);
+  return { id, name, poster: poster || undefined };
+}
+
+export function seerrPersonHit(h) {
+  const type = String(h?.mediaType || h?.media_type || "").toLowerCase();
+  if (type !== "person") return null;
+  const id = tmdbNumericId(h?.id);
+  const name = String(h?.name || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(h.profilePath || h.profile_path);
+  return {
+    id,
+    tmdbId: id,
+    name,
+    poster: poster || undefined,
+    knownForDepartment: String(h.knownForDepartment || h.known_for_department || "Acting"),
+  };
+}
+
+export function seerrCollectionHit(h) {
+  const type = String(h?.mediaType || h?.media_type || "").toLowerCase();
+  if (type !== "collection") return null;
+  const id = tmdbNumericId(h?.id);
+  const name = String(h?.name || h?.title || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(h.posterPath || h.poster_path);
+  return { id, tmdbId: id, name, poster: poster || undefined };
+}
+
+export function mapSeerrPersonHits(json, { limit = 8 } = {}) {
+  const hits = Array.isArray(json) ? json : json?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const p = seerrPersonHit(h);
+    if (!p) continue;
+    out.push(p);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function mapSeerrCollectionHits(json, { limit = 8 } = {}) {
+  const hits = Array.isArray(json) ? json : json?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const c = seerrCollectionHit(h);
+    if (!c) continue;
+    out.push(c);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function overlayLibraryOnTitle(title, libraryTitles) {
+  if (!title) return title;
+  const hit =
+    findLibraryTitle(libraryTitles, title.id) ||
+    (title.ids || []).map((id) => findLibraryTitle(libraryTitles, id)).find(Boolean) ||
+    null;
+  const attached = attachLibraryPresence(title, hit);
+  return { ...attached, inLibrary: Boolean(hit) };
+}
+
+export function mapCollectionParts(parts, libraryTitles) {
+  const out = [];
+  for (const p of parts || []) {
+    const hit = seerrSearchHit({ ...p, mediaType: p?.mediaType || p?.media_type || "movie" }, "movie");
+    if (!hit) continue;
+    out.push(overlayLibraryOnTitle(hit, libraryTitles));
+  }
+  return out;
+}
+
+export function mapCollectionDetail(json, libraryTitles) {
+  const id = tmdbNumericId(json?.id);
+  const name = String(json?.name || "").trim();
+  if (!id || !name) return null;
+  const parts = mapCollectionParts(json?.parts, libraryTitles);
+  return {
+    id,
+    name,
+    overview: String(json?.overview || ""),
+    poster: tmdbPoster(json?.posterPath || json?.poster_path) || undefined,
+    source: "tmdb",
+    parts,
+    onBox: parts.filter((p) => p.inLibrary).length,
+  };
+}
+
+export function mapPersonCredits(creditsJson, libraryTitles, { limit = 48 } = {}) {
+  const cast = Array.isArray(creditsJson?.cast)
+    ? creditsJson.cast
+    : Array.isArray(creditsJson)
+      ? creditsJson
+      : [];
+  const mapped = [];
+  const seen = new Set();
+  for (const c of cast) {
+    const hit = seerrSearchHit(c, c?.mediaType || c?.media_type);
+    if (!hit || seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    mapped.push(overlayLibraryOnTitle(hit, libraryTitles));
+  }
+  mapped.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+  return mapped.slice(0, limit);
+}
+
+export function mapPersonDetail(json, creditsJson, libraryTitles) {
+  const id = tmdbNumericId(json?.id);
+  const name = String(json?.name || "").trim();
+  if (!id || !name) return null;
+  const embedded = json?.combinedCredits || json?.combined_credits;
+  const credits = mapPersonCredits(creditsJson || embedded, libraryTitles);
+  return {
+    id,
+    name,
+    biography: String(json?.biography || ""),
+    poster: tmdbPoster(json?.profilePath || json?.profile_path) || undefined,
+    knownForDepartment: String(json?.knownForDepartment || json?.known_for_department || "Acting"),
+    credits,
+    onBox: credits.filter((t) => t.inLibrary).length,
+  };
+}
+
+/** POST /api/request body for a collection/filmography row. Person and collection ids never go here. */
+export function requestBodyForTitle(title, season) {
+  const id = String(title?.id || "");
+  if (!id || id.startsWith("person-") || id.startsWith("collection-")) return null;
+  const mediaType =
+    title?.kind === "tv" || title?.kind === "anime" ? "tv" : id.startsWith("tmdb-tv-") ? "tv" : "movie";
+  const tmdb =
+    mediaType === "tv"
+      ? id.startsWith("tmdb-tv-")
+        ? tmdbNumericId(id.slice(8))
+        : 0
+      : id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-")
+        ? tmdbNumericId(id.slice(5))
+        : 0;
+  const payload = buildSeerrAddPayload({
+    mediaType,
+    tmdb,
+    season: mediaType === "tv" ? season || 1 : undefined,
+  });
+  if (!payload) return null;
+  return {
+    titleId: id,
+    title: title.title,
+    mediaType,
+    tmdb,
+    season: mediaType === "tv" ? (Number(season) > 0 ? Number(season) : 1) : undefined,
   };
 }
 
@@ -1352,6 +1878,7 @@ export function seerrRequestRow(r, notes) {
     status,
     progress: status === "available" ? 100 : 0,
     season,
+    requestedSeasons: seasons.length > 1 ? seasons : undefined,
     createdAt: Date.parse(r?.createdAt) || Date.now(),
     updatedAt: Date.parse(r?.updatedAt) || Date.now(),
     requester: r?.requestedBy?.displayName || r?.requestedBy?.username || "house",
