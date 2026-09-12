@@ -174,7 +174,15 @@ elif [ -f "$ROOT/install/autoinstall/live-wifi.sh" ]; then
   cp "$ROOT/install/autoinstall/live-wifi.sh" "$NOCLOUD/live-wifi.sh"
 fi
 cp "$ROOT/scripts/install-reelos.sh" "$NOCLOUD/install-reelos.sh"
-chmod 755 "$NOCLOUD/install-reelos.sh" "$NOCLOUD/live-wifi.sh" 2>/dev/null || true
+if [ -f "$ROOT/install/bin/reelos_os_tune.py" ]; then
+  cp "$ROOT/install/bin/reelos_os_tune.py" "$NOCLOUD/reelos_os_tune.py"
+elif [ -f "$ROOT/daemon/reelos_os_tune.py" ]; then
+  cp "$ROOT/daemon/reelos_os_tune.py" "$NOCLOUD/reelos_os_tune.py"
+fi
+if [ -f "$ROOT/install/bin/reelos_hardware.py" ]; then
+  cp "$ROOT/install/bin/reelos_hardware.py" "$NOCLOUD/reelos_hardware.py"
+fi
+chmod 755 "$NOCLOUD/install-reelos.sh" "$NOCLOUD/live-wifi.sh" "$NOCLOUD/"*.py 2>/dev/null || true
 
 cat >"$STAGE/grub/grub.cfg" <<'GRUB'
 set timeout=5
@@ -234,7 +242,7 @@ if [ -n "$XORRISO" ]; then
 fi
 
 echo "nocloud staged at $NOCLOUD"
-echo "  user-data  meta-data  install-reelos.sh  live-wifi.sh"
+echo "  user-data  meta-data  install-reelos.sh  live-wifi.sh  reelos_os_tune.py"
 echo
 if is_dry; then
   echo "dry-run: would write $ISO -> $DEV"

@@ -73,6 +73,8 @@ test("autoinstall: reelos, GitHub main, firstboot once, :80 wizard, no secrets",
   assert.match(install, /:80/);
   assert.match(install, /Will not wipe \/media/);
   assert.match(install, /Will not delete ota\.lock/);
+  assert.match(install, /zram on rotational/);
+  assert.match(install, /512M kdump/);
   assert.doesNotMatch(install, /rm -f "\$STATE\/ota\.lock"/);
   assert.doesNotMatch(install, /rm -rf \/media/);
   assert.doesNotMatch(install, /umount.*\/media/);
@@ -97,6 +99,8 @@ test("autoinstall: reelos, GitHub main, firstboot once, :80 wizard, no secrets",
   assert.match(appliance, /deb\.nodesource\.com\/setup_22\.x/);
   assert.match(appliance, /Paste a TorBox key/);
   assert.doesNotMatch(appliance, /Real-Debrid key/);
+  assert.match(appliance, /reelos_os_tune\.py/);
+  assert.match(read("install/systemd/reelos.service"), /fuser -k 8080\/tcp/);
   assert.match(appliance, /\.dockerenv/);
   assert.match(appliance, /storage-driver":"vfs"/);
   assert.match(appliance, /is-active --quiet caddy/);
@@ -131,8 +135,9 @@ test("reelos-make-usb.sh dry-run stages nocloud without writing a device", () =>
     assert.match(r.stdout, /did not wipe \/media/);
     assert.equal(existsSync(join(stage, "nocloud", "user-data")), true);
     assert.equal(existsSync(join(stage, "nocloud", "meta-data")), true);
-    assert.equal(existsSync(join(stage, "nocloud", "install-reelos.sh")), true);
-    assert.equal(existsSync(join(stage, "nocloud", "live-wifi.sh")), true);
+  assert.equal(existsSync(join(stage, "nocloud", "install-reelos.sh")), true);
+  assert.equal(existsSync(join(stage, "nocloud", "live-wifi.sh")), true);
+  assert.equal(existsSync(join(stage, "nocloud", "reelos_os_tune.py")), true);
     assert.match(readFileSync(join(stage, "grub", "grub.cfg"), "utf8"), /autoinstall/);
     assert.match(readFileSync(join(stage, "nocloud", "user-data"), "utf8"), /username: reelos/);
   } finally {
@@ -202,6 +207,7 @@ test("install-reelos.sh dry-run layouts a repo tree and never stamps provisioned
     assert.match(ok.stdout, /would enable reelos-firstboot once/);
     assert.match(ok.stdout, /7-step wizard on :80/);
     assert.match(ok.stdout, /would not delete ota\.lock/);
+    assert.match(ok.stdout, /os tune/);
     assert.equal(readFileSync(join(dest, "install.sh"), "utf8"), "#!/bin/bash\necho ok\n");
     assert.equal(readFileSync(join(dest, "app/VERSION"), "utf8").trim(), "1.2.50.48");
     assert.equal(readFileSync(join(dest, "app/.reelos-appliance"), "utf8").trim(), "1");

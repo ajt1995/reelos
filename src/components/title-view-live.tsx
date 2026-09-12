@@ -287,7 +287,7 @@ export function TitleView({ id }: { id: string }) {
                 <Play className="size-4" fill="currentColor" />
                 Watch
               </Button>
-            ) : (
+            ) : request?.status === "downloading" || request?.status === "waiting" ? null : (
               <Button size="lg" disabled>
                 <Play className="size-4" />
                 Available after request

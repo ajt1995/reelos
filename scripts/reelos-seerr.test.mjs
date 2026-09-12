@@ -845,6 +845,71 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
     }),
     "Files linked — waiting for Sonarr import",
   );
+  const expanseS1 = seerrRequestRow(
+    {
+      id: 12,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }],
+      media: { tmdbId: 63639, status: 3 },
+    },
+    {},
+  );
+  const expanse = {
+    id: 1,
+    tmdbId: 63639,
+    title: "The Expanse",
+    monitored: true,
+    statistics: { episodeFileCount: 6 },
+    seasons: [
+      { seasonNumber: 1, monitored: true, statistics: { episodeFileCount: 0 } },
+      { seasonNumber: 6, monitored: true, statistics: { episodeFileCount: 6 } },
+    ],
+  };
+  assert.equal(
+    tvRequestReason(expanseS1, {
+      series: [expanse],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["The Expanse"] },
+    }),
+    "Searching — no file yet",
+  );
+  assert.equal(
+    tvRequestReason(expanseS1, {
+      series: [expanse],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["The Expanse", "The Expanse S06 1080p AMZN WEBRip"] },
+    }),
+    "Searching — no file yet",
+  );
+  assert.equal(
+    tvRequestReason(expanseS1, {
+      series: [expanse],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["The Expanse"] },
+      torrents: [{ name: "The Expanse S06 1080p AMZN WEBRip DDP5 1 x264" }],
+    }),
+    "Searching — no file yet",
+  );
+  assert.equal(
+    tvRequestReason(expanseS1, {
+      series: [expanse],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["The Expanse"] },
+      torrents: [{ name: "The Expanse S01 1080p" }],
+    }),
+    "Files linked — waiting for Sonarr import",
+  );
+  assert.equal(
+    tvRequestReason(expanseS1, {
+      series: [expanse],
+      arrSeriesReady: true,
+      dumps: { sonarr: ["The Expanse", "The Expanse S01 1080p AMZN WEBRip"] },
+    }),
+    "Files linked — waiting for Sonarr import",
+  );
   const honest = honestifyRequests([row], {
     series: [series],
     arrSeriesReady: true,
@@ -1096,8 +1161,8 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(lookup, /if \(method === "GET"\) return false/);
   assert.doesNotMatch(lookup, /Jellyfin is only on localhost, not the LAN/);
   const status = readFileSync(join(root, "scripts/reelos-request-status.mjs"), "utf8");
-  assert.match(status, /spawnSync\("ls"/);
-  assert.match(status, /timeout: 800/);
+  assert.match(status, /Never `ls` dump trees on FUSE/);
+  assert.match(status, /export function listDirNames/);
   assert.match(seerr, /Jellyfin library hit \(movie TMDB\)/);
   assert.match(seerr, /Radarr hasFile \/ Sonarr season episodeFileCount/);
   assert.match(seerr, /Ghost: Seerr AVAILABLE/);
@@ -1339,6 +1404,8 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(yml, /profiles: \["jellyfin", "seerr"\]/);
   assert.match(caddy, /handle \/seerr\*/);
   assert.match(caddy, /127\.0\.0\.1:5055/);
+  assert.doesNotMatch(caddy, /handle \/play\*/);
+  assert.match(caddy, /ReelOS shell player/);
 });
 
 test("needsRequestTitle treats tmdb-2059 as unnamed", () => {

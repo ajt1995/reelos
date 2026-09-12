@@ -212,6 +212,15 @@ if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
 fi
 chown -R 1000:1000 "$MEDIA" /mnt/debrid /mnt/symlinks || true
 
+# Detect hardware. zram on rotational disk. Do not reserve 512M kdump on ≤4.5Gi.
+# Never wipe /media. Never delete ota.lock.
+if [ -f "$ROOT/bin/reelos_os_tune.py" ]; then
+  python3 "$ROOT/bin/reelos_os_tune.py" --apply || echo "os tune non-fatal"
+fi
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --apply || echo "hardware profile non-fatal"
+fi
+
 ufw allow 80/tcp || true
 ufw allow 443/tcp || true
 ufw allow 22/tcp || true

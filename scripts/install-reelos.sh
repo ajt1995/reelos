@@ -30,6 +30,7 @@ Install ReelOS on a stock Ubuntu LTS box.
 
 Does not download an Ubuntu ISO. Does not wipe /media. Does not delete ota.lock.
 Wizard stays seven steps. TorBox key and admin PIN are typed there, not here.
+Detects hardware. zram on rotational disk. Does not reserve 512M kdump on ≤4.5Gi RAM.
 EOF
 }
 
@@ -162,11 +163,67 @@ rm -f "$STATE/provisioned" "$STATE/answers.json" 2>/dev/null || true
 # Never: rm ota.lock. Never: wipe /media.
 chmod 755 "$ROOT/bin/"* "$ROOT/install.sh" 2>/dev/null || true
 
+# USB seed can carry reelos_os_tune.py next to this script (nocloud).
+# Apply even when GitHub main.tar.gz is older than this installer.
+tune_os() {
+  local py="" cand
+  for cand in \
+    "${script_dir:+$script_dir/reelos_os_tune.py}" \
+    "/opt/reelos/seed/reelos_os_tune.py" \
+    "$ROOT/bin/reelos_os_tune.py"; do
+    [ -n "$cand" ] && [ -f "$cand" ] && py="$cand" && break
+  done
+  if [ -n "$py" ]; then
+    if is_dry; then
+      log "dry-run: would run os tune (zram on rotational; no 512M kdump on ≤4.5Gi)"
+      return 0
+    fi
+    python3 "$py" --apply || log "os tune non-fatal"
+    return 0
+  fi
+  # Bash fallback when the USB seed is install-reelos.sh alone.
+  local mem_kb=0 rota=0 src name
+  mem_kb=$(awk '/^MemTotal:/{print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)
+  src=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+  name=$(basename "$src")
+  name="${name%%[0-9]*}"
+  if [ -n "$name" ] && [ -f "/sys/block/$name/queue/rotational" ]; then
+    rota=$(cat "/sys/block/$name/queue/rotational" 2>/dev/null || echo 0)
+  fi
+  if is_dry; then
+    log "dry-run: would run os tune (zram on rotational; no 512M kdump on ≤4.5Gi)"
+    return 0
+  fi
+  if [ "${rota:-0}" = "1" ]; then
+    apt-get install -y --no-install-recommends systemd-zram-generator >/dev/null 2>&1 || true
+    mkdir -p /etc
+    cat >/etc/systemd/zram-generator.conf <<'ZRAM'
+# ReelOS — zram on rotational disk. Do not copy TorBox dumps here.
+[zram0]
+zram-size = min(ram / 2, 2048)
+compression-algorithm = zstd
+swap-priority = 100
+ZRAM
+    log "zram on rotational disk"
+  fi
+  if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4718592 ]; then
+    mkdir -p /etc/default/grub.d
+    printf '%s\n' '# ReelOS — do not reserve 512M kdump on ≤4.5Gi RAM.' \
+      'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} crashkernel=no"' \
+      >/etc/default/grub.d/reelos-nokdump.cfg
+    printf 'USE_KDUMP=0\n' >/etc/default/kdump-tools 2>/dev/null || true
+    update-grub >/dev/null 2>&1 || true
+    systemctl disable --now kdump-tools >/dev/null 2>&1 || true
+    log "do not reserve 512M kdump on ≤4.5Gi"
+  fi
+}
+
 if is_dry; then
   log "dry-run: would install Docker, Caddy, OpenSSH"
   log "dry-run: would enable reelos-firstboot once"
   log "dry-run: would put the 7-step wizard on :80"
   log "dry-run: would not stamp provisioned, would not wipe /media, would not delete ota.lock"
+  tune_os
   if [ ! -f "$ROOT/install.sh" ]; then
     log "dry-run: install.sh not laid out (no local tree / no fetch)"
   fi
@@ -177,6 +234,8 @@ if [ ! -x "$ROOT/install.sh" ] && [ ! -f "$ROOT/install.sh" ]; then
   echo "ReelOS install: missing $ROOT/install.sh" >&2
   exit 1
 fi
+
+tune_os
 
 bash "$ROOT/install.sh" || echo failed >"$STATE/install-failed"
 

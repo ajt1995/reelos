@@ -4,6 +4,7 @@
 #
 # Creates user reelos, then late-commands run install-reelos.sh:
 # Docker, Caddy, ReelOS from GitHub main.tar.gz, firstboot once, :80 wizard.
+# OS tune on the seed: zram on rotational disk; no 512M kdump on ≤4.5Gi RAM.
 # No TorBox key. No wizard admin PIN. The 7-step wizard still runs.
 # Never wipes /media. Never deletes ota.lock. No secrets in this file.
 autoinstall:

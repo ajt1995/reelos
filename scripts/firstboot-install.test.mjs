@@ -65,6 +65,7 @@ test("install.sh twins and firstboot unit stay the stack-installed latch", () =>
   assert.match(install, /deb\.nodesource\.com\/setup_22\.x/);
   assert.match(install, /Paste a TorBox key/);
   assert.doesNotMatch(install, /Real-Debrid key/);
+  assert.match(install, /reelos_os_tune\.py/);
   assert.match(install, /\.dockerenv/);
   assert.match(install, /storage-driver":"vfs"/);
   assert.match(install, /is-active --quiet caddy/);
