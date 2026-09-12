@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.57 is the ship.*** Cloud 40×40: unmonitored released seasons Request (Breaking Bad S02), Silo S04 / Rookie S09 stay Coming and skip SeasonSearch, movie `tmdb-<n>` cannot become `tmdb-tv-<n>` (Dark Knight is not 3rd Rock). 56 named titles / Importing paint stay. 55 unreleased seasons Coming stay. 54 Caddy 2.6 Updating page stays. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.55**. **Do not house-Apply until told.** Never twice.
+***1.2.50.57 is the ship.*** Bounded dump heal maps UIndex/Torrenting dumps onto named titles and asks Sonarr/Radarr to import those folders (API) — Importing does not sit forever after S01 is in. Cloud 40×40: unmonitored released seasons Request (Breaking Bad S02), Silo S04 / Rookie S09 stay Coming and skip SeasonSearch, movie `tmdb-<n>` cannot become `tmdb-tv-<n>` (Dark Knight is not 3rd Rock). FUSE stale is rshared only (not restarting Sonarr or live Jellyfin). 56 named titles / Importing paint stay. 55 unreleased seasons Coming stay. 54 Caddy 2.6 Updating page stays. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.55**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
@@ -34,9 +34,11 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Changelog
 
-### 1.2.50.57 cloud 40×40 Coming ≠ Request, movie ≠ TV
+### 1.2.50.57 dump heal + cloud 40×40 Coming ≠ Request
 
-Austin asked for 40 movies + 40 TV seasons on the cloud wizard box. 56 treated unmonitored Sonarr seasons (episodeCount 0, no previousAiring) as Coming, so Breaking Bad S02 / The Wire S01 POSTs were refused. GET painted Silo S04 as unmonitored instead of Coming. `tmdb-155` + `mediaType=tv` grabbed 3rd Rock. 57 confirms Coming from Seerr/TMDB (Silo S04 / Rookie S09 stay Coming), lets released missing seasons Request, and locks movie-shaped `tmdb-<n>` so it cannot become `tmdb-tv-<n>`. Wizard stays 7. Beta off. Skip 49. Do not house-Apply until told. Dump-folder ManualImport heal is **not** in this tarball.
+56 painted **On disk, importing** while catch-up skipped every UIndex/Torrenting dump once The Rookie had S01 files. 57 maps dump names to the named series/movie (one-level `/mnt/symlinks`, not a FUSE walk), asks Sonarr/Radarr to ManualImport those folders, and skips a dump only when **that season** already has files. Coming seasons still do not SeasonSearch (55). FUSE ENOTCONN is `rshared /mnt` only — not `docker restart` Sonarr or live Jellyfin. Dump-folder fingerprint skip if unchanged. Passengers-class movies use the same path.
+
+Austin's cloud 40×40 loop: 56 treated unmonitored Sonarr seasons (episodeCount 0, no previousAiring) as Coming, so Breaking Bad S02 / The Wire S01 POSTs were refused. GET painted Silo S04 as unmonitored instead of Coming. `tmdb-155` + `mediaType=tv` grabbed 3rd Rock. 57 confirms Coming from Seerr/TMDB (Silo S04 / Rookie S09 stay Coming), lets released missing seasons Request, and locks movie-shaped `tmdb-<n>` so it cannot become `tmdb-tv-<n>`. Wizard stays 7. Beta off. Skip 49. Do not house-Apply until told.
 
 ### 1.2.50.56 named titles win / Importing ≠ Watch / Rookie 0%
 

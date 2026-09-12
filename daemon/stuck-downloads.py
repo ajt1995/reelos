@@ -29,6 +29,7 @@ STUCK_SYMLINK_SEC = int(os.environ.get("REELOS_STUCK_SYMLINK_SEC", "180"))
 IMPORT_RETRY_SEC = int(os.environ.get("REELOS_IMPORT_RETRY_SEC", "90"))
 SEARCH_INTERVAL_SEC = int(os.environ.get("REELOS_MISSING_SEARCH_SEC", "900"))
 FUSE_RESTART_BACKOFF = 300
+DUMP_HEAL_CAP = 6
 MEDIA_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts", ".iso"}
 
 
@@ -765,15 +766,13 @@ def heal_fuse_if_stale(state: dict) -> bool:
         "fuse Socket not connected — "
         f"host={'stale' if host_stale else 'ok'} "
         f"containers={','.join(stale_readers) or 'ok'} — "
-        "rshared /mnt then remount/restart readers"
+        "rshared /mnt — not restarting Sonarr or live Jellyfin"
     )
     make_mnt_rshared()
     if host_stale:
         subprocess.run(["docker", "restart", "decypharr"], check=False, capture_output=True)
         time.sleep(4)
         make_mnt_rshared()
-    for name in FUSE_READERS:
-        subprocess.run(["docker", "restart", name], check=False, capture_output=True)
     state["fuseRestartAt"] = now
     return True
 
@@ -816,23 +815,91 @@ def _catalog_paths() -> dict:
         return {}
 
 
-def _dump_has_media(mod, category: str, title: str) -> bool:
-    stem = mod.relink_stem(title) if mod else ""
-    if len(stem) < 8:
-        return False
-    for root in (Path(f"/mnt/symlinks/{category}"), Path(f"/symlinks/{category}")):
+def list_dump_dirs(category: str, *, symlink_root: Path | None = None) -> list[Path]:
+    """One-level /mnt/symlinks/{sonarr,radarr} only. Never /media. Never FUSE dfs."""
+    if symlink_root is not None:
+        bases = (symlink_root / category,)
+    else:
+        bases = (Path(f"/mnt/symlinks/{category}"), Path(f"/symlinks/{category}"))
+    out: list[Path] = []
+    seen: set[str] = set()
+    skip = {"radarr", "sonarr", "anime", "music", "debrid"}
+    for base in bases:
         try:
-            kids = list(root.iterdir())
+            kids = list(base.iterdir())
         except OSError:
             continue
-        for dump in kids:
-            if not mod.stems_equal(mod.relink_stem(dump.name), stem):
+        for child in kids:
+            key = child.name.lower()
+            if key in seen or key in skip:
                 continue
-            if getattr(mod, "dump_has_media", None) and mod.dump_has_media(dump):
-                return True
-            if path_is_readable(str(dump)):
-                return True
-    return False
+            try:
+                if not (child.is_dir() or child.is_symlink()):
+                    continue
+            except OSError:
+                continue
+            seen.add(key)
+            out.append(child)
+    return out
+
+
+def dump_tree_fingerprint(dirs: list[Path]) -> str:
+    parts: list[str] = []
+    for child in dirs:
+        try:
+            st = child.stat()
+            ns = getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000))
+            parts.append(f"{child.name}:{ns}")
+        except OSError:
+            parts.append(f"{child.name}:0")
+    parts.sort()
+    return "\n".join(parts)
+
+
+def dump_heal_unchanged(state: dict, fp: str) -> bool:
+    prev = str(state.get("dumpHealFp") or "")
+    return bool(fp) and bool(prev) and prev == fp
+
+
+def _dump_path_for(
+    mod,
+    category: str,
+    title: str,
+    season: int | None = None,
+    dumps: list[Path] | None = None,
+) -> list[Path]:
+    """Map a named *arr title onto dump folders already on this box."""
+    if not mod or not title:
+        return []
+    stem = mod.relink_stem(title)
+    if len(stem) < 4:
+        return []
+    kids = dumps if dumps is not None else list_dump_dirs(category)
+    seasonal: list[Path] = []
+    unnamed: list[Path] = []
+    for dump in kids:
+        if not mod.stems_equal(mod.relink_stem(dump.name), stem):
+            continue
+        dump_season = getattr(mod, "dump_season", None)
+        got = dump_season(dump.name) if callable(dump_season) else None
+        if season is not None and got is not None and got != season:
+            continue
+        has = False
+        if getattr(mod, "dump_has_media", None) and mod.dump_has_media(dump):
+            has = True
+        elif path_is_readable(str(dump)):
+            has = True
+        if not has:
+            continue
+        if season is not None and got == season:
+            seasonal.append(dump)
+        else:
+            unnamed.append(dump)
+    return seasonal or unnamed
+
+
+def _dump_has_media(mod, category: str, title: str, season: int | None = None, dumps=None) -> bool:
+    return bool(_dump_path_for(mod, category, title, season=season, dumps=dumps))
 
 
 def _torrent_for_title(title: str, torrents: list, hit) -> tuple[bool, bool]:
@@ -1354,8 +1421,20 @@ def ensure_item_grab_path(app: dict, key: str, item: dict) -> dict:
     return out
 
 
-def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> bool:
-    """0-file monitored seasons: relink from FUSE or SeasonSearch. Relink mod optional."""
+def recover_missing_series(
+    app: dict,
+    key: str,
+    torrents: list,
+    state: dict,
+    *,
+    dumps: list | None = None,
+    skip_dump_import: bool = False,
+) -> bool:
+    """0-file released seasons: ManualImport known dumps (API) or SeasonSearch.
+
+    Dump mapping is one-level /mnt/symlinks/sonarr — not a FUSE __all__ walk.
+    Coming/TBA seasons are not searched. Relink mod optional.
+    """
     if app["name"] != "sonarr":
         return False
     try:
@@ -1365,10 +1444,11 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
     if not isinstance(series, list):
         return False
     mod = _load_relink_mod()
-    catalog = _catalog_paths() if mod else {}
+    dump_rows = list(dumps) if dumps is not None else (list_dump_dirs("sonarr") if mod else [])
     searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
     now = time.time()
     kicked = False
+    imported_n = 0
     for s in series:
         if not isinstance(s, dict) or not s.get("id"):
             continue
@@ -1395,50 +1475,53 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
                 ensure_item_grab_path(app, key, s)
                 if season.get("monitored") is False:
                     season["monitored"] = True
-            hit = mod.match_catalog(title, catalog) if mod and catalog else None
-            has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
-            if mod:
-                action = mod.decide_missing_action(
-                    has_files=False,
-                    dump_has_media=_dump_has_media(mod, "sonarr", title),
-                    has_catalog_hit=bool(hit),
-                    has_torrent=has_torrent,
-                    torrent_complete=torrent_complete,
+            matching = _dump_path_for(mod, "sonarr", title, season=n, dumps=dump_rows) if mod else []
+            if matching:
+                if skip_dump_import:
+                    continue
+                if imported_n >= DUMP_HEAL_CAP:
+                    log(f"sonarr dump heal cap {DUMP_HEAL_CAP} — remainder next sweep")
+                    continue
+                folders = [str(p) for p in matching[: DUMP_HEAL_CAP - imported_n]]
+                log(
+                    f"sonarr recover Importing {title} S{n:02d} — "
+                    "Sonarr has not taken the files yet"
                 )
-            else:
-                action = "wait" if has_torrent and not torrent_complete else "search"
+                _sonarr_manual_import(key, {"title": title, "series": s}, folders)
+                imported_n += len(folders)
+                continue
+            has_torrent, torrent_complete = _torrent_for_title(title, torrents, None)
+            if has_torrent and not torrent_complete:
+                continue
             sk = f"missing:{s['id']}:s{n}"
-            if action == "relink":
-                filled = _try_fill_dump(mod, "sonarr", title, hit)
-                log(f"sonarr recover empty-symlink {title} S{n:02d} — create dump from FUSE")
-                kicked = True
-                if filled:
-                    continue
-                action = "search"
-            if action == "import":
-                log(f"sonarr recover dump-present {title} S{n:02d} — ManualImport")
-                kicked = True
-            elif action == "search":
-                if not _should_search_missing(searched, sk, now):
-                    continue
-                ensure_item_grab_path(app, key, s)
-                try:
-                    call(
-                        f"{app['base']}/command",
-                        key,
-                        method="POST",
-                        body={"name": "SeasonSearch", "seriesId": int(s["id"]), "seasonNumber": n},
-                    )
-                    log(f"sonarr SeasonSearch {title} S{n:02d} — no FUSE/cache hit")
-                    searched[sk] = now
-                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-                    log(f"sonarr SeasonSearch {title} {type(e).__name__} {e}")
+            if not _should_search_missing(searched, sk, now):
+                continue
+            ensure_item_grab_path(app, key, s)
+            try:
+                call(
+                    f"{app['base']}/command",
+                    key,
+                    method="POST",
+                    body={"name": "SeasonSearch", "seriesId": int(s["id"]), "seasonNumber": n},
+                )
+                log(f"sonarr SeasonSearch {title} S{n:02d} — Searching, no dump on this box")
+                searched[sk] = now
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+                log(f"sonarr SeasonSearch {title} {type(e).__name__} {e}")
     state["searched"] = searched
     return kicked
 
 
-def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> bool:
-    """0-file monitored movies: relink from FUSE or MoviesSearch. House Interstellar sat forever."""
+def recover_missing_movies(
+    app: dict,
+    key: str,
+    torrents: list,
+    state: dict,
+    *,
+    dumps: list | None = None,
+    skip_dump_import: bool = False,
+) -> bool:
+    """0-file monitored movies: ManualImport known dumps or MoviesSearch. Passengers-class."""
     if app["name"] != "radarr":
         return False
     try:
@@ -1448,10 +1531,11 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
     if not isinstance(movies, list):
         return False
     mod = _load_relink_mod()
-    catalog = _catalog_paths() if mod else {}
+    dump_rows = list(dumps) if dumps is not None else (list_dump_dirs("radarr") if mod else [])
     searched = state.get("searched") if isinstance(state.get("searched"), dict) else {}
     now = time.time()
     kicked = False
+    imported_n = 0
     for m in movies:
         if not isinstance(m, dict) or not m.get("id"):
             continue
@@ -1465,46 +1549,42 @@ def recover_missing_movies(app: dict, key: str, torrents: list, state: dict) -> 
         if m.get("monitored") is False:
             ensure_item_grab_path(app, key, m)
         title = str(m.get("title") or "")
-        hit = mod.match_catalog(title, catalog) if mod and catalog else None
-        has_torrent, torrent_complete = _torrent_for_title(title, torrents, hit)
-        if mod:
-            action = mod.decide_missing_action(
-                has_files=False,
-                dump_has_media=_dump_has_media(mod, "radarr", title),
-                has_catalog_hit=bool(hit),
-                has_torrent=has_torrent,
-                torrent_complete=torrent_complete,
+        matching = _dump_path_for(mod, "radarr", title, dumps=dump_rows) if mod else []
+        if matching:
+            if skip_dump_import:
+                continue
+            if imported_n >= DUMP_HEAL_CAP:
+                log(f"radarr dump heal cap {DUMP_HEAL_CAP} — remainder next sweep")
+                continue
+            folders = [str(p) for p in matching[: DUMP_HEAL_CAP - imported_n]]
+            log(
+                f"radarr recover Importing {title} — "
+                "Radarr has not taken the files yet"
             )
-        else:
-            action = "wait" if has_torrent and not torrent_complete else "search"
+            _radarr_manual_import(app, key, m, folders)
+            imported_n += len(folders)
+            continue
+        has_torrent, torrent_complete = _torrent_for_title(title, torrents, None)
+        if has_torrent and not torrent_complete:
+            continue
         sk = f"missing:movie:{m['id']}"
-        if action == "relink":
-            filled = _try_fill_dump(mod, "radarr", title, hit)
-            log(f"radarr recover empty-symlink {title} — create dump from FUSE")
-            kicked = True
-            if filled:
-                continue
-            action = "search"
-        if action == "import":
-            log(f"radarr recover dump-present {title} — ManualImport")
-            kicked = True
-        elif action == "search":
-            if not _should_search_missing(searched, sk, now):
-                continue
-            ensure_item_grab_path(app, key, m)
-            try:
-                call(
-                    f"{app['base']}/command",
-                    key,
-                    method="POST",
-                    body={"name": "MoviesSearch", "movieIds": [int(m["id"])]},
-                )
-                log(f"radarr MoviesSearch {title} — no FUSE/cache hit")
-                searched[sk] = now
-            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-                log(f"radarr MoviesSearch {title} {type(e).__name__} {e}")
-    if _quality_choice() == "hybrid":
+        if not _should_search_missing(searched, sk, now):
+            continue
+        ensure_item_grab_path(app, key, m)
+        try:
+            call(
+                f"{app['base']}/command",
+                key,
+                method="POST",
+                body={"name": "MoviesSearch", "movieIds": [int(m["id"])]},
+            )
+            log(f"radarr MoviesSearch {title} — Searching, no dump on this box")
+            searched[sk] = now
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
+            log(f"radarr MoviesSearch {title} {type(e).__name__} {e}")
+    if _quality_choice() == "hybrid" and not skip_dump_import:
         ensure_radarr_hybrid_recycle(app, key, quality="hybrid")
+        catalog = _catalog_paths()
         added = relink_hybrid_companions(catalog, quality="hybrid")
         if added:
             log(f"radarr hybrid companion relink {added}")
@@ -1668,6 +1748,15 @@ def sweep() -> int:
     if extras:
         log(f"decypharr duplicate hashes={len(extras)} (not deleting by hash — would drop the live add)")
 
+    sonarr_dumps = list_dump_dirs("sonarr")
+    radarr_dumps = list_dump_dirs("radarr")
+    dump_fp = dump_tree_fingerprint(sonarr_dumps + radarr_dumps)
+    skip_dump_import = dump_heal_unchanged(state, dump_fp)
+    if skip_dump_import:
+        log("dump heal skip — folders unchanged")
+    elif dump_fp:
+        state["dumpHealFp"] = dump_fp
+
     recover = False
     for app in APPS:
         key = api_key(app["xml"])
@@ -1765,9 +1854,13 @@ def sweep() -> int:
         key = api_key(app["xml"])
         if not key:
             continue
-        if recover_missing_series(app, key, torrents, state):
+        if recover_missing_series(
+            app, key, torrents, state, dumps=sonarr_dumps, skip_dump_import=skip_dump_import
+        ):
             recover = True
-        if recover_missing_movies(app, key, torrents, state):
+        if recover_missing_movies(
+            app, key, torrents, state, dumps=radarr_dumps, skip_dump_import=skip_dump_import
+        ):
             recover = True
         if search_hybrid_cutoff_movies(app, key, state):
             recover = True
@@ -2226,6 +2319,71 @@ def _self_test() -> int:
             src = Path(__file__).read_text()
             self.assertIn("if season_is_unreleased(season):", src)
 
+        def test_dump_heal_maps_and_does_not_restart_readers(self):
+            src = Path(__file__).read_text()
+            self.assertIn("recover_missing_series", src)
+            self.assertIn("recover_missing_movies", src)
+            self.assertIn("relink_dumps.py", src)
+            self.assertIn("SeasonSearch", src)
+            self.assertIn("MoviesSearch", src)
+            self.assertIn("has not taken the files yet", src)
+            self.assertIn("Searching, no dump on this box", src)
+            self.assertIn("dump heal skip — folders unchanged", src)
+            self.assertIn("not restarting Sonarr or live Jellyfin", src)
+            self.assertIn('body={"name": "MoviesSearch"', src)
+            self.assertIn("ensure_item_grab_path", src)
+            self.assertIn("pick_fallback_profile", src)
+            self.assertIn("remonitor", src)
+            heal_fn = src[src.find("def heal_fuse_if_stale") : src.find("def kick_import")]
+            self.assertIn("make_mnt_rshared", heal_fn)
+            self.assertNotIn('["docker", "restart", name]', heal_fn)
+            self.assertNotIn("reelos-jellyfin-1", heal_fn)
+            self.assertNotIn("reelos-sonarr-1", heal_fn)
+            movies_fn = src[src.find("def recover_missing_movies") : src.find("def movie_id_of")]
+            self.assertIn('if m.get("monitored") is False', movies_fn)
+            self.assertIn("ensure_item_grab_path", movies_fn)
+            search_at = movies_fn.rfind('body={"name": "MoviesSearch"')
+            prep_at = movies_fn.find("ensure_item_grab_path")
+            self.assertGreaterEqual(prep_at, 0)
+            self.assertGreater(search_at, prep_at)
+            series_fn = src[src.find("def recover_missing_series") : src.find("def recover_missing_movies")]
+            self.assertNotIn("_catalog_paths()", series_fn)
+            self.assertIn("_sonarr_manual_import", series_fn)
+
+        def test_dump_path_maps_uindex_without_fuse_walk(self):
+            import tempfile
+
+            mod = _load_relink_mod()
+            self.assertIsNotNone(mod)
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                s02 = root / "www.UIndex.org - The.Rookie.S02E14.Casualties.1080p"
+                s02.mkdir()
+                (s02 / "E14.mkv").write_bytes(b"x")
+                named = root / "The Rookie"
+                named.mkdir()
+                (named / "S01E01.mkv").write_bytes(b"x")
+                silo = root / "www Torrenting com - Silo"
+                silo.mkdir()
+                (silo / "Silo.S02E03.mkv").write_bytes(b"x")
+                passengers = root / "Passengers (2016)"
+                passengers.mkdir()
+                (passengers / "Passengers.mkv").write_bytes(b"x")
+                dumps = [s02, named, silo, passengers]
+                rook_s02 = _dump_path_for(mod, "sonarr", "The Rookie", season=2, dumps=dumps)
+                self.assertEqual([child.name for child in rook_s02], [s02.name])
+                rook_s05 = _dump_path_for(mod, "sonarr", "The Rookie", season=5, dumps=dumps)
+                self.assertEqual([child.name for child in rook_s05], [named.name])
+                silo_hits = _dump_path_for(mod, "sonarr", "Silo", season=2, dumps=dumps)
+                self.assertEqual([child.name for child in silo_hits], [silo.name])
+                movie_hits = _dump_path_for(mod, "radarr", "Passengers", dumps=dumps)
+                self.assertEqual([child.name for child in movie_hits], [passengers.name])
+                fp = dump_tree_fingerprint(dumps)
+                self.assertTrue(fp)
+                state = {"dumpHealFp": fp}
+                self.assertTrue(dump_heal_unchanged(state, fp))
+                self.assertFalse(dump_heal_unchanged(state, fp + "x"))
+
         def test_empty_symlink_recovery_is_wired(self):
             src = Path(__file__).read_text()
             self.assertIn("recover_missing_series", src)
@@ -2233,7 +2391,6 @@ def _self_test() -> int:
             self.assertIn("relink_dumps.py", src)
             self.assertIn("SeasonSearch", src)
             self.assertIn("MoviesSearch", src)
-            self.assertIn("empty-symlink", src)
             self.assertIn('body={"name": "MoviesSearch"', src)
             self.assertIn("ensure_item_grab_path", src)
             self.assertIn("pick_fallback_profile", src)

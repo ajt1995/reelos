@@ -104,7 +104,7 @@ test("stack: VERSION / channel / stamps agree (1.2.50.57)", () => {
   assert.match(chan.notes[0], /40.40|Coming|Breaking Bad S02|tmdb-tv|3rd Rock|Dark Knight/i);
   assert.match(chan.notes[0], /Breaking Bad S02/);
   assert.match(chan.notes[0], /Dark Knight is not 3rd Rock/);
-  assert.doesNotMatch(chan.notes[0], /Bounded dump heal|ManualImport those folders/);
+  assert.match(chan.notes[0], /Bounded dump heal|Importing actually imports|not docker restart/i);
   assert.match(chan.notes[1], /On this box|UIndex|dump twins|placeholder|year 0/i);
   assert.match(chan.notes[2], /Unreleased TV seasons|Coming|announced|not released|Silo S04|SeasonSearch/i);
   assert.match(chan.notes[3], /Caddy 2\.6|handle_errors|Updating ReelOS|heredoc|:80 dead/i);

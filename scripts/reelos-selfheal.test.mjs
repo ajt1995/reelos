@@ -68,3 +68,23 @@ test("beta sidecar is infrastructure only", () => {
 test("unstick plan is import-not-search", () => {
   assert.equal(planUnstickSearchingIfFileOnDisk({ status: "waiting", arrHasFile: true }).search, false);
 });
+
+test("dump heal maps indexer prefixes and does not docker restart readers", () => {
+  const stuck = read("daemon/stuck-downloads.py");
+  const relink = read("daemon/relink_dumps.py");
+  const harden = read("daemon/sonarr_manual_import.py");
+  assert.equal(stuck, read("install/bin/stuck-downloads.py"));
+  assert.equal(relink, read("install/bin/relink_dumps.py"));
+  assert.equal(harden, read("install/bin/sonarr_manual_import.py"));
+  assert.match(relink, /strip_indexer_prefix/);
+  assert.match(relink, /www\.UIndex\.org - The Rookie/);
+  assert.match(harden, /THAT season already has files/);
+  assert.match(stuck, /has not taken the files yet/);
+  assert.match(stuck, /not restarting Sonarr or live Jellyfin/);
+  assert.match(stuck, /dump heal skip — folders unchanged/);
+  const healFn = stuck.slice(stuck.indexOf("def heal_fuse_if_stale"), stuck.indexOf("def kick_import"));
+  assert.doesNotMatch(healFn, /\["docker", "restart", name\]/);
+  const seriesFn = stuck.slice(stuck.indexOf("def recover_missing_series"), stuck.indexOf("def recover_missing_movies"));
+  assert.doesNotMatch(seriesFn, /_catalog_paths\(\)/);
+});
+
