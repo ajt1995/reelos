@@ -169,6 +169,7 @@ export function attachLibraryPresence(title, libraryTitle) {
     ids,
     jellyfinId: title.jellyfinId || libraryTitle.jellyfinId,
     poster: title.poster || libraryTitle.poster,
+    inLibrary: Boolean(title.jellyfinId || libraryTitle.jellyfinId),
   };
 }
 
@@ -254,6 +255,40 @@ export function rankLookupTitles(titles, q) {
     if (ar === 0 && a.kind !== b.kind) return a.kind === "movie" ? -1 : 1;
     return (Number(b?.year) || 0) - (Number(a?.year) || 0);
   });
+}
+
+/** Search hits must carry the JF row when the title is already on the box. JF-only names still appear. */
+export function overlayLookupWithLibrary(seerrTitles, libraryTitles, q) {
+  const mapped = (seerrTitles || []).map((t) => {
+    const hit =
+      findLibraryTitle(libraryTitles, t?.id) ||
+      (t?.ids || []).map((id) => findLibraryTitle(libraryTitles, id)).find(Boolean) ||
+      null;
+    const attached = attachLibraryPresence(t, hit && hit.jellyfinId ? hit : null);
+    return { ...attached, inLibrary: Boolean(attached.jellyfinId) };
+  });
+  const have = new Set();
+  for (const t of mapped) {
+    for (const id of [t?.id, ...(t?.ids || [])]) {
+      if (id) have.add(String(id));
+    }
+  }
+  const qn = String(q || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const extras = [];
+  for (const lib of libraryTitles || []) {
+    if (!lib?.jellyfinId) continue;
+    const ids = [lib.id, ...(lib.ids || [])].map(String);
+    if (ids.some((id) => have.has(id))) continue;
+    const name = String(lib.title || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "");
+    if (!qn || !name.includes(qn)) continue;
+    extras.push(lib);
+    for (const id of ids) have.add(id);
+  }
+  return rankLookupTitles([...extras, ...mapped], q);
 }
 
 /** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */

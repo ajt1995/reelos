@@ -29,6 +29,7 @@ import {
   libraryHasTitle,
   findLibraryTitle,
   lookupPayloadForId,
+  overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
   normalizeMediaType,
   titleIdFor,
@@ -45,10 +46,12 @@ import { cmpVer, isBetaLine, isRollback, notesForVersion, pendingNotes } from ".
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
 import {
+  forgetRemovedKeys,
   forgetRemovedTitleIds,
   readRemovedTitleIds,
   rememberRemovedTitleIds,
   removeLibraryTitle,
+  removedIdsStillOnShelf,
 } from "./reelos-library-remove.mjs";
 import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
@@ -93,6 +96,12 @@ function persistLibraryCache() {
   }
 }
 
+function forgetRemovedIfStillOnShelf(titles) {
+  const still = removedIdsStillOnShelf(titles, readRemovedTitleIds());
+  if (!still.length) return;
+  forgetRemovedKeys(still);
+}
+
 let libraryRefresh = null;
 async function refreshLibraryFull(host) {
   if (libraryRefresh) return libraryRefresh;
@@ -104,8 +113,10 @@ async function refreshLibraryFull(host) {
     if (!pulled.ok) return;
     const data = pulled.json;
     const items = Array.isArray(data.Items) ? data.Items : [];
-    libraryCache.write(dedupeLibraryTitles(mapJellyfinItems(items, host)), { complete: true });
+    const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
+    libraryCache.write(titles, { complete: true });
     persistLibraryCache();
+    forgetRemovedIfStillOnShelf(titles);
   })()
     .catch(() => {})
     .finally(() => {
@@ -401,16 +412,21 @@ async function handleLookup(req, res) {
     if (!r.ok) {
       error = `seerr ${r.status}`;
       note(`seerr search ${r.status}`);
-      send(res, 200, { titles, error });
-      return;
+    } else {
+      const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
+      const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
+      titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned }));
+      note(`seerr hits=${hits.length} titles=${titles.length} discover=${discoverScope ? "yes" : "no"}`);
     }
-    const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned }));
-    note(`seerr hits=${hits.length} titles=${titles.length} discover=${discoverScope ? "yes" : "no"}`);
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
+  }
+  if (q.length >= 2) {
+    const overlaid = overlayLookupWithLibrary(titles, titlesForResolve(), q);
+    titles.length = 0;
+    titles.push(...overlaid);
+    if (titles.length) error = null;
   }
   send(res, 200, { titles, error });
 }
@@ -2145,6 +2161,7 @@ async function handleLibrary(req, res) {
       return pulled.json;
     },
     refresh: () => refreshLibraryFull(host),
+    onLiveTitles: forgetRemovedIfStillOnShelf,
   });
   persistLibraryCache();
   send(res, 200, { titles: result.titles, error: result.error });

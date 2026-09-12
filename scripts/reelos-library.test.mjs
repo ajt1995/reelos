@@ -570,6 +570,22 @@ test("full request serves a Home slice immediately and refreshes in the backgrou
   assert.ok(elapsed < 20, `stale serve took ${elapsed}ms`);
 });
 
+test("live Jellyfin fetch is not hidden by a stale Remove list", async () => {
+  const cache = createLibraryCache();
+  const out = await serveLibrary({
+    url: "/api/library",
+    host: "box.local",
+    now: 5,
+    cache,
+    removedIds: ["tmdb-550", "jf-abc"],
+    getAuth: async () => ({ token: "tok", id: "u" }),
+    fetchItems: async () => ({ Items: [sampleItem] }),
+  });
+  assert.equal(out.fromCache, false);
+  assert.equal(out.titles.length, 1);
+  assert.equal(out.titles[0].id, "tmdb-550");
+});
+
 test("plugin and Home wire the lean /api/library path", () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), "..");
   const plugin = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
