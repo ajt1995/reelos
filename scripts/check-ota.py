@@ -114,7 +114,8 @@ CONTRACTS = (
     ("scripts/reelos-ota-status.mjs", "shouldSplashLock"),
     ("src/components/applying-bar.tsx", "Updating ReelOS"),
     ("src/components/splash.tsx", "Updating ReelOS"),
-    ("src/components/splash.tsx", "Not a percent"),
+    ("src/components/splash.tsx", "/api/update/status"),
+    ("src/components/splash.tsx", "stalled"),
     ("src/components/splash.tsx", "/api/hardware"),
     ("src/components/splash.tsx", "Update failed, still on previous"),
     ("src/components/settings-panels.tsx", "This is what I detected"),
@@ -151,6 +152,10 @@ CONTRACTS = (
     ("daemon/reelos-update.sh", "channel-beta stub — keep looking"),
     ("scripts/reelos-lookup-plugin.mjs", "rollback"),
     ("scripts/reelos-lookup-plugin.mjs", "ui apply using local mailman"),
+    ("scripts/reelos-lookup-plugin.mjs", "/api/update/progress"),
+    ("scripts/reelos-ota-progress.mjs", "honestApplyProgress"),
+    ("daemon/reelos-update.sh", "apply-progress.json"),
+    ("daemon/reelos_apply_progress.py", "byte_percent"),
     ("src/components/settings-updates.tsx", "Roll back"),
 )
 
@@ -317,6 +322,7 @@ def main() -> int:
         ("daemon/reelos-ota-clean.sh", "install/bin/reelos-ota-clean.sh"),
         ("daemon/reelos_ota_clean.py", "install/bin/reelos_ota_clean.py"),
         ("daemon/reelos_os_tune.py", "install/bin/reelos_os_tune.py"),
+        ("daemon/reelos_apply_progress.py", "install/bin/reelos_apply_progress.py"),
     ):
         a, b = root / rel_a, root / rel_b
         if a.is_file() and b.is_file() and a.read_text() != b.read_text():

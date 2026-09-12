@@ -102,13 +102,19 @@ export function summaryFromProfile(profile = {}) {
   return `${ram} · ${cpu} · ${disk} · ${root}`;
 }
 
+export function diskTypeLabel(kind) {
+  const k = String(kind || "");
+  if (k === "rotational") return "spinning disk";
+  if (k === "ssd") return "SSD";
+  return "disk";
+}
+
 export function splashTuneFromProfile(profile = {}) {
-  if (profile.splashTune || profile.splash_tune) return String(profile.splashTune || profile.splash_tune);
   const tiny = Boolean(profile.tiny);
   const kind = String(profile.diskKind || profile.disk_kind || "");
-  if (tiny && kind === "rotational") return "Tuning for 4GB HDD…";
+  if (tiny && kind === "rotational") return "Tuning for 4GB RAM · spinning disk";
   if (tiny) return "Tuning for 4GB RAM…";
-  if (kind === "rotational") return "Tuning for HDD…";
+  if (kind === "rotational") return "Tuning for spinning disk…";
   return "";
 }
 
@@ -133,6 +139,7 @@ export function hardwareProfile({
   cpus = 1,
   diskKind = "unknown",
   diskFreeGb = 0,
+  diskSizeGb = 0,
   cpuModel = "",
   product = "",
   rootOnUsb = false,
@@ -151,6 +158,8 @@ export function hardwareProfile({
     disk_kind: kind,
     diskFreeGb: Number(diskFreeGb) || 0,
     disk_free_gb: Number(diskFreeGb) || 0,
+    diskSizeGb: Number(diskSizeGb) || 0,
+    disk_size_gb: Number(diskSizeGb) || 0,
     tiny,
     boxIsSmall: tiny,
     box_is_small: tiny,
@@ -258,16 +267,20 @@ export function publicHardware(saved, fallbackMemKb = 0) {
   if (saved && (saved.summary || saved.ram_kb || saved.ramKb)) {
     const tiny = Boolean(saved.tiny) || boxIsSmall(saved.ram_kb || saved.ramKb || memKb);
     const knobs = saved.knobs || {};
+    const diskKind = saved.disk_kind || saved.diskKind || "unknown";
     return {
       probed: Boolean(saved.probed_at || saved.probe_version),
       probeVersion: saved.probe_version || 0,
       probedAt: saved.probed_at || null,
       summary: saved.summary || summaryFromProfile(saved),
-      splashTune: knobs.splash_tune || saved.splash_tune || splashTuneFromProfile(saved),
+      splashTune: splashTuneFromProfile({ tiny, diskKind, disk_kind: diskKind }),
       ramGb: saved.ram_gb ?? saved.ramGb ?? ramGbFromKb(saved.ram_kb || saved.ramKb || 0),
       cpus: saved.cpus || 1,
       cpuModel: saved.cpu_model || saved.cpuModel || "",
-      diskKind: saved.disk_kind || saved.diskKind || "unknown",
+      diskKind,
+      diskTypeLabel: diskTypeLabel(diskKind),
+      diskSizeGb: Number(saved.disk_size_gb ?? saved.diskSizeGb) || 0,
+      diskFreeGb: Number(saved.disk_free_gb ?? saved.diskFreeGb) || 0,
       product: saved.product || "",
       rootOnUsb: Boolean(saved.root_on_usb || saved.rootOnUsb),
       tiny,
@@ -295,6 +308,9 @@ export function publicHardware(saved, fallbackMemKb = 0) {
     cpus: 1,
     cpuModel: "",
     diskKind: "unknown",
+    diskTypeLabel: "disk",
+    diskSizeGb: 0,
+    diskFreeGb: 0,
     product: "",
     rootOnUsb: false,
     tiny,

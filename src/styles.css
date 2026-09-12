@@ -194,6 +194,115 @@ img.poster {
   outline-offset: -1px;
 }
 
+/* title-page-layout */
+.title-page {
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+}
+
+.title-hero {
+  position: relative;
+  z-index: 0;
+  height: min(32vh, 220px);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.title-hero-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  object-fit: cover;
+  opacity: 0.4;
+}
+
+.title-hero-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--color-background) 0%,
+    rgb(11 13 16 / 0.72) 48%,
+    rgb(11 13 16 / 0.2) 100%
+  );
+}
+
+.title-body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 1.25rem;
+  max-width: 64rem;
+  margin: -4.5rem auto 0;
+  padding: 0 1.25rem;
+}
+
+.title-poster {
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+  width: min(180px, 42vw);
+  max-width: 180px;
+  min-width: 0;
+  contain: layout paint;
+}
+
+.title-copy {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-width: 0;
+  padding-top: 0.25rem;
+}
+
+@media (min-width: 768px) {
+  .title-hero {
+    height: min(38vh, 320px);
+  }
+
+  .title-body {
+    grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+    justify-items: stretch;
+    align-items: start;
+    gap: 2rem;
+    margin-top: -6rem;
+    padding: 0 2.5rem;
+  }
+
+  .title-poster {
+    width: 100%;
+    max-width: 200px;
+    justify-self: start;
+  }
+}
+
+@media (max-height: 500px) {
+  .title-hero {
+    height: min(28vh, 140px);
+  }
+
+  .title-body {
+    grid-template-columns: minmax(0, 112px) minmax(0, 1fr);
+    justify-items: stretch;
+    align-items: start;
+    gap: 1rem;
+    margin-top: -2.5rem;
+    padding: 0 1rem;
+  }
+
+  .title-poster {
+    width: 100%;
+    max-width: 112px;
+    justify-self: start;
+  }
+}
+/* /title-page-layout */
+
 .arena-on {
   --color-background: #000000;
   --color-raised: #07090c;

@@ -25,6 +25,18 @@ import { mergeShelf } from "./shelf";
 import { normalizeLibraryCatchup } from "./library-catchup";
 import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
+function watchProgressFromResume(rows: Array<{ id?: string; progress?: number }> | undefined | null) {
+  if (!Array.isArray(rows)) return null;
+  const out: Record<string, number> = {};
+  for (const t of rows) {
+    const id = String(t?.id || "").trim();
+    const p = Number(t?.progress);
+    if (!id || !Number.isFinite(p) || p <= 0.03 || p >= 0.96) continue;
+    out[id] = p;
+  }
+  return out;
+}
+
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
   selectedDisks: ["sda", "sdb"],
@@ -61,8 +73,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.50";
-export const SHIPPED_VERSION = "1.2.50.50";
+export const LATEST_VERSION = "1.2.50.51";
+export const SHIPPED_VERSION = "1.2.50.51";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -90,6 +102,7 @@ export type ReadyPayload = {
   update?: { running?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState };
   libraryCatchup?: LibraryCatchupState;
   titles?: Title[];
+  continueWatching?: Array<Title & { progress?: number }>;
   requests?: MediaRequest[];
   pipeline?: unknown;
   timings?: Record<string, number>;
@@ -97,6 +110,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.51: Post-50 rollup on gold chrome. Discover hides owned library (Home keeps On this box). Finished titles (Passengers) stay on Requests until Watch; existing request poll refreshes the JF shelf. Honest Apply splash percent (tarball/extract bytes or stage N of 7 + heartbeat — never a fake 99%). Splash copy is Tuning for 4GB RAM · spinning disk. Wizard stays 7 steps. Search people and collections. Title page More like this. Discover Not interested (no Google); Settings Reset curator preferences. Home Continue watching uses Jellyfin-synced play progress on the existing library fetch. Capped title poster, TV season chips and episode accordion. No Arena. Skip 49. Do not house-Apply until told. Prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.50: OTA includes a cleaner (orphan :8080, retired containers, ghost JF ids, OS tune, tmp leftovers) and a full-screen Updating ReelOS splash until the door accepts browse/request. Probe this computer (RAM, CPU, HDD vs SSD, USB root, kdump, zram), persist /var/lib/reelos/hardware-profile.json, and drive knobs from that profile — 1 FUSE and skip dump ffprobe on 4GB HDD. Settings shows what was detected; splash can say Tuning for 4GB HDD…. Knaben/TorrentsCSV SeasonSearch. Arena+Books sit behind Settings Beta (default off) — no second 2.0.0 Apply. Library catch-up stays a banner — Request still works. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE + skip-nanosecond); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -253,7 +267,7 @@ export interface ReelState {
   removeIndexer: (id: string) => void;
   pasteRelease: (titleId: string, raw: string) => boolean;
   rememberTitles: (titles: Title[]) => void;
-  hydrateShelf: (opts?: { limit?: number }) => void;
+  hydrateShelf: (opts?: { limit?: number; force?: boolean; fresh?: boolean }) => void;
   dropLibraryTitle: (titleId: string, extraIds?: string[]) => void;
 }
 
@@ -505,8 +519,10 @@ export const useReelStore = create<ReelState>()(
         const provisioned = Boolean(ready?.provisioned);
         const incoming = ready?.answers && typeof ready.answers === "object" ? ready.answers : null;
         const titles = Array.isArray(ready?.titles) ? ready.titles : [];
+        const resume = Array.isArray(ready?.continueWatching) ? ready.continueWatching : [];
         const live = Array.isArray(ready?.requests) ? ready.requests : [];
         if (titles.length) rememberCatalogTitles(titles);
+        if (resume.length) rememberCatalogTitles(resume);
         set((s) => {
           const { adminPassword: _omitPassword, ...safeIncoming } = (incoming || {}) as WizardAnswers & {
             adminPassword?: string;
@@ -520,6 +536,7 @@ export const useReelStore = create<ReelState>()(
           const library = [...new Set(shelf.map((t) => t.id))];
           const libraryOk = Array.isArray(ready?.titles);
           const requestsOk = Array.isArray(ready?.requests);
+          const syncedWatch = watchProgressFromResume(ready?.continueWatching);
           return {
             answers,
             shelf,
@@ -528,6 +545,7 @@ export const useReelStore = create<ReelState>()(
             library,
             requests,
             requestsSeeded: requestsOk || s.requestsSeeded,
+            ...(syncedWatch ? { watchProgress: syncedWatch } : {}),
             bootSteps: {
               ...s.bootSteps,
               local: "ok" as const,
@@ -949,28 +967,40 @@ export const useReelStore = create<ReelState>()(
         set({ shelf: overlay.shelf, library: overlay.library, requests: overlay.requests });
       },
       hydrateShelf: (opts) => {
-        if (get().shelfReady) return;
         const limit = opts?.limit;
-        const key = limit ? `n${limit}` : "all";
+        const force = Boolean(opts?.force);
+        const fresh = Boolean(opts?.fresh) || force;
+        if (!force && get().shelfReady) return;
+        const key = `${force ? "f" : ""}${limit ? `n${limit}` : "all"}`;
         if (shelfFetches.has(key)) return;
-        const qs = limit ? `?limit=${encodeURIComponent(String(limit))}` : "";
+        const q = new URLSearchParams();
+        if (limit) q.set("limit", String(limit));
+        if (fresh) q.set("fresh", "1");
+        const qs = q.toString() ? `?${q.toString()}` : "";
         const p = fetch(`/api/library${qs}`, { cache: "no-store" })
-          .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string | null }>)
+          .then((r) => r.json() as Promise<{
+            titles?: Title[];
+            continueWatching?: Array<Title & { progress?: number }>;
+            error?: string | null;
+          }>)
           .then((j) => {
             const titles = Array.isArray(j.titles) ? j.titles : [];
-            rememberCatalogTitles(titles);
+            const resume = Array.isArray(j.continueWatching) ? j.continueWatching : [];
+            rememberCatalogTitles([...titles, ...resume]);
             const cur = get();
             const shelf = mergeShelf(cur.shelf, titles, Boolean(limit));
             const library = [...new Set(shelf.map((t) => t.id))];
             const requests = overlayLibraryPresence(cur.requests, {
               titles: shelf,
             });
+            const syncedWatch = watchProgressFromResume(j.continueWatching);
             set({
               shelf,
               shelfError: j.error || null,
               shelfReady: true,
               library,
               requests,
+              ...(syncedWatch ? { watchProgress: syncedWatch } : {}),
             });
           })
           .catch((e) => set({ shelfError: String(e), shelfReady: true }))

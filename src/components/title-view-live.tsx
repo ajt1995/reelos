@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
+import { Row, TitleCard } from "@/components/title-card";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
 import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
@@ -20,6 +21,7 @@ import {
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
+import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
 
 function looksLikeHashTitle(name?: string) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
@@ -44,7 +46,7 @@ export function TitleView({ id }: { id: string }) {
   const [detail, setDetail] = useState<Title | null>(null);
   const [seasonErr, setSeasonErr] = useState<string | null>(null);
   const [seasonsLoading, setSeasonsLoading] = useState(true);
-  const [lookupKey, setLookupKey] = useState(0);
+  const [similar, setSimilar] = useState<Title[]>([]);
   const raw = detail ?? title;
   const hashName = looksLikeHashTitle(raw?.title);
   const resolved = hashName
@@ -61,6 +63,7 @@ export function TitleView({ id }: { id: string }) {
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
+  const [removedHere, setRemovedHere] = useState(false);
   const request = useReelStore((s) => {
     const keys = new Set(extraIds);
     const moviePage = resolved?.kind === "movie" || (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-") && !id.startsWith("tvdb-"));
@@ -126,7 +129,29 @@ export function TitleView({ id }: { id: string }) {
     };
   }, [id, rememberTitles, lookupKey]);
 
-  const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
+  useEffect(() => {
+    let stop = false;
+    const ac = new AbortController();
+    setSimilar([]);
+    void fetch(`/api/similar?id=${encodeURIComponent(id)}`, { cache: "no-store", signal: ac.signal })
+      .then((r) => r.json() as Promise<{ titles?: Title[] }>)
+      .then((j) => {
+        if (stop) return;
+        const titles = Array.isArray(j.titles) ? j.titles : [];
+        rememberCatalogTitles(titles);
+        rememberTitles?.(titles);
+        setSimilar(titles);
+      })
+      .catch(() => {
+        if (!stop) setSimilar([]);
+      });
+    return () => {
+      stop = true;
+      ac.abort();
+    };
+  }, [id, rememberTitles]);
+
+  const sendRequest = (payload: { titleId: string; season?: number; episode?: number; hash?: string }) => {
     setReqErr(null);
     const titleId = payload.titleId;
     const mediaType = requestMediaTypeForPage(id, resolved?.kind);
@@ -147,6 +172,7 @@ export function TitleView({ id }: { id: string }) {
         mediaType,
         tmdb,
         season: payload.season,
+        episode: payload.episode,
         hash: payload.hash,
       }),
     })
@@ -178,13 +204,9 @@ export function TitleView({ id }: { id: string }) {
   });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
   const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
-  const thisSeasonOnBox =
-    !series ||
-    diskSeasons.includes(season) ||
-    request?.status === "available" ||
-    engineStatus === "downloaded" ||
-    engineStatus === "available";
+  const thisSeasonOnBox = !removedHere && (!series || diskSeasons.includes(season));
   // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
+  // Seerr AVAILABLE / engine downloaded is not S05·in.
   const onBox = series ? thisSeasonOnBox : inJellyfin || inLibrary;
   const available = onBox;
   const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
@@ -197,18 +219,18 @@ export function TitleView({ id }: { id: string }) {
     (resolved.kind === "tv" && !intent.tv);
 
   return (
-    <div className="pb-16">
-      <div className="relative min-h-[280px] overflow-hidden md:min-h-[360px]">
+    <div className="title-page pb-16">
+      <div className="title-hero" aria-hidden="true">
         <img
           src={resolved.poster}
           alt=""
-          className="absolute inset-0 size-full object-cover opacity-40 kenburns"
+          className="title-hero-art kenburns"
         />
-        <div className="absolute inset-0 bg-linear-to-t from-background via-background/70 to-background/20" />
+        <div className="title-hero-fade" />
       </div>
-      <div className="relative z-10 mx-auto -mt-40 grid max-w-5xl gap-8 px-5 md:-mt-48 md:grid-cols-[200px_1fr] md:px-10">
-        <Poster title={resolved} className="mx-auto w-[180px] rounded-2xl md:w-auto" />
-        <div className="pt-2">
+      <div className="title-body">
+        <Poster title={resolved} className="title-poster rounded-2xl" />
+        <div className="title-copy">
           <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">
@@ -220,57 +242,41 @@ export function TitleView({ id }: { id: string }) {
             {resolved.director ? ` · ${resolved.director}` : null}
           </p>
           <p className="mt-2 text-xs text-faint">{(resolved.genres ?? []).join(" · ")}</p>
+          {resolved.kind === "movie" && resolved.collection?.id && resolved.collection.name ? (
+            <Link
+              to="/collection/$id"
+              params={{ id: String(resolved.collection.id) }}
+              className="mt-3 inline-flex text-sm text-gold"
+            >
+              Collection · {resolved.collection.name}
+            </Link>
+          ) : null}
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
-          {!available && !blocked && !request ? (
+          {(series && !onBox && !blocked && !request) || (!series && !available && !blocked && !request) ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}
 
-          {series && !onBox ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {seasonNumbers.length === 0 && seasonsLoading ? (
-                <p className="text-sm text-muted">Loading seasons from Seerr…</p>
-              ) : seasonNumbers.length === 0 ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <p className="text-sm text-danger">{seasonErr || "Could not load seasons from Seerr."}</p>
-                  <Button variant="ghost" size="lg" onClick={() => setLookupKey((n) => n + 1)}>
-                    Retry
-                  </Button>
-                </div>
-              ) : (
-                seasonNumbers.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setSeason(n)}
-                    className={
-                      season === n
-                        ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
-                        : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
-                    }
-                  >
-                    Season {n}
-                    {diskSeasons.includes(n) ? " · in" : ""}
-                  </button>
-                ))
-              )}
-            </div>
-          ) : series && seasonNumbers.length ? (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {seasonNumbers.map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSeason(n)}
-                  className={
-                    season === n
-                      ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
-                      : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
-                  }
-                >
-                  Season {n}
-                  {diskSeasons.includes(n) ? " · in" : ""}
-                </button>
-              ))}
+          {series ? (
+            <div className="mt-5">
+              <SeasonEpisodeAccordion
+                seasonNumbers={seasonNumbers}
+                selectedSeason={season}
+                onSelectSeason={setSeason}
+                diskSeasons={diskSeasons}
+                titleId={requestTitleId}
+                seasonsLoading={seasonsLoading}
+                seasonErr={seasonErr}
+                onRetrySeasons={() => setLookupKey((n) => n + 1)}
+                blocked={blocked}
+                removedHere={removedHere}
+                onRequestSeason={(n) => {
+                  requestTitle(requestTitleId, n);
+                  sendRequest({ titleId: requestTitleId, season: n });
+                }}
+                onRequestEpisode={(n, episode) => {
+                  sendRequest({ titleId: requestTitleId, season: n, episode });
+                }}
+              />
             </div>
           ) : null}
 
@@ -299,7 +305,7 @@ export function TitleView({ id }: { id: string }) {
                 In library
               </span>
             ) : null}
-            {available ? <RemoveFromBox title={resolved} /> : null}
+            {available ? <RemoveFromBox title={resolved} onRemoved={() => setRemovedHere(true)} /> : null}
             {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
@@ -401,6 +407,15 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
         </div>
       </div>
+      {similar.length ? (
+        <div className="mx-auto max-w-5xl px-5 md:px-10">
+          <Row label="More like this">
+            {similar.map((t) => (
+              <TitleCard key={t.id} title={t} />
+            ))}
+          </Row>
+        </div>
+      ) : null}
     </div>
   );
 }

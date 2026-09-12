@@ -15,6 +15,9 @@ import {
   libraryHasTitle,
   onDiskSeasonsFor,
   titleIdFor,
+  titleRequestSeasonPayload,
+  findLibraryTitle,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import {
@@ -128,7 +131,7 @@ export async function collectRequestList() {
     const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
     return {
       requests: filled.rows,
-      titles: filled.titles,
+      titles: mergeRequestListTitles(filled.titles, facts),
       engine: "seerr",
       pipeline: assembled.pipeline,
     };
@@ -166,15 +169,23 @@ async function handleGet(req, res) {
   }
   if (!parsed?.tmdb) {
     const titles = facts?.libraryTitles || fileTitles;
-    if (libraryHasTitle(titles, id)) {
-      send(res, 200, {
-        status: "downloaded",
-        engine: "seerr",
-        titleId: id,
-        progress: 100,
-        requestStatus: "available",
-        reason: "On this box",
-      });
+    const lib = findLibraryTitle(titles, id);
+    const seasonRaw = u.searchParams.get("season");
+    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
+    if (lib || libraryHasTitle(titles, id)) {
+      send(
+        res,
+        200,
+        titleRequestSeasonPayload({
+          id,
+          season,
+          parsed,
+          facts: facts || { arrIndex: null },
+          libraryTitles: titles,
+          honest: { titleId: id, status: "unknown", engine: "unknown" },
+          title: lib,
+        }),
+      );
       return;
     }
     send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
@@ -213,18 +224,19 @@ async function handleGet(req, res) {
       engine: seasonOnDisk ? "downloaded" : honest.engine,
       titleId: mapped.titleId,
     });
-    send(res, 200, {
-      status: seasonOnDisk ? "downloaded" : honest.engine || "unknown",
-      engine: "seerr",
-      title: title?.title,
-      titleId: mapped.titleId,
-      seasons: title?.seasons,
-      seasonList: title?.seasonList,
-      onDiskSeasons: diskSeasons,
-      progress: seasonOnDisk || honest.status === "available" ? 100 : honest.progress,
-      reason: seasonOnDisk ? undefined : honest.reason,
-      requestStatus: seasonOnDisk ? "available" : honest.status,
-    });
+    send(
+      res,
+      200,
+      titleRequestSeasonPayload({
+        id,
+        season,
+        parsed,
+        facts,
+        libraryTitles: facts.libraryTitles || fileTitles,
+        honest,
+        title,
+      }),
+    );
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });
   }

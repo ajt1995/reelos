@@ -36,6 +36,7 @@ FIXTURE_TINY_4GB = {
     "cpus": 4,
     "disk_kind": "rotational",
     "disk_free_gb": 410.0,
+    "disk_size_gb": 500.0,
     "cpu_model": "Intel(R) Pentium(R) CPU N3710 @ 1.60GHz",
     "product": "HP Laptop 15-bs0xx",
     "root_on_usb": False,
@@ -384,6 +385,24 @@ def disk_free_gb(path: str = "/") -> float:
         return 0.0
 
 
+def disk_size_gb_from_devices(devices: list | None) -> float:
+    best = 0
+    for d in devices or []:
+        try:
+            n = int(d.get("size") or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > best:
+            best = n
+    if best > 0:
+        return round(best / (1024**3), 0)
+    try:
+        u = shutil.disk_usage("/")
+        return round(u.total / (1024**3), 0)
+    except OSError:
+        return 0.0
+
+
 def direct_map_kb(text: str | None = None) -> int:
     """Kernel DirectMap* is mapped physical RAM (DIMMs), not a cgroup view."""
     raw = text
@@ -548,6 +567,7 @@ def measure(*, meminfo: str | None = None, nproc_text: str | None = None, root: 
         kdump_reserved_kb=kdump,
         swap=swap,
         block_devices=devices,
+        disk_size_gb=disk_size_gb_from_devices(devices),
     )
 
 
@@ -564,11 +584,11 @@ def splash_tune_line(profile: dict) -> str:
     tiny = bool(profile.get("tiny"))
     kind = str(profile.get("disk_kind") or "")
     if tiny and kind == "rotational":
-        return "Tuning for 4GB HDD…"
+        return "Tuning for 4GB RAM · spinning disk"
     if tiny:
         return "Tuning for 4GB RAM…"
     if kind == "rotational":
-        return "Tuning for HDD…"
+        return "Tuning for spinning disk…"
     return ""
 
 
@@ -578,6 +598,7 @@ def profile_from_facts(
     cpus: int,
     disk_kind: str = "unknown",
     disk_free_gb: float = 0.0,
+    disk_size_gb: float = 0.0,
     ram_source: str = "memtotal",
     visible_kb: int | None = None,
     physical_kb: int | None = None,
@@ -602,6 +623,7 @@ def profile_from_facts(
         "cpus": max(1, int(cpus or 1)),
         "disk_kind": disk_kind if disk_kind in {"ssd", "rotational", "unknown"} else "unknown",
         "disk_free_gb": float(disk_free_gb or 0),
+        "disk_size_gb": float(disk_size_gb or 0) or disk_size_gb_from_devices(block_devices),
         "tiny": tiny,
         "box_is_small": tiny,
         "ram_source": ram_source if ram_source in {"memtotal", "cgroup-hidden"} else "memtotal",
@@ -1028,7 +1050,7 @@ def _self_test() -> int:
     assert hp["tiny"] is True
     assert hp["not_a_pi"] is True
     assert hp["summary"] == "4Gi RAM · 4c Pentium N3710 · HDD · root-on-internal"
-    assert hp["splash_tune"] == "Tuning for 4GB HDD…"
+    assert hp["splash_tune"] == "Tuning for 4GB RAM · spinning disk"
     hl = limits_for(hp)
     assert hl["fuse_count"] == 1
     assert hl["skip_dump_ffprobe"] is True

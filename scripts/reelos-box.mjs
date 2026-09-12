@@ -102,8 +102,10 @@ function wantsHtml(req) {
 
 export async function dispatchBoxApi(req, res) {
   const { dispatchRequestGet } = await import("./reelos-request-progress-plugin.mjs");
+  const { dispatchEpisodes } = await import("./reelos-episodes-plugin.mjs");
   const { dispatchReelOsApi } = await import("./reelos-lookup-plugin.mjs");
   if (await dispatchRequestGet(req, res)) return true;
+  if (await dispatchEpisodes(req, res)) return true;
   if (await dispatchReelOsApi(req, res)) return true;
   return false;
 }

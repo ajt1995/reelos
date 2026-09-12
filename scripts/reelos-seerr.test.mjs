@@ -28,6 +28,8 @@ import {
   normalizeMediaType,
   seerrAvailableIsGhost,
   seerrAlreadyHave,
+  discoverOwnedIndex,
+  discoverTitleIsOwned,
   seerrMediaGhostRows,
   parseTitleId,
   realSeasonNumbers,
@@ -35,6 +37,9 @@ import {
   seerrRequestRow,
   seerrSearchHit,
   simulateLookupAndRequest,
+  mapSeerrPersonHits,
+  mapSeerrCollectionHits,
+  mapSeerrPersonDetail,
   titleIdFor,
   tmdbPoster,
   tvSeasonsForRequest,
@@ -47,8 +52,13 @@ import {
   libraryHasTitle,
   findLibraryTitle,
   lookupPayloadForId,
+  overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
   onDiskSeasonsFor,
+  expandTvSeasonRows,
+  decorateTitlesWithDiskSeasons,
+  titleRequestSeasonPayload,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -405,7 +415,7 @@ test("Sonarr season hasFile upgrades that season only", () => {
   assert.equal(honest.find((r) => r.season === 2)?.progress, 0);
 });
 
-test("whole-series grabbing row upgrades when Sonarr has any season files", () => {
+test("whole-series grabbing row expands so mixed seasons stay mixed", () => {
   const row = seerrRequestRow(
     {
       id: 11,
@@ -413,17 +423,108 @@ test("whole-series grabbing row upgrades when Sonarr has any season files", () =
       status: 2,
       createdAt: "2026-09-09T00:00:00.000Z",
       updatedAt: "2026-09-09T00:00:00.000Z",
-      media: { tmdbId: 1408, status: 3 },
+      seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
+      media: { tmdbId: 1408, status: 4 },
     },
     {},
   );
   assert.equal(row.season, undefined);
+  assert.deepEqual(row.requestedSeasons, [1, 2]);
   const arrIndex = buildArrIndex({
-    series: [{ tmdbId: 1408, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 13 } }] }],
+    series: [
+      {
+        tmdbId: 1408,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+          { seasonNumber: 2, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
   });
-  const honest = honestifyRequests([row], { arrIndex, arrReady: true });
+  const honest = honestifyRequests([row], {
+    arrIndex,
+    arrReady: true,
+    series: [
+      {
+        tmdbId: 1408,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+          { seasonNumber: 2, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
+  });
+  assert.equal(honest.find((r) => r.season === 1)?.status, "available");
+  assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
+  assert.equal(honest.find((r) => r.season == null), undefined);
+});
+
+test("all on-disk seasons hide a whole-show Request row", () => {
+  const row = seerrRequestRow(
+    {
+      id: 12,
+      type: "tv",
+      status: 2,
+      createdAt: "2026-09-09T00:00:00.000Z",
+      updatedAt: "2026-09-09T00:00:00.000Z",
+      seasons: [{ seasonNumber: 1 }, { seasonNumber: 2 }],
+      media: { tmdbId: 1408, status: 4 },
+    },
+    {},
+  );
+  const series = {
+    tmdbId: 1408,
+    tvdbId: 81189,
+    seasons: [
+      { seasonNumber: 1, statistics: { episodeFileCount: 13 } },
+      { seasonNumber: 2, statistics: { episodeFileCount: 13 } },
+    ],
+  };
+  const honest = honestifyRequests([row], {
+    arrIndex: buildArrIndex({ series: [series] }),
+    arrReady: true,
+    series: [series],
+  });
+  assert.equal(honest.length, 1);
   assert.equal(honest[0].status, "available");
-  assert.equal(honest[0].progress, 100);
+});
+
+test("Rick title chips do not fake S05/S09 in from series-in-library", () => {
+  const index = buildArrIndex({
+    series: [
+      {
+        tmdbId: 60625,
+        tvdbId: 275274,
+        seasons: [
+          { seasonNumber: 2, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 3, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 4, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 5, statistics: { episodeFileCount: 0 } },
+          { seasonNumber: 6, statistics: { episodeFileCount: 10 } },
+          { seasonNumber: 9, statistics: { episodeFileCount: 0 } },
+        ],
+      },
+    ],
+  });
+  const parsed = { mediaType: "tv", tmdb: "60625", tvdb: "275274", titleId: "tmdb-tv-60625" };
+  assert.deepEqual(onDiskSeasonsFor(parsed, index), [2, 3, 4, 6]);
+  const s5 = titleRequestSeasonPayload({
+    id: "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    season: 5,
+    parsed,
+    facts: { arrIndex: index },
+    honest: { engine: "downloaded", status: "available", titleId: "tmdb-tv-60625", progress: 100 },
+    title: { title: "Rick and Morty", seasonList: [1, 2, 3, 4, 5, 6, 7, 8, 9] },
+  });
+  assert.equal(s5.status === "downloaded" || s5.requestStatus === "available", false);
+  assert.equal(s5.onDiskSeasons.includes(5), false);
+  assert.equal(s5.onDiskSeasons.includes(9), false);
+  assert.ok(s5.onDiskSeasons.includes(4));
+  const titles = decorateTitlesWithDiskSeasons(
+    [{ id: "tmdb-tv-60625", kind: "tv", ids: ["tmdb-tv-60625", "tvdb-275274"] }],
+    { arrIndex: index, series: [{ tmdbId: 60625, tvdbId: 275274, seasons: [{ seasonNumber: 5 }, { seasonNumber: 4 }] }] },
+  );
+  assert.deepEqual(titles[0].onDiskSeasons, [2, 3, 4, 6]);
 });
 
 test("duplicate Seerr rows for the same title+season collapse when one is done", () => {
@@ -1110,12 +1211,16 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(lookup, /resolveParsedTitle/);
   assert.match(readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8"), /Could not map that title to TMDB/);
   const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  const accordion = readFileSync(join(root, "src/components/season-episode-accordion.tsx"), "utf8");
   assert.match(progress, /onDiskSeasons/);
   assert.match(lookup, /bodyType/);
   assert.match(titleView, /showHashAdapter/);
   assert.match(titleView, /requestTitleIdForPage/);
   assert.match(titleView, />\s*Watch\s*</);
-  assert.match(titleView, /Could not load seasons from Seerr/);
+  assert.match(accordion, /· Watch/);
+  assert.match(accordion, /· Request/);
+  assert.doesNotMatch(titleView, /· in/);
+  assert.match(accordion, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
   assert.match(titleView, /Series-in-Jellyfin is not this season/);
   assert.match(titleView, /series \? thisSeasonOnBox : inJellyfin \|\| inLibrary/);
@@ -1148,11 +1253,16 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(progress, /ms: 4000/);
   assert.match(progress, /spawnWireImport/);
   assert.match(progress, /maybeImportAvailable/);
+  assert.match(progress, /mergeRequestListTitles/);
+  assert.match(lookup, /mergeRequestListTitles/);
+  assert.match(seerr, /mergeRequestListTitles/);
+  assert.match(requestsView, /tvSeasonChips/);
   assert.match(lookup, /scheduleBoxProbe/);
   assert.match(sync, /\/api\/request\?recover=1/);
   assert.doesNotMatch(sync, /recoveredOnce/);
   assert.match(requestsView, /requestShowsRetry/);
-  assert.match(progress, /honest\.reason/);
+  assert.match(progress, /titleRequestSeasonPayload/);
+  assert.match(seerr, /honest\?\.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);
@@ -1343,6 +1453,45 @@ test("Discover browse drops titles this box already has", () => {
   assert.equal(seerrAlreadyHave({ mediaInfo: { status: 1 } }), false);
 });
 
+test("Discover pick tonight has no John Wick if it is on Home", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  const hits = [
+    { id: 245891, mediaType: "movie", title: "John Wick", releaseDate: "2014-10-24" },
+    { id: 2059, mediaType: "movie", title: "National Treasure", releaseDate: "2004-11-19" },
+    { id: 550, mediaType: "movie", title: "Fight Club", releaseDate: "1999-10-15" },
+  ];
+  const home = [
+    {
+      id: "jf-wick",
+      kind: "movie",
+      title: "John Wick",
+      year: 2014,
+      ids: ["jf-wick"],
+      jellyfinId: "wick",
+    },
+    {
+      id: "tmdb-2059",
+      kind: "movie",
+      title: "National Treasure",
+      year: 2004,
+      ids: ["tmdb-2059"],
+      jellyfinId: "nt",
+    },
+  ];
+  const owned = discoverOwnedIndex(home);
+  assert.equal(discoverTitleIsOwned({ id: "tmdb-245891", title: "John Wick", year: 2014, kind: "movie" }, owned), true);
+  const picks = mapSeerrDiscoverResults(hits, { mediaType: "movie", excludeIds: owned, now });
+  assert.deepEqual(
+    picks.map((t) => t.id),
+    ["tmdb-550"],
+  );
+  const search = mapSeerrSearchResults(hits, { q: "john", excludeOwned: owned });
+  assert.equal(
+    search.some((t) => /john wick$/i.test(t.title) && t.year === 2014),
+    false,
+  );
+});
+
 test("AbortError / timeout is a retryable lookup error, not an empty shelf", () => {
   const abort = new Error("The operation was aborted");
   abort.name = "AbortError";
@@ -1371,20 +1520,40 @@ test("Discover pick tonight drops unreleased 2026 junk", () => {
   );
 });
 
-test("Discover has on this box / finishing / pick tonight; POST never sends seasons=all", () => {
+test("Discover is finishing / pick tonight — library stays on Home", () => {
   const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
+  const home = readFileSync(join(root, "src/components/home-view.tsx"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
   const ping = readFileSync(join(root, "scripts/wizard-honesty.mjs"), "utf8");
   const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
-  assert.match(discover, /On this box/);
+  assert.doesNotMatch(discover, /label="On this box"/);
+  assert.match(discover, /Titles on this box live on Home/);
   assert.match(discover, /Finishing/);
   assert.match(discover, /Pick tonight/);
+  assert.match(discover, /filterDiscoverCatalog/);
+  assert.match(discover, /scope=discover/);
+  assert.match(discover, /Titles on this box live on Home/);
   assert.match(discover, /collapseHomeRequestCards/);
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
   assert.match(discover, /\/api\/discover/);
+  assert.match(home, /On this box/);
+  assert.match(lookup, /overlayLookupWithLibrary/);
+  assert.match(discover, /onHide/);
+  assert.match(discover, /\/api\/curator/);
+  assert.match(readFileSync(join(root, "src/components/title-card.tsx"), "utf8"), /Not interested/);
+  assert.match(discover, /People/);
+  assert.match(discover, /Collections/);
+  assert.match(title, /More like this/);
+  assert.match(title, /\/api\/similar/);
+  assert.match(lookup, /\/api\/curator/);
+  assert.match(lookup, /\/api\/similar/);
+  assert.match(lookup, /\/api\/person/);
+  assert.match(lookup, /\/api\/collection/);
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
+  assert.match(lookup, /discoverOwnedIndex/);
+  assert.match(lookup, /searchParams.get\("scope"\)/);
   assert.match(lookup, /\/api\/discover/);
   assert.match(lookup, /discover\/movies\?page=/);
   assert.match(ping, /"User-Agent": "ReelOS"/);
@@ -1393,6 +1562,42 @@ test("Discover has on this box / finishing / pick tonight; POST never sends seas
   assert.match(lookup, /ms: 45000/);
   assert.doesNotMatch(lookup, /seasons = .*["']all["']/);
   assert.match(title, /season: series \? season/);
+  assert.match(home, /On this box/);
+});
+
+test("search overlay attaches JF Watch and keeps a JF-only name", () => {
+  const passengers = {
+    id: "tmdb-274870",
+    kind: "movie",
+    title: "Passengers",
+    year: 2016,
+    ids: ["tmdb-274870"],
+  };
+  const jfPassengers = {
+    id: "tmdb-274870",
+    kind: "movie",
+    title: "Passengers",
+    year: 2016,
+    ids: ["tmdb-274870", "jf-de7507144367"],
+    jellyfinId: "de7507144367fccb43412273ba23ab8a",
+  };
+  const jfOnly = {
+    id: "jf-abc",
+    kind: "movie",
+    title: "House Cut",
+    year: 1999,
+    ids: ["jf-abc"],
+    jellyfinId: "abc",
+  };
+  const overlaid = overlayLookupWithLibrary([passengers], [jfPassengers, jfOnly], "Passengers");
+  assert.equal(overlaid[0].id, "tmdb-274870");
+  assert.equal(overlaid[0].jellyfinId, "de7507144367fccb43412273ba23ab8a");
+  assert.equal(overlaid[0].inLibrary, true);
+  const only = overlayLookupWithLibrary([], [jfOnly], "house cut");
+  assert.equal(only.length, 1);
+  assert.equal(only[0].id, "jf-abc");
+  const empty = overlayLookupWithLibrary([], [jfOnly], "passengers");
+  assert.deepEqual(empty, []);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {
@@ -1442,4 +1647,50 @@ test("attachSeerrDetailTitles names National Treasure from Seerr movie detail", 
   assert.equal(calls.length, 1);
   assert.equal(again.rows[0].title, "National Treasure");
 });
+
+test("search maps people and collections without turning them into movies", () => {
+  const hits = [
+    { id: 6384, mediaType: "person", name: "Keanu Reeves", knownForDepartment: "Acting", profilePath: "/k.jpg" },
+    { id: 404609, mediaType: "collection", name: "John Wick Collection", posterPath: "/c.jpg" },
+    { id: 324552, mediaType: "movie", title: "John Wick: Chapter 2", releaseDate: "2017-02-08" },
+  ];
+  const people = mapSeerrPersonHits(hits);
+  const collections = mapSeerrCollectionHits(hits);
+  const titles = mapSeerrSearchResults(hits, { q: "john wick" });
+  assert.equal(people[0].tmdbId, 6384);
+  assert.equal(people[0].name, "Keanu Reeves");
+  assert.equal(collections[0].tmdbId, 404609);
+  assert.deepEqual(
+    titles.map((t) => t.id),
+    ["tmdb-324552"],
+  );
+  assert.equal(normalizeMediaType("person"), null);
+  assert.equal(normalizeMediaType("collection"), null);
+});
+
+test("person credits keep owned library titles even if Discover hid them", () => {
+  const person = mapSeerrPersonDetail(
+    {
+      id: 6384,
+      name: "Keanu Reeves",
+      combinedCredits: {
+        cast: [
+          { id: 245891, title: "John Wick", releaseDate: "2014-10-24", mediaType: "movie" },
+          { id: 550, title: "Fight Club", releaseDate: "1999-10-15", mediaType: "movie" },
+        ],
+      },
+    },
+    {
+      libraryTitles: [{ id: "tmdb-245891", title: "John Wick", year: 2014, kind: "movie", jellyfinId: "wick" }],
+      excludeHidden: { hidden: ["tmdb-245891", "tmdb-550"] },
+    },
+  );
+  assert.deepEqual(
+    person.credits.map((t) => t.id),
+    ["tmdb-245891"],
+    "John Wick stays on the actor page because it is on this box",
+  );
+  assert.equal(person.credits[0].inLibrary, true);
+});
+
 
