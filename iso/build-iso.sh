@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-shot: download Ubuntu 26.04.1 LTS live-server, pack ReelOS, remaster.
-# Output: /opt/cursor/artifacts/reelos-ubuntu.iso (not committed).
+# Output: /tmp/iso-build/reelos-ubuntu.iso (not committed; too big for artifacts).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 UBUNTU_VER="${UBUNTU_VER:-26.04.1}"
@@ -9,7 +9,7 @@ UBUNTU_URL="${UBUNTU_URL:-https://releases.ubuntu.com/26.04/${UBUNTU_ISO_NAME}}"
 WORK="${WORK:-/tmp/iso-build}"
 SRC="${SRC:-$WORK/$UBUNTU_ISO_NAME}"
 ART="${ART:-/opt/cursor/artifacts}"
-OUT="${OUT:-$ART/reelos-ubuntu.iso}"
+OUT="${OUT:-/tmp/iso-build/reelos-ubuntu.iso}"
 
 mkdir -p "$WORK" "$ART"
 

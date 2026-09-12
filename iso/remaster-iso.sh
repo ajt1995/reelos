@@ -13,8 +13,10 @@ if [ -z "$XORRISO" ]; then
 fi
 SRC="${SRC:-/tmp/iso-build/ubuntu-26.04.1-live-server-amd64.iso}"
 ART="${ART:-/opt/cursor/artifacts}"
-mkdir -p "$ART" "$ROOT/public/install"
-OUT="${OUT:-$ART/reelos-ubuntu.iso}"
+mkdir -p "$ART" "$ROOT/public/install" /tmp/iso-build
+# Artifacts FUSE caps ~100MiB/file with fsync; GitHub releases cap 2G.
+# The 2.8G ISO stays on the build disk.
+OUT="${OUT:-/tmp/iso-build/reelos-ubuntu.iso}"
 WORK="${WORK:-/tmp/iso-build/reelos-overlay}"
 
 if [ ! -f "$SRC" ]; then
@@ -86,6 +88,27 @@ rm -f "$OUT"
   -map /tmp/iso-build/extract/grub.cfg /boot/grub/grub.cfg \
   -map /tmp/iso-build/extract/loopback.cfg /boot/grub/loopback.cfg \
   -commit
-ln -sfn "$OUT" "$ROOT/public/install/reelos-1.2.iso" 2>/dev/null || cp -f "$OUT" "$ROOT/public/install/reelos-1.2.iso"
+cp -f "$OUT" "$ROOT/public/install/reelos-1.2.iso"
+SUM=$(sha256sum "$OUT" | awk '{print $1}')
+SIZE=$(du -h "$OUT" | awk '{print $1}')
+{
+  echo "ReelOS Ubuntu install ISO"
+  echo "path: $OUT"
+  echo "also: $ROOT/public/install/reelos-1.2.iso"
+  echo "sha256: $SUM"
+  echo "size: $SIZE"
+  echo "This file is ~2.8G (Ubuntu live-server). Cursor artifacts cap a single"
+  echo "file around 100MiB, GitHub release assets cap at 2G, so the ISO is not"
+  echo "uploaded. Bake it with: bash iso/build-iso.sh"
+  echo "Flash: sudo dd if=$OUT of=/dev/sdX bs=4M status=progress conv=fsync"
+} > "$ART/reelos-ubuntu.iso.txt"
+sha256sum "$OUT" > "$ART/reelos-ubuntu.iso.sha256"
+if [ -f /tmp/reelos-pack/cidata/reelos-bundle.tar.gz ]; then
+  cp -f /tmp/reelos-pack/cidata/reelos-bundle.tar.gz "$ART/reelos-bundle.tar.gz" || true
+fi
+if [ -f "$ROOT/public/install/reelos-cidata.iso" ]; then
+  cp -f "$ROOT/public/install/reelos-cidata.iso" "$ART/reelos-cidata.iso" || true
+fi
 ls -lh "$OUT"
 echo "OK $OUT"
+echo "sha256 $SUM"

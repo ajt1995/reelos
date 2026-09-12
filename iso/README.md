@@ -17,8 +17,11 @@ key and admin PIN are typed there. They are never in this image.
 bash iso/build-iso.sh
 ```
 
-Writes `/opt/cursor/artifacts/reelos-ubuntu.iso` (also `public/install/reelos-1.2.iso`).
-The ISO is too big for git. If `xorriso` is missing: `sudo apt-get install xorriso`.
+Writes `/tmp/iso-build/reelos-ubuntu.iso` (and `public/install/reelos-1.2.iso`).
+The ISO is ~2.8G — too big for git, GitHub release assets (2G), and Cursor
+artifacts (~100MiB/file). Bake it on a machine with ~8GB free. Checksums land
+in `/opt/cursor/artifacts/reelos-ubuntu.iso.txt`. If `xorriso` is missing:
+`sudo apt-get install xorriso`.
 
 Need only the autoinstall payload (no remaster)? `install/autoinstall/user-data`
 plus `seed-reelos.sh` / `late.sh` are the hands-off path Austin can run against
@@ -31,7 +34,7 @@ USB, whole disk, **destroys the stick**:
 ```bash
 # Find the USB (not the house HDD). Example: /dev/sdX
 lsblk
-sudo dd if=/opt/cursor/artifacts/reelos-ubuntu.iso of=/dev/sdX bs=4M status=progress conv=fsync
+sudo dd if=/tmp/iso-build/reelos-ubuntu.iso of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 

@@ -3,7 +3,7 @@
 # Boots QEMU/KVM when /dev/kvm exists. Does not touch the live house.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ISO="${ISO:-/opt/cursor/artifacts/reelos-ubuntu.iso}"
+ISO="${ISO:-/tmp/iso-build/reelos-ubuntu.iso}"
 WORK="${WORK:-/tmp/iso-smoke}"
 FULL="${FULL:-0}"
 
@@ -55,7 +55,11 @@ xorriso -osirrox on -indev "$ISO" \
 chmod 644 "$WORK/vmlinuz" "$WORK/initrd" 2>/dev/null || true
 qemu-img create -f qcow2 "$WORK/disk.qcow2" 16G >/dev/null
 
-QEMU=(qemu-system-x86_64
+QEMU_BIN=(qemu-system-x86_64)
+if [ ! -w /dev/kvm ]; then
+  QEMU_BIN=(sudo -n qemu-system-x86_64)
+fi
+QEMU=("${QEMU_BIN[@]}"
   -enable-kvm
   -m 2048
   -smp 2

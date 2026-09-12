@@ -50,5 +50,5 @@ Do not re-run the wizard. Do not stamp `VERSION` by hand.
 bash iso/build-iso.sh
 ```
 
-Writes `/opt/cursor/artifacts/reelos-ubuntu.iso`. Flash with `dd` / balenaEtcher
+Writes `/tmp/iso-build/reelos-ubuntu.iso`. Flash with `dd` / balenaEtcher
 (see `iso/README.md`). Only when the installer itself is dead. Point updates are OTA.
