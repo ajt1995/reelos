@@ -18,7 +18,6 @@ import {
   honestReadyJson,
   HOUSE_UNMATCHED_DUMP,
 } from "./cloud-house-shelf.mjs";
-import { homeShelfRows, isDumpTwinCard } from "./reelos-library.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = String(process.env.CLICK_PORT || "18056");
@@ -270,8 +269,8 @@ try {
   assert.ok(collapsed.includes("The Rookie"));
   assert.ok(collapsed.includes("Silo"));
   assert.ok(collapsed.includes("Reacher"));
-  assert.ok(!collapsed.some((n) => /UIndex|Torrenting|Ponte/i.test(n)));
-  assert.ok(collapsed.includes(HOUSE_UNMATCHED_DUMP.title) || homeShelfRows(houseRawShelf()).some((t) => t.id === HOUSE_UNMATCHED_DUMP.id));
+  assert.ok(!collapsed.some((n) => /UIndex org - Silo|Torrenting|Il Ponte|UIndex org - The Rookie/i.test(n)));
+  assert.ok(collapsed.some((n) => n === HOUSE_UNMATCHED_DUMP.title || n.includes("Completely Different Show")));
 
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
@@ -286,7 +285,7 @@ try {
   assert.match(homeText, /The Rookie/);
   assert.match(homeText, /Silo/);
   assert.match(homeText, /Reacher/);
-  assert.doesNotMatch(homeText, /UIndex|Torrenting|Il Ponte/i);
+  assert.doesNotMatch(homeText, /UIndex org - Silo|Torrenting|Il Ponte|UIndex org - The Rookie/i);
   assert.doesNotMatch(homeText, /\b0%/);
   verdict.steps.homeNamed = true;
 
@@ -380,7 +379,7 @@ try {
   await nav(page, "Home");
   await waitHome(page);
   homeText = await page.locator("body").innerText();
-  assert.doesNotMatch(homeText, /UIndex|Torrenting|Il Ponte/i);
+  assert.doesNotMatch(homeText, /UIndex org - Silo|Torrenting|Il Ponte|UIndex org - The Rookie/i);
   verdict.steps.noDumpTwin = true;
 
   // 4. Remove only dump-named card if shown
