@@ -155,9 +155,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         />
       </label>
       <p className="mt-2 text-xs text-muted">
-        Off by default. On this sidecar tarball, Beta turns on Arena chrome and Books in place — no second Apply.
-        Off rolls those back (Kavita stops, Books routes 404) without wiping movies/TV. Check still reads
-        channel-beta when on. Do not house Apply this PR. Stable Check stays 1.2.50.x on main.tar.gz.
+        Off by default. On 1.2.50.50, Beta turns on Arena chrome and Books in place — no second 2.0.0 Apply.
+        Off rolls those back (Kavita stops, Books routes 404) without wiping movies/TV. Check stays on
+        1.2.50.x while Arena is in-tree. A 4GB house may struggle with Kavita RAM.
       </p>
       {update.rollback && update.status === "available" ? (
         <p className="mt-2 text-xs text-muted">

@@ -1,12 +1,12 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
-import { i as adapterProfile, n as HOSTNAME } from "./appliance-Dk74LcNF.mjs";
+import { i as adapterProfile, n as HOSTNAME } from "./appliance-CsV_BBL_.mjs";
 import { F as Bell, M as Check, S as HardDrive, T as Cpu, a as TriangleAlert, b as KeyRound, c as Shield, d as ScrollText, f as RefreshCw, g as LoaderCircle, k as ChevronRight, n as Wrench, r as Users, s as SlidersHorizontal, x as House } from "../_libs/lucide-react.mjs";
-import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, k as catchupLocksHome, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-DddgKIQJ.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-CSgJSbbK.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-DMlHR8BP.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/settings-VnL58R9M.js
+import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, k as catchupLocksHome, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-DjN32tbo.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-0GIxcROj.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-DdbOSGQa.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/settings-CQEUMtOj.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {
@@ -807,7 +807,7 @@ function UpdatesRow({ open, onClick }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-xs text-muted",
-				children: "Off by default. On this sidecar tarball, Beta turns on Arena chrome and Books in place — no second Apply. Off rolls those back (Kavita stops, Books routes 404) without wiping movies/TV. Check still reads channel-beta when on. Do not house Apply this PR. Stable Check stays 1.2.50.x on main.tar.gz."
+				children: "Off by default. On 1.2.50.50, Beta turns on Arena chrome and Books in place — no second 2.0.0 Apply. Off rolls those back (Kavita stops, Books routes 404) without wiping movies/TV. Check stays on 1.2.50.x while Arena is in-tree. A 4GB house may struggle with Kavita RAM."
 			}),
 			update.rollback && update.status === "available" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-2 text-xs text-muted",
