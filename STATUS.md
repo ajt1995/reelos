@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.51 is the ship.*** Finished Requests (Passengers) hand off to On this box / Watch instead of vanishing. 1.2.50.50 OTA cleaner stays. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.50**. **Do not house-Apply until told.** Never twice.
+***1.2.50.51 is the ship.*** Discover hides owned library. Passengers hand off to On this box / Watch. Honest Apply splash percent. 1.2.50.50 OTA cleaner stays. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.50**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
@@ -34,9 +34,10 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Changelog
 
-### Done-handoff (1.2.50.51)
+### 1.2.50.51 rollup (Discover / Passengers / splash)
 
-Passengers (2016) showed on Requests while downloading, then vanished when done. It was already in Jellyfin and `/api/library` / `/api/ready`, but the phone never refreshed the Home shelf after Seerr said available — persist + `hydrateShelf` no-op. Finished titles now stay on Requests until the JF card has Watch, and the existing `/api/request` poll refreshes `/api/library?fresh=1`. No second Home timer. Do not house-Apply yet.
+Discover hides owned library; Home keeps On this box. Finished Requests (Passengers) stay until Watch on Home; the existing `/api/request` poll refreshes `/api/library?fresh=1`. Honest Apply splash percent is real bytes or stage N of 7 + heartbeat — never a fake 99%. Splash copy is Tuning for 4GB RAM · spinning disk. Wizard stays 7 steps. Do not house-Apply yet.
+
 
 ### OTA cleaner + update splash (1.2.50.50)
 

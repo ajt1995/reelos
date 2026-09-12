@@ -95,7 +95,7 @@ test("stack: VERSION / channel / stamps agree (1.2.50.51)", () => {
   assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
-  assert.match(chan.notes[0], /Passengers|On this box|Watch|request poll|handoff/i);
+  assert.match(chan.notes[0], /Passengers|On this box|Watch|Honest Apply splash|tarball\/extract bytes|spinning disk|Discover hides owned/i);
   assert.match(chan.notes[1], /OTA|cleaner|Updating ReelOS|splash/i);
   assert.match(chan.notes[2], /Hands-off home|on this box|pick tonight|Watch|National Treasure/i);
   assert.match(chan.notes[3], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);

@@ -33,7 +33,7 @@ test("house HP fixture summary is 4Gi RAM · 4c Pentium N3710 · HDD · root-on-
     kdumpReservedKb: 524_288,
   });
   assert.equal(hp.summary, "4Gi RAM · 4c Pentium N3710 · HDD · root-on-internal");
-  assert.equal(hp.splashTune, "Tuning for 4GB HDD…");
+  assert.equal(hp.splashTune, "Tuning for 4GB RAM · spinning disk");
   assert.equal(cpuShort("Intel(R) Pentium(R) CPU N3710 @ 1.60GHz", 4), "4c Pentium N3710");
   const lim = hardwareLimits(hp);
   assert.equal(lim.fuseCount, 1);
@@ -76,6 +76,8 @@ test("saved profile is source of truth; 4.5Gi fallback if probe has not run", ()
     assert.equal(view.knobs.fuseCount, 1);
     assert.equal(view.knobs.skipDumpFfprobe, true);
     assert.equal(view.tiny, true);
+    assert.equal(view.splashTune, "Tuning for 4GB RAM · spinning disk");
+    assert.equal(view.diskTypeLabel, "spinning disk");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -183,7 +185,10 @@ test("UI and API surface the saved profile; wizard stays 7 steps", () => {
   const panels = read("src/components/settings-panels.tsx");
   assert.match(panels, /A 4\.5Gi RAM guess is used until the probe runs/);
   assert.match(panels, /if \(!didProbe\)/);
-  assert.match(panels, /setDetail\(""\)/);
+  assert.match(panels, /setRows\(\[\]\)/);
+  assert.match(panels, /Disk type/);
+  assert.match(panels, /Disk size/);
+  assert.match(panels, /4GB is RAM/);
   assert.doesNotMatch(panels, /This computer/);
 });
 

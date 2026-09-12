@@ -42,6 +42,7 @@ import {
   applyTargetFromLog,
   readLibraryProgress,
 } from "./reelos-ota-status.mjs";
+import { readApplyProgress } from "./reelos-ota-progress.mjs";
 import { cmpVer, isBetaLine, isRollback, notesForVersion, pendingNotes } from "./update-notes.mjs";
 import { pingWizardSource, provisionHonestyError, sourceValidateError } from "./wizard-honesty.mjs";
 import { collectRequestList } from "./reelos-request-progress-plugin.mjs";
@@ -1274,6 +1275,10 @@ function lastOtaLines(n = 3) {
   }
 }
 
+function applyProgressPayload(running) {
+  return readApplyProgress({ running: Boolean(running) });
+}
+
 async function handleUpdateStatus(_req, res) {
   const logText = otaLogText();
   const running = applyProductRunning({ logText });
@@ -1286,7 +1291,14 @@ async function handleUpdateStatus(_req, res) {
     target: running ? applyTargetFromLog(logText) : null,
     log,
     library: readLibraryProgress(),
+    progress: applyProgressPayload(running),
   });
+}
+
+async function handleUpdateProgress(_req, res) {
+  const logText = otaLogText();
+  const running = applyProductRunning({ logText });
+  send(res, 200, { ok: true, ...applyProgressPayload(running) });
 }
 
 async function arrGet(url, key) {
@@ -2293,6 +2305,7 @@ async function handleReady(req, res) {
       target: running ? applyTargetFromLog(logText) : null,
       log: lastOtaLines(3),
       library: readLibraryProgress(),
+      progress: applyProgressPayload(running),
     };
     mark("update", t0);
     return payload;
@@ -2714,6 +2727,10 @@ export async function dispatchReelOsApi(req, res) {
   }
   if (pathOnly === "/api/update/status") {
     await handleUpdateStatus(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/update/progress") {
+    await handleUpdateProgress(req, res);
     return true;
   }
   if (pathOnly === "/api/request") {
