@@ -1,0 +1,1 @@
+import{B as e,X as t}from"./store-CX5mJiZl.js";import{l as n}from"./gate-110gFa1N.js";var r=t();function i({children:t}){let{kids:i,profile:a}=n();return a&&i?(0,r.jsx)(e,{to:`/`}):t}export{i as t};
