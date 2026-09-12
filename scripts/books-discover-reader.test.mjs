@@ -51,11 +51,11 @@ test("Books Discover, reader, and sideload are wired without Seerr/TorBox novel 
   assert.doesNotMatch(api, /acsTokenLink/);
 });
 
-test("this change ships on 1.2.50.53 behind the beta toggle", () => {
+test("this change ships on 1.2.50.54 behind the beta toggle", () => {
   const ver = read("VERSION").trim();
-  assert.equal(ver, "1.2.50.53");
+  assert.equal(ver, "1.2.50.54");
   assert.doesNotMatch(ver, /^1\.2\.51$/);
   const store = read("src/lib/store.ts");
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.53"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.54"/);
   assert.match(store, /betaChannel: false/);
 });

@@ -1629,6 +1629,7 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(caddy, /ReelOS shell player/);
   assert.match(caddy, /handle_errors/);
   assert.match(caddy, /Updating ReelOS/);
+  assert.doesNotMatch(caddy, /<<HTML/);
 });
 
 test("needsRequestTitle treats tmdb-2059 as unnamed", () => {
