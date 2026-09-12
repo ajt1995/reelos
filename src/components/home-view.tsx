@@ -8,7 +8,7 @@ import { getTitle } from "@/lib/catalog";
 import { frontendLabel, sourceLabel, useReelStore } from "@/lib/store";
 import {
   collapseHomeRequestCards,
-  inFlightRequests,
+  homeInFlightRequests,
   isGhostRequestLabel,
   titleForRequest,
   transferringChipCount,
@@ -42,7 +42,7 @@ export function HomeView() {
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
   const boxShelf = useMemo(() => homeShelfRows(shelf), [shelf]);
-  const inflight = inFlightRequests(requests, { titles: shelf });
+  const inflight = homeInFlightRequests(requests, { titles: shelf });
   const transferring = transferringChipCount(inflight);
   const libraryCatchup = useReelStore((s) => s.libraryCatchup);
   const catchupChip = catchupShowsBanner(libraryCatchup);

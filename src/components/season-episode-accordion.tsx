@@ -3,6 +3,7 @@ import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   EPISODE_STATUS_LABEL,
+  IMPORTING_SEASON_COPY,
   UNRELEASED_SEASON_COPY,
   episodeRequestAction,
   seasonChipLabel,
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 
 const STATUS_CLASS: Record<EpisodeStatus, string> = {
   "in-library": "bg-success/15 text-success",
+  importing: "bg-gold/15 text-gold",
   downloading: "bg-gold/15 text-gold",
   requested: "bg-card-2 text-muted",
   missing: "bg-danger/10 text-danger",
@@ -105,8 +107,13 @@ export function SeasonEpisodeAccordion({
 
   const missing = episodes.filter((e) => e.status === "missing" || (removedHere && e.status === "requested"));
   const thisUnreleased = Boolean(unreleasedSeasons?.includes(selectedSeason) || unreleasedOpen);
+  const thisImporting =
+    Boolean(importingSeasons?.includes(selectedSeason)) && !diskSeasons.includes(selectedSeason) && !thisUnreleased;
   const showSeasonRequest =
-    !blocked && !thisUnreleased && (removedHere || missing.length > 0 || (open && !loading && episodes.length === 0));
+    !blocked &&
+    !thisUnreleased &&
+    !thisImporting &&
+    (removedHere || missing.length > 0 || (open && !loading && episodes.length === 0));
 
   if (seasonNumbers.length === 0 && seasonsLoading) {
     return <p className="text-sm text-muted">Loading seasons from Seerr…</p>;
@@ -185,7 +192,10 @@ export function SeasonEpisodeAccordion({
               {UNRELEASED_SEASON_COPY}. Request cannot grab files that do not exist.
             </p>
           ) : null}
-          {!loading && !episodes.length && !err && !thisUnreleased ? (
+          {!loading && thisImporting ? (
+            <p className="py-3 text-sm text-muted">{IMPORTING_SEASON_COPY} — Sonarr has not taken the files yet.</p>
+          ) : null}
+          {!loading && !episodes.length && !err && !thisUnreleased && !thisImporting ? (
             <p className="py-3 text-sm text-muted">
               Episode names land once Sonarr or Seerr has this season. Request this season without hunting.
             </p>

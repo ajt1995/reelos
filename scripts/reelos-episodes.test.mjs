@@ -16,9 +16,10 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-test("episode status vocab is Austin's four honest labels", () => {
-  assert.deepEqual(EPISODE_STATUSES, ["in-library", "downloading", "requested", "missing"]);
+test("episode status vocab is Austin's honest labels", () => {
+  assert.deepEqual(EPISODE_STATUSES, ["in-library", "importing", "downloading", "requested", "missing"]);
   assert.equal(episodeStatusLabel("in-library"), "In library");
+  assert.equal(episodeStatusLabel("importing"), "On disk, importing");
   assert.equal(episodeStatusLabel("downloading"), "Downloading");
   assert.equal(episodeStatusLabel("requested"), "Requested");
   assert.equal(episodeStatusLabel("missing"), "Missing");
@@ -30,6 +31,7 @@ test("classify prefers library, then queue, then requested, else missing", () =>
   assert.equal(classifyEpisodeStatus({ inJellyfin: true }), "in-library");
   assert.equal(classifyEpisodeStatus({ inQueue: true, requested: true }), "downloading");
   assert.equal(classifyEpisodeStatus({ requested: true }), "requested");
+  assert.equal(classifyEpisodeStatus({ importing: true, requested: true, inJellyfin: true }), "importing");
   assert.equal(classifyEpisodeStatus({}), "missing");
 });
 
@@ -64,6 +66,26 @@ test("assembleSeasonEpisodes merges Sonarr files, queue, Jellyfin, Seerr names",
   assert.deepEqual(
     rows.map((r) => `${r.episodeNumber}:${r.status}:${r.label}`),
     ["1:in-library:In library", "2:downloading:Downloading", "3:requested:Requested", "4:requested:Requested"],
+  );
+});
+
+test("Rookie S02 dump-linked episodes are On disk, importing — not Requested Watch", () => {
+  const rows = assembleSeasonEpisodes({
+    seasonNumber: 2,
+    seerrEpisodes: [
+      { episodeNumber: 1, name: "Impact" },
+      { episodeNumber: 2, name: "The Roundup" },
+    ],
+    sonarrEpisodes: [
+      { episodeNumber: 1, title: "Impact", hasFile: false, monitored: true },
+      { episodeNumber: 2, title: "The Roundup", hasFile: false, monitored: true },
+    ],
+    seasonRequested: true,
+    seasonImporting: true,
+  });
+  assert.deepEqual(
+    rows.map((r) => `${r.episodeNumber}:${r.status}:${r.label}`),
+    ["1:importing:On disk, importing", "2:importing:On disk, importing"],
   );
 });
 

@@ -8,6 +8,7 @@ import {
   inFlightRequests,
   isGhostRequestLabel,
   isTvRequestRow,
+  requestProgressLabel,
   requestShowsRetry,
   titleForRequest,
   tvSeasonChips,
@@ -115,10 +116,7 @@ export function RequestsView() {
                   </div>
                 ) : null}
                 <p className="mt-1 text-xs text-muted">
-                  {r.reason ||
-                    viaLabel(r.via, r.status) ||
-                    (r.status === "downloading" ? `${Math.round(r.progress)}%` : r.status)}
-                  {r.status === "downloading" && r.progress > 0 && !r.reason ? ` · ${Math.round(r.progress)}%` : ""}
+                  {requestProgressLabel(r) || r.reason || viaLabel(r.via, r.status) || r.status}
                   {r.release ? ` · ${r.release}` : ""}
                 </p>
               </div>

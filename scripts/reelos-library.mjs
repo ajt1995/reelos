@@ -169,6 +169,8 @@ export function stripIndexerPrefix(raw) {
   s = s.replace(/^www\.[a-z0-9.-]+\s*[-–—:]+\s*/i, "").trim();
   s = s.replace(new RegExp(`^www[\\s._-]+[a-z0-9]+[\\s._-]+(?:${TLD})\\b[\\s._:-]*`, "i"), "").trim();
   s = s.replace(new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+`, "i"), "").trim();
+  // Truncated Home paint: "org-Silo" / "org - Silo"
+  s = s.replace(new RegExp(`^(?:${TLD})[-–—:]+(?=[A-Za-z0-9])`, "i"), "").trim();
   s = s.replace(/^[-_\s]+/, "").trim();
   return s || String(raw || "").trim();
 }
@@ -177,7 +179,7 @@ export function looksLikeIndexerDump(name) {
   const s = String(name || "").trim();
   if (!s) return false;
   if (/^www[\s._-]/i.test(s) || /^www\./i.test(s)) return true;
-  if (new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+\\S`, "i").test(s)) return true;
+  if (new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s*\\S`, "i").test(s)) return true;
   if (INDEXER_HOST.test(s) && (/[-.]/.test(s) || /^\[[^\]]+\]/.test(s) || /\[[^\]]+\]\s*$/.test(s))) return true;
   const stripped = stripIndexerPrefix(s);
   return Boolean(stripped) && stripped !== s;
@@ -321,8 +323,11 @@ export function mapJellyfinItems(items, host, { listFiles } = {}) {
     const hashish = looksLikeHashTitle(it?.Name) || looksLikeHashTitle(t.title) || hashes.length;
     const indexerDump =
       looksLikeIndexerDump(it?.Name) || looksLikeIndexerDump(t.title) || looksLikeIndexerDump(it?.Path);
-    const dumpish = Boolean(hashish || indexerDump);
     const named = namedCatalogTitle(t);
+    const leftover =
+      !named &&
+      (!(Number(t.year) > 0) || !t.poster || /\b[Ss]\d{1,2}/.test(String(it?.Name || t.title || "")));
+    const dumpish = Boolean(hashish || indexerDump || leftover);
     if (!dumpish) {
       return disk.length ? { ...t, onDiskSeasons: disk } : t;
     }
@@ -572,7 +577,7 @@ export function isDumpTwinCard(t) {
   if (titleProviderId(t)) return false;
   if (!(Number(t.year) > 0) || !t.poster) return true;
   if (/\b[Ss]\d{1,2}\s*[Ee]\d{1,3}\b/.test(String(t.title || ""))) return true;
-  return false;
+  return true;
 }
 
 export function dumpMatchesNamed(dump, named) {
@@ -597,10 +602,6 @@ export function dumpMatchesNamed(dump, named) {
   return false;
 }
 
-function seasonNums(list) {
-  return [...new Set((list || []).map(Number).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
-}
-
 /** Dump files waiting for Sonarr import are Importing — they do not become Watch. */
 export function foldDumpSeasons(keep, drop) {
   const watch = new Set(seasonNums(keep?.onDiskSeasons));
@@ -619,27 +620,7 @@ function shouldAliasDumpId(t) {
 }
 
 function mergeDumpIntoNamed(keep, drop) {
-  const extra = shouldAliasDumpId(drop)
-    ? [
-        ...(drop.ids || []),
-        drop.id,
-        drop.jellyfinId,
-        drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
-      ]
-    : [];
-  const ids = [
-    ...new Set(
-      [...(keep.ids || []), keep.id, keep.jellyfinId, keep.jellyfinId ? `jf-${keep.jellyfinId}` : "", ...extra]
-        .filter(Boolean)
-        .map(String),
-    ),
-  ];
-  return {
-    ...keep,
-    ids,
-    ...foldDumpSeasons(keep, drop),
-    poster: keep.poster || drop.poster,
-  };
+  return mergeTitleRows(keep, drop);
 }
 
 /** Named JF/TMDB/TVDB card wins; UIndex / Torrenting / episode-dump twins fold into it. */
@@ -781,62 +762,11 @@ export function dedupeLibraryTitles(titles) {
       (looksLikeSeasonFolderTitle(slot.best?.title) || looksLikeCompletePackTitle(slot.best?.title)) &&
       !looksLikeSeasonFolderTitle(t?.title) &&
       !looksLikeCompletePackTitle(t?.title);
-    const mergeRow = (keep, drop) => {
-      const ids = [
-        ...new Set(
-          [
-            ...(keep.ids || []),
-            ...(drop.ids || []),
-            keep.id,
-            drop.id,
-            keep.jellyfinId,
-            drop.jellyfinId,
-            keep.jellyfinId ? `jf-${keep.jellyfinId}` : "",
-            drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
-          ]
-            .filter(Boolean)
-            .map(String),
-        ),
-      ];
-      return {
-        ...keep,
-        ids,
-        poster: keep.poster || drop.poster,
-      };
-    };
-    const mergeAliases = shouldAliasDumpId(t) || shouldAliasDumpId(slot.best);
-    const mergeDisk = (keep, drop) => {
-      const dumpIntoNamed =
-        (isDumpTwinCard(drop) && !isDumpTwinCard(keep)) || (drop.fromHashDump && !keep.fromHashDump);
-      const namedIntoDump =
-        (isDumpTwinCard(keep) && !isDumpTwinCard(drop)) || (keep.fromHashDump && !drop.fromHashDump);
-      if (dumpIntoNamed) {
-        return { ...keep, ...foldDumpSeasons(keep, drop), poster: keep.poster || drop.poster };
-      }
-      if (namedIntoDump) {
-        return {
-          ...drop,
-          ids: [...new Set([...(drop.ids || []), ...(keep.ids || [])].filter(Boolean).map(String))],
-          ...foldDumpSeasons(drop, keep),
-          poster: drop.poster || keep.poster,
-        };
-      }
-      return {
-        ...keep,
-        onDiskSeasons: [...new Set([...(keep.onDiskSeasons || []), ...(drop.onDiskSeasons || [])])].sort(
-          (a, b) => a - b,
-        ),
-        importingSeasons: [...new Set([...(keep.importingSeasons || []), ...(drop.importingSeasons || [])])].sort(
-          (a, b) => a - b,
-        ),
-        poster: keep.poster || drop.poster,
-      };
-    };
     if (betterScore || preferSeriesName) {
-      slot.best = mergeDisk(mergeAliases ? mergeRow(t, slot.best) : t, slot.best);
+      slot.best = mergeTitleRows(t, slot.best);
       if (year) slot.year = year;
     } else {
-      slot.best = mergeDisk(mergeAliases ? mergeRow(slot.best, t) : slot.best, t);
+      slot.best = mergeTitleRows(slot.best, t);
       slot.year = slot.year || year;
     }
   }

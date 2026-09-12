@@ -940,6 +940,9 @@ test("UIndex / Torrenting prefixes strip to the show name", () => {
   assert.equal(stripIndexerPrefix("www UIndex org    -    The Rookie"), "The Rookie");
   assert.equal(stripIndexerPrefix("www.UIndex.org    -    The.Rookie.S02E14"), "The.Rookie.S02E14");
   assert.equal(stripIndexerPrefix("www Torrenting com - Silo"), "Silo");
+  assert.equal(stripIndexerPrefix("org-Silo"), "Silo");
+  assert.equal(stripIndexerPrefix("org - Silo"), "Silo");
+  assert.equal(looksLikeIndexerDump("org-Silo"), true);
   assert.equal(looksLikeIndexerDump("www UIndex org    -    The Rookie"), true);
   assert.equal(looksLikeIndexerDump("Brooklyn Nine-Nine"), false);
   const uindex = humanTitleFromSceneName(
@@ -1029,6 +1032,28 @@ test("Austin On this box dump twins collapse onto named Rookie / Silo / Reacher"
   const namedSilo = deduped.find((t) => t.title === "Silo");
   assert.deepEqual(namedSilo.onDiskSeasons, [1]);
   assert.ok(namedSilo.importingSeasons.includes(2));
+  const liveNamed = mapJellyfinItems(
+    [
+      {
+        Id: "01c2efb0f4c9b916b1ccaffe1d81e598",
+        Name: "The Rookie",
+        Type: "Series",
+        ProductionYear: 2018,
+        Path: "/symlinks/sonarr/The Rookie S02E01 Impact 720p AMZN WEB-DL DDP5 1 H 264-NTb [ UIndex.org ]",
+        ProviderIds: { Tvdb: "350665", Tmdb: "79744" },
+        ImageTags: { Primary: "abc" },
+      },
+    ],
+    "10.0.0.5",
+    { listFiles: () => [] },
+  )[0];
+  assert.equal(liveNamed.title, "The Rookie");
+  assert.equal(liveNamed.year, 2018);
+  assert.equal(isDumpTwinCard(liveNamed), false);
+  assert.equal(liveNamed.fromDump, false);
+  assert.deepEqual(liveNamed.importingSeasons, [2]);
+  assert.ok(!(liveNamed.onDiskSeasons || []).includes(2));
+  assert.equal(libraryRowHidden(namedRookie, ["jf-2386"]), false);
   assert.equal(dumpMatchesNamed({ title: "Reacher II Ponte" }, reacher), true);
   const foundation = named("tvdb-1", "Foundation", 2021, ["tvdb-1", "tmdb-tv-1"], "found1");
   const found = named("tvdb-2", "Found", 2023, ["tvdb-2", "tmdb-tv-2"], "found2");
@@ -1069,9 +1094,11 @@ test("house screenshot fixture: named titles win, dump files are Importing, TBA 
     unreleasedSeasons: [9],
   });
   const shelf = [
-    dump("orgsilo", "www UIndex org - Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
+    dump("orgsilo", "org-Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
+    dump("orgsilo2", "www UIndex org - Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
     reacher,
     dump("ponte", "Reacher II Ponte", "/symlinks/sonarr/Reacher II Ponte", [2]),
+    dump("ilponte", "Reacher Il Ponte", "/symlinks/sonarr/Reacher Il Ponte - S04 E0508", [4]),
     dump("torrsilo", "www Torrenting com - Silo", "/symlinks/sonarr/www.Torrenting.com - Silo", [2]),
     dump("orgrook", "www UIndex org - The Rookie", "/symlinks/sonarr/www.UIndex.org - The.Rookie.S02E14", [2]),
     silo,
@@ -1092,6 +1119,8 @@ test("house screenshot fixture: named titles win, dump files are Importing, TBA 
   assert.ok(!rookieOut.onDiskSeasons.includes(2), "dump S02 is Importing, not Watch");
   assert.deepEqual(reacherOut.onDiskSeasons, [1]);
   assert.ok(reacherOut.importingSeasons.includes(2));
+  assert.ok(reacherOut.importingSeasons.includes(4));
+  assert.ok(!home.some((t) => /uindex|torrenting|ponte|org-silo/i.test(t.title)));
   assert.deepEqual(siloOut.unreleasedSeasons, [4]);
   assert.deepEqual(rookieOut.unreleasedSeasons, [9]);
 });

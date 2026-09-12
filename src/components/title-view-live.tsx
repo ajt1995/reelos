@@ -14,6 +14,7 @@ import {
   showRequestQueueControls,
   requestShowsRetry,
   requestMediaTypeForPage,
+  requestProgressLabel,
   requestTitleIdForPage,
   titleMatchesId,
   titlePresenceKeys,
@@ -22,7 +23,7 @@ import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
 import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
-import { UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
+import { IMPORTING_SEASON_CHIP, IMPORTING_SEASON_COPY, UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
 
 function looksLikeHashTitle(name?: string) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
@@ -243,6 +244,9 @@ export function TitleView({ id }: { id: string }) {
   ];
   const thisSeasonOnBox = !removedHere && (!series || diskSeasons.includes(season));
   const thisSeasonUnreleased = Boolean(series && comingSeasons.includes(season) && !thisSeasonOnBox);
+  const thisSeasonImporting = Boolean(
+    series && linkingSeasons.includes(season) && !thisSeasonOnBox && !thisSeasonUnreleased,
+  );
   // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
   // Seerr AVAILABLE / engine downloaded is not S05·in.
   // JF is truth — lookup overlay jellyfinId must Watch even if the limited Home shelf missed the id.
@@ -299,6 +303,9 @@ export function TitleView({ id }: { id: string }) {
           {thisSeasonUnreleased ? (
             <p className="mt-4 text-sm text-muted">{UNRELEASED_SEASON_COPY}</p>
           ) : null}
+          {thisSeasonImporting ? (
+            <p className="mt-4 text-sm text-muted">{IMPORTING_SEASON_COPY}</p>
+          ) : null}
 
           {series ? (
             <div className="mt-5">
@@ -343,6 +350,10 @@ export function TitleView({ id }: { id: string }) {
               <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">
                 {UNRELEASED_SEASON_CHIP}
               </span>
+            ) : thisSeasonImporting ? (
+              <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
+                {IMPORTING_SEASON_CHIP}
+              </span>
             ) : request?.status === "downloading" || request?.status === "waiting" ? null : (
               <Button size="lg" disabled>
                 <Play className="size-4" />
@@ -360,20 +371,18 @@ export function TitleView({ id }: { id: string }) {
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
-            ) : thisSeasonUnreleased ? null : showRequestQueueControls({
+            ) : thisSeasonUnreleased || thisSeasonImporting ? null : showRequestQueueControls({
                 kind: resolved.kind,
                 available: series ? thisSeasonOnBox : available,
                 requestStatus: thisSeasonOnBox && series ? "available" : request?.status,
               }) ? (
               request?.status === "downloading" ? (
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
-                  {typeof request.progress === "number" && request.progress > 0
-                    ? `Grabbing · ${Math.round(request.progress)}%`
-                    : request.reason
-                      ? request.reason
-                      : request.via === "cache"
-                        ? "Cache hit · importing"
-                        : "Grabbing"}
+                  {(() => {
+                    const label = requestProgressLabel(request);
+                    if (label && /%$/.test(label)) return `Grabbing · ${label}`;
+                    return label || request.reason || (request.via === "cache" ? "Cache hit · importing" : "Grabbing");
+                  })()}
                 </span>
               ) : request?.status === "waiting" || engineStatus === "queued" ? (
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">

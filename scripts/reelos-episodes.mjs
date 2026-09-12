@@ -1,19 +1,38 @@
 /** Honest TV episode status from Sonarr/Jellyfin/Seerr for the season accordion. */
-import { parseTitleId, seerrApiKey, seerrFetch, seerrSeasonStatus, resolveParsedTitle, seasonIsUnreleased, UNRELEASED_SEASON_COPY } from "./reelos-seerr.mjs";
+import {
+  parseTitleId,
+  seerrApiKey,
+  seerrFetch,
+  seerrSeasonStatus,
+  resolveParsedTitle,
+  seasonIsUnreleased,
+  findLibraryTitle,
+  UNRELEASED_SEASON_COPY,
+  IMPORTING_SEASON_COPY,
+} from "./reelos-seerr.mjs";
 import { arrApiKey, arrJson, loadPresenceFacts } from "./reelos-request-status.mjs";
 
-/** Austin: in library / downloading / missing / requested — no invented percents. */
-export const EPISODE_STATUSES = Object.freeze(["in-library", "downloading", "requested", "missing"]);
+/** Austin: in library / on disk importing / downloading / missing / requested — no invented percents. */
+export const EPISODE_STATUSES = Object.freeze(["in-library", "importing", "downloading", "requested", "missing"]);
 
 export const EPISODE_STATUS_LABEL = Object.freeze({
   "in-library": "In library",
+  importing: "On disk, importing",
   downloading: "Downloading",
   requested: "Requested",
   missing: "Missing",
 });
 
-export function classifyEpisodeStatus({ hasFile = false, inJellyfin = false, inQueue = false, requested = false } = {}) {
-  if (hasFile || inJellyfin) return "in-library";
+export function classifyEpisodeStatus({
+  hasFile = false,
+  inJellyfin = false,
+  inQueue = false,
+  requested = false,
+  importing = false,
+} = {}) {
+  if (hasFile) return "in-library";
+  if (importing) return "importing";
+  if (inJellyfin) return "in-library";
   if (inQueue) return "downloading";
   if (requested) return "requested";
   return "missing";
@@ -89,6 +108,7 @@ export function assembleSeasonEpisodes({
   queueItems = [],
   jellyfinEpisodes = [],
   seasonRequested = false,
+  seasonImporting = false,
 } = {}) {
   const queued = queueEpisodeNumbers(queueItems, seasonNumber);
   const onJf = jellyfinEpisodeNumbers(jellyfinEpisodes);
@@ -130,6 +150,7 @@ export function assembleSeasonEpisodes({
         inJellyfin: onJf.has(row.episodeNumber),
         inQueue: queued.has(row.episodeNumber),
         requested: seasonRequested,
+        importing: Boolean(seasonImporting) && row.hasFile !== true,
       });
       return {
         episodeNumber: row.episodeNumber,
@@ -235,6 +256,11 @@ export async function loadSeasonEpisodeList({
   } else {
     jellyfinEpisodes = jellyfinEpisodesFromLibrary(facts?.libraryTitles || [], tmdb, seasonNumber);
   }
+  const lib = findLibraryTitle(facts?.libraryTitles || [], parsed.titleId || titleId);
+  const seasonImporting = Boolean(
+    (lib?.importingSeasons || []).map(Number).includes(seasonNumber) ||
+      (facts?.libraryTitles || []).some((t) => (t?.importingSeasons || []).map(Number).includes(seasonNumber) && String(t?.title || "").toLowerCase() === String(lib?.title || series?.title || "").toLowerCase()),
+  );
   const episodes = assembleSeasonEpisodes({
     seasonNumber,
     sonarrEpisodes,
@@ -242,6 +268,7 @@ export async function loadSeasonEpisodeList({
     queueItems,
     jellyfinEpisodes: Array.isArray(jellyfinEpisodes) ? jellyfinEpisodes : [],
     seasonRequested,
+    seasonImporting,
   });
   const sonarrSeason = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === seasonNumber);
   const unreleased = Boolean(

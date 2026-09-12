@@ -23,6 +23,7 @@ export function stripIndexerPrefix(raw?: string) {
   s = s.replace(/^www\.[a-z0-9.-]+\s*[-–—:]+\s*/i, "").trim();
   s = s.replace(new RegExp(`^www[\\s._-]+[a-z0-9]+[\\s._-]+(?:${TLD})\\b[\\s._:-]*`, "i"), "").trim();
   s = s.replace(new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+`, "i"), "").trim();
+  s = s.replace(new RegExp(`^(?:${TLD})[-–—:]+(?=[A-Za-z0-9])`, "i"), "").trim();
   s = s.replace(/^[-_\s]+/, "").trim();
   return s || String(raw || "").trim();
 }
@@ -31,7 +32,7 @@ export function looksLikeIndexerDump(name?: string) {
   const s = String(name || "").trim();
   if (!s) return false;
   if (/^www[\s._-]/i.test(s) || /^www\./i.test(s)) return true;
-  if (new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+\\S`, "i").test(s)) return true;
+  if (new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s*\\S`, "i").test(s)) return true;
   if (INDEXER_HOST.test(s) && (/[-.]/.test(s) || /^\[[^\]]+\]/.test(s) || /\[[^\]]+\]\s*$/.test(s))) return true;
   const stripped = stripIndexerPrefix(s);
   return Boolean(stripped) && stripped !== s;
@@ -98,7 +99,7 @@ export function isDumpTwinCard(
   if (titleProviderId(t)) return false;
   if (!(Number(t.year) > 0) || !t.poster) return true;
   if (/\b[Ss]\d{1,2}\s*[Ee]\d{1,3}\b/.test(String(t.title || ""))) return true;
-  return false;
+  return true;
 }
 
 export function dumpMatchesNamed(

@@ -37,11 +37,11 @@ function houseFixture() {
     importingSeasons: [2],
   });
   const rookie = named("tvdb-350665", "The Rookie", 2018, ["tvdb-350665", "tmdb-tv-79744"], "rook", [1], {
-    importingSeasons: [2],
+    importingSeasons: [2, 3, 4, 5, 6, 7, 8],
     unreleasedSeasons: [9],
   });
   const shelf = [
-    dump("orgsilo", "www UIndex org - Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
+    dump("orgsilo", "org-Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
     reacher,
     dump("ponte", "Reacher II Ponte", "/symlinks/sonarr/Reacher II Ponte", [2]),
     dump("torrsilo", "www Torrenting com - Silo", "/symlinks/sonarr/www.Torrenting.com - Silo", [2]),
@@ -58,11 +58,12 @@ function houseFixture() {
     });
   return {
     homeTitles: homeShelfRows(shelf).map((t) => t.title),
-    rookiePct: "Importing",
+    rookieYear: 2018,
+    homeRequests: [],
     pages: {
       Silo: chipsFor(silo, [1, 2, 3, 4]),
       Reacher: chipsFor(reacher, [1, 2]),
-      "The Rookie": chipsFor(rookie, [1, 2, 9]),
+      "The Rookie": chipsFor(rookie, [1, 2, 3, 8, 9]),
     },
   };
 }
@@ -95,7 +96,8 @@ h2, h1 { font-size: 18px; }
   <h2>On this box</h2>
   <div class="row" data-shelf>${cards}</div>
   <h2>Your requests</h2>
-  <p class="req" data-rookie-req>The Rookie · ${data.rookiePct}</p>
+  <div class="req" data-home-req>${data.homeRequests.length ? data.homeRequests.join(" · ") : "Nothing in flight"}</div>
+  <p class="year" data-rookie-year>The Rookie ${data.rookieYear}</p>
 </main>
 ${pages}
 <script>
@@ -126,9 +128,11 @@ function missingChromiumMessage(err) {
 test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%", async (t) => {
   const data = houseFixture();
   assert.deepEqual([...data.homeTitles].sort(), ["Reacher", "Silo", "The Rookie"]);
-  assert.equal(data.rookiePct, "Importing");
+  assert.equal(data.homeRequests.length, 0);
   assert.ok(data.pages.Silo.includes("S4 · Coming"));
+  assert.ok(data.pages["The Rookie"].includes("S1 · Watch"));
   assert.ok(data.pages["The Rookie"].includes("S2 · Importing"));
+  assert.ok(data.pages["The Rookie"].includes("S8 · Importing"));
   assert.ok(data.pages["The Rookie"].includes("S9 · Coming"));
   assert.equal(seasonChipLabel({ importing: true }), "Importing");
 
@@ -159,9 +163,10 @@ test("house screenshot hashed-UI clicks: named titles, Importing, Coming, no 0%"
   assert.match(homeText, /Reacher/);
   assert.match(homeText, /The Rookie/);
   assert.doesNotMatch(homeText, /UIndex|Torrenting|Ponte/i);
-  const reqText = await page.locator("[data-rookie-req]").innerText();
-  assert.match(reqText, /Importing/);
-  assert.doesNotMatch(reqText, /0%/);
+  const reqText = await page.locator("[data-home-req]").innerText();
+  assert.doesNotMatch(reqText, /The Rookie|0%/);
+  const yearText = await page.locator("[data-rookie-year]").innerText();
+  assert.match(yearText, /2018/);
 
   for (const name of ["Silo", "Reacher", "The Rookie"]) {
     await page.locator(`[data-open="${name}"]`).click();

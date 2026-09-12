@@ -7,6 +7,7 @@ import {
   collapseHomeRequestCards,
   transferringChipCount,
   dropLibraryOverlay,
+  homeInFlightRequests,
   inFlightRequests,
   isGhostRequestLabel,
   isInFlightRequest,
@@ -155,7 +156,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
-  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(home, /homeInFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
   assert.match(home, /collapseHomeRequestCards\(inflight\)/);
   assert.match(home, /transferringChipCount\(inflight\)/);
@@ -719,4 +720,39 @@ test("Rookie dump S02 is Importing not Watch; 0% linked files paint Importing", 
     requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", status: "downloading", progress: 0 })),
     "0%",
   );
+});
+
+test("Home hides Rookie linked-importing when named series is On this box; Requests keep it", () => {
+  const requests = [
+    row({
+      id: "s3",
+      titleId: "tmdb-tv-79744",
+      season: 3,
+      status: "downloading",
+      progress: 0,
+      reason: "On disk, importing",
+    }),
+    row({
+      id: "s2-search",
+      titleId: "tmdb-tv-1402",
+      season: 2,
+      status: "downloading",
+      progress: 0,
+      reason: "Searching — no file yet",
+    }),
+  ];
+  const titles = [
+    {
+      id: "tvdb-350665",
+      kind: "tv" as const,
+      jellyfinId: "01c2efb0f4c9b916b1ccaffe1d81e598",
+      ids: ["tvdb-350665", "tmdb-tv-79744"],
+      onDiskSeasons: [1],
+      importingSeasons: [2],
+    },
+  ];
+  const home = homeInFlightRequests(requests, { titles });
+  assert.deepEqual(home.map((r) => r.id), ["s2-search"]);
+  const tab = inFlightRequests(requests, { titles });
+  assert.ok(tab.some((r) => r.id === "s3"));
 });

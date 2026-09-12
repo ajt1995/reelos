@@ -43,6 +43,7 @@ test("Home On this box cards wrap, placeholder empty art, and hide dump twins", 
 });
 
 const LIVE_DUMPS = [
+  { id: "jf-org-silo", title: "org-Silo", year: 0, poster: "" },
   { id: "jf-uindex-rookie", title: "www UIndex org    -    The Rookie", year: 0, poster: "" },
   { id: "jf-uindex-silo", title: "www UIndex org    -    Silo", year: 0, poster: "" },
   { id: "jf-torrenting-silo", title: "www Torrenting com - Silo", year: 0, poster: "" },
