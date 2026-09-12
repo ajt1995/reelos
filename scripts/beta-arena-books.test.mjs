@@ -85,3 +85,10 @@ test("beta: composeProfiles only starts books when the toggle is on", () => {
   assert.match(plugin, /"betaChannel" in body/);
   assert.match(plugin, /applyBetaSidecar/);
 });
+
+test("beta: phone hydrates Arena from /api/settings so a slow /api/ready cannot keep ReelOS chrome", () => {
+  const root = read("src/routes/__root.tsx");
+  assert.match(root, /fetch\("\/api\/settings"/);
+  assert.match(root, /patchSettings\(\{ betaChannel: ui\.betaChannel \}\)/);
+  assert.match(root, /applyReadyPayload/);
+});
