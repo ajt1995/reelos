@@ -24,7 +24,6 @@ const PORT = String(process.env.CLICK_PORT || "18056");
 const BASE = `http://127.0.0.1:${PORT}`;
 const OUT = process.env.CLICK_OUT || "/opt/cursor/artifacts";
 const HASHED_CSS = "/assets/styles-BpMpl5a6.css";
-const HASHED_JS = "/assets/index-Bm-G6TrB.js";
 
 mkdirSync(OUT, { recursive: true });
 
@@ -76,38 +75,34 @@ function jsonFrom(route) {
   return route.request().postDataJSON?.() || null;
 }
 
-async function installProductRoutes(page, posts) {
+async function snapshotDoorApis() {
+  const ready = await fetch(`${BASE}/api/ready?limit=24`, { signal: AbortSignal.timeout(8000) }).then((r) => r.json());
+  const library = await fetch(`${BASE}/api/library?limit=24`, { signal: AbortSignal.timeout(8000) })
+    .then((r) => r.json())
+    .catch(() => ({ titles: [] }));
+  return { ready, library };
+}
+
+async function installProductRoutes(page, posts, snap) {
   const shelf = houseHomeShelf();
-  await page.route("**/api/ready**", async (route) => {
-    const res = await route.fetch();
-    let json = {};
-    try {
-      json = await res.json();
-    } catch {
-      json = {};
-    }
-    const body = honestReadyJson(json, shelf);
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(body),
-    });
+  const readyBody = JSON.stringify(honestReadyJson(snap.ready, shelf));
+  const libraryBody = JSON.stringify(mergeLibraryJson(snap.library || { titles: [] }));
+  await page.route(/\/api\/ready(\?|$)/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: readyBody });
   });
-  await page.route("**/api/library**", async (route) => {
+  await page.route(/\/api\/library(\?|$)/, async (route) => {
     const req = route.request();
     if (req.method() === "DELETE") {
       const body = jsonFrom(route) || {};
       posts.deletes.push(body);
       const id = String(body.titleId || body.jellyfinId || "");
-      if (/rook|350665|79744|The Rookie/i.test(JSON.stringify(body)) && /orgdump|Completely Different/i.test(id) === false) {
-        if (id === "tvdb-350665" || id === "tmdb-tv-79744" || id === "rook") {
-          await route.fulfill({
-            status: 200,
-            contentType: "application/json",
-            body: JSON.stringify({ ok: false, error: "refused: would remove named The Rookie" }),
-          });
-          return;
-        }
+      if (id === "tvdb-350665" || id === "tmdb-tv-79744" || id === "rook") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: false, error: "refused: would remove named The Rookie" }),
+        });
+        return;
       }
       await route.fulfill({
         status: 200,
@@ -116,37 +111,22 @@ async function installProductRoutes(page, posts) {
       });
       return;
     }
-    const res = await route.fetch();
-    let json = {};
-    try {
-      json = await res.json();
-    } catch {
-      json = { titles: [] };
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(mergeLibraryJson(json)),
-    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: libraryBody });
   });
-  await page.route("**/api/lookup**", async (route) => {
+  await page.route(/\/api\/lookup(\?|$)/, async (route) => {
     const url = new URL(route.request().url());
-    const res = await route.fetch();
-    let json = {};
-    try {
-      json = await res.json();
-    } catch {
-      json = { titles: [] };
+    if (url.searchParams.get("q")) {
+      await route.continue();
+      return;
     }
     const id = url.searchParams.get("id") || "";
-    const body = id ? mergeLookupJson(json, id) : json;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(body),
-    });
+    const live = await fetch(route.request().url(), { signal: AbortSignal.timeout(12000) })
+      .then((r) => r.json())
+      .catch(() => ({ titles: [] }));
+    const body = id ? mergeLookupJson(live, id) : live;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
-  await page.route("**/api/request**", async (route) => {
+  await page.route(/\/api\/request(\?|$)/, async (route) => {
     const req = route.request();
     const url = new URL(req.url());
     if (req.method() === "POST") {
@@ -164,26 +144,20 @@ async function installProductRoutes(page, posts) {
     }
     const id = url.searchParams.get("id") || "";
     if (req.method() === "GET" && /79744|350665|tmdb-tv-79744|tvdb-350665/.test(id)) {
-      const res = await route.fetch();
-      let json = {};
-      try {
-        json = await res.json();
-      } catch {
-        json = {};
-      }
+      const live = await fetch(req.url(), { signal: AbortSignal.timeout(12000) })
+        .then((r) => r.json())
+        .catch(() => ({}));
       const house = houseRawShelf().find((t) => t.id === "tvdb-350665");
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          ...json,
+          ...live,
           onDiskSeasons: house.onDiskSeasons,
           importingSeasons: house.importingSeasons,
           unreleasedSeasons: house.unreleasedSeasons,
           seasonList: house.seasonList,
-          progress: undefined,
-          percent: undefined,
-          reason: json.reason && /0%/.test(String(json.reason)) ? "On disk, importing" : json.reason,
+          reason: live.reason && /0%/.test(String(live.reason)) ? "On disk, importing" : live.reason,
         }),
       });
       return;
@@ -272,10 +246,12 @@ try {
   assert.ok(!collapsed.some((n) => /UIndex org - Silo|Torrenting|Il Ponte|UIndex org - The Rookie/i.test(n)));
   assert.ok(collapsed.some((n) => n === HOUSE_UNMATCHED_DUMP.title || n.includes("Completely Different Show")));
 
+  const snap = await snapshotDoorApis();
+  assert.equal(honestReadyJson(snap.ready, houseHomeShelf()).update.running, false);
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const posts = { requests: [], deletes: [] };
-  await installProductRoutes(page, posts);
+  await installProductRoutes(page, posts, snap);
 
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
   await waitHome(page);
