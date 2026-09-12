@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-CsV_BBL_.mjs";
 import { M as Check, j as ChevronDown, m as Play, p as Plus } from "../_libs/lucide-react.mjs";
-import { C as requestTitleIdForPage, D as titleMatchesId, O as titlePresenceKeys, S as requestShowsRetry, T as showRequestQueueControls, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showHashAdapter, x as requestMediaTypeForPage } from "./router-COm-1-Ns.mjs";
-import { a as Poster, f as jellyfinWatchHref, i as Gate, l as cn, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-CXRffXZE.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/title._id-kpoqY6Ys.js
+import { C as requestTitleIdForPage, D as titleMatchesId, O as titlePresenceKeys, S as requestShowsRetry, T as showRequestQueueControls, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showHashAdapter, x as requestMediaTypeForPage } from "./router-DBwfHMvx.mjs";
+import { a as Poster, f as jellyfinWatchHref, i as Gate, l as cn, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-KSzUs2Be.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/title._id-DQI2Efwy.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {
@@ -141,6 +141,23 @@ function SeasonEpisodeAccordion({ seasonNumbers, selectedSeason, onSelectSeason,
 		titleId,
 		selectedSeason
 	]);
+	(0, import_react.useEffect)(() => {
+		if (!open || loading) return;
+		const node = document.getElementById(`season-${selectedSeason}-episodes`);
+		if (!node) return;
+		const id = window.requestAnimationFrame(() => {
+			node.scrollIntoView({
+				block: "end",
+				behavior: "smooth"
+			});
+		});
+		return () => window.cancelAnimationFrame(id);
+	}, [
+		open,
+		selectedSeason,
+		loading,
+		episodes.length
+	]);
 	const tapSeason = (n) => {
 		if (n === selectedSeason && open) {
 			setOpen(false);
@@ -191,7 +208,7 @@ function SeasonEpisodeAccordion({ seasonNumbers, selectedSeason, onSelectSeason,
 			})
 		}), open ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			id: `season-${selectedSeason}-episodes`,
-			className: "relative z-20 mt-3 min-w-0 rounded-2xl bg-card px-3 py-2 shadow-[var(--shadow-border)]",
+			className: "relative z-20 mt-3 min-w-0 scroll-mt-4 scroll-mb-24 rounded-2xl bg-card px-3 py-2 shadow-[var(--shadow-border)]",
 			children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 					className: "flex flex-wrap items-center justify-between gap-2 py-2",
@@ -420,7 +437,7 @@ function TitleView({ id }) {
 	});
 	const blocked = resolved.kind === "music" && !intent.music || resolved.kind === "anime" && !intent.anime || resolved.kind === "kids" && !intent.kids || resolved.kind === "movie" && !intent.movies || resolved.kind === "tv" && !intent.tv;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-		className: "pb-16",
+		className: "pb-28",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 			className: "relative min-h-[280px] overflow-hidden md:min-h-[360px]",
 			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {

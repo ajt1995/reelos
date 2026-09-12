@@ -3,10 +3,10 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as adapterProfile, n as HOSTNAME } from "./appliance-CsV_BBL_.mjs";
 import { F as Bell, M as Check, S as HardDrive, T as Cpu, a as TriangleAlert, b as KeyRound, c as Shield, d as ScrollText, f as RefreshCw, g as LoaderCircle, k as ChevronRight, n as Wrench, r as Users, s as SlidersHorizontal, x as House } from "../_libs/lucide-react.mjs";
-import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, j as catchupLocksHome, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-COm-1-Ns.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-CXRffXZE.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-CO_YdM0b.mjs";
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/settings-T25lZzeR.js
+import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, j as catchupLocksHome, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-DBwfHMvx.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-KSzUs2Be.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-DK_iXaR9.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/settings-DfEzRu9Z.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {

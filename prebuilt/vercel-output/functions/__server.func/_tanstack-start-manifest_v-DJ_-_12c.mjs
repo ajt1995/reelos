@@ -1,4 +1,4 @@
-//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-CRrkfQjC.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-DJ_-_12c.js
 var tsrStartManifest = () => ({ routes: {
 	__root__: {
 		filePath: "/tmp/reelos-accordion-work/src/routes/__root.tsx",
@@ -16,14 +16,14 @@ var tsrStartManifest = () => ({ routes: {
 			"/title/$id"
 		],
 		preloads: [
-			"/assets/index-txz7zxTS.js",
+			"/assets/index-Pn8S1YRc.js",
 			"/assets/store-CEmLkFxy.js",
 			"/assets/preload-helper-BWBoFUWq.js"
 		],
 		scripts: [{ attrs: {
 			type: "module",
 			async: !0,
-			src: "/assets/index-txz7zxTS.js"
+			src: "/assets/index-Pn8S1YRc.js"
 		} }]
 	},
 	"/": {
@@ -77,12 +77,12 @@ var tsrStartManifest = () => ({ routes: {
 	"/engine/$id": {
 		filePath: "/tmp/reelos-accordion-work/src/routes/engine.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/engine._id-BUXFMnAJ.js", "/assets/gate-Dux1bjpg.js"]
+		preloads: ["/assets/engine._id-zenmHJr7.js", "/assets/gate-Dux1bjpg.js"]
 	},
 	"/play/$id": {
 		filePath: "/tmp/reelos-accordion-work/src/routes/play.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/play._id-BNiju58A.js", "/assets/gate-Dux1bjpg.js"]
+		preloads: ["/assets/play._id-Br3Uh_Xa.js", "/assets/gate-Dux1bjpg.js"]
 	},
 	"/settings/advanced": {
 		filePath: "/tmp/reelos-accordion-work/src/routes/settings.advanced.tsx",
@@ -92,7 +92,7 @@ var tsrStartManifest = () => ({ routes: {
 	"/title/$id": {
 		filePath: "/tmp/reelos-accordion-work/src/routes/title.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/title._id-gArbswEj.js", "/assets/gate-Dux1bjpg.js"]
+		preloads: ["/assets/title._id-Bw2BPrbU.js", "/assets/gate-Dux1bjpg.js"]
 	}
 } });
 //#endregion
