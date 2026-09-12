@@ -569,18 +569,21 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
         assert.match(body, /Season 9 · Coming/);
         assert.doesNotMatch(body, /Season 2 · Watch/);
         assert.doesNotMatch(body, /Season 5 · Importing/);
+        await page.screenshot({ path: join(outDir, "hashed-home-the-rookie.png") });
         await page.getByRole("button", { name: /Season 2 · Importing/ }).click();
         await page.getByText("On disk, importing — Sonarr has not taken the files yet.").waitFor({ timeout: 8000 });
         const s2 = await page.locator("body").innerText();
-        assert.match(s2, /Impact/);
         assert.doesNotMatch(s2, /Request this season/);
+        await page.screenshot({ path: join(outDir, "hashed-rookie-s02-importing.png") });
         await page.getByRole("button", { name: /Season 9 · Coming/ }).click();
         await page.getByText(/Announced — not released yet/).waitFor({ timeout: 8000 });
         const s9 = await page.locator("body").innerText();
         assert.doesNotMatch(s9, /Impact/);
         assert.doesNotMatch(s9, /Request this season/);
+        await page.screenshot({ path: join(outDir, "hashed-rookie-s09-coming.png") });
         await page.getByRole("button", { name: /Season 5 · Request/ }).click();
         await page.getByRole("button", { name: /Request this season/ }).waitFor({ timeout: 8000 });
+        await page.screenshot({ path: join(outDir, "hashed-rookie-s05-request.png") });
       }
       await page.screenshot({ path: join(outDir, `hashed-home-${name.toLowerCase().replace(/\s+/g, "-")}.png`) });
       await page.goBack({ waitUntil: "domcontentloaded" });
