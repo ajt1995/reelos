@@ -62,6 +62,7 @@ import {
   lookupPayloadForId,
   overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
+  attachLibraryPresence,
   discoverBrowseSeerrPath,
   discoverBrowseKind,
   mapSeerrGenres,
@@ -157,6 +158,35 @@ test("jf-* lookup uses the library row, not a Seerr miss", () => {
     ],
   );
   assert.equal(hit.kind, "tv");
+});
+
+test("lookup overlay keeps library Coming/Importing seasons on The Rookie", () => {
+  const seerr = {
+    id: "tmdb-tv-79744",
+    kind: "tv",
+    title: "The Rookie",
+    year: 2018,
+    ids: ["tmdb-tv-79744"],
+    seasonList: [1, 2, 3, 4, 5, 6, 7, 8, 9],
+  };
+  const lib = {
+    id: "tvdb-350665",
+    kind: "tv",
+    title: "The Rookie",
+    year: 2018,
+    ids: ["tvdb-350665", "tmdb-tv-79744"],
+    jellyfinId: "rook",
+    onDiskSeasons: [1],
+    importingSeasons: [2, 8],
+    unreleasedSeasons: [9],
+  };
+  const merged = attachLibraryPresence(seerr, lib);
+  assert.deepEqual(merged.unreleasedSeasons, [9]);
+  assert.deepEqual(merged.onDiskSeasons, [1]);
+  assert.ok(merged.importingSeasons.includes(2));
+  assert.ok(!merged.importingSeasons.includes(9));
+  const payload = lookupPayloadForId({ seerrTitle: seerr, libraryTitle: lib });
+  assert.deepEqual(payload.titles[0].unreleasedSeasons, [9]);
 });
 
 test("infohash URL resolves the Rick dump folder", () => {

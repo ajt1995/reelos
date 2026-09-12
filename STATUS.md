@@ -148,6 +148,7 @@ node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box
 # GET / → 200 with /assets/styles-*.css, not /src/styles.css
 # GET /api/ready → 200
+# node scripts/product-click-loop.mjs   # hashed UI clicks: search/request/dislike/Rookie/dump/person
 ```
 
 ## Owner / house Apply
