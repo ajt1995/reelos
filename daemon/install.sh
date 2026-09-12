@@ -186,6 +186,14 @@ enable_unit avahi-daemon
 if [ -f "$HERE/systemd/reelos.service" ]; then
   cp "$HERE/systemd/reelos.service" /etc/systemd/system/reelos.service
 fi
+if [ -f "$HERE/systemd/reelos-hw-probe.service" ]; then
+  cp "$HERE/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$HERE/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$HERE/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+fi
 if [ -f "$HERE/systemd/reelos-firstboot.service" ]; then
   cp "$HERE/systemd/reelos-firstboot.service" /etc/systemd/system/reelos-firstboot.service
 fi

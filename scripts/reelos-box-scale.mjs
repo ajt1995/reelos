@@ -112,9 +112,13 @@ export function splashTuneFromProfile(profile = {}) {
   return "";
 }
 
-export const HARDWARE_PROFILE_PATH = "/var/lib/reelos/hardware-profile.json";
+export function hardwareProfilePath(state = process.env.REELOS_STATE || "/var/lib/reelos") {
+  return `${String(state || "/var/lib/reelos").replace(/\/$/, "")}/hardware-profile.json`;
+}
 
-export function loadSavedHardware({ path = HARDWARE_PROFILE_PATH, readFile = readFileSync } = {}) {
+export const HARDWARE_PROFILE_PATH = hardwareProfilePath();
+
+export function loadSavedHardware({ path = hardwareProfilePath(), readFile = readFileSync } = {}) {
   try {
     const doc = JSON.parse(readFile(path, "utf8"));
     if (!doc || !(doc.ram_kb || doc.ramKb)) return null;
@@ -279,14 +283,15 @@ export function publicHardware(saved, fallbackMemKb = 0) {
     };
   }
   const tiny = boxIsSmall(memKb);
-  const fallback = hardwareProfile({ ramKb: memKb, cpus: 1, diskKind: "unknown" });
   return {
     probed: false,
     probeVersion: 0,
     probedAt: null,
-    summary: tiny ? "4Gi RAM · unknown CPU · disk unknown · root-on-internal" : summaryFromProfile(fallback),
+    summary: tiny
+      ? "4Gi RAM · unknown CPU · disk unknown · root-on-internal"
+      : "Not measured yet — ReelOS will probe on the next update or door start.",
     splashTune: tiny ? "Tuning for 4GB RAM…" : "",
-    ramGb: ramGbFromKb(memKb),
+    ramGb: tiny ? ramGbFromKb(memKb) : 0,
     cpus: 1,
     cpuModel: "",
     diskKind: "unknown",

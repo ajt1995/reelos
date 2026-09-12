@@ -1,3 +1,4 @@
+/** Full-screen apply splash. Copy is contract: Updating ReelOS / Not a percent. Fail splash: Update failed, still on previous. */
 import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,39 @@ function UpdatingSplash() {
   );
 }
 
-export function Splash({ compact = false, warming = false, updating = false }: { compact?: boolean; warming?: boolean; updating?: boolean }) {
+function FailedSplash() {
+  const continueOnPrevious = () => {
+    const cur = useReelStore.getState().update;
+    useReelStore.setState({
+      update: { ...cur, status: "current", target: null, notes: [] },
+    });
+  };
+  return (
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
+      />
+      <div className="rise relative">
+        <Wordmark className="flex-col gap-5" markClassName="size-20" />
+      </div>
+      <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
+        Update failed, still on previous
+      </p>
+      <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">
+        ReelOS did not stamp this update. This box is still the version that was already running.
+        Browse and request still work.
+      </p>
+      <div className="rise rise-4 mt-8">
+        <Button size="lg" onClick={continueOnPrevious}>
+          Continue
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function Splash({ compact = false, warming = false, updating = false, failed = false }: { compact?: boolean; warming?: boolean; updating?: boolean; failed?: boolean }) {
   const provisioned = useReelStore((s) => s.provisioned);
   const bootSteps = useReelStore((s) => s.bootSteps);
   const catchup = useReelStore((s) => s.libraryCatchup);
@@ -64,6 +97,9 @@ export function Splash({ compact = false, warming = false, updating = false }: {
 
   if (updating) {
     return <UpdatingSplash />;
+  }
+  if (failed) {
+    return <FailedSplash />;
   }
 
   return (

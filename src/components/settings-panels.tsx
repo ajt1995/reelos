@@ -59,25 +59,76 @@ export function PwaRow() {
   );
 }
 
-export function PerformanceRow() {
-  const [low, setLow] = useState(true);
-  const [busy, setBusy] = useState(false);
+export function HardwareDetectedCard() {
   const [summary, setSummary] = useState("");
   const [probed, setProbed] = useState(false);
+  const [detail, setDetail] = useState("");
   useEffect(() => {
-    void fetch("/api/performance", { cache: "no-store" })
+    void fetch("/api/hardware", { cache: "no-store" })
       .then(
         (r) =>
           r.json() as Promise<{
-            low?: boolean;
-            hardware?: { summary?: string; probed?: boolean; splashTune?: string };
+            summary?: string;
+            probed?: boolean;
+            ramGb?: number;
+            cpus?: number;
+            cpuModel?: string;
+            diskKind?: string;
+            rootOnUsb?: boolean;
+            product?: string;
           }>,
       )
       .then((j) => {
-        setLow(j.low !== false);
-        setSummary(j.hardware?.summary || "");
-        setProbed(Boolean(j.hardware?.probed));
+        const didProbe = Boolean(j.probed);
+        setProbed(didProbe);
+        setSummary(j.summary || "");
+        if (!didProbe) {
+          setDetail("");
+          return;
+        }
+        const disk = j.diskKind === "rotational" ? "HDD" : j.diskKind === "ssd" ? "SSD" : "disk";
+        const bits = [
+          j.product || "",
+          j.ramGb ? `${j.ramGb} Gi visible RAM` : "",
+          j.cpus ? `${j.cpus} cores` : "",
+          j.cpuModel || "",
+          disk,
+          j.rootOnUsb ? "root on USB" : "root on internal disk",
+        ].filter(Boolean);
+        setDetail(bits.join(" · "));
       })
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <div className="flex items-start gap-3">
+        <Cpu className="mt-0.5 size-5 text-muted" />
+        <div>
+          <p className="font-display font-medium">This is what I detected</p>
+          <p className="mt-1 text-sm text-foreground">
+            {probed
+              ? summary || "Measured on this box."
+              : "Not measured yet — ReelOS will probe on the next update or door start."}
+          </p>
+          {probed && detail ? <p className="mt-1 text-sm text-muted">{detail}</p> : null}
+          <p className="mt-1 text-sm text-muted">
+            {probed
+              ? "Cheap read of RAM, CPU, HDD vs SSD, USB-root, and kdump — not a speed test. Drive knobs follow this profile. Re-probes on install, OTA, or disk change; skips if unchanged."
+              : "A 4.5Gi RAM guess is used until the probe runs. This is not a speed test."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function PerformanceRow() {
+  const [low, setLow] = useState(true);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void fetch("/api/performance", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ low?: boolean }>)
+      .then((j) => setLow(j.low !== false))
       .catch(() => {});
   }, []);
   const toggle = async () => {
@@ -89,10 +140,8 @@ export function PerformanceRow() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ low: next }),
       });
-      const j = (await r.json()) as { low?: boolean; hardware?: { summary?: string; probed?: boolean } };
+      const j = (await r.json()) as { low?: boolean };
       setLow(j.low !== false);
-      if (j.hardware?.summary) setSummary(j.hardware.summary);
-      if (j.hardware?.probed != null) setProbed(Boolean(j.hardware.probed));
     } catch {
       /* */
     }
@@ -103,16 +152,7 @@ export function PerformanceRow() {
       <div className="flex items-start gap-3">
         <Cpu className="mt-0.5 size-5 text-muted" />
         <div>
-          <p className="font-display font-medium">This computer</p>
-          <p className="mt-1 text-sm text-foreground">
-            {summary || "Not measured yet — ReelOS will probe on the next update or door start."}
-          </p>
-          <p className="mt-1 text-sm text-muted">
-            {probed
-              ? "Detected on this box. Low-RAM / HDD boxes keep one TorBox filesystem, skip dump scans, and use compressed RAM instead of disk swap."
-              : "A 4.5Gi RAM guess is used until the probe runs. This is not a speed test."}
-          </p>
-          <p className="mt-2 font-display font-medium">Low performance mode</p>
+          <p className="font-display font-medium">Low performance mode</p>
           <p className="mt-1 text-sm text-muted">
             Caps transcode to one thread when a GPU (/dev/dri) is present. No GPU: Jellyfin DirectPlay/DirectStream only — no CPU ffmpeg transcode. Scene previews and subtitle extraction stay off so Jellyfin does not read TorBox dumps. A box with ≤4.5Gi RAM stays in this mode even if the toggle is off.
           </p>

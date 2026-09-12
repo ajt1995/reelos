@@ -10,6 +10,7 @@ import {
   cpuShort,
   hardwareLimits,
   hardwareProfile,
+  hardwareProfilePath,
   loadSavedHardware,
   publicHardware,
   summaryFromProfile,
@@ -80,6 +81,51 @@ test("saved profile is source of truth; 4.5Gi fallback if probe has not run", ()
   }
 });
 
+test("unprobed 16Gi cloud VM does not mix live RAM with a 4.5Gi guess", () => {
+  const cloud = publicHardware(null, 16 * 1024 * 1024);
+  assert.equal(cloud.probed, false);
+  assert.equal(cloud.tiny, false);
+  assert.equal(cloud.ramGb, 0);
+  assert.match(cloud.summary, /Not measured yet/);
+  assert.doesNotMatch(cloud.summary, /16Gi/);
+  assert.doesNotMatch(cloud.summary, /4\.5Gi|4Gi RAM/);
+});
+
+test("loadSavedHardware follows REELOS_STATE, not a hardcoded /var/lib path", () => {
+  const dir = mkdtempSync(join(tmpdir(), "reelos-hw-state-"));
+  try {
+    const path = join(dir, "hardware-profile.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ram_kb: 3_383_440,
+        ram_gb: 3.23,
+        cpus: 4,
+        disk_kind: "rotational",
+        tiny: true,
+        summary: "4Gi RAM · 4c Pentium N3710 · HDD · root-on-internal",
+        probe_version: 2,
+        probed_at: "2026-09-12T00:00:00Z",
+      }) + "\n",
+    );
+    const prev = process.env.REELOS_STATE;
+    process.env.REELOS_STATE = dir;
+    try {
+      assert.equal(hardwareProfilePath(), path);
+      const saved = loadSavedHardware();
+      const view = publicHardware(saved, 16 * 1024 * 1024);
+      assert.equal(view.probed, true);
+      assert.equal(view.summary, "4Gi RAM · 4c Pentium N3710 · HDD · root-on-internal");
+      assert.equal(view.ramGb, 3.23);
+    } finally {
+      if (prev == null) delete process.env.REELOS_STATE;
+      else process.env.REELOS_STATE = prev;
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("python probe persists JSON; second ensure is a no-op", () => {
   const self = spawnSync("python3", [join(root, "daemon/reelos_hardware.py"), "--self-test"], {
     encoding: "utf8",
@@ -120,19 +166,31 @@ test("python probe persists JSON; second ensure is a no-op", () => {
 });
 
 test("UI and API surface the saved profile; wizard stays 7 steps", () => {
-  assert.match(read("src/components/settings-panels.tsx"), /This computer/);
-  assert.match(read("src/components/settings-panels.tsx"), /\/api\/performance/);
+  assert.match(read("src/components/settings-panels.tsx"), /This is what I detected/);
+  assert.match(read("src/components/settings-panels.tsx"), /\/api\/hardware/);
+  assert.match(read("src/components/settings-view.tsx"), /HardwareDetectedCard/);
   assert.match(read("src/components/splash.tsx"), /\/api\/hardware/);
   assert.match(read("src/components/splash.tsx"), /Updating ReelOS/);
+  assert.match(read("src/components/splash.tsx"), /Update failed, still on previous/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /\/api\/hardware/);
-  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /hardware: publicHardware/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /this is what I detected/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /hardwareProfilePath/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /runHardwareEnsure/);
+  assert.match(read("scripts/reelos-lookup-plugin.mjs"), /this is what I detected/);
+  assert.match(read("scripts/reelos-box-scale.mjs"), /function hardwareProfilePath/);
   assert.match(read("src/components/wizard.tsx"), /TOTAL = 7/);
   assert.doesNotMatch(read("src/components/wizard.tsx"), /hardware profile step/i);
+  const panels = read("src/components/settings-panels.tsx");
+  assert.match(panels, /A 4\.5Gi RAM guess is used until the probe runs/);
+  assert.match(panels, /if \(!didProbe\)/);
+  assert.match(panels, /setDetail\(""\)/);
+  assert.doesNotMatch(panels, /This computer/);
 });
 
-test("re-probe hooks: firstboot, OTA before cleaner, door start", () => {
+test("re-probe hooks: firstboot, OTA before cleaner, door start, USB udev", () => {
   const install = read("daemon/install.sh");
   assert.match(install, /reelos_hardware.py" --ensure/);
+  assert.match(install, /99-reelos-hw-probe.rules/);
   assert.equal(install, read("install/reelos-install.sh"));
   const updater = read("daemon/reelos-update.sh");
   const hw = updater.indexOf('python3 "$ROOT/bin/reelos_hardware.py" --apply');
@@ -142,9 +200,13 @@ test("re-probe hooks: firstboot, OTA before cleaner, door start", () => {
   assert.match(read("firstboot/reelos.service"), /reelos_hardware.py --ensure/);
   assert.match(read("install/systemd/reelos.service"), /reelos_hardware.py --ensure/);
   assert.match(read("scripts/reelos-box.mjs"), /ensureHardwareProfile/);
+  assert.match(read("install/udev/99-reelos-hw-probe.rules"), /reelos-hw-probe.service/);
+  assert.match(read("install/systemd/reelos-hw-probe.service"), /--ensure/);
+  assert.match(updater, /reelos-hw-probe.service/);
   assert.equal(read("daemon/reelos_hardware.py"), read("install/bin/reelos_hardware.py"));
   assert.equal(read("daemon/reelos-ota-clean.sh"), read("install/bin/reelos-ota-clean.sh"));
   assert.equal(read("daemon/reelos_os_tune.py"), read("install/bin/reelos_os_tune.py"));
+  assert.equal(read("daemon/reelos-update.sh"), read("install/bin/reelos-update.sh"));
   assert.doesNotMatch(updater, /rm -rf \/media/);
   assert.doesNotMatch(updater, /rm .*ota\.lock/);
 });

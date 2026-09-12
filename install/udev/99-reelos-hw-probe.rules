@@ -1,0 +1,3 @@
+# Cheap re-probe when a real disk appears or leaves (USB SSD). Not a benchmark.
+# Skip loop/zram/rom. systemd --no-block so udev does not wait on Python.
+ACTION=="add|remove", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", KERNEL!="loop*|ram*|zram*|sr*", RUN+="/bin/systemctl --no-block start reelos-hw-probe.service"

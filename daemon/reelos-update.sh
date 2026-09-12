@@ -421,8 +421,12 @@ need src/components/applying-bar.tsx 'Updating ReelOS'
 need src/components/splash.tsx 'Updating ReelOS'
 need src/components/splash.tsx 'Not a percent'
 need src/components/splash.tsx '/api/hardware'
-need src/components/settings-panels.tsx 'This computer'
+need src/components/splash.tsx 'Update failed, still on previous'
+need src/components/settings-panels.tsx 'This is what I detected'
+need src/components/settings-panels.tsx '/api/hardware'
+need src/components/settings-view.tsx 'HardwareDetectedCard'
 need src/components/gate.tsx 'Splash updating'
+need src/components/gate.tsx 'Splash failed'
 need daemon/reelos-update.sh 'Updating ReelOS'
 need daemon/reelos-update.sh 'OTA cleaner — leftover nonsense'
 need daemon/reelos_os_tune.py 'zram on rotational'
@@ -550,6 +554,8 @@ need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
 need daemon/reelos_hardware.py 'probe_version'
 need daemon/reelos_hardware.py 'root-on-internal'
+need install/udev/99-reelos-hw-probe.rules 'reelos-hw-probe.service'
+need install/systemd/reelos-hw-probe.service '--ensure'
 need daemon/reelos_os_tune.py 'zram on rotational disk'
 need daemon/reelos_os_tune.py 'do not reserve 512M kdump'
 need daemon/reelos-library-catchup.sh 'TorBox filesystem busy'
@@ -661,7 +667,7 @@ fi
 
 NEXT="$ROOT.next"
 rm -rf "$NEXT"
-mkdir -p "$NEXT/app" "$NEXT/bin" "$NEXT/systemd" "$NEXT/compose"
+mkdir -p "$NEXT/app" "$NEXT/bin" "$NEXT/systemd" "$NEXT/compose" "$NEXT/udev"
 cp -a "$WORK/src/install/." "$NEXT/" 2>/dev/null || true
 if [ -d "$WORK/src/src" ]; then
   rm -rf "$NEXT/app"
@@ -1011,6 +1017,11 @@ mv "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
 cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
+if [ -d "$NEXT/udev" ]; then
+  mkdir -p "$ROOT/udev" /etc/udev/rules.d
+  cp -a "$NEXT/udev/." "$ROOT/udev/"
+  cp "$NEXT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules 2>/dev/null || true
+fi
 cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
 seed_arr_debrid_json "$ROOT"
@@ -1051,6 +1062,18 @@ fi
 if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
   cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
   chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
+fi
+if [ -f "$ROOT/systemd/reelos-hw-probe.service" ]; then
+  cp "$ROOT/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$ROOT/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$ROOT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+elif [ -f "$WORK/src/install/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$WORK/src/install/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
 fi
 if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"

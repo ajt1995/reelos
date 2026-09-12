@@ -1,5 +1,11 @@
 import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync, unlinkSync } from "node:fs";
-import { hasVaapiDri, loadSavedHardware, publicHardware, readHostMemKb } from "./reelos-box-scale.mjs";
+import {
+  hasVaapiDri,
+  hardwareProfilePath,
+  loadSavedHardware,
+  publicHardware,
+  readHostMemKb,
+} from "./reelos-box-scale.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
@@ -808,7 +814,7 @@ function boxSyncSlice() {
     tailscaleDns: ts.dns,
     tailscaleState: ts.state,
     tailnet: ts.tailnet,
-    hardware: publicHardware(loadSavedHardware(), readHostMemKb()),
+    hardware: publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
   };
 }
 
@@ -2335,7 +2341,7 @@ async function handleReady(req, res) {
     titles: Array.isArray(library?.titles) ? library.titles : [],
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,
-    hardware: slice.hardware || publicHardware(loadSavedHardware(), readHostMemKb()),
+    hardware: slice.hardware || publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
     betaChannel: betaEnabled(),
     timings: { ...timings, total: Date.now() - started },
   });
@@ -2563,37 +2569,20 @@ function applyPerformance() {
 }
 
 async function handlePerformance(req, res) {
-  const { boxIsSmall, hardwareProfile, hardwareLimits } = await import("./reelos-box-scale.mjs");
-  mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+  const { boxIsSmall } = await import("./reelos-box-scale.mjs");
+  const path = hardwareProfilePath();
+  mkdirSync(path.replace(/\/hardware-profile\.json$/, "") || "/var/lib/reelos", { recursive: true, mode: 0o700 });
   const method = (req.method || "GET").toUpperCase();
   const memKb = readHostMemKb();
-  const saved = loadSavedHardware();
-  const small = Boolean(saved?.tiny) || boxIsSmall(memKb);
-  let profile = hardwareProfile({ ramKb: memKb, cpus: 1, diskKind: "unknown", diskFreeGb: 0 });
-  if (saved && (saved.ram_kb || saved.ramKb)) {
-    profile = hardwareProfile({
-      ramKb: saved.ram_kb || saved.ramKb || memKb,
-      cpus: saved.cpus || 1,
-      diskKind: saved.disk_kind || saved.diskKind || "unknown",
-      diskFreeGb: saved.disk_free_gb || saved.diskFreeGb || 0,
-      cpuModel: saved.cpu_model || saved.cpuModel || "",
-      product: saved.product || "",
-      rootOnUsb: Boolean(saved.root_on_usb || saved.rootOnUsb),
-      kdumpReservedKb: saved.kdump_reserved_kb || 0,
-    });
-  } else {
-    try {
-      const { cpus } = await import("node:os");
-      profile = hardwareProfile({ ramKb: memKb, cpus: cpus().length || 1, diskKind: "unknown", diskFreeGb: 0 });
-    } catch {
-      /* measured RAM only */
-    }
+  let saved = loadSavedHardware({ path });
+  if (!saved) {
+    runHardwareEnsure();
+    saved = loadSavedHardware({ path });
   }
-  const limits = hardwareLimits(profile);
+  const small = Boolean(saved?.tiny) || boxIsSmall(Number(saved?.ram_kb || saved?.ramKb || 0) || memKb);
   const dri = hasVaapiDri();
   const mode = dri ? "vaapi" : "direct";
-  const view = publicHardware(saved, memKb);
-  const hardware = { ...profile, ...limits, ...view };
+  const hardware = publicHardware(saved, memKb);
   if (method === "GET") {
     const cur = readPerformance();
     if (!existsSync(performancePath())) {
@@ -2619,6 +2608,7 @@ function hardwarePy() {
   for (const p of [
     `${root}/bin/reelos_hardware.py`,
     `${cwd}/daemon/reelos_hardware.py`,
+    `${cwd}/install/bin/reelos_hardware.py`,
     "/opt/reelos/bin/reelos_hardware.py",
   ]) {
     if (existsSync(p)) return p;
@@ -2626,20 +2616,26 @@ function hardwarePy() {
   return "";
 }
 
+function runHardwareEnsure() {
+  const py = hardwarePy();
+  if (!py) return;
+  spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000, env: process.env });
+}
+
 async function handleHardware(req, res) {
   const method = (req.method || "GET").toUpperCase();
-  mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
-  if (method === "POST") {
-    const py = hardwarePy();
-    if (py) {
-      spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000 });
-    }
-  } else if (method !== "GET") {
+  const path = hardwareProfilePath();
+  const state = path.replace(/\/hardware-profile\.json$/, "") || "/var/lib/reelos";
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  if (method !== "GET" && method !== "POST") {
     send(res, 405, { ok: false });
     return;
   }
-  const view = publicHardware(loadSavedHardware(), readHostMemKb());
-  send(res, 200, { ok: true, ...view, path: "/var/lib/reelos/hardware-profile.json" });
+  if (method === "POST" || !loadSavedHardware({ path })) {
+    runHardwareEnsure();
+  }
+  const view = publicHardware(loadSavedHardware({ path }), readHostMemKb());
+  send(res, 200, { ok: true, detected: "this is what I detected", ...view, path });
 }
 
 export async function dispatchReelOsApi(req, res) {
