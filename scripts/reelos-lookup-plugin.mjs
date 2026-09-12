@@ -1524,6 +1524,7 @@ async function handleRequest(req, res) {
   if (!titleId && tmdb) titleId = String(body.mediaType || "").toLowerCase() === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
   if (!titleId && tvdb) titleId = `tvdb-${tvdb}`;
   const season = body.season ?? body.data?.season;
+  const episode = body.episode ?? body.data?.episode;
   let parsed = parseTitleId(titleId);
   parsed = await resolveLiveParsed(parsed);
   const bodyType = normalizeMediaType(body.mediaType);
@@ -1567,7 +1568,7 @@ async function handleRequest(req, res) {
       note(`seerr reuse ${reused.id} type=${parsed.mediaType} season=${reuseSeason}`);
       let recover = null;
       if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-        recover = await kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, mediaType: parsed.mediaType });
+        recover = await kickArrRecover({ tmdb: parsed.tmdb, season: reuseSeason, episode, mediaType: parsed.mediaType });
       }
       send(res, 200, {
         ok: recover ? recover.ok !== false : true,
@@ -1600,7 +1601,7 @@ async function handleRequest(req, res) {
     note(`seerr add ${added.status} type=${parsed.mediaType} season=${seasonN ?? ""}`);
     let recover = null;
     if (parsed.mediaType === "tv" || parsed.mediaType === "movie") {
-      recover = await kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, mediaType: parsed.mediaType });
+      recover = await kickArrRecover({ tmdb: parsed.tmdb, season: seasonN, episode, mediaType: parsed.mediaType });
     }
     send(res, 200, {
       ok: recover ? recover.ok !== false : true,

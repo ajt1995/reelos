@@ -345,6 +345,48 @@ test("kickTvSeasonRecover does not search a season that already has files", asyn
   assert.equal(result.importSpawned, true);
 });
 
+test("kickArrRecover EpisodeSearchs a missing ep when the season already has files", async () => {
+  const posts = [];
+  const result = await kickArrRecover({
+    mediaType: "tv",
+    tmdb: 1402,
+    season: 1,
+    episode: 4,
+    sonarrKey: "test",
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      if (String(url).includes("/series") && method === "GET") {
+        return [
+          {
+            id: 9,
+            tmdbId: 1402,
+            seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 6 } }],
+          },
+        ];
+      }
+      if (String(url).includes("/episode?") && method === "GET") {
+        return [
+          { id: 40, episodeNumber: 3, hasFile: true, monitored: true },
+          { id: 41, episodeNumber: 4, hasFile: false, monitored: false },
+        ];
+      }
+      if (String(url).includes("/episode/41") && method === "PUT") {
+        return { id: 41, episodeNumber: 4, hasFile: false, monitored: true };
+      }
+      if (String(url).includes("/command")) {
+        posts.push(opts.body);
+        return { id: 2, name: "EpisodeSearch" };
+      }
+      return { ok: true };
+    },
+  });
+  assert.equal(result.searched, true);
+  assert.equal(result.command, "EpisodeSearch");
+  assert.equal(posts[0]?.name, "EpisodeSearch");
+  assert.deepEqual(posts[0]?.episodeIds, [41]);
+});
+
 test("kickArrRecover MoviesSearch when Radarr has Interstellar with 0 files", async () => {
   const posts = [];
   const result = await kickArrRecover({
