@@ -97,6 +97,7 @@ test("start:box finds prebuilt nitro and hashed manifest", () => {
   assert.match(box, /prebuilt\/vercel-output/);
   assert.match(box, /prebuilt\/client/);
   assert.match(box, /vite --host :8080 \(door still binds\)/);
+  assert.match(box, /killOrphan8080/);
   const dir = mkdtempSync(join(tmpdir(), "reelos-37-"));
   try {
     mkdirSync(join(dir, "prebuilt/client"), { recursive: true });

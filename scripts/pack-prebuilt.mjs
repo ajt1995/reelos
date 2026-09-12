@@ -38,6 +38,9 @@ const staticSrc = join(src, "static");
 if (existsSync(staticSrc)) {
   for (const name of readdirSync(staticSrc)) {
     if (name === "posters") continue;
+    // public/install can hold local USB ISOs; never ship those in the 4GB tarball.
+    if (name === "install") continue;
+    if (/\.(iso|zip)$/i.test(name)) continue;
     cpSync(join(staticSrc, name), join(dest, "static", name), { recursive: true });
   }
 }

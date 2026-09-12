@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import { inFlightRequests, titleForRequest } from "@/lib/sync-requests";
+import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Kind, MediaRequest, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
@@ -85,13 +85,9 @@ export function DiscoverView() {
   const movieShelf = useMemo(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
   const tvShelf = useMemo(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
   const finishing = useMemo(() => {
-    const rows: { r: MediaRequest; t: Title }[] = [];
-    for (const r of inflight) {
-      const t = titleForRequest(r, catalog);
-      if (!t?.id) continue;
-      rows.push({ r, t });
-    }
-    return rows;
+    return collapseHomeRequestCards(inflight)
+      .map((r) => ({ r, t: titleForRequest(r, catalog) }))
+      .filter((x) => x.t?.id);
   }, [inflight, catalog]);
   const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
   const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);

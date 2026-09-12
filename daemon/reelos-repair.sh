@@ -50,9 +50,6 @@ else
   cat >/etc/caddy/Caddyfile <<'EOF'
 :80 {
 	encode gzip
-	handle /play* {
-		reverse_proxy 127.0.0.1:8096
-	}
 	handle /advanced/downloads* {
 		uri strip_prefix /advanced/downloads
 		reverse_proxy 127.0.0.1:8282

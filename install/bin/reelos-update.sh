@@ -115,6 +115,12 @@ https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main
 https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json
 https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json?$(date +%s)
 "
+    if [ -n "${REELOS_CHANNEL_URL:-}" ]; then
+      urls="
+${REELOS_CHANNEL_URL}
+$urls
+"
+    fi
   fi
   local u
   for u in $urls
@@ -398,7 +404,8 @@ need src/components/settings-fix.tsx 'Finished. Check Movies'
 need src/components/settings-view.tsx 'FixSection'
 need src/components/settings-updates.tsx 'This install'
 need src/components/settings-updates.tsx 'This update'
-need scripts/reelos-lookup-plugin.mjs 'pendingNotes'
+need scripts/reelos-lookup-plugin.mjs 'REELOS_CHANNEL_URL'
+need daemon/reelos-update.sh 'REELOS_CHANNEL_URL'
 need scripts/update-notes.mjs 'ownerEnglish'
 need scripts/reelos-library-remove.mjs 'deleteFilesAllowed'
 need src/components/remove-from-box.tsx 'Remove from this box'
@@ -406,7 +413,7 @@ need src/lib/repairs.ts 'One poster per movie'
 need scripts/reelos-lookup-plugin.mjs '/api/intent'
 need scripts/reelos-lookup-plugin.mjs 'applyIsRunning'
 need scripts/reelos-ota-status.mjs 'lockIsHeld'
-need src/components/applying-bar.tsx 'engines are still configuring'
+need src/components/applying-bar.tsx 'swapping the app'
 need src/routes/__root.tsx 'syncUpdateFromBox'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
@@ -517,6 +524,9 @@ need daemon/reelos_hardware.py 'disk_kind'
 need daemon/reelos_hardware.py 'catchup_memory_max'
 need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
+need daemon/reelos_os_tune.py 'zram on rotational disk'
+need daemon/reelos_os_tune.py 'do not reserve 512M kdump'
+need daemon/reelos-library-catchup.sh 'TorBox filesystem busy'
 need daemon/reelos-update.sh 'hardware profile'
 need daemon/reelos-library-catchup.sh 'do not remount if listed'
 need daemon/reelos-library-catchup.sh 'ffprobe D-state'

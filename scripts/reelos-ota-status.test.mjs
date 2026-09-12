@@ -71,6 +71,8 @@ test("library progress splash-locks only when running and dumps need import", ()
   assert.equal(skipped.splashLock, false);
   const back = parseLibraryProgress(JSON.stringify({ status: "backoff", needsImport: true }));
   assert.equal(back.splashLock, false);
+  assert.equal(back.status, "backoff");
+  assert.match(back.message, /TorBox filesystem busy/);
 });
 
 
