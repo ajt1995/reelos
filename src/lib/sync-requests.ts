@@ -129,8 +129,9 @@ export function mergeServerRequests(local: MediaRequest[], server: MediaRequest[
         continue;
       }
       // Non-empty server list is source of truth. Drop phone persist Seerr dropped,
-      // except a just-tapped Request that has not echoed yet.
-      if (isOptimisticLocal(loc)) {
+      // except a just-tapped Request that has not echoed yet — or a stuck movie
+      // Seerr still owns while Radarr has no row (Requests must not go empty).
+      if (isOptimisticLocal(loc) || /has no movie yet|has no series yet|search cannot land/i.test(loc.reason || "")) {
         out.push(loc);
         continue;
       }
@@ -199,9 +200,40 @@ export function titlePresenceKeys(id: string, extra: string[] = []): string[] {
   };
   add(id);
   extra.forEach(add);
+  // TV pages alias the movie-shaped tmdb-* id. A movie page must not grow tmdb-tv-*
+  // or Moon /title/tmdb-17431 POSTs The Great Escape.
   if (id.startsWith("tmdb-tv-")) add(`tmdb-${id.slice(8)}`);
-  if (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-")) add(`tmdb-tv-${id.slice(5)}`);
   return [...keys];
+}
+
+/** POST /api/request titleId: movie pages stay tmdb-<n>, never tmdb-tv-<n>. */
+export function requestTitleIdForPage(
+  pageId: string,
+  kind?: Kind | null,
+  extraIds: string[] = [],
+): string {
+  const series = kind === "tv" || kind === "anime";
+  const ids = extraIds.map(String);
+  if (series || pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-")) {
+    return ids.find((k) => k.startsWith("tmdb-tv-")) || (pageId.startsWith("tmdb-tv-") ? pageId : "") || ids.find((k) => /^tmdb-\d/.test(k)) || pageId;
+  }
+  if (pageId.startsWith("tmdb-") && !pageId.startsWith("tmdb-tv-")) return pageId;
+  return ids.find((k) => /^tmdb-\d/.test(k) && !k.startsWith("tmdb-tv-")) || pageId;
+}
+
+export function requestMediaTypeForPage(pageId: string, kind?: Kind | null): "tv" | "movie" {
+  if (kind === "tv" || kind === "anime") return "tv";
+  if (kind === "movie") return "movie";
+  if (pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-")) return "tv";
+  return "movie";
+}
+
+/** Hash paste is for unnamed dumps. Request on a named title goes to Seerr/*arr. */
+export function showHashAdapter(opts: { pageId?: string; title?: string } = {}): boolean {
+  const name = String(opts.title || "").trim();
+  const id = String(opts.pageId || "").trim();
+  if (name === "Unknown on this box") return true;
+  return /^[0-9a-f]{32,64}$/i.test(name) || /^[0-9a-f]{32,64}$/i.test(id);
 }
 
 export function titleMatchesId(
@@ -339,7 +371,7 @@ export function applyTitleRequestPoll(
 /** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
 export function overlayLibraryPresence(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind">[] },
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId">[] },
 ): MediaRequest[] {
   const movieKeys = new Set<string>();
   for (const id of opts.libraryIds || []) {
@@ -348,6 +380,8 @@ export function overlayLibraryPresence(
   }
   for (const t of opts.titles || []) {
     if (t.kind === "tv" || t.kind === "anime") continue;
+    // Discover/lookup memory is not the JF shelf — National Treasure must stay in-flight.
+    if (!t.jellyfinId) continue;
     for (const k of titlePresenceKeys(t.id, t.ids || [])) {
       if (k.startsWith("jf-")) continue;
       movieKeys.add(k);

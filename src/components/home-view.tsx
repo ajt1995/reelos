@@ -34,7 +34,8 @@ export function HomeView() {
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
-  const inflight = inFlightRequests(requests, { titles: catalog });
+  const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
+  const inflight = inFlightRequests(requests, { titles: shelf });
   const transferring = inflight.length;
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
@@ -141,8 +142,9 @@ export function HomeView() {
       </form>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <Chip live>
-          {frontendLabel[frontend]} live
+        <Chip live={jfLive}>
+          {frontendLabel[frontend]}
+          {jfLive ? " live" : ""}
         </Chip>
         <Chip live={adapter.status === "healthy"}>
           {sourceLabel[source]}

@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-CnJP4qFl.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-C2x6vXTT.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -433,7 +433,7 @@ function mergeServerRequests(local, server) {
 				out.push(loc);
 				continue;
 			}
-			if (isOptimisticLocal(loc)) {
+			if (isOptimisticLocal(loc) || /has no movie yet|has no series yet|search cannot land/i.test(loc.reason || "")) {
 				out.push(loc);
 				continue;
 			}
@@ -498,8 +498,28 @@ function titlePresenceKeys(id, extra = []) {
 	add(id);
 	extra.forEach(add);
 	if (id.startsWith("tmdb-tv-")) add(`tmdb-${id.slice(8)}`);
-	if (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-")) add(`tmdb-tv-${id.slice(5)}`);
 	return [...keys];
+}
+/** POST /api/request titleId: movie pages stay tmdb-<n>, never tmdb-tv-<n>. */
+function requestTitleIdForPage(pageId, kind, extraIds = []) {
+	const series = kind === "tv" || kind === "anime";
+	const ids = extraIds.map(String);
+	if (series || pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-")) return ids.find((k) => k.startsWith("tmdb-tv-")) || (pageId.startsWith("tmdb-tv-") ? pageId : "") || ids.find((k) => /^tmdb-\d/.test(k)) || pageId;
+	if (pageId.startsWith("tmdb-") && !pageId.startsWith("tmdb-tv-")) return pageId;
+	return ids.find((k) => /^tmdb-\d/.test(k) && !k.startsWith("tmdb-tv-")) || pageId;
+}
+function requestMediaTypeForPage(pageId, kind) {
+	if (kind === "tv" || kind === "anime") return "tv";
+	if (kind === "movie") return "movie";
+	if (pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-")) return "tv";
+	return "movie";
+}
+/** Hash paste is for unnamed dumps. Request on a named title goes to Seerr/*arr. */
+function showHashAdapter(opts = {}) {
+	const name = String(opts.title || "").trim();
+	const id = String(opts.pageId || "").trim();
+	if (name === "Unknown on this box") return true;
+	return /^[0-9a-f]{32,64}$/i.test(name) || /^[0-9a-f]{32,64}$/i.test(id);
 }
 function titleMatchesId(t, id) {
 	const keys = new Set(titlePresenceKeys(t.id, t.ids || []));
@@ -613,6 +633,7 @@ function overlayLibraryPresence(requests, opts) {
 	}
 	for (const t of opts.titles || []) {
 		if (t.kind === "tv" || t.kind === "anime") continue;
+		if (!t.jellyfinId) continue;
 		for (const k of titlePresenceKeys(t.id, t.ids || [])) {
 			if (k.startsWith("jf-")) continue;
 			movieKeys.add(k);
@@ -649,7 +670,7 @@ var defaultAnswers = {
 	tunnelToken: ""
 };
 var CHANNEL = "stable";
-var SHIPPED_VERSION = "1.2.50.46";
+var SHIPPED_VERSION = "1.2.50.47";
 function idleBootSteps() {
 	return {
 		local: "pending",
@@ -659,6 +680,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
+	"1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff… is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff… /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it — Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.45: Title page honesty — /title/tvdb-* is the same Expanse as library tmdb-tv / Jellyfin. Watch when it is on the box, not TorBox-will-transfer + Available after request. Seerr season load fails with Retry instead of infinite Loading seasons from Seerr. Complete pack dumps collapse onto the series. Gold chrome, prebuilt hashed UI. Complements #128. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.44: Splash-lock Home only while library catch-up is actually running and dumps still need import. Status done / idle / stopped and skip-only (14 skipped) do not freeze the phone on catching up. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -1047,6 +1069,10 @@ var initial = {
 	shelf: [],
 	shelfError: null,
 	shelfReady: false,
+	jellyfinHop: {
+		state: "amber",
+		detail: "Still starting"
+	},
 	watchProgress: {},
 	activity: [],
 	users: [],
@@ -1107,7 +1133,11 @@ var useReelStore = create()(persist((set, get) => ({
 					house: provisioned ? "ok" : "fail",
 					library: libraryOk ? "ok" : "fail",
 					requests: requestsOk ? "ok" : "fail"
-				}
+				},
+				jellyfinHop: ready?.jellyfin?.state ? {
+					state: String(ready.jellyfin.state),
+					detail: ready.jellyfin.detail
+				} : s.jellyfinHop
 			};
 		});
 		const s = get();
@@ -1693,27 +1723,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-b0Hq2ayH.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-Cw6nsgrS.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-C5EHdgdw.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-Cxzg3wzm.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-BAb_uKqX.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-B3zOzmS0.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-DGK3spbk.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-BeNBpzja.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-2NzL_41U.mjs");
+var $$splitComponentImporter$6 = () => import("./library-9Ta4Zmmy.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-BRezYqqO.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-BaIdD02d.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-C1lXFMYd.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-d5YVoUBY.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-Dkoyc4uB.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-Dcchcpem.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-BTdWXa2I.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-C7y7ybQm.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-Bigf5AR8.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-vxA-nUS_.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-nYrPMRA0.mjs");
+var $$splitComponentImporter = () => import("./title._id-DyK5MaKt.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
@@ -1792,4 +1822,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { titleMatchesId as C, titleForRequest as S, catchupLocksHome as T, isGhostRequestLabel as _, CHANNEL as a, requestShowsRetry as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, titlePresenceKeys as w, showRequestQueueControls as x, overlayLibraryPresence as y };
+export { showHashAdapter as C, titlePresenceKeys as D, titleMatchesId as E, catchupLocksHome as O, requestTitleIdForPage as S, titleForRequest as T, isGhostRequestLabel as _, CHANNEL as a, requestMediaTypeForPage as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as w, requestShowsRetry as x, overlayLibraryPresence as y };

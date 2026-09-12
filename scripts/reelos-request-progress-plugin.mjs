@@ -13,6 +13,8 @@ import {
   resolveParsedTitle,
   attachTitleAliases,
   libraryHasTitle,
+  onDiskSeasonsFor,
+  titleIdFor,
 } from "./reelos-seerr.mjs";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import {
@@ -195,28 +197,33 @@ async function handleGet(req, res) {
       type: parsed.mediaType,
       media: { ...media, tmdbId: Number(parsed.tmdb), ...(last.media || {}) },
     });
+    mapped.titleId = mapped.titleId || titleIdFor(parsed.mediaType, parsed.tmdb);
+    if (season != null && Number.isFinite(season)) mapped.season = season;
     facts = facts || (await loadPresenceFacts());
     const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId })[0] || mapped;
+    const diskSeasons = onDiskSeasonsFor(parsed, facts.arrIndex);
+    const seasonOnDisk = season != null && diskSeasons.includes(Number(season));
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
       parsed,
     );
     maybeImportAvailable({
-      status: honest.status,
-      engine: honest.engine,
+      status: seasonOnDisk ? "available" : honest.status,
+      engine: seasonOnDisk ? "downloaded" : honest.engine,
       titleId: mapped.titleId,
     });
     send(res, 200, {
-      status: honest.engine || "unknown",
+      status: seasonOnDisk ? "downloaded" : honest.engine || "unknown",
       engine: "seerr",
       title: title?.title,
       titleId: mapped.titleId,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
-      progress: honest.status === "available" ? 100 : honest.progress,
-      reason: honest.reason,
-      requestStatus: honest.status,
+      onDiskSeasons: diskSeasons,
+      progress: seasonOnDisk || honest.status === "available" ? 100 : honest.progress,
+      reason: seasonOnDisk ? undefined : honest.reason,
+      requestStatus: seasonOnDisk ? "available" : honest.status,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });

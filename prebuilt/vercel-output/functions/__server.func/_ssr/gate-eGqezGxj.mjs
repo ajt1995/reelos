@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { S as titleForRequest, T as catchupLocksHome, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-CnJP4qFl.mjs";
+import { O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-C2x6vXTT.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/gate-RHWa-VSK.js
+//#region node_modules/.nitro/vite/services/ssr/assets/gate-eGqezGxj.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -39,16 +39,7 @@ function Poster({ title, className, sizes = "poster" }) {
 			decoding: "async",
 			className: "poster absolute inset-0 size-full object-cover",
 			onError: () => setOk(false)
-		}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-			className: "absolute inset-0 flex flex-col justify-end bg-linear-to-br from-card-2 to-background p-4",
-			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "font-display text-lg font-medium tracking-tight",
-				children: title.title
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-				className: "text-xs text-muted",
-				children: title.year
-			})]
-		})
+		}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", { className: "absolute inset-0 bg-linear-to-br from-card-2 to-background" })
 	});
 }
 function TitleCard({ title, request, progress, className }) {
@@ -289,7 +280,7 @@ function useSyncRequests() {
 				useReelStore.getState().rememberTitles?.(titles);
 				const live = Array.isArray(j.requests) ? j.requests : [];
 				useReelStore.setState((s) => {
-					return { requests: overlayLibraryPresence(mergeServerRequests(s.requests, live), { titles: [...s.shelf, ...s.remoteTitles] }) };
+					return { requests: overlayLibraryPresence(mergeServerRequests(s.requests, live), { titles: s.shelf }) };
 				});
 			} catch {}
 		};
@@ -345,7 +336,8 @@ function HomeView() {
 	const source = useReelStore((s) => s.answers.source);
 	const adapter = useReelStore((s) => s.adapter);
 	const catalog = (0, import_react.useMemo)(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
-	const inflight = inFlightRequests(requests, { titles: catalog });
+	const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
+	const inflight = inFlightRequests(requests, { titles: shelf });
 	const transferring = inflight.length;
 	useSyncRequests();
 	useResolveGhostRequestTitles(inflight, catalog);
@@ -459,8 +451,8 @@ function HomeView() {
 				className: "mt-5 flex flex-wrap gap-2",
 				children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, {
-						live: true,
-						children: [frontendLabel[frontend], " live"]
+						live: jfLive,
+						children: [frontendLabel[frontend], jfLive ? " live" : ""]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Chip, {
 						live: adapter.status === "healthy",

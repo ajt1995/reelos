@@ -47,6 +47,7 @@ import {
   findLibraryTitle,
   lookupPayloadForId,
   pickSeerrSearchForLibrary,
+  onDiskSeasonsFor,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -60,6 +61,10 @@ test("TV ids stay distinct from movie tmdb ids", () => {
   });
   assert.equal(titleIdFor("tv", 80566), "tmdb-tv-80566");
   assert.equal(titleIdFor("movie", 550), "tmdb-550");
+  assert.deepEqual(parseTitleId("73ceff573dc30bebc3fcf26f61de07b25f927a74"), {
+    hash: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    titleId: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+  });
 });
 
 test("tvdb shelf rows resolve to the same TMDB show as tmdb-tv", () => {
@@ -129,6 +134,31 @@ test("jf-* lookup uses the library row, not a Seerr miss", () => {
     ],
   );
   assert.equal(hit.kind, "tv");
+});
+
+test("infohash URL resolves the Rick dump folder", () => {
+  const rick = {
+    id: "tvdb-275274",
+    kind: "tv",
+    title: "Rick and Morty",
+    ids: ["tvdb-275274", "tmdb-tv-60625", "73ceff573dc30bebc3fcf26f61de07b25f927a74", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    path: "/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    onDiskSeasons: [4],
+  };
+  assert.equal(findLibraryTitle([rick], "73ceff573dc30bebc3fcf26f61de07b25f927a74")?.title, "Rick and Morty");
+  const index = buildArrIndex({
+    series: [
+      {
+        tmdbId: 60625,
+        tvdbId: 275274,
+        seasons: [
+          { seasonNumber: 1, statistics: { episodeFileCount: 11 } },
+          { seasonNumber: 4, statistics: { episodeFileCount: 10 } },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(onDiskSeasonsFor({ mediaType: "tv", tmdb: "60625", tvdb: "275274" }, index), [1, 4]);
 });
 
 test("season selectors skip specials and fake uncapped counts", () => {
@@ -975,6 +1005,10 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(lookup, /resolveParsedTitle/);
   assert.match(readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8"), /Could not map that title to TMDB/);
   const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  assert.match(progress, /onDiskSeasons/);
+  assert.match(lookup, /bodyType/);
+  assert.match(titleView, /showHashAdapter/);
+  assert.match(titleView, /requestTitleIdForPage/);
   assert.match(titleView, />\s*Watch\s*</);
   assert.match(titleView, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
@@ -1011,7 +1045,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(sync, /\/api\/request\?recover=1/);
   assert.doesNotMatch(sync, /recoveredOnce/);
   assert.match(requestsView, /requestShowsRetry/);
-  assert.match(progress, /reason: honest.reason/);
+  assert.match(progress, /honest\.reason/);
   assert.match(lookup, /assembleRequestPayload/);
   assert.match(lookup, /kickArrRecover/);
   assert.match(lookup, /mediaType: parsed.mediaType/);

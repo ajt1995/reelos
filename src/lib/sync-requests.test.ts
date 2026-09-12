@@ -11,10 +11,14 @@ import {
   isInFlightRequest,
   mergeServerRequests,
   overlayLibraryPresence,
+  requestMediaTypeForPage,
   requestShowsRetry,
+  requestTitleIdForPage,
+  showHashAdapter,
   showRequestQueueControls,
   titleForRequest,
   titleMatchesId,
+  titlePresenceKeys,
 } from "./sync-requests.ts";
 import type { MediaRequest } from "./types.ts";
 
@@ -121,7 +125,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
-  assert.match(home, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
   assert.match(home, /collapseHomeRequestCards\(inflight\)/);
   assert.match(home, /transferring = inflight\.length/);
@@ -129,7 +133,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
   assert.doesNotMatch(shell, /aria-label="Search"/);
-  assert.match(reqs, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
+  assert.match(reqs, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(reqs, /inflight\.filter\(\(r\) => \(filter === "all" \? true : r\.status === filter\)\)/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
@@ -409,7 +413,7 @@ test("sticky persist library ids do not keep a ghost movie available without a s
 test("movie overlay matches TMDB from title.ids, not only t.id", () => {
   const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
   const honest = overlayLibraryPresence(requests, {
-    titles: [{ id: "jf-museum", kind: "movie", ids: ["tmdb-1593", "jf-1"] }],
+    titles: [{ id: "jf-museum", kind: "movie", ids: ["tmdb-1593", "jf-1"], jellyfinId: "jf-1" }],
   });
   assert.equal(honest[0]?.status, "available");
 });
@@ -509,4 +513,51 @@ test("title-page poll matches a tvdb URL onto the tmdb-tv request row", () => {
   });
   assert.equal(next[0]?.status, "available");
   assert.equal(next[0]?.progress, 100);
+});
+
+test("Moon movie page POSTs tmdb-17431 not tmdb-tv-17431", () => {
+  const extra = titlePresenceKeys("tmdb-17431");
+  assert.equal(extra.includes("tmdb-tv-17431"), false);
+  assert.equal(requestTitleIdForPage("tmdb-17431", "movie", extra), "tmdb-17431");
+  assert.equal(requestMediaTypeForPage("tmdb-17431", "movie"), "movie");
+  assert.equal(requestTitleIdForPage("tmdb-tv-63639", "tv", ["tmdb-tv-63639", "tmdb-63639"]), "tmdb-tv-63639");
+  assert.equal(requestMediaTypeForPage("tvdb-280619", "tv"), "tv");
+});
+
+test("hash adapter is hidden on named titles", () => {
+  assert.equal(showHashAdapter({ pageId: "tmdb-17431", title: "Moon" }), false);
+  assert.equal(showHashAdapter({ pageId: "tmdb-2059", title: "National Treasure" }), false);
+  assert.equal(showHashAdapter({ pageId: "tmdb-157336", title: "Interstellar" }), false);
+  assert.equal(showHashAdapter({ pageId: "73ceff573dc30bebc3fcf26f61de07b25f927a74", title: "Unknown on this box" }), true);
+});
+
+test("lookup-memory National Treasure does not empty Requests", () => {
+  const requests = [
+    row({
+      id: "seerr-9",
+      titleId: "tmdb-2059",
+      title: "National Treasure",
+      status: "downloading",
+      progress: 0,
+      reason: "Requested — Radarr has no movie yet",
+    }),
+  ];
+  const inflight = inFlightRequests(requests, {
+    titles: [{ id: "tmdb-2059", kind: "movie", title: "National Treasure" }],
+  });
+  assert.equal(inflight.length, 1);
+  assert.equal(inflight[0]?.titleId, "tmdb-2059");
+  const merged = mergeServerRequests(requests, [
+    row({ id: "other", titleId: "tmdb-1593", title: "Night at the Museum", status: "waiting" }),
+  ]);
+  assert.equal(merged.find((r) => r.titleId === "tmdb-2059")?.reason, "Requested — Radarr has no movie yet");
+});
+
+test("title page hides magnet paste and prefers movie POST", () => {
+  const view = readFileSync(new URL("../components/title-view-live.tsx", import.meta.url), "utf8");
+  assert.match(view, /requestTitleIdForPage/);
+  assert.match(view, /requestMediaTypeForPage/);
+  assert.match(view, /showHashAdapter/);
+  assert.match(view, /thisSeasonOnBox/);
+  assert.doesNotMatch(view, /extraIds\.find\(\(k\) => k\.startsWith\("tmdb-tv-"\)\) \|\| extraIds\.find/);
 });

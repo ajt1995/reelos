@@ -39,6 +39,7 @@ export function parseTitleId(id) {
   if (s.startsWith("tmdb-")) return { mediaType: "movie", tmdb: s.slice(5), titleId: s };
   if (s.startsWith("tvdb-")) return { mediaType: "tv", tvdb: s.slice(5), titleId: s };
   if (s.startsWith("jf-") && s.length > 3) return { jellyfinId: s.slice(3), titleId: s };
+  if (/^[0-9a-f]{32,64}$/i.test(s)) return { hash: s.toLowerCase(), titleId: s.toLowerCase() };
   return null;
 }
 
@@ -123,18 +124,27 @@ export function libraryHasTitle(titles, id) {
 
 export function findLibraryTitle(titles, id) {
   const parsed = parseTitleId(id);
+  const hash = parsed?.hash || (/^[0-9a-f]{32,64}$/i.test(String(id || "")) ? String(id).toLowerCase() : "");
   const keys = new Set(
     [
       id,
       parsed?.titleId,
       parsed?.tvdb ? `tvdb-${parsed.tvdb}` : "",
       parsed?.tmdb ? `tmdb-${parsed.tmdb}` : "",
-      parsed?.tmdb ? `tmdb-tv-${parsed.tmdb}` : "",
+      parsed?.mediaType === "tv" && parsed?.tmdb ? `tmdb-tv-${parsed.tmdb}` : "",
       parsed?.jellyfinId,
       parsed?.jellyfinId ? `jf-${parsed.jellyfinId}` : "",
+      hash,
     ].filter(Boolean),
   );
-  return (titles || []).find((t) => collectTitleIds(t).some((x) => keys.has(x))) || null;
+  return (
+    (titles || []).find((t) => {
+      const ids = collectTitleIds(t);
+      if (ids.some((x) => keys.has(x) || (hash && String(x).toLowerCase() === hash))) return true;
+      if (hash && String(t?.path || "").toLowerCase().includes(hash)) return true;
+      return false;
+    }) || null
+  );
 }
 
 export function attachLibraryPresence(title, libraryTitle) {
@@ -551,6 +561,22 @@ export function arrHasFile(row, index) {
   if (parsed.tmdb && index.seasonHasFile?.has(`tmdb:${parsed.tmdb}:${season}`)) return true;
   if (parsed.tvdb && index.seasonHasFile?.has(`tvdb:${parsed.tvdb}:${season}`)) return true;
   return false;
+}
+
+/** Seasons *arr already has files for — Request Sxx must hide these. */
+export function onDiskSeasonsFor(parsed, index) {
+  if (!parsed || parsed.mediaType === "movie" || !index?.seasonHasFile) return [];
+  const out = [];
+  const tmdbPrefix = parsed.tmdb ? `tmdb:${parsed.tmdb}:` : "";
+  const tvdbPrefix = parsed.tvdb ? `tvdb:${parsed.tvdb}:` : "";
+  for (const key of index.seasonHasFile) {
+    const k = String(key);
+    let n = 0;
+    if (tmdbPrefix && k.startsWith(tmdbPrefix)) n = Number(k.slice(tmdbPrefix.length));
+    else if (tvdbPrefix && k.startsWith(tvdbPrefix)) n = Number(k.slice(tvdbPrefix.length));
+    if (Number.isFinite(n) && n > 0) out.push(n);
+  }
+  return [...new Set(out)].sort((a, b) => a - b);
 }
 
 export function isTvSeasonRow(row) {

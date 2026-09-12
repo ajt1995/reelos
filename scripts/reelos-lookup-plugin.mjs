@@ -23,6 +23,8 @@ import {
   findLibraryTitle,
   lookupPayloadForId,
   pickSeerrSearchForLibrary,
+  normalizeMediaType,
+  titleIdFor,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -1413,7 +1415,16 @@ async function handleRequest(req, res) {
   const season = body.season ?? body.data?.season;
   let parsed = parseTitleId(titleId);
   parsed = await resolveLiveParsed(parsed);
-  note(`request ${titleId} title=${body.title || ""} season=${season ?? ""} tmdb=${parsed?.tmdb || ""}`);
+  const bodyType = normalizeMediaType(body.mediaType);
+  if (parsed?.tmdb && bodyType && bodyType !== parsed.mediaType) {
+    parsed = {
+      ...parsed,
+      mediaType: bodyType,
+      titleId: titleIdFor(bodyType, parsed.tmdb),
+    };
+    titleId = parsed.titleId;
+  }
+  note(`request ${titleId} title=${body.title || ""} season=${season ?? ""} tmdb=${parsed?.tmdb || ""} type=${parsed?.mediaType || ""}`);
   if (!titleId) {
     send(res, 400, { ok: false, error: "No title" });
     return;

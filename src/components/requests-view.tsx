@@ -28,7 +28,7 @@ export function RequestsView() {
   }, [hydrateShelf]);
 
   const catalog = [...shelf, ...remoteTitles];
-  const inflight = inFlightRequests(requests, { titles: catalog });
+  const inflight = inFlightRequests(requests, { titles: shelf });
   useResolveGhostRequestTitles(inflight, catalog);
   const list = inflight.filter((r) => (filter === "all" ? true : r.status === filter));
 
