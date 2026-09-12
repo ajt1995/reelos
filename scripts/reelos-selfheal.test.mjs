@@ -69,6 +69,14 @@ test("unstick plan is import-not-search", () => {
   assert.equal(planUnstickSearchingIfFileOnDisk({ status: "waiting", arrHasFile: true }).search, false);
 });
 
+test("selfheal.mjs loads — recover does not crash on missing filterRemovedRequests", async () => {
+  const heal = await import("./reelos-selfheal.mjs");
+  assert.equal(typeof heal.runSelfHeal, "function");
+  assert.equal(typeof heal.recoverInFlightRequests, "function");
+  const remove = await import("./reelos-library-remove.mjs");
+  assert.equal(typeof remove.filterRemovedRequests, "function");
+});
+
 test("dump heal maps indexer prefixes and does not docker restart readers", () => {
   const stuck = read("daemon/stuck-downloads.py");
   const relink = read("daemon/relink_dumps.py");

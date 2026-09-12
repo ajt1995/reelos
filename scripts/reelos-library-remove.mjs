@@ -126,6 +126,17 @@ export function applyRemovedTitles(titles, removedIds) {
   return (titles || []).filter((t) => !titleInDropSet(t, keys));
 }
 
+/** Recover must not re-add a title the phone already Removed. */
+export function filterRemovedRequests(rows, removedIds) {
+  const keys = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
+  if (!keys.size) return rows || [];
+  return (rows || []).filter((r) => {
+    if (!r?.titleId) return true;
+    if (keys.has(String(r.titleId))) return false;
+    return !libraryDropKeys(r.titleId).some((k) => keys.has(k));
+  });
+}
+
 export function mergeRemovedIds(prev, next) {
   return [...new Set([...(prev || []), ...(next || [])].map((id) => String(id).trim()).filter(Boolean))];
 }

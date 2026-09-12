@@ -12,6 +12,7 @@ import {
   dropCacheTitles,
   dropLibraryOverlay,
   expandDropKeys,
+  filterRemovedRequests,
   forgetRemovedIds,
   forgetRemovedKeys,
   forgetRemovedTitleIds,
@@ -210,6 +211,27 @@ test("remove TV: Sonarr unmonitor+delete; JF skipped when path is /media", async
   assert.ok(calls.some((c) => c[0] === "arr" && c[1] === "DELETE" && String(c[2]).includes("deleteFiles=false")));
   assert.equal(calls.some((c) => c[0] === "jf"), false);
   assert.ok(calls.filter((c) => c[0] === "seerr" && c[1] === "DELETE").length >= 3);
+});
+
+test("filterRemovedRequests drops tombstoned movie and every TV season row", () => {
+  const movie = filterRemovedRequests(
+    [
+      { id: "seerr-1", titleId: "tmdb-1593" },
+      { id: "seerr-2", titleId: "tmdb-550" },
+    ],
+    ["tmdb-1593"],
+  );
+  assert.deepEqual(movie.map((r) => r.id), ["seerr-2"]);
+  const tv = filterRemovedRequests(
+    [
+      { id: "s1", titleId: "tmdb-tv-1402", season: 1 },
+      { id: "s2", titleId: "tmdb-tv-1402", season: 2 },
+      { id: "m", titleId: "tmdb-550" },
+    ],
+    ["tvdb-153021", "tmdb-tv-1402"],
+  );
+  assert.deepEqual(tv.map((r) => r.id), ["m"]);
+  assert.deepEqual(filterRemovedRequests([{ titleId: "tmdb-1" }], []), [{ titleId: "tmdb-1" }]);
 });
 
 test("removed-id overlay persists across serve filter and forgets on re-request", () => {
