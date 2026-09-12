@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
+import { Route as BooksRouteImport } from './routes/books'
 import { Route as ConnectRouteImport } from './routes/connect'
 import { Route as DiscoverRouteImport } from './routes/discover'
 import { Route as LibraryRouteImport } from './routes/library'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BooksRoute = BooksRouteImport.update({
+  id: '/books',
+  path: '/books',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectRoute = ConnectRouteImport.update({
@@ -80,6 +86,7 @@ const TitleIdRoute = TitleIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
   '/discover': typeof DiscoverRoute
   '/library': typeof LibraryRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
   '/discover': typeof DiscoverRoute
   '/library': typeof LibraryRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/books': typeof BooksRoute
   '/connect': typeof ConnectRoute
   '/discover': typeof DiscoverRoute
   '/library': typeof LibraryRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/activity'
+    | '/books'
     | '/connect'
     | '/discover'
     | '/library'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/activity'
+    | '/books'
     | '/connect'
     | '/discover'
     | '/library'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/activity'
+    | '/books'
     | '/connect'
     | '/discover'
     | '/library'
@@ -162,6 +174,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
+  BooksRoute: typeof BooksRoute
   ConnectRoute: typeof ConnectRoute
   DiscoverRoute: typeof DiscoverRoute
   LibraryRoute: typeof LibraryRoute
@@ -186,6 +199,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/activity'
       preLoaderRoute: typeof ActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/books': {
+      id: '/books'
+      path: '/books'
+      fullPath: '/books'
+      preLoaderRoute: typeof BooksRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connect': {
@@ -269,6 +289,7 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
+  BooksRoute: BooksRoute,
   ConnectRoute: ConnectRoute,
   DiscoverRoute: DiscoverRoute,
   LibraryRoute: LibraryRoute,

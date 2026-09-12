@@ -290,11 +290,18 @@ function armSelfHeal() {
   setInterval(() => void kickSelfHeal(), 120_000).unref();
 }
 
+function idleOffBooks() {
+  void import("./reelos-beta-sidecar.mjs")
+    .then((m) => m.idleOffBooksIfNeeded())
+    .catch(() => {});
+}
+
 export async function startBox({ root = ROOT } = {}) {
   const client = findClientRoot(root);
   if (client) {
     const server = await startStatic(client, root);
     armSelfHeal();
+    idleOffBooks();
     return { mode: "static", client, server };
   }
   const nitro = findNitroOutput(root);
@@ -302,6 +309,7 @@ export async function startBox({ root = ROOT } = {}) {
     try {
       const server = await startNitroPlusApi(nitro, root);
       armSelfHeal();
+      idleOffBooks();
       return { mode: "nitro+api", client: nitro, server };
     } catch (e) {
       console.log(`[reelos-box] nitro+api failed (${e}) — production preview`);

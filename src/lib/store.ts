@@ -61,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.48";
-export const SHIPPED_VERSION = "1.2.50.48";
+export const LATEST_VERSION = "2.0.0";
+export const SHIPPED_VERSION = "2.0.0";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -93,9 +93,11 @@ export type ReadyPayload = {
   requests?: MediaRequest[];
   pipeline?: unknown;
   timings?: Record<string, number>;
+  betaChannel?: boolean;
 };
 
 export const UPDATE_NOTES = [
+  "2.0.0 sidecar: Settings Beta toggle (default off) turns on Arena chrome and Books. Off is stable movies/TV. Toggle-off rolls back without OTA. Not for house Apply. Not inside main.tar.gz. Licensed novels = buy/borrow/sideload. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff\u2026 /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it \u2014 Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
@@ -539,6 +541,10 @@ export const useReelStore = create<ReelState>()(
             ipv4: ready?.ipv4 != null ? String(ready.ipv4) : s.ipv4,
             watch: ready?.watch != null ? String(ready.watch) : s.watch,
             tailscaleIp: ready?.tailscaleIp != null ? String(ready.tailscaleIp) : s.tailscaleIp,
+            settings:
+              typeof ready?.betaChannel === "boolean"
+                ? { ...s.settings, betaChannel: ready.betaChannel }
+                : s.settings,
           };
         });
         const s = get();

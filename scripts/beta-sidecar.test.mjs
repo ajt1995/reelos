@@ -12,12 +12,12 @@ function read(rel) {
   return readFileSync(join(root, rel), "utf8");
 }
 
-test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
+test("sidecar: this tree is 2.0.0; stable channel.json stays 1.2.50.x / main.tar.gz", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
-  assert.equal(ver, "1.2.50.48");
-  assert.equal(chan.version, "1.2.50.48");
+  assert.equal(ver, "2.0.0");
+  assert.match(chan.version, /^1\.2\.50\./);
   assert.equal(chan.channel, "stable");
   assert.match(chan.tarball, /main\.tar\.gz/);
   assert.doesNotMatch(JSON.stringify(chan), /beta-arena-books/);
@@ -25,8 +25,8 @@ test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
   assert.equal(beta.channel, "beta");
   assert.match(beta.tarball, /cursor\/beta-arena-books-5ba6\.tar\.gz/);
   assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
-  assert.doesNotMatch(read("src/styles.css"), /\.arena-page/);
-  assert.doesNotMatch(read("src/lib/store.ts"), /LATEST_VERSION = "2\./);
+  assert.match(read("src/lib/store.ts"), /LATEST_VERSION = "2\.0\.0"/);
+  assert.match(read("src/lib/store.ts"), /betaChannel: false/);
   assert.doesNotMatch(read("src/components/settings-updates.tsx"), /stub today/);
 });
 
@@ -53,8 +53,8 @@ test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
   assert.match(read("src/components/settings-updates.tsx"), /Beta channel/);
 });
 
-test("sidecar: check-ota stays green without Arena CSS", () => {
+test("sidecar: check-ota stays green on the 2.0.0 beta tree", () => {
   const r = spawnSync("python3", ["scripts/check-ota.py", "."], { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr || r.stdout);
-  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.48/);
+  assert.match(r.stdout, /check-ota ok version=2\.0\.0/);
 });
