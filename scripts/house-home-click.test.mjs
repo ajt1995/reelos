@@ -576,7 +576,7 @@ test("hashed gold UI clicks house screenshot: named titles win, Importing ≠ Wa
         assert.doesNotMatch(s2, /Request this season/);
         await page.screenshot({ path: join(outDir, "hashed-rookie-s02-importing.png") });
         await page.getByRole("button", { name: /Season 9 · Coming/ }).click();
-        await page.getByText(/Announced — not released yet/).waitFor({ timeout: 8000 });
+        await page.getByText("Announced — not released yet. Request cannot grab files that do not exist.").waitFor({ timeout: 8000 });
         const s9 = await page.locator("body").innerText();
         assert.doesNotMatch(s9, /Impact/);
         assert.doesNotMatch(s9, /Request this season/);
