@@ -230,7 +230,7 @@ export function TitleView({ id }: { id: string }) {
       </div>
       <div className="title-body">
         <Poster title={resolved} className="title-poster rounded-2xl" />
-        <div className="title-copy relative z-20 min-w-0">
+        <div className="title-copy">
           <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">

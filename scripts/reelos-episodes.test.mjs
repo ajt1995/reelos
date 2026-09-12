@@ -154,7 +154,7 @@ test("title page accordion sits in the text column with Austin's status vocab", 
   assert.match(view, /SeasonEpisodeAccordion/);
   assert.match(view, /removedHere/);
   assert.match(view, /onRemoved=\{\(\) => setRemovedHere\(true\)\}/);
-  assert.match(view, /relative z-20 min-w-0/);
+  assert.match(view, /className="title-copy"/);
   assert.match(acc, /aria-expanded/);
   assert.match(acc, /Request this season/);
   assert.match(acc, /Request again/);
