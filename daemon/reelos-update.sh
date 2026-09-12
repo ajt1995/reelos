@@ -115,6 +115,12 @@ https://api.github.com/repos/ajt1995/reelos/contents/channel.json?ref=main
 https://github.com/ajt1995/reelos/raw/refs/heads/main/channel.json
 https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json?$(date +%s)
 "
+    if [ -n "${REELOS_CHANNEL_URL:-}" ]; then
+      urls="
+${REELOS_CHANNEL_URL}
+$urls
+"
+    fi
   fi
   local u
   for u in $urls
@@ -398,7 +404,8 @@ need src/components/settings-fix.tsx 'Finished. Check Movies'
 need src/components/settings-view.tsx 'FixSection'
 need src/components/settings-updates.tsx 'This install'
 need src/components/settings-updates.tsx 'This update'
-need scripts/reelos-lookup-plugin.mjs 'pendingNotes'
+need scripts/reelos-lookup-plugin.mjs 'REELOS_CHANNEL_URL'
+need daemon/reelos-update.sh 'REELOS_CHANNEL_URL'
 need scripts/update-notes.mjs 'ownerEnglish'
 need scripts/reelos-library-remove.mjs 'deleteFilesAllowed'
 need src/components/remove-from-box.tsx 'Remove from this box'

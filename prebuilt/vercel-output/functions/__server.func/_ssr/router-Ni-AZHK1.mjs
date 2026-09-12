@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-C3sJDeuN.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-Ni-AZHK1.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -676,7 +676,7 @@ var defaultAnswers = {
 	tunnelToken: ""
 };
 var CHANNEL = "stable";
-var SHIPPED_VERSION = "1.2.50.48";
+var SHIPPED_VERSION = "1.2.50.49";
 function idleBootSteps() {
 	return {
 		local: "pending",
@@ -686,6 +686,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
+	"1.2.50.49: Cloud-only OTA — Check/Apply honor REELOS_CHANNEL_URL first so a box can Apply this branch without merging to main. Transferring chip matches collapsed Home cards. Caddy does not steal /play/$id. TV linked-waiting is this season, not another season's series folder. Gold chrome, prebuilt hashed UI. Complements #134. Do not house Apply. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff… is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff… /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it — Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -1739,27 +1740,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-Cxb-aiP3.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-Cz9dpuID.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BBHsHKET.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-DPbp74Yn.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-CNDPmhf2.mjs");
+var $$splitComponentImporter$8 = () => import("./connect--wpZ8UZT.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-YXsGoqCL.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-Ccp42HZV.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-JJA6DAt8.mjs");
+var $$splitComponentImporter$6 = () => import("./library-Ba1yQjLT.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-D3F7vjgr.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-CR_0O_Ev.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-DO_0j1Y4.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-BymdQmY5.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-C_3htiHI.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-D-QqSMcI.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-BRcRvEeg.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-COTtw-5h.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-B772xSXp.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-DptH-hhO.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-BW4pdetx.mjs");
+var $$splitComponentImporter = () => import("./title._id-DBfwpf3M.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",

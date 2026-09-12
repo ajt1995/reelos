@@ -993,7 +993,9 @@ function readLocalChannelFile(file) {
 
 async function loadChannel(name = "stable") {
   const file = channelFileName(name);
+  const override = name !== "beta" ? String(process.env.REELOS_CHANNEL_URL || "").trim() : "";
   const urls = [
+    override || null,
     name === "beta" ? CHANNEL_BETA_URL : null,
     `https://api.github.com/repos/ajt1995/reelos/contents/${file}?ref=main`,
     `https://github.com/ajt1995/reelos/raw/refs/heads/main/${file}`,
@@ -1126,13 +1128,21 @@ async function handleUpdateApply(req, res) {
     const beta = readUiSettings().betaChannel === true;
     const local = localVersion();
     const rollback = !beta && isBetaLine(local);
+    const channelUrl = String(process.env.REELOS_CHANNEL_URL || "").trim();
     let body = "";
-    if (beta || rollback) {
+    if (beta || rollback || channelUrl) {
       for (const p of ["/opt/reelos/bin/reelos-update.sh", "/opt/reelos/app/daemon/reelos-update.sh"]) {
         try {
           if (!existsSync(p)) continue;
           const t = readFileSync(p, "utf8");
-          if (t.includes("ReelOS") && (beta ? t.includes("ui_wants_beta") : t.includes("leave beta for last stable"))) {
+          if (
+            t.includes("ReelOS") &&
+            (channelUrl
+              ? t.includes("REELOS_CHANNEL_URL")
+              : beta
+                ? t.includes("ui_wants_beta")
+                : t.includes("leave beta for last stable"))
+          ) {
             body = t;
             otaNote(`ui apply using local mailman ${p}`);
             break;
@@ -1193,7 +1203,7 @@ KillMode=mixed
 Environment=REELOS_OTA_UNIT=1
 Environment=REELOS_ROOT=/opt/reelos
 Environment=PYTHONUNBUFFERED=1
-StandardOutput=append:/var/lib/reelos/ota.log
+${channelUrl ? `Environment=REELOS_CHANNEL_URL=${channelUrl}\n` : ""}StandardOutput=append:/var/lib/reelos/ota.log
 StandardError=append:/var/lib/reelos/ota.log
 ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
 `,

@@ -21,12 +21,14 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.48 is the ship.*** Hands-off home: Discover rows are on this box / finishing / pick tonight (not unreleased 2026 Mutiny/Colony/Moana/Paradise Hotel). Home posters skip empty ImageTags so 404 is a blank card, not title-on-poster plus caption. One Watch to LAN/Tailscale IP:8096. Requests stay visible while National Treasure is downloading; recover adds the Radarr movie without a magnet. 47 request honesty, 46 hash-dump titles, 45 title-page honesty stay. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House was **1.2.50.47**. **One house Apply of 48 after merge.** Never twice.
+***1.2.50.49 is a cloud-only OTA stamp.*** Check/Apply honor `REELOS_CHANNEL_URL` so this branch can Apply without merging to main. **Do not house Apply. Do not merge 49 to main** until Austin says so. Main/house stay **1.2.50.48**.
+
+***1.2.50.48 is the house ship.*** Hands-off home: Discover rows are on this box / finishing / pick tonight (not unreleased 2026 Mutiny/Colony/Moana/Paradise Hotel). Home posters skip empty ImageTags so 404 is a blank card, not title-on-poster plus caption. One Watch to LAN/Tailscale IP:8096. Requests stay visible while National Treasure is downloading; recover adds the Radarr movie without a magnet. 47 request honesty, 46 hash-dump titles, 45 title-page honesty stay. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House was **1.2.50.47**. **Do not offer Austin a house Apply of 49.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.48`
-- **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
+- **VERSION / channel:** `1.2.50.49` (cloud-only branch `cursor/cloud-ota-49-cc86`; main stays 48)
+- **channel tarball:** `cursor/cloud-ota-49-cc86.tar.gz` (not `main.tar.gz`)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
 - **Base:** `main` at 1.2.50.47; Discover rows + Home posters + one Watch + Radarr heal. 1.2.50.47 request honesty, 1.2.50.46 hash titles, 1.2.50.45 tvdb/tmdb title page, 1.2.50.43 Home honesty, 1.2.50.42 ffprobe stub stay. 1.2.50.41 hardware, 1.2.50.40 catch-up clock, 1.2.50.38 DirectPlay, 1.2.50.37 prebuilt.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.47** installed
