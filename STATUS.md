@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.51 is the ship.*** Discover hides owned library. Passengers hand off to On this box / Watch. Honest Apply splash percent. 1.2.50.50 OTA cleaner stays. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.50**. **Do not house-Apply until told.** Never twice.
+***1.2.50.51 is the ship.*** Discover hides owned library. Passengers hand off to On this box / Watch. Honest Apply splash percent. Continue watching is Jellyfin-synced. More like this and Discover Not interested. 1.2.50.50 OTA cleaner stays. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.50**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
@@ -34,10 +34,9 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Changelog
 
-### 1.2.50.51 rollup (Discover / Passengers / splash)
+### 1.2.50.51 rollup (Discover / Passengers / splash / Continue watching)
 
-Discover hides owned library; Home keeps On this box. Finished Requests (Passengers) stay until Watch on Home; the existing `/api/request` poll refreshes `/api/library?fresh=1`. Honest Apply splash percent is real bytes or stage N of 7 + heartbeat — never a fake 99%. Splash copy is Tuning for 4GB RAM · spinning disk. Wizard stays 7 steps. Do not house-Apply yet.
-
+Discover hides owned library; Home keeps On this box. Finished Requests (Passengers) stay until Watch on Home; the existing `/api/request` poll refreshes `/api/library?fresh=1`. Honest Apply splash percent is real bytes or stage N of 7 + heartbeat — never a fake 99%. Splash copy is Tuning for 4GB RAM · spinning disk. Wizard stays 7 steps. Search people and collections. Title page has More like this. Discover Not interested persists on the box (`/var/lib/reelos/curator.json`, no Google). Settings **Reset curator preferences** clears it. Home **Continue watching** uses Jellyfin Resume play progress on the existing library fetch (episodes map to the series). Capped title poster, TV season chips and episode accordion. Do not house-Apply yet.
 
 ### OTA cleaner + update splash (1.2.50.50)
 
@@ -123,7 +122,7 @@ Seven-step wizard is unchanged. Default source is TorBox. Continue on the source
 ## Proof
 
 ```
-python3 scripts/check-ota.py .   # ok version=1.2.50.50
+python3 scripts/check-ota.py .   # ok version=1.2.50.51
 node --test scripts/stack-smoke.test.mjs scripts/apply-stamp-first-39.test.mjs scripts/apply-library-split-40.test.mjs scripts/scale-hardware-41.test.mjs scripts/fuse-no-ffprobe-42.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs scripts/sonarr-manual-import.test.mjs scripts/relink-dumps.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box

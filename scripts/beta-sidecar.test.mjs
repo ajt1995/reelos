@@ -32,7 +32,7 @@ test("sidecar: VERSION is 1.2.50.51; Arena+Books are in-tree behind betaChannel 
   assert.doesNotMatch(read("src/components/settings-updates.tsx"), /stub today/);
 });
 
-test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50", () => {
+test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50.x", () => {
   assert.ok(cmpVer("2.0.0", "1.2.50.51") > 0);
   assert.equal(isRollback("2.0.0", "1.2.50.51", false), true);
   assert.equal(isRollback("2.0.0", "1.2.50.51", true), false);

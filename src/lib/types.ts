@@ -74,14 +74,15 @@ export interface Title {
   ids?: string[];
   path?: string;
   fromHashDump?: boolean;
-  maxQuality: "1080p" | "4k";
-  popularity: number;
   inLibrary?: boolean;
   collection?: { id: number; name: string; poster?: string };
+  maxQuality: "1080p" | "4k";
+  popularity: number;
 }
 
 export interface PersonHit {
   id: number;
+  tmdbId?: number;
   name: string;
   poster?: string;
   knownForDepartment?: string;
@@ -89,6 +90,7 @@ export interface PersonHit {
 
 export interface CollectionHit {
   id: number;
+  tmdbId?: number;
   name: string;
   poster?: string;
 }
@@ -108,7 +110,6 @@ export interface MediaRequest {
   via?: RequestVia;
   release?: string;
   engine?: string;
-  requestedSeasons?: number[];
 }
 
 export interface AdapterState {

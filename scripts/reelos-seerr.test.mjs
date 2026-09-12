@@ -37,6 +37,9 @@ import {
   seerrRequestRow,
   seerrSearchHit,
   simulateLookupAndRequest,
+  mapSeerrPersonHits,
+  mapSeerrCollectionHits,
+  mapSeerrPersonDetail,
   titleIdFor,
   tmdbPoster,
   tvSeasonsForRequest,
@@ -1536,6 +1539,17 @@ test("Discover is finishing / pick tonight — library stays on Home", () => {
   assert.match(discover, /\/api\/discover/);
   assert.match(home, /On this box/);
   assert.match(lookup, /overlayLookupWithLibrary/);
+  assert.match(discover, /onHide/);
+  assert.match(discover, /\/api\/curator/);
+  assert.match(readFileSync(join(root, "src/components/title-card.tsx"), "utf8"), /Not interested/);
+  assert.match(discover, /People/);
+  assert.match(discover, /Collections/);
+  assert.match(title, /More like this/);
+  assert.match(title, /\/api\/similar/);
+  assert.match(lookup, /\/api\/curator/);
+  assert.match(lookup, /\/api\/similar/);
+  assert.match(lookup, /\/api\/person/);
+  assert.match(lookup, /\/api\/collection/);
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
   assert.match(lookup, /discoverOwnedIndex/);
@@ -1548,6 +1562,7 @@ test("Discover is finishing / pick tonight — library stays on Home", () => {
   assert.match(lookup, /ms: 45000/);
   assert.doesNotMatch(lookup, /seasons = .*["']all["']/);
   assert.match(title, /season: series \? season/);
+  assert.match(home, /On this box/);
 });
 
 test("search overlay attaches JF Watch and keeps a JF-only name", () => {
@@ -1632,4 +1647,50 @@ test("attachSeerrDetailTitles names National Treasure from Seerr movie detail", 
   assert.equal(calls.length, 1);
   assert.equal(again.rows[0].title, "National Treasure");
 });
+
+test("search maps people and collections without turning them into movies", () => {
+  const hits = [
+    { id: 6384, mediaType: "person", name: "Keanu Reeves", knownForDepartment: "Acting", profilePath: "/k.jpg" },
+    { id: 404609, mediaType: "collection", name: "John Wick Collection", posterPath: "/c.jpg" },
+    { id: 324552, mediaType: "movie", title: "John Wick: Chapter 2", releaseDate: "2017-02-08" },
+  ];
+  const people = mapSeerrPersonHits(hits);
+  const collections = mapSeerrCollectionHits(hits);
+  const titles = mapSeerrSearchResults(hits, { q: "john wick" });
+  assert.equal(people[0].tmdbId, 6384);
+  assert.equal(people[0].name, "Keanu Reeves");
+  assert.equal(collections[0].tmdbId, 404609);
+  assert.deepEqual(
+    titles.map((t) => t.id),
+    ["tmdb-324552"],
+  );
+  assert.equal(normalizeMediaType("person"), null);
+  assert.equal(normalizeMediaType("collection"), null);
+});
+
+test("person credits keep owned library titles even if Discover hid them", () => {
+  const person = mapSeerrPersonDetail(
+    {
+      id: 6384,
+      name: "Keanu Reeves",
+      combinedCredits: {
+        cast: [
+          { id: 245891, title: "John Wick", releaseDate: "2014-10-24", mediaType: "movie" },
+          { id: 550, title: "Fight Club", releaseDate: "1999-10-15", mediaType: "movie" },
+        ],
+      },
+    },
+    {
+      libraryTitles: [{ id: "tmdb-245891", title: "John Wick", year: 2014, kind: "movie", jellyfinId: "wick" }],
+      excludeHidden: { hidden: ["tmdb-245891", "tmdb-550"] },
+    },
+  );
+  assert.deepEqual(
+    person.credits.map((t) => t.id),
+    ["tmdb-245891"],
+    "John Wick stays on the actor page because it is on this box",
+  );
+  assert.equal(person.credits[0].inLibrary, true);
+});
+
 

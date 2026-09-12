@@ -27,6 +27,7 @@ import {
   collectionFromSeerrMovie,
   overlayLibraryOnTitle,
   mapSeerrDiscoverResults,
+  mapSeerrSimilarResults,
   discoverOwnedIndex,
   lookupFailureMessage,
   buildSeerrAddPayload,
@@ -68,12 +69,21 @@ import {
 import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
 import {
+  curatorPublic,
+  hideCuratorTitle,
+  readCurator,
+  resetCurator,
+  titleIsCuratorHidden,
+} from "./reelos-curator.mjs";
+import {
   createLibraryCache,
   createTokenCache,
   JELLYFIN_ITEMS_TIMEOUT_MS,
   LIBRARY_CACHE_FILE,
   libraryItemsUrl,
+  jellyfinResumeUrl,
   mapJellyfinItems,
+  mapResumeItems,
   readLibraryCacheFile,
   repairHashTitles,
   serveLibrary,
@@ -141,7 +151,15 @@ async function refreshLibraryFull(host) {
     const data = pulled.json;
     const items = Array.isArray(data.Items) ? data.Items : [];
     const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
-    libraryCache.write(titles, { complete: true });
+    const resumePulled = await jellyfinFetchResume(auth);
+    const writeOpts = { complete: true };
+    if (resumePulled.ok) {
+      writeOpts.continueWatching = mapResumeItems(
+        Array.isArray(resumePulled.json?.Items) ? resumePulled.json.Items : [],
+        { host, libraryTitles: titles },
+      );
+    }
+    libraryCache.write(titles, writeOpts);
     persistLibraryCache();
     forgetRemovedIfStillOnShelf(titles);
   })()
@@ -453,7 +471,14 @@ async function handleLookup(req, res) {
     } else {
       const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
       const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
-      titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned }));
+      titles.push(
+        ...mapSeerrSearchResults(hits, {
+          q,
+          limit: 16,
+          excludeOwned,
+          excludeHidden: discoverScope ? readCurator() : undefined,
+        }),
+      );
       people.push(...mapSeerrPersonHits(hits));
       collections.push(...mapSeerrCollectionHits(hits));
       note(`seerr hits=${hits.length} titles=${titles.length} people=${people.length} collections=${collections.length} discover=${discoverScope ? "yes" : "no"}`);
@@ -473,9 +498,9 @@ async function handleLookup(req, res) {
 
 async function handleCollection(req, res) {
   const u = new URL(req.url ?? "", "http://reelos.local");
-  const id = String(u.searchParams.get("id") || "").trim();
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
   const key = seerrApiKey();
-  if (!/^\d+$/.test(id)) {
+  if (!id) {
     send(res, 200, { collection: null, error: "Need a TMDB collection id." });
     return;
   }
@@ -489,10 +514,23 @@ async function handleCollection(req, res) {
   try {
     const r = await seerrFetch(`/api/v1/collection/${id}`, { key, ms: 20000 });
     if (!r.ok || !r.json) {
-      send(res, 200, { collection: null, error: r.ok ? "TMDB has no collection with that id." : `seerr ${r.status}` });
+      send(res, 200, {
+        collection: null,
+        error: r.status === 404 || !r.json ? "TMDB has no collection with that id." : `seerr ${r.status}`,
+      });
       return;
     }
-    send(res, 200, { collection: mapCollectionDetail(r.json, titlesForResolve()), error: null });
+    const collection = mapCollectionDetail(r.json, titlesForResolve());
+    if (!collection) {
+      send(res, 200, { collection: null, error: "TMDB has no collection with that id." });
+      return;
+    }
+    const hidden = readCurator();
+    collection.parts = (collection.parts || []).filter(
+      (t) => t?.inLibrary || t?.jellyfinId || !titleIsCuratorHidden(t, hidden),
+    );
+    collection.onBox = collection.parts.filter((t) => t.inLibrary || t.jellyfinId).length;
+    send(res, 200, { collection, error: null });
   } catch (e) {
     send(res, 200, { collection: null, error: lookupFailureMessage(e) });
   }
@@ -500,9 +538,9 @@ async function handleCollection(req, res) {
 
 async function handlePerson(req, res) {
   const u = new URL(req.url ?? "", "http://reelos.local");
-  const id = String(u.searchParams.get("id") || "").trim();
+  const id = tmdbIdFromQuery(u.searchParams.get("id"));
   const key = seerrApiKey();
-  if (!/^\d+$/.test(id)) {
+  if (!id) {
     send(res, 200, { person: null, error: "Need a TMDB person id." });
     return;
   }
@@ -516,7 +554,10 @@ async function handlePerson(req, res) {
   try {
     const r = await seerrFetch(`/api/v1/person/${id}`, { key, ms: 20000 });
     if (!r.ok || !r.json) {
-      send(res, 200, { person: null, error: r.ok ? "TMDB has no person with that id." : `seerr ${r.status}` });
+      send(res, 200, {
+        person: null,
+        error: r.status === 404 || !r.json ? "TMDB has no person with that id." : `seerr ${r.status}`,
+      });
       return;
     }
     let creditsJson = r.json.combinedCredits || r.json.combined_credits || null;
@@ -524,7 +565,17 @@ async function handlePerson(req, res) {
       const c = await seerrFetch(`/api/v1/person/${id}/combined_credits`, { key, ms: 20000 });
       creditsJson = c.ok ? c.json : null;
     }
-    send(res, 200, { person: mapPersonDetail(r.json, creditsJson, titlesForResolve()), error: null });
+    const person = mapPersonDetail(r.json, creditsJson, titlesForResolve());
+    if (!person) {
+      send(res, 200, { person: null, error: "TMDB has no person with that id." });
+      return;
+    }
+    const hidden = readCurator();
+    person.credits = (person.credits || []).filter(
+      (t) => t?.inLibrary || t?.jellyfinId || !titleIsCuratorHidden(t, hidden),
+    );
+    person.onBox = person.credits.filter((t) => t.inLibrary || t.jellyfinId).length;
+    send(res, 200, { person, error: null });
   } catch (e) {
     send(res, 200, { person: null, error: lookupFailureMessage(e) });
   }
@@ -569,6 +620,7 @@ async function handleDiscover(_req, res) {
       return;
     }
     const excludeIds = await ownedDiscoverExclude();
+    const excludeHidden = readCurator();
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
@@ -578,12 +630,12 @@ async function handleDiscover(_req, res) {
       ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
     ];
     if (movieRes.ok || movieRes2.ok) {
-      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }));
+      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
     if (tvRes.ok || tvRes2.ok) {
-      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds }));
+      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds, excludeHidden }));
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
@@ -596,6 +648,91 @@ async function handleDiscover(_req, res) {
     note(`seerr discover ${e}`);
   }
   send(res, 200, { movies, tv, error });
+}
+
+function tmdbIdFromQuery(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return 0;
+  const n = Number(s.replace(/^(person-|collection-|tmdb-tv-|tmdb-|tvdb-)/, ""));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function handleSimilar(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const parsed = parseTitleId(u.searchParams.get("id") || "") || parseTitleId(`tmdb-${u.searchParams.get("id") || ""}`);
+  const titles = [];
+  let error = null;
+  const key = seerrApiKey();
+  if (!parsed?.tmdb) {
+    send(res, 200, { titles, error: "Need a TMDB title id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, { titles, error: "Request UI (Seerr) has no API key yet." });
+    return;
+  }
+  try {
+    const kind = parsed.mediaType === "tv" ? "tv" : "movie";
+    const base = kind === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+    const [sim, rec] = await Promise.all([
+      seerrFetch(`${base}/similar`, { key, ms: 20000 }),
+      seerrFetch(`${base}/recommendations`, { key, ms: 20000 }),
+    ]);
+    const hits = [
+      ...(Array.isArray(sim.json) ? sim.json : sim.json?.results || []),
+      ...(Array.isArray(rec.json) ? rec.json : rec.json?.results || []),
+    ];
+    const excludeIds = discoverOwnedIndex(titlesForResolve());
+    titles.push(
+      ...mapSeerrSimilarResults(hits, {
+        mediaType: kind,
+        limit: 16,
+        excludeIds,
+        excludeHidden: readCurator(),
+      }),
+    );
+    if (!titles.length) error = "Seerr has nothing similar to show yet.";
+  } catch (e) {
+    error = lookupFailureMessage(e);
+  }
+  send(res, 200, { titles, error });
+}
+
+async function handleCurator(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  if (method === "GET") {
+    send(res, 200, curatorPublic(readCurator()));
+    return;
+  }
+  if (method !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const body = await readBody(req);
+  const id = String(body?.id || body?.titleId || "").trim();
+  if (!id) {
+    send(res, 400, { ok: false, error: "Need a title id" });
+    return;
+  }
+  const next = hideCuratorTitle(
+    {
+      id,
+      ids: Array.isArray(body?.ids) ? body.ids : [],
+      jellyfinId: body?.jellyfinId,
+      title: body?.title,
+    },
+    process.env.REELOS_STATE,
+  );
+  send(res, next.ok ? 200 : 400, curatorPublic(next));
+}
+
+async function handleCuratorReset(req, res) {
+  if ((req.method || "GET").toUpperCase() !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  const next = resetCurator(process.env.REELOS_STATE);
+  send(res, 200, curatorPublic(next));
 }
 
 async function probeJson(url, ms = 3000) {
@@ -781,6 +918,33 @@ async function jellyfinFetchItems(auth, { limit, timeout = JELLYFIN_ITEMS_TIMEOU
   }
   if (!r.ok) return { ok: false, status: r.status, json: null };
   return { ok: true, status: r.status, json: await r.json() };
+}
+
+async function jellyfinFetchResume(auth, { limit = 24, timeout = JELLYFIN_ITEMS_TIMEOUT_MS } = {}) {
+  const url = jellyfinResumeUrl(auth?.id, { limit });
+  if (!url || !auth?.token) return { ok: false, status: 0, json: null };
+  const pull = (token) =>
+    fetch(url, {
+      headers: jellyfinAuthedHeaders(token),
+      signal: AbortSignal.timeout(timeout),
+    });
+  let token = auth.token;
+  let r = await pull(token);
+  if (r.status === 401 || r.status === 403) {
+    jellyfinTokens.clear();
+    const a = answers();
+    const next = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    if (!next?.token) return { ok: false, status: r.status, json: null };
+    token = next.token;
+    r = await pull(token);
+  }
+  if (!r.ok) return { ok: false, status: r.status, json: null };
+  return { ok: true, status: r.status, json: await r.json() };
+}
+
+async function libraryResumePayload(auth) {
+  const pulled = await jellyfinFetchResume(auth);
+  return pulled.ok ? pulled.json : null;
 }
 
 async function jellyfinState(ip) {
@@ -2282,11 +2446,16 @@ async function handleLibrary(req, res) {
       if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
       return pulled.json;
     },
+    fetchResume: libraryResumePayload,
     refresh: () => refreshLibraryFull(host),
     onLiveTitles: forgetRemovedIfStillOnShelf,
   });
   persistLibraryCache();
-  send(res, 200, { titles: result.titles, error: result.error });
+  send(res, 200, {
+    titles: result.titles,
+    continueWatching: result.continueWatching || [],
+    error: result.error,
+  });
 }
 
 async function jellyfinGetItem(id) {
@@ -2441,6 +2610,7 @@ async function handleReady(req, res) {
           if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
           return pulled.json;
         },
+        fetchResume: libraryResumePayload,
         refresh: () => refreshLibraryFull(host),
       });
       persistLibraryCache();
@@ -2448,7 +2618,7 @@ async function handleReady(req, res) {
       return result;
     } catch (e) {
       mark("library", t0);
-      return { titles: [], error: String(e) };
+      return { titles: [], continueWatching: [], error: String(e) };
     }
   })();
 
@@ -2482,6 +2652,7 @@ async function handleReady(req, res) {
     update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
     libraryCatchup: update?.library || readLibraryProgress(),
     titles: Array.isArray(library?.titles) ? library.titles : [],
+    continueWatching: Array.isArray(library?.continueWatching) ? library.continueWatching : [],
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,
     hardware: slice.hardware || publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
@@ -2805,6 +2976,18 @@ export async function dispatchReelOsApi(req, res) {
   }
   if (pathOnly === "/api/discover") {
     await handleDiscover(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/similar") {
+    await handleSimilar(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator") {
+    await handleCurator(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/curator/reset") {
+    await handleCuratorReset(req, res);
     return true;
   }
   if (pathOnly === "/api/box") {

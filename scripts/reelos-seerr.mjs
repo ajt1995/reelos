@@ -1,5 +1,6 @@
 /** Seerr/Jellyseerr helpers for /api/lookup and /api/request. */
 import { existsSync, readFileSync } from "node:fs";
+import { titleIsCuratorHidden } from "./reelos-curator.mjs";
 
 export const SEERR_ORIGIN = "http://127.0.0.1:5055";
 
@@ -331,7 +332,7 @@ export function overlayLookupWithLibrary(seerrTitles, libraryTitles, q) {
 }
 
 /** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */
-export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned } = {}) {
+export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned, excludeHidden } = {}) {
   const owned = excludeOwned ? asDiscoverOwned(excludeOwned) : null;
   const titles = [];
   for (const h of hits || []) {
@@ -341,10 +342,72 @@ export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned }
     const t = seerrSearchHit(h, mediaType);
     if (!t) continue;
     if (owned && discoverTitleIsOwned(t, owned)) continue;
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }
   return rankLookupTitles(titles, q);
+}
+
+function creditHits(json) {
+  const combined = json?.combinedCredits?.cast || json?.combined_credits?.cast || [];
+  const movies = json?.movieCredits?.cast || json?.movie_credits?.cast || [];
+  const shows = json?.tvCredits?.cast || json?.tv_credits?.cast || [];
+  return [...combined, ...movies, ...shows];
+}
+
+export function mapSeerrPersonDetail(json, { libraryTitles = [], excludeHidden } = {}) {
+  const id = Number(json?.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const credits = [];
+  const seen = new Set();
+  for (const h of creditHits(json)) {
+    const mediaType = normalizeMediaType(h?.mediaType || (h?.firstAirDate || h?.name ? "tv" : "movie"));
+    if (!mediaType) continue;
+    const t = seerrSearchHit({ ...h, mediaType }, mediaType);
+    if (!t || seen.has(t.id)) continue;
+    const libraryTitle = findLibraryTitle(libraryTitles, t.id);
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden) && !libraryTitle) continue;
+    seen.add(t.id);
+    credits.push(libraryTitle ? attachLibraryPresence(t, libraryTitle) : t);
+    if (credits.length >= 40) break;
+  }
+  return {
+    id,
+    name: String(json.name || "Unknown"),
+    biography: String(json.biography || ""),
+    poster: tmdbPoster(json.profilePath || json.posterPath),
+    knownForDepartment: String(json.knownForDepartment || "Acting"),
+    credits,
+    onBox: credits.filter((t) => t.inLibrary || t.jellyfinId).length,
+  };
+}
+
+export function mapSeerrCollectionDetail(json, { libraryTitles = [], excludeHidden } = {}) {
+  const id = Number(json?.id);
+  if (!Number.isFinite(id) || id <= 0) return null;
+  const parts = [];
+  const seen = new Set();
+  for (const h of json?.parts || []) {
+    const t = seerrSearchHit({ ...h, mediaType: "movie" }, "movie");
+    if (!t || seen.has(t.id)) continue;
+    const libraryTitle = findLibraryTitle(libraryTitles, t.id);
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden) && !libraryTitle) continue;
+    seen.add(t.id);
+    parts.push(libraryTitle ? attachLibraryPresence(t, libraryTitle) : t);
+  }
+  return {
+    id,
+    name: String(json.name || json.title || "Collection"),
+    overview: String(json.overview || ""),
+    poster: tmdbPoster(json.posterPath || json.backdropPath),
+    parts,
+    onBox: parts.filter((t) => t.inLibrary || t.jellyfinId).length,
+  };
+}
+
+export function mapSeerrSimilarResults(hits, { mediaType, limit = 16, excludeIds, excludeHidden } = {}) {
+  return mapSeerrDiscoverResults(hits, { mediaType, limit, excludeIds, excludeHidden });
 }
 
 /** Seerr/Jellyseerr: 4 = partially available, 5 = available. Those are already on the box. */
@@ -426,7 +489,7 @@ export function discoverHitReleased(h, now = Date.now()) {
 }
 
 /** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
-export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, now = Date.now() } = {}) {
+export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, excludeHidden, now = Date.now() } = {}) {
   const owned = asDiscoverOwned(excludeIds);
   const titles = [];
   for (const h of hits || []) {
@@ -436,6 +499,7 @@ export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeId
     if (!type) continue;
     const t = seerrSearchHit(h, type);
     if (!t || discoverTitleIsOwned(t, owned)) continue;
+    if (excludeHidden && titleIsCuratorHidden(t, excludeHidden)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }
@@ -1545,6 +1609,7 @@ export function seerrPersonHit(h) {
   const poster = tmdbPoster(h.profilePath || h.profile_path);
   return {
     id,
+    tmdbId: id,
     name,
     poster: poster || undefined,
     knownForDepartment: String(h.knownForDepartment || h.known_for_department || "Acting"),
@@ -1558,7 +1623,7 @@ export function seerrCollectionHit(h) {
   const name = String(h?.name || h?.title || "").trim();
   if (!id || !name) return null;
   const poster = tmdbPoster(h.posterPath || h.poster_path);
-  return { id, name, poster: poster || undefined };
+  return { id, tmdbId: id, name, poster: poster || undefined };
 }
 
 export function mapSeerrPersonHits(json, { limit = 8 } = {}) {

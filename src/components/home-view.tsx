@@ -32,7 +32,6 @@ export function HomeView() {
   const shelfReady = useReelStore((s) => s.shelfReady);
   const navigate = useNavigate();
   const requests = useReelStore((s) => s.requests);
-  const library = useReelStore((s) => s.library);
   const watch = useReelStore((s) => s.watchProgress);
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
@@ -131,8 +130,8 @@ export function HomeView() {
 
   const continueWatch = Object.entries(watch)
     .filter(([, v]) => v > 0.03 && v < 0.96)
-    .map(([id, v]) => ({ t: getTitle(id), v }))
-    .filter((x) => x.t && library.includes(x.t.id));
+    .map(([id, v]) => ({ t: getTitle(id) || catalog.find((x) => x.id === id), v }))
+    .filter((x) => x.t);
 
   return (
     <div className="px-5 pb-12 pt-2 md:px-10 md:pt-8">
@@ -249,7 +248,7 @@ export function HomeView() {
       ) : null}
 
       {continueWatch.length > 0 ? (
-        <Row label="Continue">
+        <Row label="Continue watching">
           {continueWatch.map(({ t, v }) =>
             t ? <TitleCard key={t.id} title={t} progress={v} /> : null,
           )}

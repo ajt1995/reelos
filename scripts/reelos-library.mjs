@@ -30,6 +30,68 @@ export function libraryItemsUrl({ limit } = {}) {
   return `http://127.0.0.1:8096/Items?${q}`;
 }
 
+export function jellyfinResumeUrl(userId, { limit = 24 } = {}) {
+  const id = String(userId || "").trim();
+  if (!id) return "";
+  const q = new URLSearchParams({
+    IncludeItemTypes: "Movie,Episode",
+    Fields: "ProviderIds,ImageTags",
+    EnableUserData: "true",
+    EnableImages: "true",
+    ImageTypeLimit: "1",
+    Limit: String(limit || 24),
+  });
+  return `http://127.0.0.1:8096/Users/${encodeURIComponent(id)}/Items/Resume?${q}`;
+}
+
+/** PlaybackPositionTicks / RunTimeTicks. 0 when Jellyfin has no runtime. */
+export function resumeProgress(it) {
+  const pos = Number(it?.UserData?.PlaybackPositionTicks) || 0;
+  const runtime = Number(it?.RunTimeTicks) || 0;
+  if (!(pos > 0) || !(runtime > 0)) return 0;
+  return pos / runtime;
+}
+
+function libraryTitleForJellyfinId(titles, jellyfinId) {
+  const id = String(jellyfinId || "").trim();
+  if (!id) return null;
+  return (titles || []).find((t) => String(t?.jellyfinId || "") === id) || null;
+}
+
+/** Map JF Resume movies/episodes onto Home titles. Episodes become the series. */
+export function mapResumeItems(items, { host, libraryTitles = [] } = {}) {
+  const out = [];
+  const seen = new Set();
+  for (const it of items || []) {
+    const progress = resumeProgress(it);
+    if (progress <= 0.03 || progress >= 0.96) continue;
+    const episode = String(it?.Type || "") === "Episode";
+    const seriesId = episode ? it.SeriesId || it.ParentId : "";
+    const jfId = episode ? seriesId || it.Id : it.Id;
+    let title = libraryTitleForJellyfinId(libraryTitles, jfId);
+    if (!title) {
+      const imageTag = episode ? it.SeriesPrimaryImageTag : it.ImageTags?.Primary;
+      title = mapJellyfinItem(
+        {
+          Id: jfId || it.Id,
+          Name: episode ? it.SeriesName || it.Name : it.Name,
+          Type: episode ? "Series" : it.Type || "Movie",
+          ProductionYear: it.ProductionYear,
+          ProviderIds: (episode ? it.SeriesProviderIds : null) || it.ProviderIds || {},
+          ImageTags: imageTag ? { Primary: imageTag } : it.ImageTags || {},
+          Path: it.Path,
+        },
+        host,
+      );
+    }
+    if (!title?.id || seen.has(title.id)) continue;
+    seen.add(title.id);
+    out.push({ ...title, progress });
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
 export function jellyfinHasPrimaryImage(it) {
   const tags = it?.ImageTags;
   if (tags && typeof tags === "object") return Boolean(tags.Primary);
@@ -579,8 +641,14 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
     read() {
       return mem;
     },
-    write(titles, { now = Date.now(), complete = true } = {}) {
-      mem = { at: now, complete, titles };
+    write(titles, { now = Date.now(), complete = true, continueWatching } = {}) {
+      mem = {
+        at: now,
+        complete,
+        titles,
+        continueWatching:
+          continueWatching !== undefined ? continueWatching : mem?.continueWatching || [],
+      };
       return mem;
     },
     drop(keys, { now = Date.now() } = {}) {
@@ -590,6 +658,7 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
         at: now,
         complete: mem.complete,
         titles: mem.titles.filter((t) => !libraryRowHidden(t, hide)),
+        continueWatching: (mem.continueWatching || []).filter((t) => !libraryRowHidden(t, hide)),
       };
       return mem;
     },
@@ -603,7 +672,12 @@ export function readLibraryCacheFile(file, { readFileSync: read = readFileSync }
   try {
     const j = JSON.parse(read(file, "utf8"));
     if (!Array.isArray(j?.titles)) return null;
-    return { at: Number(j.at) || 0, complete: j.complete !== false, titles: j.titles };
+    return {
+      at: Number(j.at) || 0,
+      complete: j.complete !== false,
+      titles: j.titles,
+      continueWatching: Array.isArray(j.continueWatching) ? j.continueWatching : [],
+    };
   } catch {
     return null;
   }
@@ -626,6 +700,7 @@ export async function serveLibrary({
   cache,
   getAuth,
   fetchItems,
+  fetchResume,
   refresh,
   onLiveTitles,
   removedIds = [],
@@ -642,11 +717,17 @@ export async function serveLibrary({
 
   const serve = (titles, extra = {}) => {
     const rows = extra.fromCache ? withoutRemoved(titles) : titles || [];
+    const resume = extra.continueWatching !== undefined
+      ? extra.continueWatching
+      : extra.fromCache
+        ? stale?.continueWatching || []
+        : [];
     return {
       titles: withPosterHost(
         applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(rows)), limit),
         host,
       ),
+      continueWatching: withPosterHost(resume || [], host),
       error: extra.error ?? null,
       fromCache: Boolean(extra.fromCache),
     };
@@ -657,27 +738,50 @@ export async function serveLibrary({
     if ((!stale.complete || !cacheIsFresh(stale, now, ttlMs)) && typeof refresh === "function") {
       void refresh();
     }
-    return serve(stale.titles, { fromCache: true });
+    return serve(stale.titles, { fromCache: true, continueWatching: stale.continueWatching || [] });
   }
 
   const auth = await getAuth();
   if (!auth?.token) {
     if (canServeStale(stale)) {
-      return serve(stale.titles, { fromCache: true, error: "Jellyfin has no matching user/PIN" });
+      return serve(stale.titles, {
+        fromCache: true,
+        continueWatching: stale.continueWatching || [],
+        error: "Jellyfin has no matching user/PIN",
+      });
     }
-    return { titles: [], error: "Jellyfin has no matching user/PIN", fromCache: false };
+    return { titles: [], continueWatching: [], error: "Jellyfin has no matching user/PIN", fromCache: false };
   }
 
   try {
-    const data = await fetchItems(auth, limit);
+    const resumeP =
+      typeof fetchResume === "function"
+        ? fetchResume(auth).catch(() => null)
+        : Promise.resolve(undefined);
+    const [data, resumeJson] = await Promise.all([fetchItems(auth, limit), resumeP]);
     const items = Array.isArray(data?.Items) ? data.Items : [];
     const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
-    cache.write(titles, { now, complete: !limit });
+    const writeOpts = { now, complete: !limit };
+    let continueWatching = stale?.continueWatching || [];
+    if (resumeJson && typeof resumeJson === "object") {
+      continueWatching = mapResumeItems(Array.isArray(resumeJson.Items) ? resumeJson.Items : [], {
+        host,
+        libraryTitles: titles,
+      });
+      writeOpts.continueWatching = continueWatching;
+    }
+    cache.write(titles, writeOpts);
     if (!limit && typeof onLiveTitles === "function") onLiveTitles(titles);
     if (limit && typeof refresh === "function") void refresh();
-    return serve(titles);
+    return serve(titles, { continueWatching });
   } catch (e) {
-    if (canServeStale(stale)) return serve(stale.titles, { fromCache: true, error: String(e) });
-    return { titles: [], error: String(e), fromCache: false };
+    if (canServeStale(stale)) {
+      return serve(stale.titles, {
+        fromCache: true,
+        continueWatching: stale.continueWatching || [],
+        error: String(e),
+      });
+    }
+    return { titles: [], continueWatching: [], error: String(e), fromCache: false };
   }
 }
