@@ -7,6 +7,7 @@ import {
   UNRELEASED_SEASON_COPY,
   episodeRequestAction,
   seasonChipLabel,
+  seasonShowsRequestButton,
   type EpisodeStatus,
   type SeasonEpisodeRow,
 } from "@/lib/episode-status";
@@ -109,15 +110,19 @@ export function SeasonEpisodeAccordion({
     setOpen(true);
   };
 
-  const missing = episodes.filter((e) => e.status === "missing" || (removedHere && e.status === "requested"));
   const thisUnreleased = Boolean(unreleasedSeasons?.includes(selectedSeason) || unreleasedOpen);
+  const thisOnDisk = diskSeasons.includes(selectedSeason) && !removedHere && !thisUnreleased;
   const thisImporting =
-    Boolean(importingSeasons?.includes(selectedSeason)) && !diskSeasons.includes(selectedSeason) && !thisUnreleased;
-  const showSeasonRequest =
-    !blocked &&
-    !thisUnreleased &&
-    !thisImporting &&
-    (removedHere || missing.length > 0 || (open && !loading && episodes.length === 0));
+    Boolean(importingSeasons?.includes(selectedSeason)) && !thisOnDisk && !thisUnreleased;
+  const showSeasonRequest = seasonShowsRequestButton({
+    blocked,
+    onDisk: thisOnDisk,
+    importing: thisImporting,
+    unreleased: thisUnreleased,
+    removedHere,
+    open,
+    loading,
+  });
 
   if (seasonNumbers.length === 0 && seasonsLoading) {
     return <p className="text-sm text-muted">Loading seasons from Seerr…</p>;
