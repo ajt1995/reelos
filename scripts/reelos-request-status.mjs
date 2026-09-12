@@ -171,9 +171,9 @@ export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}
   const out = [];
   const seen = new Set();
   for (const row of seerrRows || []) {
-    // Only stuck rows. A row Seerr already calls available is in the library; re-adding
-    // it to Radarr and searching would re-grab the whole back catalogue on one recover.
-    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    // Seerr often marks National Treasure available while Radarr still has no row.
+    // Skip only when Radarr already has that tmdb (have.has). Re-adding the
+    // catalogue cannot happen: those ids are already in `movies`.
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
     const tmdb = requestRowTmdb(row);
