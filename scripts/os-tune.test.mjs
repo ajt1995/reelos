@@ -82,10 +82,11 @@ test("installer and USB seed bake OS tune; wizard stays 7 steps", () => {
 });
 
 test("honest wait copy: Apply vs library vs FUSE busy", () => {
-  assert.match(read("src/components/applying-bar.tsx"), /swapping the app/);
+  assert.match(read("src/components/applying-bar.tsx"), /Updating ReelOS/);
   assert.match(read("src/components/library-catchup-bar.tsx"), /TorBox filesystem busy/);
-  assert.match(read("src/components/settings-updates.tsx"), /Swapping the app/);
+  assert.match(read("src/components/settings-updates.tsx"), /Full-screen splash stays until browse and request work/);
   assert.match(read("src/lib/library-catchup.ts"), /WAIT_FUSE_BUSY/);
+  assert.match(read("src/lib/library-catchup.ts"), /updateLocksUi/);
   assert.match(read("scripts/reelos-ota-status.mjs"), /WAIT_APPLY/);
   assert.match(read("daemon/reelos-library-catchup.sh"), /TorBox filesystem busy — not copying to disk/);
   assert.match(read("daemon/reelos-library-catchup.sh"), /4GB \+ HDD, small-box limits/);
