@@ -154,7 +154,7 @@ test("door wires collection/person APIs and search entry points; wizard stays 7"
 
   const discover = read("src/components/discover-view.tsx");
   assert.match(discover, /Looking up movies and shows/);
-  assert.match(discover, /Find a title or actor/);
+  assert.match(discover, /Find a title, actor, or collection/);
   assert.match(discover, /to="\/person\/\$id"/);
   assert.match(discover, />People</);
   assert.match(discover, />Collections</);
