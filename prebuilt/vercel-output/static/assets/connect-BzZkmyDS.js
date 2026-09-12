@@ -1,1 +1,0 @@
-import{G as e}from"./store-BMB9_LsQ.js";import{n as t,r as n}from"./gate-By_Mulop.js";var r=e();function i(){return(0,r.jsx)(t,{children:(0,r.jsx)(n,{})})}export{i as component};

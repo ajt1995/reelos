@@ -38,6 +38,7 @@ export function parseTitleId(id) {
   if (s.startsWith("tmdb-tv-")) return { mediaType: "tv", tmdb: s.slice(8), titleId: s };
   if (s.startsWith("tmdb-")) return { mediaType: "movie", tmdb: s.slice(5), titleId: s };
   if (s.startsWith("tvdb-")) return { mediaType: "tv", tvdb: s.slice(5), titleId: s };
+  if (s.startsWith("jf-") && s.length > 3) return { jellyfinId: s.slice(3), titleId: s };
   return null;
 }
 
@@ -117,13 +118,82 @@ export function attachTitleAliases(title, parsed) {
 }
 
 export function libraryHasTitle(titles, id) {
+  return Boolean(findLibraryTitle(titles, id));
+}
+
+export function findLibraryTitle(titles, id) {
   const parsed = parseTitleId(id);
   const keys = new Set(
-    [id, parsed?.titleId, parsed?.tvdb ? `tvdb-${parsed.tvdb}` : "", parsed?.tmdb ? `tmdb-${parsed.tmdb}` : "", parsed?.tmdb ? `tmdb-tv-${parsed.tmdb}` : ""].filter(
-      Boolean,
-    ),
+    [
+      id,
+      parsed?.titleId,
+      parsed?.tvdb ? `tvdb-${parsed.tvdb}` : "",
+      parsed?.tmdb ? `tmdb-${parsed.tmdb}` : "",
+      parsed?.tmdb ? `tmdb-tv-${parsed.tmdb}` : "",
+      parsed?.jellyfinId,
+      parsed?.jellyfinId ? `jf-${parsed.jellyfinId}` : "",
+    ].filter(Boolean),
   );
-  return (titles || []).some((t) => collectTitleIds(t).some((x) => keys.has(x)));
+  return (titles || []).find((t) => collectTitleIds(t).some((x) => keys.has(x))) || null;
+}
+
+export function attachLibraryPresence(title, libraryTitle) {
+  if (!title) return libraryTitle || title;
+  if (!libraryTitle) return title;
+  const ids = [
+    ...new Set(
+      [
+        ...(title.ids || []),
+        ...(libraryTitle.ids || []),
+        title.id,
+        libraryTitle.id,
+        libraryTitle.jellyfinId,
+        libraryTitle.jellyfinId ? `jf-${libraryTitle.jellyfinId}` : "",
+      ]
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+  return {
+    ...title,
+    ids,
+    jellyfinId: title.jellyfinId || libraryTitle.jellyfinId,
+    poster: title.poster || libraryTitle.poster,
+  };
+}
+
+/** Seerr is for requests. A JF row already on the box is the title page. */
+export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb } = {}) {
+  if (seerrTitle) {
+    return { titles: [attachLibraryPresence(seerrTitle, libraryTitle)], error: null };
+  }
+  if (libraryTitle) {
+    return { titles: [libraryTitle], error: null };
+  }
+  if (missingTmdb) {
+    return { titles: [], error: "Could not map that title to TMDB. Retry, or open it from Library." };
+  }
+  return { titles: [], error: "Seerr did not find that title" };
+}
+
+export function pickSeerrSearchForLibrary(title, hits) {
+  const want = String(title?.title || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  if (!want || want === "unknownonthisbox" || /^[0-9a-f]{32,64}$/.test(want)) return null;
+  const kind = title?.kind;
+  return (
+    (hits || []).find((h) => {
+      const got = String(h?.title || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "");
+      if (got !== want) return false;
+      if (kind && h.kind && h.kind !== kind && !(kind === "tv" && h.kind === "anime") && !(kind === "anime" && h.kind === "tv")) {
+        return false;
+      }
+      return true;
+    }) || null
+  );
 }
 
 /** Seerr/TMDB type strings vary; person/collection must not become movie. */

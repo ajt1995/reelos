@@ -433,6 +433,7 @@ test("tmdb-2059 is a ghost label until Seerr names it", () => {
   assert.equal(isGhostRequestLabel("tmdb-2059", "tmdb-2059"), true);
   assert.equal(isGhostRequestLabel("", "tmdb-2059"), true);
   assert.equal(isGhostRequestLabel("National Treasure", "tmdb-2059"), false);
+  assert.equal(isGhostRequestLabel("73ceff573dc30bebc3fcf26f61de07b25f927a74", "jf-103ae"), true);
   const ghost = titleForRequest({ titleId: "tmdb-2059" }, []);
   assert.equal(isGhostRequestLabel(ghost.title, ghost.id), true);
   const named = titleForRequest({ titleId: "tmdb-2059" }, [

@@ -12,6 +12,10 @@ import { showRequestQueueControls, requestShowsRetry, titleMatchesId, titlePrese
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { RemoveFromBox } from "@/components/remove-from-box";
 
+function looksLikeHashTitle(name?: string) {
+  return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
+}
+
 function seasonNumbersOf(title?: Title | null, extra: number[] = []) {
   const listed = title?.seasonList?.filter((n) => n > 0) ?? [];
   if (listed.length) return listed;
@@ -32,7 +36,17 @@ export function TitleView({ id }: { id: string }) {
   const [seasonErr, setSeasonErr] = useState<string | null>(null);
   const [seasonsLoading, setSeasonsLoading] = useState(true);
   const [lookupKey, setLookupKey] = useState(0);
-  const resolved = detail ?? title;
+  const raw = detail ?? title;
+  const hashName = looksLikeHashTitle(raw?.title);
+  const resolved = hashName
+    ? detail && !looksLikeHashTitle(detail.title)
+      ? detail
+      : seasonsLoading && !detail
+        ? null
+        : raw
+          ? { ...raw, title: "Unknown on this box" }
+          : null
+    : raw;
   const extraIds = titlePresenceKeys(id, resolved?.ids || []);
   const [season, setSeason] = useState(1);
   const [hash, setHash] = useState("");
@@ -167,7 +181,7 @@ export function TitleView({ id }: { id: string }) {
           <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">
-            {resolved.year}
+            {resolved.year || null}
             {resolved.runtime ? ` · ${formatRuntime(resolved.runtime)}` : null}
             {seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
             {resolved.tracks ? ` · ${resolved.tracks} tracks` : null}
@@ -180,7 +194,7 @@ export function TitleView({ id }: { id: string }) {
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}
 
-          {series ? (
+          {series && !onBox ? (
             <div className="mt-5 flex flex-wrap gap-2">
               {seasonNumbers.length === 0 && seasonsLoading ? (
                 <p className="text-sm text-muted">Loading seasons from Seerr…</p>
@@ -207,6 +221,23 @@ export function TitleView({ id }: { id: string }) {
                   </button>
                 ))
               )}
+            </div>
+          ) : series && seasonNumbers.length ? (
+            <div className="mt-5 flex flex-wrap gap-2">
+              {seasonNumbers.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setSeason(n)}
+                  className={
+                    season === n
+                      ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg"
+                      : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]"
+                  }
+                >
+                  Season {n}
+                </button>
+              ))}
             </div>
           ) : null}
 

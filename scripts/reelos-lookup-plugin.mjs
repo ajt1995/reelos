@@ -20,6 +20,9 @@ import {
   resolveParsedTitle,
   attachTitleAliases,
   libraryHasTitle,
+  findLibraryTitle,
+  lookupPayloadForId,
+  pickSeerrSearchForLibrary,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -44,10 +47,12 @@ import {
   JELLYFIN_ITEMS_TIMEOUT_MS,
   LIBRARY_CACHE_FILE,
   libraryItemsUrl,
-  mapJellyfinItem,
+  mapJellyfinItems,
   readLibraryCacheFile,
+  repairHashTitles,
   serveLibrary,
   writeLibraryCacheFile,
+  dedupeLibraryTitles,
 } from "./reelos-library.mjs";
 
 const jellyfinTokens = createTokenCache();
@@ -91,10 +96,7 @@ async function refreshLibraryFull(host) {
     if (!r.ok) return;
     const data = await r.json();
     const items = Array.isArray(data.Items) ? data.Items : [];
-    libraryCache.write(
-      items.map((it) => mapJellyfinItem(it, host)),
-      { complete: true },
-    );
+    libraryCache.write(dedupeLibraryTitles(mapJellyfinItems(items, host)), { complete: true });
     persistLibraryCache();
   })()
     .catch(() => {})
@@ -301,8 +303,8 @@ async function readBody(req) {
 
 function titlesForResolve() {
   const mem = libraryCache.read()?.titles || [];
-  if (mem.length) return mem;
-  return readLibraryCacheFile(LIBRARY_CACHE_FILE)?.titles || [];
+  const raw = mem.length ? mem : readLibraryCacheFile(LIBRARY_CACHE_FILE)?.titles || [];
+  return dedupeLibraryTitles(repairHashTitles(raw));
 }
 
 async function resolveLiveParsed(parsed) {
@@ -338,6 +340,13 @@ async function handleLookup(req, res) {
   let error = null;
   const key = seerrApiKey();
   note(`api q=${q} id=${id} seerr=${key ? "yes" : "NO"}`);
+  if (id) {
+    const libraryTitle = findLibraryTitle(titlesForResolve(), id);
+    if (!key && libraryTitle) {
+      send(res, 200, { titles: [libraryTitle], error: null });
+      return;
+    }
+  }
   if (!key) {
     error = "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.";
     send(res, 200, { titles, error });
@@ -345,12 +354,34 @@ async function handleLookup(req, res) {
   }
   try {
     if (id) {
-      const parsed = parseTitleId(id);
-      const detail = parsed ? await seerrTitleDetail(parsed) : { title: null, parsed: null };
-      if (detail.title) titles.push(detail.title);
-      else if (detail.missingTmdb) error = "Could not map that title to TMDB. Retry, or open it from Library.";
-      else error = "Seerr did not find that title";
-      send(res, 200, { titles, error });
+      const libraryTitle = findLibraryTitle(titlesForResolve(), id);
+      let parsed = await resolveLiveParsed(parseTitleId(id) || (libraryTitle ? parseTitleId(libraryTitle.id) : null));
+      let seerrTitle = null;
+      let missingTmdb = false;
+      if (parsed?.tmdb) {
+        const detail = await seerrTitleDetail(parsed);
+        seerrTitle = detail.title;
+        missingTmdb = Boolean(detail.missingTmdb) && !libraryTitle;
+      } else if (
+        libraryTitle?.title &&
+        libraryTitle.title !== "Unknown on this box" &&
+        !/^[0-9a-f]{32,64}$/i.test(libraryTitle.title)
+      ) {
+        try {
+          const r = await seerrFetch(`/api/v1/search?query=${encodeURIComponent(libraryTitle.title)}`, { key, ms: 8000 });
+          if (r.ok) {
+            const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
+            seerrTitle = pickSeerrSearchForLibrary(libraryTitle, mapSeerrSearchResults(hits, { q: libraryTitle.title, limit: 8 }));
+          }
+        } catch {
+          /* Seerr is for requests; the JF row still names the page */
+        }
+        missingTmdb = false;
+      } else {
+        missingTmdb = !libraryTitle;
+      }
+      const payload = lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb });
+      send(res, 200, payload);
       return;
     }
     if (q.length < 2) {
