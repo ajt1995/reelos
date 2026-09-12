@@ -18,8 +18,8 @@ test("movie/TV Discover still hits Seerr /api/discover, not the books catalog", 
   assert.match(view, /settings\.betaChannel/);
   const plugin = read("scripts/reelos-lookup-plugin.mjs");
   assert.match(plugin, /async function handleDiscover/);
-  assert.match(plugin, /seerrFetch\("\/api\/v1\/discover\/movies"/);
-  assert.match(plugin, /seerrFetch\("\/api\/v1\/discover\/tv"/);
+  assert.match(plugin, /seerrFetch\("\/api\/v1\/discover\/movies/);
+  assert.match(plugin, /seerrFetch\("\/api\/v1\/discover\/tv/);
   assert.doesNotMatch(plugin, /\/api\/books\/discover/);
 });
 

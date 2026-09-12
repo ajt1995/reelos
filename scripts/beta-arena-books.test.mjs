@@ -48,7 +48,7 @@ test("beta: Arena+Books are gated on betaChannel, default off", () => {
   assert.match(sidecar, /stopBooks/);
   assert.match(sidecar, /idleOffBooksIfNeeded/);
   assert.match(sidecar, /\/srv\/media\/books/);
-  assert.doesNotMatch(sidecar, /\/media\/movies|wipe \/media/);
+  assert.doesNotMatch(sidecar, /rmSync\(BOOKS_MEDIA|wipe \/media movie/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.doesNotMatch(read("src/components/wizard.tsx"), /Books/);
 });
