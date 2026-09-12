@@ -13,12 +13,14 @@ import {
   dedupeLibraryTitles,
   libraryItemsUrl,
   looksLikeSeasonFolderTitle,
+  looksLikeCompletePackTitle,
   mapJellyfinItem,
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
   shelfTitleKey,
   stripMatchingYear,
+  stripCompletePackSuffix,
   stripSeasonFolderSuffix,
   titleYear,
   yearsCompatible,
@@ -301,6 +303,38 @@ test("a season folder joins the remake it shares a year with, not the first one 
     [2011, 2013],
   );
   assert.equal(out.find((t) => t.year === 2013).id, "tvdb-264586");
+});
+
+test("The EXPANSE Complete dump collapses onto The Expanse series", () => {
+  assert.equal(stripCompletePackSuffix("The EXPANSE Complete"), "The EXPANSE");
+  assert.equal(stripCompletePackSuffix("The Expanse Complete 2020"), "The Expanse");
+  assert.equal(looksLikeCompletePackTitle("The EXPANSE Complete"), true);
+  const series = titleFrom({
+    Id: "jf-expanse",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: { Tvdb: "280619", Tmdb: "63639" },
+  });
+  const complete = titleFrom({
+    Id: "jf-expanse-complete",
+    Name: "The EXPANSE Complete",
+    Type: "Series",
+    ProductionYear: 2020,
+    ProviderIds: {},
+  });
+  complete.poster = "";
+  assert.equal(shelfTitleKey(series), shelfTitleKey(complete));
+  for (const order of [
+    [complete, series],
+    [series, complete],
+  ]) {
+    const out = dedupeLibraryTitles(order);
+    assert.equal(out.length, 1, JSON.stringify(out.map((t) => [t.title, t.year, t.id])));
+    assert.equal(out[0].id, "tvdb-280619");
+    assert.equal(out[0].title, "The Expanse");
+    assert.equal(out[0].year, 2015);
+  }
 });
 
 test("two matched series that differ only by a season suffix stay two rows", () => {

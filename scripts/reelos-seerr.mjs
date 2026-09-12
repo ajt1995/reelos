@@ -46,6 +46,86 @@ export function titleIdFor(mediaType, tmdb) {
   return mediaType === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
 }
 
+function collectTitleIds(t) {
+  return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""]
+    .map((x) => String(x || "").trim())
+    .filter(Boolean);
+}
+
+/** Library/Sonarr often store TV as tvdb-* while Seerr/TMDB use tmdb-tv-*. */
+export function tmdbFromTitleIds(ids) {
+  const list = (ids || []).map(String);
+  const tv = list.find((i) => i.startsWith("tmdb-tv-"));
+  if (tv) return { mediaType: "tv", tmdb: tv.slice(8) };
+  const movie = list.find((i) => /^tmdb-\d/.test(i));
+  if (movie) return { mediaType: "movie", tmdb: movie.slice(5) };
+  return null;
+}
+
+export function resolveParsedTitle(parsed, { titles = [], series = [], movies = [] } = {}) {
+  if (!parsed) return parsed;
+  if (parsed.tmdb) return parsed;
+  const tvdbKey = parsed.tvdb ? `tvdb-${parsed.tvdb}` : "";
+  const pageId = String(parsed.titleId || "");
+  for (const t of titles || []) {
+    const ids = collectTitleIds(t);
+    const hit = (tvdbKey && ids.includes(tvdbKey)) || (pageId && ids.includes(pageId));
+    if (!hit) continue;
+    const mapped = tmdbFromTitleIds(ids);
+    if (!mapped?.tmdb) continue;
+    const mediaType = parsed.mediaType || mapped.mediaType || (t.kind === "tv" || t.kind === "anime" ? "tv" : "movie");
+    const tvdb =
+      parsed.tvdb ||
+      (ids.find((i) => i.startsWith("tvdb-")) || "").replace(/^tvdb-/, "") ||
+      undefined;
+    return {
+      mediaType,
+      tmdb: String(mapped.tmdb),
+      tvdb: tvdb || undefined,
+      titleId: titleIdFor(mediaType, mapped.tmdb),
+    };
+  }
+  if (parsed.tvdb) {
+    const s = (series || []).find((x) => String(x?.tvdbId) === String(parsed.tvdb));
+    if (s?.tmdbId) {
+      return {
+        mediaType: "tv",
+        tmdb: String(s.tmdbId),
+        tvdb: String(parsed.tvdb),
+        titleId: titleIdFor("tv", s.tmdbId),
+      };
+    }
+  }
+  if (parsed.titleId && !parsed.tvdb) {
+    const m = (movies || []).find((x) => String(x?.tmdbId) === String(parsed.titleId.replace(/^tmdb-/, "")));
+    if (m?.tmdbId) {
+      return { mediaType: "movie", tmdb: String(m.tmdbId), titleId: titleIdFor("movie", m.tmdbId) };
+    }
+  }
+  return parsed;
+}
+
+export function attachTitleAliases(title, parsed) {
+  if (!title) return title;
+  const ids = new Set([...(title.ids || []), title.id].filter(Boolean));
+  if (parsed?.tmdb) {
+    ids.add(`tmdb-${parsed.tmdb}`);
+    if ((parsed.mediaType || title.kind) === "tv") ids.add(`tmdb-tv-${parsed.tmdb}`);
+  }
+  if (parsed?.tvdb) ids.add(`tvdb-${parsed.tvdb}`);
+  return { ...title, ids: [...ids] };
+}
+
+export function libraryHasTitle(titles, id) {
+  const parsed = parseTitleId(id);
+  const keys = new Set(
+    [id, parsed?.titleId, parsed?.tvdb ? `tvdb-${parsed.tvdb}` : "", parsed?.tmdb ? `tmdb-${parsed.tmdb}` : "", parsed?.tmdb ? `tmdb-tv-${parsed.tmdb}` : ""].filter(
+      Boolean,
+    ),
+  );
+  return (titles || []).some((t) => collectTitleIds(t).some((x) => keys.has(x)));
+}
+
 /** Seerr/TMDB type strings vary; person/collection must not become movie. */
 export function normalizeMediaType(raw) {
   const s = String(raw || "")
@@ -975,8 +1055,12 @@ export function seerrSearchHit(h, mediaTypeHint) {
   const listed = realSeasonNumbers(h.mediaInfo?.seasons || h.seasons);
   const fromCount = Number(h.numberOfSeasons || 0);
   const seasons = mediaType === "tv" ? listed.length || (Number.isFinite(fromCount) && fromCount > 0 ? fromCount : undefined) : undefined;
+  const id = titleIdFor(mediaType, tmdb);
+  const tvdb = h.tvdbId ?? h.externalIds?.tvdbId ?? h.mediaInfo?.tvdbId;
+  const ids = [id, mediaType === "tv" ? `tmdb-${tmdb}` : null, tvdb ? `tvdb-${tvdb}` : null].filter(Boolean);
   return {
-    id: titleIdFor(mediaType, tmdb),
+    id,
+    ids,
     kind: mediaType === "tv" ? "tv" : "movie",
     title,
     year,

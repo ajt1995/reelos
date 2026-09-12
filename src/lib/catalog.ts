@@ -461,11 +461,16 @@ const extra: Record<string, Title> = {};
 /** Engine lookup (TMDB via Seerr) lives here so title pages resolve after search. */
 export function rememberCatalogTitles(list: Title[] | null | undefined) {
   if (!list || !list.length) return;
-  for (const t of list) extra[t.id] = t;
+  for (const t of list) {
+    extra[t.id] = t;
+    for (const alias of t.ids || []) extra[String(alias)] = t;
+  }
 }
 
 export function getTitle(id: string) {
-  return TITLE_BY_ID[id] ?? extra[id];
+  if (TITLE_BY_ID[id]) return TITLE_BY_ID[id];
+  if (extra[id]) return extra[id];
+  return Object.values(extra).find((t) => (t.ids || []).includes(id));
 }
 
 export function kindLabel(kind: Kind) {
