@@ -36,14 +36,17 @@ test("live Seerr/TMDB era ids are not lab-Cached (no Discover glow)", () => {
   assert.equal(titleInCache(title("hollow-broadcast")), false);
 });
 
-test("Discover search cards do not take request, progress, or Cached glow", () => {
+test("Discover rows are on this box / finishing / pick tonight; search has no Cached glow", () => {
   const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
   const card = readFileSync(join(root, "src/components/title-card.tsx"), "utf8");
   const adapter = readFileSync(join(root, "src/lib/adapter.ts"), "utf8");
   assert.match(discover, /\/api\/lookup\?q=/);
   assert.match(discover, /\/api\/discover/);
+  assert.match(discover, /On this box/);
+  assert.match(discover, /Finishing/);
+  assert.match(discover, /Pick tonight/);
   assert.match(discover, /<TitleCard key=\{t\.id\} title=\{t\} \/>/);
-  assert.doesNotMatch(discover, /request=\{/);
+  assert.match(discover, /request=\{r\}/);
   assert.doesNotMatch(discover, /progress=\{/);
   assert.doesNotMatch(discover, /In progress/i);
   assert.doesNotMatch(discover, /Movies on this box/);

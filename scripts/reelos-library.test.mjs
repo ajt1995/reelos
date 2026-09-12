@@ -45,6 +45,7 @@ const sampleItem = {
   ProductionYear: 2024,
   Overview: "A very long synopsis that used to ride every /api/library payload.",
   ProviderIds: { Tmdb: "550" },
+  ImageTags: { Primary: "abc123" },
 };
 
 function titleFrom(it, host = "10.0.0.5") {
@@ -62,7 +63,7 @@ test("Home shelf limit stays 24 and parser rejects junk", () => {
 test("Jellyfin Items URL is lean: no Overview, optional Limit", () => {
   const full = libraryItemsUrl();
   assert.match(full, /Fields=Path%2CProviderIds/);
-  assert.match(full, /EnableImages=false/);
+  assert.match(full, /EnableImages=true/);
   assert.match(full, /EnableTotalRecordCount=false/);
   assert.doesNotMatch(full, /Overview/);
   assert.doesNotMatch(full, /(?:\?|&)Limit=/);
@@ -745,6 +746,7 @@ test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster",
   ]);
   assert.equal(jellyfinHasPrimaryImage({ ImageTags: {} }), false);
   assert.equal(jellyfinHasPrimaryImage({ ImageTags: { Primary: "abc" } }), true);
+  assert.equal(jellyfinHasPrimaryImage({}), false);
   const bare = titleFrom({
     Id: "jf-hash",
     Name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",

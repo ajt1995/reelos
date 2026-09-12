@@ -20,7 +20,7 @@ export function libraryItemsUrl({ limit } = {}) {
     IncludeItemTypes: "Movie,Series",
     Fields: "Path,ProviderIds,ImageTags",
     ImageTypeLimit: "1",
-    EnableImages: "false",
+    EnableImages: "true",
     EnableUserData: "false",
     EnableTotalRecordCount: "false",
     SortBy: "DateCreated",
@@ -34,7 +34,7 @@ export function jellyfinHasPrimaryImage(it) {
   const tags = it?.ImageTags;
   if (tags && typeof tags === "object") return Boolean(tags.Primary);
   if (it?.ImageTag) return true;
-  return tags == null;
+  return false;
 }
 
 export function hashDumpIds(name, path) {

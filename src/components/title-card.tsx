@@ -2,9 +2,20 @@ import { Link } from "@tanstack/react-router";
 import { Poster } from "@/components/poster";
 import { titleInCache } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
+import { titleMatchesId } from "@/lib/sync-requests";
 import type { MediaRequest } from "@/lib/types";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+export function posterArt(title: Title, extras: Title[] = []): string {
+  const tmdb = extras.find((x) => {
+    const p = String(x.poster || "").trim();
+    if (!p || p.includes("/api/jf/")) return false;
+    return titleMatchesId(title, x.id) || x.id === title.id;
+  });
+  if (tmdb?.poster) return String(tmdb.poster);
+  return String(title.poster || "");
+}
 
 export function TitleCard({
   title,
@@ -20,8 +31,10 @@ export function TitleCard({
   const status = request?.status;
   const source = useReelStore((s) => s.answers.source);
   const inLibrary = useReelStore((s) => s.library.includes(title.id));
+  const remoteTitles = useReelStore((s) => s.remoteTitles);
   const showCache =
     !request && !inLibrary && source !== "local-vpn" && titleInCache(title);
+  const painted = { ...title, poster: posterArt(title, remoteTitles) };
 
   return (
     <Link
@@ -30,7 +43,7 @@ export function TitleCard({
       className={cn("group block w-[148px] shrink-0 sm:w-[168px]", className)}
     >
       <div className="relative overflow-hidden rounded-xl transition-transform duration-200 ease-out group-hover:-translate-y-0.5">
-        <Poster title={title} className="rounded-xl" />
+        <Poster title={painted} className="rounded-xl" />
         {showCache ? (
           <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-medium tracking-wide text-gold-fg">
             Cached

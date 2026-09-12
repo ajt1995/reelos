@@ -52,14 +52,14 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.47)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.48)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.47");
-  assert.equal(chan.version, "1.2.50.47");
+  assert.equal(ver, "1.2.50.48");
+  assert.equal(chan.version, "1.2.50.48");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
   assert.equal(beta.version, "2.0.0");
@@ -67,11 +67,11 @@ test("stack: VERSION / channel / stamps agree (1.2.50.47)", () => {
   assert.match(beta.tarball, /beta-arena-books-5ba6/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
   assert.match(beta.notes[0], /separate beta tarball|Not inside main/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.47"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.47"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.47"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.47"/);
-  assert.match(read("STATUS.md"), /1\.2\.50\.47/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.48"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.48"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.48"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.48"/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.48/);
   assert.match(read("STATUS.md"), /1\.2\.50\.46/);
   assert.match(read("STATUS.md"), /1\.2\.50\.45/);
   assert.match(read("STATUS.md"), /1\.2\.50\.43/);
@@ -92,18 +92,19 @@ test("stack: VERSION / channel / stamps agree (1.2.50.47)", () => {
   assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
-  assert.match(chan.notes[0], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);
-  assert.match(chan.notes[1], /hash|jf-|Unknown on this box|infohash|Rick and Morty/i);
-  assert.match(chan.notes[2], /tvdb|Watch|Expanse|title page/i);
-  assert.match(chan.notes[3], /Splash-lock|skip-only|catching up/);
-  assert.match(chan.notes[4], /tmdb-2059|National Treasure|transferring|Expanse/);
-  assert.match(chan.notes[5], /ffprobe|stub|FUSE dumps|concurrency/);
-  assert.match(chan.notes[6], /hardware|MemoryMax|concurrency/);
-  assert.match(chan.notes[7], /own phone clock|Library catching up|product/);
-  assert.match(chan.notes[8], /library catch-up|import after hops/);
-  assert.match(chan.notes[9], /TorBox/);
-  assert.match(chan.notes[9], /DirectPlay/);
-  assert.match(chan.notes[9], /prebuilt hashed UI/);
+  assert.match(chan.notes[0], /Hands-off home|on this box|pick tonight|Watch|National Treasure/i);
+  assert.match(chan.notes[1], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);
+  assert.match(chan.notes[2], /hash|jf-|Unknown on this box|infohash|Rick and Morty/i);
+  assert.match(chan.notes[3], /tvdb|Watch|Expanse|title page/i);
+  assert.match(chan.notes[4], /Splash-lock|skip-only|catching up/);
+  assert.match(chan.notes[5], /tmdb-2059|National Treasure|transferring|Expanse/);
+  assert.match(chan.notes[6], /ffprobe|stub|FUSE dumps|concurrency/);
+  assert.match(chan.notes[7], /hardware|MemoryMax|concurrency/);
+  assert.match(chan.notes[8], /own phone clock|Library catching up|product/);
+  assert.match(chan.notes[9], /library catch-up|import after hops/);
+  assert.match(chan.notes[10], /TorBox/);
+  assert.match(chan.notes[10], /DirectPlay/);
+  assert.match(chan.notes[10], /prebuilt hashed UI/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
