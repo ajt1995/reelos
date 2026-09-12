@@ -67,6 +67,7 @@ import {
   dispatchProfilesApi,
   isHouseOwner,
   loadProfiles,
+  publicProfile,
   sessionAuthCreds,
   tasteFor,
 } from "./reelos-profiles.mjs";

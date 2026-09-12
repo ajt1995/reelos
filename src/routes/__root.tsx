@@ -106,7 +106,9 @@ function Runtime({ children }: { children: React.ReactNode }) {
           })
           .finally(() => {
             const cur = useReelStore.getState();
-            void cur.hydrateProfiles().finally(() => cur.setHydrated());
+            void cur.hydrateProfiles().finally(() => {
+              cur.setHydrated();
+            });
           });
       });
   }, []);
