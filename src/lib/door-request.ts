@@ -1,5 +1,5 @@
-import { requestMediaTypeForPage, requestTitleIdForPage, titlePresenceKeys } from "./sync-requests";
-import type { Title } from "@/lib/types";
+import { requestMediaTypeForPage, requestTitleIdForPage, titlePresenceKeys } from "./sync-requests.ts";
+import type { Title } from "./types.ts";
 
 /** POST /api/request for a collection/filmography row. Person and collection ids never go here. */
 export function requestBodyForTitle(title: Title, season?: number) {
