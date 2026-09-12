@@ -13,6 +13,8 @@ Environment=REELOS_APPLIANCE=1
 Environment=REELOS_ROOT=/opt/reelos
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+# One Node on :8080. Kill leftover vite/nitro from a previous start.
+ExecStartPre=/bin/sh -c 'fuser -k 8080/tcp >/dev/null 2>&1 || true'
 ExecStart=/usr/bin/env npm run start:box
 Restart=always
 RestartSec=2

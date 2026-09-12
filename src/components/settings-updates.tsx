@@ -38,9 +38,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
 
   const hint =
     update.status === "applying"
-      ? `Applying ${update.target ?? ""}`
+      ? `Applying ${update.target ?? ""} — swapping the app`
       : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
-        ? libraryCatchup.message || "Library catching up"
+        ? libraryCatchup.message || "TorBox filesystem busy — not copying to disk"
         : update.status === "available"
         ? `${update.target} is ready`
         : update.status === "checking"
@@ -63,14 +63,14 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       </p>
       <p className="mt-2 text-sm text-muted">
         {update.status === "applying"
-          ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
+          ? "An Apply is running — phone, CLI, or both. Home can open. Swapping the app. Do not tap Apply again."
           : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
-            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply."
+            ? "The update is on this box. TorBox filesystem busy — not copying to disk, or library catch-up is still importing. Folder skips and timeouts are here, not a stuck Apply."
             : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
       {catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? (
         <p className="mt-2 text-sm">
-          {libraryCatchup.message || "Library catching up"}
+          {libraryCatchup.message || "TorBox filesystem busy — not copying to disk"}
           {libraryCatchup.folder && libraryCatchup.total
             ? ` · folder ${libraryCatchup.folder} of ${libraryCatchup.total}`
             : null}

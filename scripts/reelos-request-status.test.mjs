@@ -64,6 +64,8 @@ test("presence facts read the JF shelf cache and *arr hasFile index", async () =
   assert.equal(facts.arrReady, true);
   assert.ok(Array.isArray(facts.series));
   assert.ok(Array.isArray(facts.dumps.sonarr));
+  assert.deepEqual(facts.dumps.sonarr, []);
+  assert.deepEqual(facts.dumps.radarr, []);
 });
 
 test("TV POST recover searches a missing season and always imports", () => {

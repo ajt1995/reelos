@@ -13,7 +13,7 @@ import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
 import { frontendLabel, useReelStore } from "@/lib/store";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
-import { inFlightRequests } from "@/lib/sync-requests";
+import { inFlightRequests, transferringChipCount } from "@/lib/sync-requests";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -32,8 +32,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const ipv4 = useReelStore((s) => s.ipv4);
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watch = useReelStore((s) => s.watch);
-  const transferring = useReelStore(
-    (s) => inFlightRequests(s.requests, { titles: s.shelf }).length,
+  const transferring = useReelStore((s) =>
+    transferringChipCount(inFlightRequests(s.requests, { titles: s.shelf })),
   );
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const watchHref = jellyfinWatchHref({ ipv4, tailscaleIp, watch, hostname });

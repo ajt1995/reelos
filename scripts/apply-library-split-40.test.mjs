@@ -60,9 +60,11 @@ test("persistent library catch-up unit outlives selfheal 90s", () => {
 
 test("phone has two clocks: Applying vs Library catching up", () => {
   assert.match(read("src/components/applying-bar.tsx"), /Applying \{name\}/);
+  assert.match(read("src/components/applying-bar.tsx"), /swapping the app/);
   assert.match(read("src/components/library-catchup-bar.tsx"), /Library catching up/);
+  assert.match(read("src/components/library-catchup-bar.tsx"), /TorBox filesystem busy/);
   assert.match(read("src/components/shell.tsx"), /LibraryCatchupBar/);
-  assert.match(read("src/components/settings-updates.tsx"), /Library catching up/);
+  assert.match(read("src/components/settings-updates.tsx"), /swapping the app/i);
   assert.match(read("src/components/gate.tsx"), /splashLock/);
   assert.match(read("src/components/gate.tsx"), /catchupLocksHome/);
   assert.match(read("src/lib/library-catchup.ts"), /catchupLocksHome/);

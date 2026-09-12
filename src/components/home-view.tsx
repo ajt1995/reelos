@@ -11,6 +11,7 @@ import {
   inFlightRequests,
   isGhostRequestLabel,
   titleForRequest,
+  transferringChipCount,
 } from "@/lib/sync-requests";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
@@ -36,7 +37,7 @@ export function HomeView() {
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
   const inflight = inFlightRequests(requests, { titles: shelf });
-  const transferring = inflight.length;
+  const transferring = transferringChipCount(inflight);
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {

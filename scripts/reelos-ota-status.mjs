@@ -100,10 +100,16 @@ export function shouldSplashLock(doc, { actuallyRunning } = {}) {
   return true;
 }
 
+export const WAIT_FUSE_BUSY = "TorBox filesystem busy — not copying to disk";
+export const WAIT_APPLY = "swapping the app";
+export const WAIT_SMALL_BOX = "4GB + HDD, small-box limits";
+
 export function honestCatchupMessage(doc, splashLock) {
   const status = String(doc?.status || "idle").toLowerCase();
   const raw = String(doc?.message || "");
-  const catching = /^library catching up/i.test(raw) || /backing off/i.test(raw);
+  const catching =
+    /^library catching up/i.test(raw) || /backing off/i.test(raw) || /torbox filesystem busy/i.test(raw);
+  if (status === "backoff") return raw || WAIT_FUSE_BUSY;
   if (splashLock) return raw || "Library catching up";
   const skipped = Number(doc?.skipped || 0) || 0;
   const timeouts = Number(doc?.timeouts || 0) || 0;
@@ -116,7 +122,10 @@ export function honestCatchupMessage(doc, splashLock) {
       if (skipped || timeouts) return `Library catch-up done — ${skipped} skipped, ${timeouts} timeouts`;
       return status === "done" || status === "stopped" ? "Library catch-up done" : "";
     }
-    if (status === "idle" || status === "backoff") return "";
+    if (status === "idle") {
+      if (/torbox filesystem busy/i.test(raw)) return raw || WAIT_FUSE_BUSY;
+      return "";
+    }
     return catching ? "" : raw;
   }
   return raw;
@@ -128,7 +137,6 @@ export function parseLibraryProgress(raw, opts = {}) {
     const doc = JSON.parse(String(raw || "{}"));
     if (!doc || typeof doc !== "object") return idle;
     let status = String(doc.status || "idle");
-    if (status === "backoff") status = "idle";
     let needsImport = Boolean(doc.needsImport);
     const skipped = Number(doc.skipped || 0) || 0;
     const timeouts = Number(doc.timeouts || 0) || 0;
