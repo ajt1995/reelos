@@ -8,6 +8,116 @@ WORK=/tmp/reelos-ota
 LOG="$STATE/ota.log"
 mkdir -p "$STATE" "$WORK"
 log() { printf '%s\n' "$*" >>"$LOG"; printf '%s\n' "$*" >&2; }
+export REELOS_STATE="$STATE"
+PROGRESS_HB=0
+write_progress() {
+  local stage=$1 got=${2:-0} total=${3:-0} detail=${4:-} status=${5:-running} py=""
+  for cand in \
+      "$WORK/src/daemon/reelos_apply_progress.py" \
+      "$WORK/src/install/bin/reelos_apply_progress.py" \
+      "$ROOT/bin/reelos_apply_progress.py"
+  do
+    if [ -f "$cand" ]; then py=$cand; break; fi
+  done
+  if [ -n "$py" ]; then
+    REELOS_STATE="$STATE" python3 "$py" --stage "$stage" --bytes-got "$got" --bytes-total "$total" --detail "$detail" --status "$status" --state "$STATE" >/dev/null 2>&1 || true
+    return 0
+  fi
+  python3 - "$STATE" "$stage" "$got" "$total" "$detail" "$status" <<'PROG'
+import json, sys, time
+from pathlib import Path
+state, stage, got, total, detail, status = sys.argv[1:7]
+stages = {
+  "download": (1, "Downloading update"),
+  "extract": (2, "Extracting"),
+  "probe": (3, "Probing this computer"),
+  "cleaner": (4, "Cleaning leftover builds"),
+  "health": (5, "Checking health"),
+  "door": (6, "Restarting the door"),
+  "images": (7, "Pulling images"),
+  "done": (7, "Done"),
+}
+root = Path(state)
+root.mkdir(parents=True, exist_ok=True)
+path = root / "apply-progress.json"
+try:
+    prev = json.loads(path.read_text())
+except Exception:
+    prev = {}
+now = int(time.time() * 1000)
+got_i = max(0, int(got or 0))
+tot_i = max(0, int(total or 0))
+idx, label = stages.get(stage, (int(prev.get("stageIndex") or 1), stage))
+if status == "done" or stage == "done":
+    status, stage, idx, label = "done", "done", 7, "Done"
+same = str(prev.get("stage") or "") == stage
+stage_started = int(prev.get("stageStartedAt") or now) if same else now
+pct = int(round(100 * got_i / tot_i)) if tot_i > 0 else None
+if pct is not None:
+    pct = max(0, min(100, pct))
+if status == "done":
+    msg = "Done"
+    pct = 100
+elif stage == "download" and got_i <= 0 and (now - stage_started) >= 120000:
+    msg = "Download stalled — 0 bytes for 2+ minutes"
+elif pct is not None:
+    msg = f"{label} · {pct}%"
+elif got_i > 0:
+    msg = f"{label} · {got_i} bytes"
+else:
+    msg = f"{(detail or label)} · {idx}/7"
+doc = {
+    "status": status,
+    "stage": stage,
+    "stageIndex": idx,
+    "stageCount": 7,
+    "label": label,
+    "detail": detail,
+    "bytesGot": got_i,
+    "bytesTotal": tot_i,
+    "percent": pct,
+    "percentKind": "bytes" if pct is not None else None,
+    "heartbeatAt": now,
+    "startedAt": int(prev.get("startedAt") or now),
+    "stageStartedAt": stage_started,
+    "message": msg,
+}
+path.write_text(json.dumps(doc) + "\n")
+esc = msg.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+(root / "updating.html").write_text(
+    '<!doctype html><meta charset=utf-8><meta http-equiv=refresh content=2>'
+    '<title>Updating ReelOS</title><body style="margin:0;min-height:100vh;display:flex;'
+    'align-items:center;justify-content:center;background:#120e08;color:#f3ead8;'
+    'font-family:sans-serif;text-align:center"><div style="padding:2rem">'
+    '<p style="letter-spacing:.34em;text-transform:uppercase;color:#d4a017">Updating ReelOS…</p>'
+    f'<p style="margin-top:1.1rem;font-size:16px">{esc}</p>'
+    '<p style="margin-top:1.2rem;color:#8a8070;font-size:13px">Browse and request come back when this page lifts.</p>'
+    "</div></body>"
+)
+PROG
+}
+stop_progress_watch() {
+  if [ "${PROGRESS_HB:-0}" != "0" ]; then
+    kill "$PROGRESS_HB" 2>/dev/null || true
+    wait "$PROGRESS_HB" 2>/dev/null || true
+    PROGRESS_HB=0
+  fi
+}
+watch_progress_file() {
+  local stage=$1 path=$2 total=$3
+  stop_progress_watch
+  write_progress "$stage" 0 "${total:-0}"
+  (
+    while sleep 2; do
+      got=0
+      if [ -f "$path" ]; then got=$(stat -c%s "$path" 2>/dev/null || echo 0)
+      elif [ -d "$path" ]; then got=$(du -sb "$path" 2>/dev/null | awk '{print $1}')
+      fi
+      write_progress "$stage" "${got:-0}" "${total:-0}"
+    done
+  ) &
+  PROGRESS_HB=$!
+}
 STEPS=8
 STEP=0
 step() {
@@ -318,14 +428,42 @@ fi
 if [ "${REELOS_OTA_REEXEC:-}" = "1" ] && [ -f "$WORK/src/VERSION" ]; then
   log "tarball already extracted — skip second download"
   step "Download"
+  write_progress extract 1 1 "Extracted"
 else
   log "downloading $TARBALL"
   step "Download"
+  mkdir -p "$WORK"
+  DL_TOTAL=0
+  cl=$(curl -sI -fL --ipv4 --max-time 20 -A "ReelOS-update" "$TARBALL" 2>/dev/null | awk 'tolower($1)=="content-length:" {print $2}' | tr -d '\r' | tail -1 || true)
+  if [ -n "${cl:-}" ]; then
+    case "$cl" in
+      ''|*[!0-9]*) ;;
+      *) DL_TOTAL=$cl ;;
+    esac
+  fi
+  write_progress download 0 "${DL_TOTAL:-0}" "Downloading update"
+  watch_progress_file download "$WORK/src.tar.gz" "${DL_TOTAL:-0}"
   curl --progress-bar -fL --ipv4 --retry 3 --max-time 180 -A "ReelOS-update" "$TARBALL" -o "$WORK/src.tar.gz"
-  log "tarball $(wc -c < "$WORK/src.tar.gz") bytes"
+  stop_progress_watch
+  TAR_BYTES=$(wc -c < "$WORK/src.tar.gz" | tr -d ' ')
+  write_progress download "${TAR_BYTES:-0}" "${DL_TOTAL:-$TAR_BYTES}"
+  log "tarball ${TAR_BYTES} bytes"
   rm -rf "$WORK/src"
   mkdir -p "$WORK/src"
+  UNCOMP=0
+  gz=$(gzip -l "$WORK/src.tar.gz" 2>/dev/null | awk 'NR==2 {print $2}' || true)
+  if [ -n "${gz:-}" ]; then
+    case "$gz" in
+      ''|*[!0-9]*) ;;
+      *) UNCOMP=$gz ;;
+    esac
+  fi
+  write_progress extract 0 "${UNCOMP:-0}" "Extracting"
+  watch_progress_file extract "$WORK/src" "${UNCOMP:-0}"
   tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
+  stop_progress_watch
+  EX_BYTES=$(du -sb "$WORK/src" 2>/dev/null | awk '{print $1}')
+  write_progress extract "${EX_BYTES:-0}" "${UNCOMP:-$EX_BYTES}" "Extracting"
 fi
 GOT=$(cat "$WORK/src/VERSION" 2>/dev/null || true)
 # Re-exec mailman before version compare. Stale channel.json must not block a newer tarball.
@@ -419,7 +557,11 @@ need scripts/reelos-ota-status.mjs 'lockIsHeld'
 need src/components/applying-bar.tsx 'engines are still configuring'
 need src/components/applying-bar.tsx 'Updating ReelOS'
 need src/components/splash.tsx 'Updating ReelOS'
-need src/components/splash.tsx 'Not a percent'
+need src/components/splash.tsx 'stalled'
+need src/components/splash.tsx '/api/update/status'
+need scripts/reelos-ota-progress.mjs 'honestApplyProgress'
+need daemon/reelos-update.sh 'apply-progress.json'
+need daemon/reelos_apply_progress.py 'byte_percent'
 need src/components/splash.tsx '/api/hardware'
 need src/components/splash.tsx 'Update failed, still on previous'
 need src/components/settings-panels.tsx 'This is what I detected'
@@ -852,13 +994,10 @@ cp -a "$ROOT/VERSION" "$ROOT.prev/VERSION" 2>/dev/null || true
 [ -f "$ROOT/compose/docker-compose.yml" ] && cp -a "$ROOT/compose/docker-compose.yml" "$ROOT.prev/docker-compose.yml" || true
 
 caddy_updating() {
-  mkdir -p /etc/caddy
+  mkdir -p /etc/caddy "$STATE"
+  write_progress extract 0 0 "Swapping onto this box"
   if [ -f /etc/caddy/Caddyfile ]; then
     cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
-  fi
-  hw_tune=""
-  if [ -f /var/lib/reelos/hardware-profile.json ]; then
-    hw_tune=$(python3 -c 'import json; p=json.load(open("/var/lib/reelos/hardware-profile.json")); print(p.get("splash_tune") or p.get("knobs",{}).get("splash_tune") or "")' 2>/dev/null || true)
   fi
   cat >/etc/caddy/Caddyfile <<EOF
 {
@@ -866,8 +1005,9 @@ caddy_updating() {
 	admin off
 }
 :80 {
-	header Content-Type "text/html; charset=utf-8"
-	respond "Updating ReelOS… ${hw_tune} Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
+	root * $STATE
+	rewrite * /updating.html
+	file_server
 }
 EOF
   caddy_dropin
@@ -958,6 +1098,7 @@ caddy_reelos() {
 
 restore() {
   log "restore after failure"
+  stop_progress_watch
   bug_snap "restore"
   trap - ERR
   systemctl stop reelos 2>/dev/null || true
@@ -1076,12 +1217,14 @@ elif [ -f "$WORK/src/install/udev/99-reelos-hw-probe.rules" ]; then
   udevadm control --reload-rules >/dev/null 2>&1 || true
 fi
 if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  write_progress probe 0 0 "Probing this computer"
   python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
   python3 "$ROOT/bin/reelos_hardware.py" --log 2>/dev/null | while read -r line; do
     [ -n "$line" ] && log "$line"
   done || true
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
+write_progress cleaner 0 0 "Cleaning leftover builds"
 log "OTA cleaner — leftover nonsense from previous builds"
 if [ -f "$ROOT/bin/reelos-ota-clean.sh" ]; then
   bash "$ROOT/bin/reelos-ota-clean.sh" --keep-work-src || log "OTA cleaner non-fatal"
@@ -1092,6 +1235,7 @@ start_shell
 
 probe_home() {
   local i code restarted=0
+  write_progress health 0 0 "Checking health"
   log "waiting for :8080 — door :80 stays on updating page"
   # Unit file may have changed on disk (house: daemon-reload needed).
   # systemctl start is a no-op on a hung/failed unit — restart once at ~15s.
@@ -1157,6 +1301,7 @@ trap - ERR
 log "home up — not stamping VERSION"
 step "Home"
 
+write_progress door 0 0 "Restarting the door"
 caddy_reelos
 if ! probe_port80; then
   log ":80 still down — Home is on :8080, not rolling back"
@@ -1166,6 +1311,7 @@ step "Door :80"
 ensure_door() {
   # Import/indexer heal can OOM *arr and leave Vite accepting TCP with no HTTP.
   # systemctl start is a no-op on a hung-but-active unit — restart it.
+  write_progress door 0 0 "Restarting the door"
   start_fuse_readers
   systemctl start reelos >/dev/null 2>&1 || true
   caddy_reelos
@@ -1630,6 +1776,9 @@ systemctl start --no-block reelos-lock-clients.service >/dev/null 2>&1 || true
 # Pull after stamp so a long image fetch cannot un-apply a live tree.
 # Separate unit from Vite (unlike Finish/provision spawnSync pull).
 if [ -f /var/lib/reelos/stack-images ]; then
+  write_progress images 0 0 "Pulling images"
   log "stack images — docker compose pull"
   (cd "$ROOT/compose" && timeout 600 docker compose pull) || log "compose pull non-fatal"
 fi
+stop_progress_watch
+write_progress done 0 0 "" done

@@ -62,7 +62,7 @@ export function PwaRow() {
 export function HardwareDetectedCard() {
   const [summary, setSummary] = useState("");
   const [probed, setProbed] = useState(false);
-  const [detail, setDetail] = useState("");
+  const [rows, setRows] = useState<string[]>([]);
   useEffect(() => {
     void fetch("/api/hardware", { cache: "no-store" })
       .then(
@@ -74,6 +74,9 @@ export function HardwareDetectedCard() {
             cpus?: number;
             cpuModel?: string;
             diskKind?: string;
+            diskTypeLabel?: string;
+            diskSizeGb?: number;
+            diskFreeGb?: number;
             rootOnUsb?: boolean;
             product?: string;
           }>,
@@ -83,19 +86,25 @@ export function HardwareDetectedCard() {
         setProbed(didProbe);
         setSummary(j.summary || "");
         if (!didProbe) {
-          setDetail("");
+          setRows([]);
           return;
         }
-        const disk = j.diskKind === "rotational" ? "HDD" : j.diskKind === "ssd" ? "SSD" : "disk";
-        const bits = [
-          j.product || "",
-          j.ramGb ? `${j.ramGb} Gi visible RAM` : "",
-          j.cpus ? `${j.cpus} cores` : "",
-          j.cpuModel || "",
-          disk,
-          j.rootOnUsb ? "root on USB" : "root on internal disk",
-        ].filter(Boolean);
-        setDetail(bits.join(" · "));
+        const type =
+          j.diskTypeLabel ||
+          (j.diskKind === "rotational" ? "spinning disk" : j.diskKind === "ssd" ? "SSD" : "disk");
+        setRows(
+          [
+            j.product || "",
+            j.ramGb ? `RAM · ${j.ramGb} Gi visible` : "",
+            type ? `Disk type · ${type}` : "",
+            j.diskSizeGb ? `Disk size · ${Math.round(j.diskSizeGb)} GB` : "",
+            j.diskFreeGb ? `Free space · ${j.diskFreeGb} Gi` : "",
+            j.cpus || j.cpuModel
+              ? `CPU · ${[j.cpus ? `${j.cpus} cores` : "", j.cpuModel].filter(Boolean).join(" · ")}`
+              : "",
+            j.rootOnUsb ? "Root · USB" : "Root · internal disk",
+          ].filter(Boolean),
+        );
       })
       .catch(() => {});
   }, []);
@@ -110,10 +119,16 @@ export function HardwareDetectedCard() {
               ? summary || "Measured on this box."
               : "Not measured yet — ReelOS will probe on the next update or door start."}
           </p>
-          {probed && detail ? <p className="mt-1 text-sm text-muted">{detail}</p> : null}
+          {probed && rows.length ? (
+            <ul className="mt-2 space-y-0.5 text-sm text-muted">
+              {rows.map((row) => (
+                <li key={row}>{row}</li>
+              ))}
+            </ul>
+          ) : null}
           <p className="mt-1 text-sm text-muted">
             {probed
-              ? "Cheap read of RAM, CPU, HDD vs SSD, USB-root, and kdump — not a speed test. Drive knobs follow this profile. Re-probes on install, OTA, or disk change; skips if unchanged."
+              ? "Cheap read of RAM, CPU, disk type, disk size, USB-root, and kdump — not a speed test. 4GB is RAM, not the HDD. Drive knobs follow this profile. Re-probes on install, OTA, or disk change; skips if unchanged."
               : "A 4.5Gi RAM guess is used until the probe runs. This is not a speed test."}
           </p>
         </div>
