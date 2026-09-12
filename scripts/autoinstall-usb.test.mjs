@@ -97,6 +97,10 @@ test("autoinstall: reelos, GitHub main, firstboot once, :80 wizard, no secrets",
   assert.match(appliance, /deb\.nodesource\.com\/setup_22\.x/);
   assert.match(appliance, /Paste a TorBox key/);
   assert.doesNotMatch(appliance, /Real-Debrid key/);
+  assert.match(appliance, /\.dockerenv/);
+  assert.match(appliance, /storage-driver":"vfs"/);
+  assert.match(appliance, /is-active --quiet caddy/);
+  assert.doesNotMatch(appliance, /systemctl enable --now caddy/);
   const nInstall = spawnSync("bash", ["-n", join(root, "install/reelos-install.sh")], {
     encoding: "utf8",
   });

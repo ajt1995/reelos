@@ -106,11 +106,25 @@ apply_caddy() {
 CADDY
   fi
   if systemd_live; then
-    systemctl enable --now caddy >/dev/null 2>&1 || true
-    systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
+    systemctl enable caddy >/dev/null 2>&1 || true
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy >/dev/null 2>&1 || true
+    else
+      systemctl start caddy >/dev/null 2>&1 || true
+    fi
   fi
 }
 apply_caddy
+
+# Nested Docker (cloud/CI): overlay2 whiteouts fail with "operation not permitted".
+# USB / bare metal keeps the default overlay2 driver. Never vfs on a real box.
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+  mkdir -p /etc/docker
+  if [ ! -f /etc/docker/daemon.json ]; then
+    printf '%s\n' '{"storage-driver":"vfs"}' >/etc/docker/daemon.json
+    echo "Nested container: Docker storage-driver vfs (overlay whiteouts are blocked here)."
+  fi
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh || true
@@ -216,9 +230,15 @@ else
   echo "npm or node_modules missing — reelos.service not started."
   enable_unit reelos
 fi
-systemctl enable --now caddy 2>/dev/null || enable_unit caddy
 if systemd_live; then
-  systemctl reload caddy || systemctl restart caddy || true
+  systemctl enable caddy >/dev/null 2>&1 || true
+  if systemctl is-active --quiet caddy; then
+    systemctl reload caddy >/dev/null 2>&1 || true
+  else
+    systemctl start caddy >/dev/null 2>&1 || enable_unit caddy
+  fi
+else
+  enable_unit caddy
 fi
 
 chmod 700 "$STATE"
