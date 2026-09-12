@@ -1,0 +1,1 @@
+import{Z as e}from"./store-CB8EsSR8.js";import{o as t}from"./index-Bnn76fkq.js";import{t as n}from"./discover-browse-view-BObB0NAZ.js";var r=e();function i(){let{genre:e,category:i}=t.useSearch();return(0,r.jsx)(n,{kind:`movie`,genre:e,category:i})}export{i as component};

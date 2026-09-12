@@ -722,6 +722,36 @@ test("Rookie dump S02 is Importing not Watch; 0% linked files paint Importing", 
   );
 });
 
+test("title poll does not demote Rookie files-linked S03 to failed or 0%", () => {
+  const before = [
+    row({
+      id: "s3",
+      titleId: "tmdb-tv-79744",
+      season: 3,
+      status: "downloading",
+      progress: 0,
+      reason: "Files linked — waiting for Sonarr import",
+    }),
+  ];
+  const after = applyTitleRequestPoll(before, {
+    titleId: "tmdb-tv-79744",
+    season: 3,
+    status: "failed",
+    progress: 0,
+    reason: "Searching — no file yet",
+  });
+  assert.equal(after[0].status, "downloading");
+  assert.match(String(after[0].reason), /linked|importing/i);
+  const fromApi = applyTitleRequestPoll(before, {
+    titleId: "tmdb-tv-79744",
+    season: 3,
+    status: "downloading",
+    progress: 0,
+    reason: "On disk, importing",
+  });
+  assert.equal(fromApi[0].reason, "On disk, importing");
+});
+
 test("Home hides Rookie linked-importing when named series is On this box; Requests keep it", () => {
   const requests = [
     row({

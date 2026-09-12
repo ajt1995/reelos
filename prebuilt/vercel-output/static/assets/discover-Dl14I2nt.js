@@ -1,1 +1,0 @@
-import{Z as e}from"./store-Ddn6bALG.js";import{n as t}from"./gate-kHSDLccx.js";import{l as n}from"./index-Bm-G6TrB.js";var r=e();function i(){return(0,r.jsx)(t,{children:(0,r.jsx)(n,{})})}export{i as component};

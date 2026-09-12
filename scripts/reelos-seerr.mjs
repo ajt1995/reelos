@@ -165,11 +165,18 @@ export function attachLibraryPresence(title, libraryTitle) {
         .map(String),
     ),
   ];
+  const importing = [
+    ...new Set(
+      [...(title.importingSeasons || []), ...(libraryTitle.importingSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ];
   const disk = [
     ...new Set(
       [...(title.onDiskSeasons || []), ...(libraryTitle.onDiskSeasons || [])]
         .map(Number)
-        .filter((n) => Number.isFinite(n) && n > 0),
+        .filter((n) => Number.isFinite(n) && n > 0 && !importing.includes(n)),
     ),
   ].sort((a, b) => a - b);
   const listed = [
@@ -177,6 +184,13 @@ export function attachLibraryPresence(title, libraryTitle) {
       [...(title.seasonList || []), ...(libraryTitle.seasonList || [])]
         .map(Number)
         .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const unreleased = [
+    ...new Set(
+      [...(title.unreleasedSeasons || []), ...(libraryTitle.unreleasedSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
     ),
   ].sort((a, b) => a - b);
   return {
@@ -187,13 +201,8 @@ export function attachLibraryPresence(title, libraryTitle) {
     inLibrary: Boolean(title.jellyfinId || libraryTitle.jellyfinId),
     year: title.year || libraryTitle.year || 0,
     onDiskSeasons: disk.length ? disk : title.onDiskSeasons || libraryTitle.onDiskSeasons,
-    importingSeasons: [
-      ...new Set(
-        [...(title.importingSeasons || []), ...(libraryTitle.importingSeasons || [])]
-          .map(Number)
-          .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
-      ),
-    ].sort((a, b) => a - b),
+    importingSeasons: importing.filter((n) => !disk.includes(n) && !unreleased.includes(n)).sort((a, b) => a - b),
+    unreleasedSeasons: unreleased,
     seasonList: listed.length ? listed : title.seasonList || libraryTitle.seasonList,
   };
 }
@@ -202,11 +211,14 @@ export function attachLibraryPresence(title, libraryTitle) {
 export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDiskSeasons, seasonList } = {}) {
   const decorate = (title) => {
     if (!title) return title;
+    const importing = [
+      ...new Set((title.importingSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0)),
+    ];
     const disk = [
       ...new Set(
         [...(title.onDiskSeasons || []), ...(onDiskSeasons || [])]
           .map(Number)
-          .filter((n) => Number.isFinite(n) && n > 0),
+          .filter((n) => Number.isFinite(n) && n > 0 && !importing.includes(n)),
       ),
     ].sort((a, b) => a - b);
     const listed = [
@@ -216,10 +228,14 @@ export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDi
           .filter((n) => Number.isFinite(n) && n > 0),
       ),
     ].sort((a, b) => a - b);
+    const unreleased = [
+      ...new Set((title.unreleasedSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n))),
+    ].sort((a, b) => a - b);
     return {
       ...title,
       onDiskSeasons: disk.length ? disk : title.onDiskSeasons,
-      importingSeasons: title.importingSeasons,
+      importingSeasons: importing.filter((n) => !disk.includes(n) && !unreleased.includes(n)).sort((a, b) => a - b),
+      unreleasedSeasons: unreleased,
       seasonList: listed.length ? listed : title.seasonList,
     };
   };
@@ -1027,6 +1043,7 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
             series: seriesHit,
             listed: t.seasonList || [],
           }),
+          ...importingSeasonsFromRequests(parsed, facts.requests),
         ]
           .map(Number)
           .filter((n) => Number.isFinite(n) && n > 0 && !arrDisk.includes(n)),
@@ -1107,6 +1124,7 @@ export function titleRequestSeasonPayload({
   const importingHint = [
     ...(lib?.importingSeasons || []),
     ...(title?.importingSeasons || []),
+    ...importingSeasonsFromRequests(parsed, [...(facts?.requests || []), honest].filter(Boolean)),
   ]
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0 && !arrDisk.includes(n));
@@ -1165,7 +1183,15 @@ export function titleRequestSeasonPayload({
   const thisImporting = seasonN != null && importing.includes(seasonN);
   const honestEngine = honest?.engine || honest?.status || "unknown";
   const seriesAvailable = honest?.status === "available" || honestEngine === "downloaded";
-  const status = seasonN != null ? (seasonOnDisk ? "downloaded" : seriesAvailable ? "unknown" : honestEngine) : honestEngine;
+  const status = thisImporting
+    ? "downloading"
+    : seasonN != null
+      ? seasonOnDisk
+        ? "downloaded"
+        : seriesAvailable
+          ? "unknown"
+          : honestEngine
+      : honestEngine;
   const importReason = IMPORTING_SEASON_COPY;
   return {
     status: thisUnreleased ? "unknown" : status,
@@ -1180,7 +1206,13 @@ export function titleRequestSeasonPayload({
     seasonFacts: title?.seasonFacts,
     progress: seasonOnDisk ? 100 : thisImporting || thisUnreleased ? 0 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
     reason: seasonOnDisk ? undefined : thisUnreleased ? UNRELEASED_SEASON_COPY : thisImporting ? importReason : honest?.reason,
-    requestStatus: seasonOnDisk ? "available" : thisUnreleased || (seasonN != null && seriesAvailable) ? undefined : honest?.status,
+    requestStatus: seasonOnDisk
+      ? "available"
+      : thisUnreleased || (seasonN != null && seriesAvailable)
+        ? undefined
+        : thisImporting
+          ? "downloading"
+          : honest?.status,
   };
 }
 
@@ -1325,6 +1357,7 @@ export function tvRequestReason(row, { series, arrSeriesReady, dumps, torrents }
   if (sonarrDumpNamed(dumps, hit.title, torrents, row.season, hit.statistics?.episodeFileCount)) {
     return IMPORTING_SEASON_COPY;
   }
+  if (isImportingReason(row.reason)) return IMPORTING_SEASON_COPY;
   return "Searching — no file yet";
 }
 
@@ -1342,6 +1375,30 @@ export function importingSeasonsFromDumps(parsed, { dumps, torrents, series, lis
     ),
   ];
   return seasons.filter((n) => sonarrDumpNamed(dumps, title, torrents, n, files));
+}
+
+/** Seerr/Decypharr rows that already say files are linked — Importing, never Watch. */
+export function importingSeasonsFromRequests(parsed, requests = []) {
+  if (!parsed || parsed.mediaType === "movie") return [];
+  const keys = new Set();
+  if (parsed.titleId) keys.add(String(parsed.titleId));
+  if (parsed.tmdb) {
+    keys.add(`tmdb-${parsed.tmdb}`);
+    keys.add(`tmdb-tv-${parsed.tmdb}`);
+  }
+  if (parsed.tvdb) keys.add(`tvdb-${parsed.tvdb}`);
+  const out = [];
+  for (const row of requests || []) {
+    if (!row || !keys.has(String(row.titleId || ""))) continue;
+    if (!isImportingReason(row.reason)) continue;
+    const n = Number(row.season);
+    if (Number.isFinite(n) && n > 0) out.push(n);
+    for (const s of row.requestedSeasons || []) {
+      const sn = Number(s);
+      if (Number.isFinite(sn) && sn > 0) out.push(sn);
+    }
+  }
+  return [...new Set(out)];
 }
 
 /** Seerr requested but Radarr never searched / has no grab client. Keep downloading@0, say why. */
@@ -1415,7 +1472,19 @@ export function overlayPresence(
     }
     if (libraryHit(row, libraryTitles)) return markAvailable(row);
     if (arrHasFile(row, arrIndex)) return markAvailable(row);
-    const reason = movieRequestReason(row, facts) || tvRequestReason(row, facts);
+    const reason =
+      movieRequestReason(row, facts) ||
+      tvRequestReason(row, facts) ||
+      (isImportingReason(row.reason) ? IMPORTING_SEASON_COPY : undefined);
+    if (reason && isImportingReason(reason)) {
+      return {
+        ...row,
+        status: "downloading",
+        engine: "grabbing",
+        progress: 0,
+        reason: IMPORTING_SEASON_COPY,
+      };
+    }
     return reason ? { ...row, reason } : row;
   });
 }
