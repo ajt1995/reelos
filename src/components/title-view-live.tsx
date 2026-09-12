@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Check, Play, Plus } from "lucide-react";
+import { Check, Play, Plus, ThumbsDown, ThumbsUp } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { Row, TitleCard } from "@/components/title-card";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,11 @@ export function TitleView({ id }: { id: string }) {
   const ipv4 = useReelStore((s) => s.ipv4);
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watchDoor = useReelStore((s) => s.watch);
+  const taste = useReelStore((s) => s.taste);
+  const setTasteVote = useReelStore((s) => s.setTasteVote);
+  const me = useReelStore((s) => s.users.find((u) => u.id === s.activeProfileId));
+  const canRemove = Boolean(me?.permissions?.canRemoveLibrary);
+  const canRequest = !me || me.permissions?.canRequest !== false;
   const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
@@ -244,6 +249,25 @@ export function TitleView({ id }: { id: string }) {
           </p>
           <p className="mt-2 text-xs text-faint">{(resolved.genres ?? []).join(" · ")}</p>
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={taste.likes.includes(resolved.id) ? "gold" : "ghost"}
+              onClick={() => setTasteVote(resolved.id, taste.likes.includes(resolved.id) ? "none" : "like")}
+            >
+              <ThumbsUp className="size-4" />
+              Like
+            </Button>
+            <Button
+              size="sm"
+              variant={taste.dislikes.includes(resolved.id) ? "danger" : "ghost"}
+              onClick={() => setTasteVote(resolved.id, taste.dislikes.includes(resolved.id) ? "none" : "dislike")}
+            >
+              <ThumbsDown className="size-4" />
+              Dislike
+            </Button>
+            <p className="self-center text-xs text-faint">This profile only. Not a Google TV scrape.</p>
+          </div>
           {!available && !blocked && !request ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}
@@ -322,11 +346,13 @@ export function TitleView({ id }: { id: string }) {
                 In library
               </span>
             ) : null}
-            {available ? <RemoveFromBox title={resolved} /> : null}
+            {available && canRemove ? <RemoveFromBox title={resolved} /> : null}
             {blocked ? (
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
+            ) : !canRequest ? (
+              <p className="self-center text-sm text-muted">This profile cannot request titles.</p>
             ) : showRequestQueueControls({
                 kind: resolved.kind,
                 available: series ? thisSeasonOnBox : available,

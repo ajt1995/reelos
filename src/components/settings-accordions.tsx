@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HOSTNAME } from "@/lib/catalog";
 import {
+  OWNER_PERMISSION_TOGGLES,
+  isHouseOwner,
+} from "@/lib/household-profile";
+import {
   frontendLabel,
   qualityLabel,
   useReelStore,
@@ -130,54 +134,94 @@ export function UsersPanel() {
   const users = useReelStore((s) => s.users);
   const settings = useReelStore((s) => s.settings);
   const patchSettings = useReelStore((s) => s.patchSettings);
-  const addUser = useReelStore((s) => s.addUser);
+  const patchUser = useReelStore((s) => s.patchUser);
   const removeUser = useReelStore((s) => s.removeUser);
-  const [name, setName] = useState("");
+  const signOutProfile = useReelStore((s) => s.signOutProfile);
+  const activeId = useReelStore((s) => s.activeProfileId);
+  const me = users.find((u) => u.id === activeId);
+  const owner = isHouseOwner(me?.role);
+  const [openId, setOpenId] = useState<string | null>(null);
   return (
     <>
-      <ul className="space-y-2">
-        {users.map((u) => (
-          <li key={u.id} className="flex items-center justify-between text-sm">
-            <span>
-              {u.name}{" "}
-              <span className="text-faint">{u.role === "admin" ? "admin" : "member"}</span>
-            </span>
-            {u.role !== "admin" ? (
-              <button type="button" className="text-xs text-danger" onClick={() => removeUser(u.id)}>
-                Remove
+      <p className="text-sm text-muted">
+        Each person has their own 1–2 question setup. ReelOS uses that Jellyfin user. The owner sets roles here.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {users.map((u) => {
+          const perms = u.permissions;
+          return (
+            <li key={u.id} className="rounded-xl bg-card-2 px-3 py-2">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between text-left text-sm"
+                onClick={() => setOpenId(openId === u.id ? null : u.id)}
+              >
+                <span>
+                  {u.name}{" "}
+                  <span className="text-faint">{isHouseOwner(u.role) ? "owner" : "member"}</span>
+                  {u.id === activeId ? <span className="ml-2 text-gold">this phone</span> : null}
+                </span>
+                <span className="text-xs text-muted">{u.jellyfinUser || u.name}</span>
               </button>
-            ) : null}
-          </li>
-        ))}
+              {openId === u.id ? (
+                <div className="mt-2 border-t border-border pt-2">
+                  {owner ? (
+                    <>
+                      {OWNER_PERMISSION_TOGGLES.map((t) => (
+                        <label key={t.id} className="mt-2 flex items-center justify-between gap-3 text-sm">
+                          <span>
+                            {t.label}
+                            <span className="mt-0.5 block text-xs text-faint">{t.hint}</span>
+                          </span>
+                          <Toggle
+                            on={Boolean(perms?.[t.id])}
+                            onChange={(v) => patchUser(u.id, { [t.id]: v })}
+                          />
+                        </label>
+                      ))}
+                      {!isHouseOwner(u.role) ? (
+                        <button
+                          type="button"
+                          className="mt-3 text-xs text-danger"
+                          onClick={() => {
+                            void fetch(`/api/profiles/${encodeURIComponent(u.id)}`, { method: "DELETE" }).then(() =>
+                              removeUser(u.id),
+                            );
+                          }}
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted">Only the owner can change roles and permissions.</p>
+                  )}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ul>
-      <form
-        className="mt-3 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          addUser(name);
-          setName("");
-        }}
-      >
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Invite name"
-          className="h-10 flex-1 rounded-xl bg-card-2 px-3 text-sm"
-        />
-        <Button size="sm" type="submit">
-          Add
-        </Button>
-      </form>
-      <label className="mt-4 flex items-center justify-between text-sm">
-        Auto-approve requests
-        <Toggle
-          on={settings.autoApprove}
-          onChange={(v) => {
-            patchSettings({ autoApprove: v });
-            persistUi({ autoApprove: v });
-          }}
-        />
-      </label>
+      {owner ? (
+        <p className="mt-3 text-sm text-muted">
+          Add someone from the profile picker — two questions, not the house wizard.
+        </p>
+      ) : null}
+      <Button className="mt-3" size="sm" variant="ghost" onClick={() => signOutProfile()}>
+        Switch profile
+      </Button>
+      {owner ? (
+        <label className="mt-4 flex items-center justify-between text-sm">
+          Auto-approve requests
+          <Toggle
+            on={settings.autoApprove}
+            onChange={(v) => {
+              patchSettings({ autoApprove: v });
+              persistUi({ autoApprove: v });
+            }}
+          />
+        </label>
+      ) : null}
     </>
   );
 }

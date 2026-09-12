@@ -1,5 +1,6 @@
 import { Navigate } from "@tanstack/react-router";
 import { HomeView } from "@/components/home-view";
+import { ProfilePicker } from "@/components/profile-picker";
 import { Provision } from "@/components/provision";
 import { Shell } from "@/components/shell";
 import { Splash } from "@/components/splash";
@@ -19,12 +20,15 @@ export function Gate({
   const phase = useReelStore((s) => s.phase);
   const applying = useReelStore((s) => updateLocksUi(s.update.status));
   const failed = useReelStore((s) => s.update.status === "error");
+  const profileReady = useReelStore((s) => s.profileReady);
+  const activeProfileId = useReelStore((s) => s.activeProfileId);
 
   if (!hydrated) return <Splash warming />;
   if (!provisioned || phase === "wizard") return <Navigate to="/" />;
   if (phase === "building") return <Provision />;
   if (applying) return <Splash updating />;
   if (failed) return <Splash failed />;
+  if (profileReady && !activeProfileId) return <ProfilePicker />;
   if (!chrome) return children;
   return <Shell>{children}</Shell>;
 }
@@ -36,6 +40,8 @@ export function Boot() {
   const phase = useReelStore((s) => s.phase);
   const applying = useReelStore((s) => updateLocksUi(s.update.status));
   const failed = useReelStore((s) => s.update.status === "error");
+  const profileReady = useReelStore((s) => s.profileReady);
+  const activeProfileId = useReelStore((s) => s.activeProfileId);
 
   if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;
@@ -44,6 +50,7 @@ export function Boot() {
   if (provisioned) {
     if (applying) return <Splash updating />;
     if (failed) return <Splash failed />;
+    if (profileReady && !activeProfileId) return <ProfilePicker />;
     return (
       <Shell>
         <HomeView />

@@ -72,7 +72,7 @@ function CuratorResetRow() {
         <div className="min-w-0 flex-1">
           <p className="font-display font-medium">Reset curator preferences</p>
           <p className="mt-1 text-sm text-muted">
-            Clears Not interested titles on Discover. Titles on this box stay on Home. No Google account.
+            Clears Not interested titles on Discover for this profile. Titles on this box stay on Home. No Google account.
             {count ? ` ${count} hidden.` : ""}
           </p>
           <Button className="mt-3" variant="ghost" size="sm" disabled={busy} onClick={() => void run()}>
@@ -200,7 +200,7 @@ export function SettingsView() {
         <Row
           icon={Users}
           title="Users"
-          hint={`${users.length} in this house`}
+          hint={`${users.length} in this house · owner sets roles`}
           open={panel === "users"}
           onClick={() => setPanel(panel === "users" ? null : "users")}
         >

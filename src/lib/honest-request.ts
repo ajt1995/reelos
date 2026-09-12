@@ -19,7 +19,10 @@ export function installHonestRequest() {
       const title = getTitle(titleId) ?? s.remoteTitles.find((t) => t.id === titleId);
       if (!title) return;
       const fail = s.answers.quality === "4k" && title.maxQuality !== "4k";
-      const requester = s.users.find((u) => u.role === "admin")?.name ?? "Ada";
+      const requester =
+        s.users.find((u) => u.id === s.activeProfileId)?.name ??
+        s.users.find((u) => u.role === "owner" || u.role === "admin")?.name ??
+        "Ada";
       const local = s.answers.source === "local-vpn";
       const cached = !local && titleInCache(title);
       const via: MediaRequest["via"] = fail ? undefined : local ? "local" : cached ? "cache" : "uncached";

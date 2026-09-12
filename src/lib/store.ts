@@ -21,9 +21,29 @@ import type {
 } from "./types";
 import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
+import { defaultPermissions, isHouseOwner } from "./household-profile";
 import { mergeShelf } from "./shelf";
 import { normalizeLibraryCatchup } from "./library-catchup";
 import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+
+export type ProfileTaste = { likes: string[]; dislikes: string[] };
+
+function houseUser(partial: Partial<HouseholdUser> & { id: string; name: string; role?: HouseholdUser["role"] }): HouseholdUser {
+  const role = isHouseOwner(partial.role) ? "owner" : "member";
+  const ageYears = partial.ageYears ?? (role === "owner" ? 17 : null);
+  return {
+    id: partial.id,
+    name: partial.name,
+    role,
+    ageYears,
+    ageBand: partial.ageBand,
+    parentalMax: partial.parentalMax,
+    jellyfinUser: partial.jellyfinUser || partial.name,
+    jellyfinUserId: partial.jellyfinUserId,
+    permissions: partial.permissions || defaultPermissions(role, ageYears),
+    traktEnabled: partial.traktEnabled ?? false,
+  };
+}
 
 export const defaultAnswers: WizardAnswers = {
   storageMode: "both",
@@ -94,10 +114,13 @@ export type ReadyPayload = {
   pipeline?: unknown;
   timings?: Record<string, number>;
   betaChannel?: boolean;
+  profiles?: HouseholdUser[];
+  session?: HouseholdUser | null;
+  taste?: ProfileTaste;
 };
 
 export const UPDATE_NOTES = [
-  "1.2.50.51: Discover hides owned library (John Wick stays on Home). Search people and collections. Title page has More like this. Not interested hides a Discover card on this box — no Google account. Settings Reset curator preferences brings it back. Library on this box is never hidden. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
+  "1.2.50.51: Discover hides owned library (John Wick stays on Home). Search people and collections. Title page has More like this. Not interested hides a Discover card per profile — no Google account. Settings Reset curator preferences brings it back. Household members get a 1–2 question wizard (age + their Jellyfin login), not the owner's 7-step house wizard. Session is that JF user. Owner sets roles in Settings. Like/dislike per profile. Trakt optional. No Google TV scrape. Library on this box is never hidden. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.50: OTA includes a cleaner (orphan :8080, retired containers, ghost JF ids, OS tune, tmp leftovers) and a full-screen Updating ReelOS splash until the door accepts browse/request. Probe this computer (RAM, CPU, HDD vs SSD, USB root, kdump, zram), persist /var/lib/reelos/hardware-profile.json, and drive knobs from that profile — 1 FUSE and skip dump ffprobe on 4GB HDD. Settings shows what was detected; splash can say Tuning for 4GB HDD…. Knaben/TorrentsCSV SeasonSearch. Arena+Books sit behind Settings Beta (default off) — no second 2.0.0 Apply. Library catch-up stays a banner — Request still works. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE + skip-nanosecond); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -218,6 +241,9 @@ export interface ReelState {
   watchProgress: Record<string, number>;
   activity: ActivityEvent[];
   users: HouseholdUser[];
+  activeProfileId: string | null;
+  taste: ProfileTaste;
+  profileReady: boolean;
   settings: Settings;
   update: UpdateState;
   libraryCatchup: LibraryCatchupState;
@@ -243,6 +269,11 @@ export interface ReelState {
   patchSettings: (p: Partial<Settings>) => void;
   addUser: (name: string) => void;
   removeUser: (id: string) => void;
+  hydrateProfiles: () => Promise<void>;
+  setActiveProfile: (user: HouseholdUser | null, taste?: ProfileTaste) => void;
+  signOutProfile: () => void;
+  patchUser: (id: string, patch: Partial<HouseholdUser> & Record<string, unknown>) => void;
+  setTasteVote: (titleId: string, vote: "like" | "dislike" | "none") => void;
   loadLab: () => void;
   startRepair: () => void;
   factoryReset: () => void;
@@ -358,6 +389,9 @@ function labState(): Pick<
   | "watchProgress"
   | "activity"
   | "users"
+  | "activeProfileId"
+  | "taste"
+  | "profileReady"
   | "settings"
   | "update"
   | "adapter"
@@ -430,10 +464,13 @@ function labState(): Pick<
       event("system", "Decypharr healthy. Engines registered it as the download client."),
     ],
     users: [
-      { id: "u-ada", name: "Ada", role: "admin" },
-      { id: "u-jon", name: "Jon", role: "member" },
-      { id: "u-nes", name: "Nessa", role: "member" },
+      houseUser({ id: "u-ada", name: "Ada", role: "owner" }),
+      houseUser({ id: "u-jon", name: "Jon", role: "member", ageYears: 14 }),
+      houseUser({ id: "u-nes", name: "Nessa", role: "member", ageYears: 10 }),
     ],
+    activeProfileId: "u-ada",
+    taste: { likes: [], dislikes: [] },
+    profileReady: true,
     settings: {
       hideAdvanced: false,
       autoApprove: true,
@@ -477,6 +514,9 @@ const initial = {
   watchProgress: {} as Record<string, number>,
   activity: [] as ActivityEvent[],
   users: [] as HouseholdUser[],
+  activeProfileId: null as string | null,
+  taste: { likes: [] as string[], dislikes: [] as string[] },
+  profileReady: false,
   settings: {
     hideAdvanced: false,
     autoApprove: true,
@@ -546,6 +586,10 @@ export const useReelStore = create<ReelState>()(
               typeof ready?.betaChannel === "boolean"
                 ? { ...s.settings, betaChannel: ready.betaChannel }
                 : s.settings,
+            users: Array.isArray(ready?.profiles) && ready.profiles.length ? ready.profiles : s.users,
+            activeProfileId: ready?.session?.id ?? s.activeProfileId,
+            taste: ready?.taste && Array.isArray(ready.taste.likes) ? ready.taste : s.taste,
+            profileReady: ready?.session !== undefined || s.profileReady,
           };
         });
         const s = get();
@@ -598,7 +642,7 @@ export const useReelStore = create<ReelState>()(
           phase: "building",
           build,
           buildLogOpen: false,
-          users: [{ id: "u-admin", name: admin, role: "admin" }],
+          users: [houseUser({ id: "u-admin", name: admin, role: "owner", jellyfinUser: admin })],
           adapter: makeAdapter(answers),
         });
       },
@@ -620,7 +664,10 @@ export const useReelStore = create<ReelState>()(
         const title = getTitle(titleId) ?? get().remoteTitles.find((t) => t.id === titleId);
         if (!title) return;
         const fail = s.answers.quality === "4k" && title.maxQuality !== "4k";
-        const requester = s.users.find((u) => u.role === "admin")?.name ?? "Ada";
+        const requester =
+          s.users.find((u) => u.id === s.activeProfileId)?.name ??
+          s.users.find((u) => isHouseOwner(u.role))?.name ??
+          "Ada";
         const local = s.answers.source === "local-vpn";
         const cached = !local && titleInCache(title);
         const via: MediaRequest["via"] = fail ? undefined : local ? "local" : cached ? "cache" : "uncached";
@@ -681,9 +728,93 @@ export const useReelStore = create<ReelState>()(
       addUser: (name) => {
         const n = name.trim();
         if (!n) return;
-        set({ users: [...get().users, { id: uid("u"), name: n, role: "member" }] });
+        set({ users: [...get().users, houseUser({ id: uid("u"), name: n, role: "member" })] });
       },
       removeUser: (id) => set({ users: get().users.filter((u) => u.id !== id) }),
+      hydrateProfiles: async () => {
+        try {
+          const r = await fetch("/api/profiles", { cache: "no-store" });
+          const j = (await r.json()) as {
+            profiles?: HouseholdUser[];
+            session?: HouseholdUser | null;
+            taste?: ProfileTaste;
+          };
+          set({
+            users: Array.isArray(j.profiles) ? j.profiles : get().users,
+            activeProfileId: j.session?.id ?? null,
+            taste: j.taste && Array.isArray(j.taste.likes) ? j.taste : { likes: [], dislikes: [] },
+            profileReady: true,
+          });
+        } catch {
+          set({ profileReady: true });
+        }
+      },
+      setActiveProfile: (user, taste) =>
+        set({
+          activeProfileId: user?.id ?? null,
+          users: user && !get().users.some((u) => u.id === user.id) ? [...get().users, user] : get().users,
+          taste: taste || { likes: [], dislikes: [] },
+          profileReady: true,
+        }),
+      signOutProfile: () => {
+        void fetch("/api/profiles/session", { method: "DELETE" }).catch(() => {});
+        set({ activeProfileId: null, taste: { likes: [], dislikes: [] } });
+      },
+      patchUser: (id, patch) => {
+        set({
+          users: get().users.map((u) => {
+            if (u.id !== id) return u;
+            const permissions = {
+              ...(u.permissions || defaultPermissions(u.role, u.ageYears)),
+              ...(patch.permissions || {}),
+            };
+            for (const k of [
+              "canRequest",
+              "autoApprove",
+              "canApprove",
+              "canManageHouse",
+              "canRemoveLibrary",
+              "traktEnabled",
+            ] as const) {
+              if (typeof patch[k] === "boolean") permissions[k] = patch[k];
+            }
+            return houseUser({
+              ...u,
+              ...patch,
+              id: u.id,
+              name: String(patch.name || u.name),
+              permissions,
+              traktEnabled: permissions.traktEnabled,
+            });
+          }),
+        });
+        void fetch(`/api/profiles/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        }).catch(() => {});
+      },
+      setTasteVote: (titleId, vote) => {
+        const cur = get().taste;
+        const likes = new Set(cur.likes);
+        const dislikes = new Set(cur.dislikes);
+        if (vote === "like") {
+          likes.add(titleId);
+          dislikes.delete(titleId);
+        } else if (vote === "dislike") {
+          dislikes.add(titleId);
+          likes.delete(titleId);
+        } else {
+          likes.delete(titleId);
+          dislikes.delete(titleId);
+        }
+        set({ taste: { likes: [...likes], dislikes: [...dislikes] } });
+        void fetch("/api/profiles/taste", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ titleId, vote }),
+        }).catch(() => {});
+      },
       loadLab: () => set({ ...labState() }),
       startRepair: () => set({ phase: "wizard", wizardStep: 1 }),
       factoryReset: () => set({ ...initial, hydrated: true, shelfReady: true }),
@@ -912,7 +1043,10 @@ export const useReelStore = create<ReelState>()(
         const s = get();
         const title = getTitle(titleId) ?? s.remoteTitles.find((t) => t.id === titleId);
         if (!title) return false;
-        const requester = s.users.find((u) => u.role === "admin")?.name ?? "Ada";
+        const requester =
+          s.users.find((u) => u.id === s.activeProfileId)?.name ??
+          s.users.find((u) => isHouseOwner(u.role))?.name ??
+          "Ada";
         const rec: MediaRequest = {
           id: uid("req"),
           titleId,
@@ -1001,6 +1135,8 @@ export const useReelStore = create<ReelState>()(
         watchProgress: s.watchProgress,
         activity: s.activity,
         users: s.users,
+        activeProfileId: s.activeProfileId,
+        taste: s.taste,
         settings: s.settings,
         adapter: s.adapter,
         indexers: s.indexers,

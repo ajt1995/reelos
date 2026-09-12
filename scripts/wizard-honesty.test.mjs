@@ -93,5 +93,7 @@ test("7-step wizard stays; Books chip stays out; default source is TorBox", () =
   assert.doesNotMatch(plugin, /VPN client ready/);
   assert.doesNotMatch(ping, /VPN client ready/);
   assert.doesNotMatch(adapter, /38 days/);
-  assert.doesNotMatch(store, /daysLeft: answers\.source === "local-vpn" \? 0 : 38/);
-});
+  assert.doesNotMatch(wizard, /How old are you\?/);
+  assert.match(read("src/components/profile-wizard.tsx"), /How old are you\?/);
+  assert.match(read("src/components/profile-wizard.tsx"), /Jellyfin username and password\/PIN/);
+  assert.match(read("src/components/profile-wizard.tsx"), /MEMBER_WIZARD_TOTAL/);

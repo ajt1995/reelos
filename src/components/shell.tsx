@@ -60,6 +60,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const transferring = useReelStore((s) =>
     transferringChipCount(inFlightRequests(s.requests, { titles: s.shelf })),
   );
+  const me = useReelStore((s) => s.users.find((u) => u.id === s.activeProfileId));
+  const signOutProfile = useReelStore((s) => s.signOutProfile);
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const watchHref = jellyfinWatchHref({ ipv4, tailscaleIp, watch, hostname });
   const desktopNav = arena ? ARENA_DESKTOP_NAV : STABLE_NAV;
@@ -133,6 +135,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
           ) : null}
           <div className="mt-3 rounded-xl bg-raised px-3 py-3">
             <p className="font-mono text-[11px] text-faint">{HOSTNAME}</p>
+            {me ? (
+              <button
+                type="button"
+                className="mt-1 text-left text-[11px] text-gold"
+                onClick={() => signOutProfile()}
+              >
+                {me.name} · switch
+              </button>
+            ) : null}
             <p className={cn("mt-1 flex items-center gap-1.5 text-[11px]", jfLive ? (arena ? "text-circuit" : "text-live") : "text-muted")}>
               {jfLive ? (
                 <span

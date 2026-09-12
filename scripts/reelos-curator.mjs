@@ -1,14 +1,16 @@
 /**
  * Discover curator prefs on this box (`curator.json`). Library is never filtered.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 export function curatorStateDir(state = process.env.REELOS_STATE || "/var/lib/reelos") {
   return String(state || "/var/lib/reelos").replace(/\/$/, "") || "/var/lib/reelos";
 }
 
-export function curatorPath(state) {
-  return `${curatorStateDir(state)}/curator.json`;
+export function curatorPath(state, profileId) {
+  const dir = curatorStateDir(state);
+  const id = String(profileId || "").replace(/[^a-zA-Z0-9._-]/g, "");
+  return id ? `${dir}/curator-${id}.json` : `${dir}/curator.json`;
 }
 
 export function emptyCurator() {
@@ -48,19 +50,19 @@ export function normalizeCurator(raw) {
   return { hidden, hiddenAt };
 }
 
-export function readCurator(state) {
+export function readCurator(state, profileId) {
   try {
-    return normalizeCurator(JSON.parse(readFileSync(curatorPath(state), "utf8")));
+    return normalizeCurator(JSON.parse(readFileSync(curatorPath(state, profileId), "utf8")));
   } catch {
     return emptyCurator();
   }
 }
 
-export function writeCurator(doc, state) {
+export function writeCurator(doc, state, profileId) {
   const dir = curatorStateDir(state);
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   const next = normalizeCurator(doc);
-  writeFileSync(curatorPath(state), JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
+  writeFileSync(curatorPath(state, profileId), JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
   return next;
 }
 
@@ -86,8 +88,8 @@ export function filterLibraryTitles(titles) {
   return Array.isArray(titles) ? titles : [];
 }
 
-export function hideCuratorTitle(title, state, now = Date.now()) {
-  const cur = readCurator(state);
+export function hideCuratorTitle(title, state, now = Date.now(), profileId) {
+  const cur = readCurator(state, profileId);
   const keys = [...curatorTitleKeys(title)];
   if (!keys.length) return { ok: false, error: "Need a title id", ...cur };
   const seen = new Set(cur.hidden);
@@ -97,16 +99,12 @@ export function hideCuratorTitle(title, state, now = Date.now()) {
     cur.hidden.push(key);
     cur.hiddenAt[key] = now;
   }
-  const next = writeCurator(cur, state);
+  const next = writeCurator(cur, state, profileId);
   return { ok: true, count: next.hidden.length, ...next };
 }
 
-export function resetCurator(state) {
-  if (existsSync(curatorPath(state))) {
-    writeCurator(emptyCurator(), state);
-  } else {
-    writeCurator(emptyCurator(), state);
-  }
+export function resetCurator(state, profileId) {
+  writeCurator(emptyCurator(), state, profileId);
   return { ok: true, ...emptyCurator(), count: 0 };
 }
 

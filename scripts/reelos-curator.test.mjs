@@ -49,6 +49,19 @@ test("Not interested persists on the box and reset clears it", () => {
   }
 });
 
+test("Not interested is per profile id", () => {
+  const state = mkdtempSync(join(tmpdir(), "reelos-curator-prof-"));
+  try {
+    const fight = { id: "tmdb-550", ids: ["tmdb-550"], title: "Fight Club" };
+    hideCuratorTitle(fight, state, Date.now(), "u-ada");
+    assert.equal(titleIsCuratorHidden(fight, readCurator(state, "u-ada")), true);
+    assert.equal(titleIsCuratorHidden(fight, readCurator(state, "u-jon")), false);
+    assert.equal(titleIsCuratorHidden(fight, readCurator(state)), false);
+  } finally {
+    rmSync(state, { recursive: true, force: true });
+  }
+});
+
 test("curator module never talks to Google", () => {
   const src = readFileSync(join(root, "scripts/reelos-curator.mjs"), "utf8");
   assert.doesNotMatch(src, /google|oauth|accounts\.google/i);
@@ -70,7 +83,7 @@ test("Discover UI and Settings expose Not interested / Reset curator preferences
   assert.doesNotMatch(library, /filterCuratorHidden/);
   assert.match(plugin, /\/api\/curator/);
   assert.match(plugin, /resetCurator/);
-  assert.match(plugin, /excludeHidden: readCurator/);
+  assert.match(plugin, /excludeHidden: hiddenForReq/);
   const libraryHandler = plugin.slice(plugin.indexOf("async function handleLibrary"), plugin.indexOf("async function handleDisks"));
   assert.doesNotMatch(libraryHandler, /filterCuratorHidden/);
   assert.doesNotMatch(libraryHandler, /readCurator/);

@@ -105,7 +105,8 @@ function Runtime({ children }: { children: React.ReactNode }) {
             if (cur.provisioned) cur.openReelOS();
           })
           .finally(() => {
-            useReelStore.getState().setHydrated();
+            const cur = useReelStore.getState();
+            void cur.hydrateProfiles().finally(() => cur.setHydrated());
           });
       });
   }, []);

@@ -122,10 +122,28 @@ export interface BuildStep {
   log: string;
 }
 
+export type HouseholdRole = "owner" | "member" | "admin";
+
+export interface HouseholdPermissions {
+  canRequest: boolean;
+  autoApprove: boolean;
+  canApprove: boolean;
+  canManageHouse: boolean;
+  canRemoveLibrary: boolean;
+  traktEnabled: boolean;
+}
+
 export interface HouseholdUser {
   id: string;
   name: string;
-  role: "admin" | "member";
+  role: HouseholdRole;
+  ageYears?: number | null;
+  ageBand?: string;
+  parentalMax?: number | null;
+  jellyfinUser?: string;
+  jellyfinUserId?: string;
+  permissions?: HouseholdPermissions;
+  traktEnabled?: boolean;
 }
 
 export interface Disk {

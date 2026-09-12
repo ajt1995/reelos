@@ -130,8 +130,15 @@ export function ConnectView({ onDone }: { onDone?: () => void }) {
                 />
               ) : null}
               <p className="mt-3 text-sm text-muted">
-                Login <span className="text-foreground">{box.adminName}</span> · PIN{" "}
-                <span className="font-mono text-foreground">{box.adminPassword}</span>
+                Login <span className="text-foreground">{box.adminName}</span>
+                {box.adminPassword ? (
+                  <>
+                    {" "}
+                    · PIN <span className="font-mono text-foreground">{box.adminPassword}</span>
+                  </>
+                ) : (
+                  " · use your Jellyfin PIN"
+                )}
               </p>
             </>
           )}

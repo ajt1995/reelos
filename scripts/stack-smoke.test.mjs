@@ -95,6 +95,7 @@ test("stack: VERSION / channel / stamps agree (1.2.50.51)", () => {
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
   assert.match(chan.notes[0], /Not interested|curator|hides owned library/i);
+  assert.match(chan.notes[0], /1–2 question wizard|Jellyfin login/i);
   assert.match(chan.notes[1], /OTA|cleaner|Updating ReelOS|splash/i);
   assert.match(chan.notes[2], /Hands-off home|on this box|pick tonight|Watch|National Treasure/i);
   assert.match(chan.notes[3], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);
@@ -135,7 +136,8 @@ test("stack: jellyfinToken Authorization + #46 cache + lean /api/library", () =>
   assert.match(src, /const JF_AUTH/);
   assert.match(src, /Authorization: JF_AUTH/);
   assert.match(src, /"X-Emby-Authorization": JF_AUTH/);
-  assert.match(src, /jellyfinTokens\.set\(user, password, auth\)/);
+  assert.match(src, /dispatchProfilesApi/);
+  assert.match(src, /sessionAuthCreds/);
   assert.match(src, /function jellyfinAuthedHeaders/);
   assert.match(src, /jellyfinAuthedHeaders\(auth\.token\)/);
   assert.match(src, /createLibraryCache/);

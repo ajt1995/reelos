@@ -64,6 +64,13 @@ import {
   resetCurator,
 } from "./reelos-curator.mjs";
 import {
+  dispatchProfilesApi,
+  isHouseOwner,
+  loadProfiles,
+  sessionAuthCreds,
+  tasteFor,
+} from "./reelos-profiles.mjs";
+import {
   createLibraryCache,
   createTokenCache,
   JELLYFIN_ITEMS_TIMEOUT_MS,
@@ -232,6 +239,22 @@ function answers() {
   } catch {
     return {};
   }
+}
+
+function profileIdForReq(req) {
+  return sessionAuthCreds(req, answers()).profile?.id || "";
+}
+
+/** Discover hide is this profile's Not interested + disliked titles — not the owner's. */
+function hiddenForReq(req) {
+  const pid = profileIdForReq(req);
+  const cur = readCurator(process.env.REELOS_STATE, pid);
+  if (!pid) return cur;
+  const taste = tasteFor(loadProfiles(process.env.REELOS_STATE || "/var/lib/reelos", answers()), pid);
+  return {
+    hidden: [...new Set([...(cur.hidden || []), ...(taste.dislikes || [])])],
+    hiddenAt: cur.hiddenAt || {},
+  };
 }
 
 async function probe(url, ms = 2500) {
@@ -417,7 +440,7 @@ async function handleLookup(req, res) {
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
     const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
-    const excludeHidden = discoverScope ? readCurator() : undefined;
+    const excludeHidden = discoverScope ? hiddenForReq(req) : undefined;
     titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned, excludeHidden }));
     const people = mapSeerrPersonHits(hits);
     const collections = mapSeerrCollectionHits(hits);
@@ -442,7 +465,7 @@ async function ownedDiscoverExclude() {
   return discoverOwnedIndex(titlesForResolve());
 }
 
-async function handleDiscover(_req, res) {
+async function handleDiscover(req, res) {
   const movies = [];
   const tv = [];
   let error = null;
@@ -470,7 +493,7 @@ async function handleDiscover(_req, res) {
       return;
     }
     const excludeIds = await ownedDiscoverExclude();
-    const excludeHidden = readCurator();
+    const excludeHidden = hiddenForReq(req);
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
@@ -525,7 +548,7 @@ async function handlePerson(req, res) {
       send(res, 200, { person: null, error: r.status === 404 ? "TMDB has no person with that id." : `seerr ${r.status}` });
       return;
     }
-    const person = mapSeerrPersonDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: readCurator() });
+    const person = mapSeerrPersonDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: hiddenForReq(req) });
     send(res, 200, { person, error: person ? null : "TMDB has no person with that id." });
   } catch (e) {
     send(res, 200, { person: null, error: lookupFailureMessage(e) });
@@ -550,7 +573,7 @@ async function handleCollection(req, res) {
       send(res, 200, { collection: null, error: r.status === 404 ? "TMDB has no collection with that id." : `seerr ${r.status}` });
       return;
     }
-    const collection = mapSeerrCollectionDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: readCurator() });
+    const collection = mapSeerrCollectionDetail(r.json, { libraryTitles: titlesForResolve(), excludeHidden: hiddenForReq(req) });
     send(res, 200, { collection, error: collection ? null : "TMDB has no collection with that id." });
   } catch (e) {
     send(res, 200, { collection: null, error: lookupFailureMessage(e) });
@@ -588,7 +611,7 @@ async function handleSimilar(req, res) {
         mediaType: kind,
         limit: 16,
         excludeIds,
-        excludeHidden: readCurator(),
+        excludeHidden: hiddenForReq(req),
       }),
     );
     if (!titles.length) error = "Seerr has nothing similar to show yet.";
@@ -600,8 +623,9 @@ async function handleSimilar(req, res) {
 
 async function handleCurator(req, res) {
   const method = (req.method || "GET").toUpperCase();
+  const pid = profileIdForReq(req);
   if (method === "GET") {
-    send(res, 200, curatorPublic(readCurator()));
+    send(res, 200, curatorPublic(hiddenForReq(req)));
     return;
   }
   if (method !== "POST") {
@@ -622,6 +646,8 @@ async function handleCurator(req, res) {
       title: body?.title,
     },
     process.env.REELOS_STATE,
+    Date.now(),
+    pid,
   );
   send(res, next.ok ? 200 : 400, curatorPublic(next));
 }
@@ -631,7 +657,7 @@ async function handleCuratorReset(req, res) {
     send(res, 405, { ok: false });
     return;
   }
-  const next = resetCurator(process.env.REELOS_STATE);
+  const next = resetCurator(process.env.REELOS_STATE, profileIdForReq(req));
   send(res, 200, curatorPublic(next));
 }
 
@@ -972,11 +998,15 @@ function boxSyncSlice() {
   };
 }
 
-async function handleBox(_req, res) {
+async function handleBox(req, res) {
   const slice = boxSyncSlice();
+  const a = answers();
+  const creds = sessionAuthCreds(req, a);
+  const showPin = !creds.profile || isHouseOwner(creds.profile.role);
   send(res, 200, {
     ...slice,
-    adminPassword: slice.answers.adminPassword || "reelos",
+    adminPassword: showPin ? slice.answers.adminPassword || "reelos" : "",
+    session: creds.profile ? { id: creds.profile.id, name: creds.profile.name, role: creds.profile.role, jellyfinUser: creds.profile.jellyfinUser } : null,
   });
 }
 
@@ -1626,6 +1656,11 @@ async function handleRequest(req, res) {
     send(res, 400, { ok: false, error: "No title" });
     return;
   }
+  const creds = sessionAuthCreds(req, answers());
+  if (creds.profile && creds.profile.permissions && creds.profile.permissions.canRequest === false) {
+    send(res, 403, { ok: false, error: "This profile cannot request titles" });
+    return;
+  }
   const key = seerrApiKey();
   if (!key) {
     send(res, 503, { ok: false, error: "Seerr has no API key yet" });
@@ -2116,6 +2151,18 @@ async function handleSettings(req, res) {
     return;
   }
   const body = await readBody(req);
+  const creds = sessionAuthCreds(req, answers());
+  const keys = Object.keys(body || {});
+  const memberOk = keys.length > 0 && keys.every((k) => k === "notifyAvailable" || k === "notifyFailed");
+  if (
+    creds.profile &&
+    !isHouseOwner(creds.profile.role) &&
+    creds.profile.permissions?.canManageHouse !== true &&
+    !memberOk
+  ) {
+    send(res, 403, { ok: false, error: "Only the owner can change house Settings" });
+    return;
+  }
   const cur = readUiSettings();
   const next = { ...cur, ...body };
   mkdirSync("/var/lib/reelos", { recursive: true });
@@ -2289,7 +2336,8 @@ async function handleLibrary(req, res) {
     removedIds: readRemovedTitleIds(),
     getAuth: async () => {
       const a = answers();
-      return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+      const creds = sessionAuthCreds(req, a);
+      return jellyfinToken(creds.user || a.adminName || "reelos", creds.password || a.adminPassword || "reelos");
     },
     fetchItems: async (auth, limit) => {
       const pulled = await jellyfinFetchItems(auth, { limit });
@@ -2326,6 +2374,11 @@ async function jellyfinDeleteItem(id) {
 }
 
 async function handleLibraryRemove(req, res) {
+  const creds = sessionAuthCreds(req, answers());
+  if (creds.profile && creds.profile.permissions && creds.profile.permissions.canRemoveLibrary === false) {
+    send(res, 403, { ok: false, error: "This profile cannot remove titles from this box" });
+    return;
+  }
   const body = await readBody(req);
   const confirm = body.confirm === true || body.confirm === "true";
   const titleId = String(body.titleId || body.id || "").trim();
@@ -2442,7 +2495,8 @@ async function handleReady(req, res) {
         cache: libraryCache,
         getAuth: async () => {
           const a = answers();
-          return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+          const creds = sessionAuthCreds(req, a);
+          return jellyfinToken(creds.user || a.adminName || "reelos", creds.password || a.adminPassword || "reelos");
         },
         fetchItems: async (auth, lim) => {
           const pulled = await jellyfinFetchItems(auth, {
@@ -2483,6 +2537,7 @@ async function handleReady(req, res) {
   ]);
 
   const slice = box || boxSyncSlice();
+  const creds = sessionAuthCreds(req, slice.answers || answers());
   send(res, 200, {
     provisioned: Boolean(slice.provisioned),
     answers: publicAnswers(slice.answers),
@@ -2498,6 +2553,16 @@ async function handleReady(req, res) {
     hardware: slice.hardware || publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
     betaChannel: betaEnabled(),
     timings: { ...timings, total: Date.now() - started },
+    profiles: loadProfiles("/var/lib/reelos", slice.answers || answers()).profiles.map(publicProfile),
+    session: creds.profile
+      ? {
+          id: creds.profile.id,
+          name: creds.profile.name,
+          role: creds.profile.role,
+          jellyfinUser: creds.profile.jellyfinUser,
+          permissions: creds.profile.permissions,
+        }
+      : null,
   });
 }
 
@@ -2795,6 +2860,14 @@ async function handleHardware(req, res) {
 export async function dispatchReelOsApi(req, res) {
   const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
   const method = (req.method || "GET").toUpperCase();
+  if (await dispatchProfilesApi(req, res, {
+    answers,
+    readBody,
+    jellyfinToken,
+    jellyfinAuthedHeaders,
+  })) {
+    return true;
+  }
   if (pathOnly.startsWith("/api/books")) {
     if (!betaEnabled()) {
       send(res, 404, { ok: false, error: "Books is off. Settings → Updates → Beta channel." });
