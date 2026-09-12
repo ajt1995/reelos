@@ -251,11 +251,16 @@ async function searchAndOpen(page, query, { title, kind } = {}) {
 }
 
 async function clickRequestIfPresent(page) {
-  const btn = page.getByRole("button", { name: /^Request/ }).first();
-  if (!(await btn.count())) return false;
+  const btn = page.getByRole("button", { name: /^(Request( S\d+)?)$/ }).first();
+  try {
+    await btn.waitFor({ state: "visible", timeout: 12000 });
+  } catch {
+    return false;
+  }
   if (await btn.isDisabled()) return false;
+  await btn.scrollIntoViewIfNeeded();
   await btn.click();
-  await page.waitForTimeout(800);
+  await page.waitForTimeout(900);
   return true;
 }
 
@@ -328,19 +333,23 @@ try {
   await moonHit.waitFor({ timeout: 15000 });
   await moonHit.click();
   await page.waitForURL(/\/title\//, { timeout: 15000 });
+  await page.getByRole("heading", { name: "Moon" }).waitFor({ timeout: 15000 });
   await shot(page, "clickloop_02_title_moon.png");
   const moonUrl = page.url();
   assert.match(moonUrl, /\/title\/tmdb-\d+/);
   assert.doesNotMatch(moonUrl, /tmdb-tv-/);
   const moonRequested = await clickRequestIfPresent(page);
+  await shot(page, "clickloop_02b_moon_request.png");
   verdict.steps.movieSearch = true;
   verdict.steps.movieRequest = moonRequested;
   await nav(page, "Home");
   await waitHome(page);
-  await searchAndOpen(page, "The Bear", { title: "The Bear" });
+  await searchAndOpen(page, "Slow Horses", { title: "Slow Horses" });
+  await page.getByRole("heading", { name: "Slow Horses" }).waitFor({ timeout: 15000 });
   await shot(page, "clickloop_03_title_tv.png");
   assert.match(page.url(), /\/title\/tmdb-tv-/);
   const tvRequested = await clickRequestIfPresent(page);
+  await shot(page, "clickloop_03b_tv_request.png");
   verdict.steps.tvSearch = true;
   verdict.steps.tvRequest = tvRequested;
   await nav(page, "Requests");
@@ -414,10 +423,12 @@ try {
   verdict.steps.noDumpTwin = true;
 
   // 4. Remove only dump-named card if shown
-  const dumpCard = page.getByText("www UIndex org - Completely Different Show");
+  await page.getByText("On this box", { exact: true }).scrollIntoViewIfNeeded();
+  await page.waitForTimeout(400);
+  const dumpCard = page.locator("div.w-\\[148px\\]").filter({ hasText: /Completely Different Show/ }).first();
   if (await dumpCard.count()) {
-    const dumpBlock = page.locator("div.w-\\[148px\\]").filter({ hasText: "Completely Different Show" }).first();
-    await dumpBlock.getByText("Remove", { exact: true }).click();
+    await dumpCard.scrollIntoViewIfNeeded();
+    await dumpCard.getByText("Remove", { exact: true }).click();
     const confirm = page.getByText("Confirm remove?");
     if (await confirm.count()) await confirm.click();
     await page.waitForTimeout(600);
@@ -442,6 +453,8 @@ try {
   if (await actor.count()) {
     await actor.click();
     await page.waitForURL(/\/person\//, { timeout: 15000 });
+    await page.getByText(/Loading filmography|Keanu Reeves/i).first().waitFor({ timeout: 15000 });
+    await page.getByRole("heading", { name: /Keanu Reeves/i }).waitFor({ timeout: 20000 });
     await shot(page, "clickloop_11_person.png");
     verdict.steps.personSearch = true;
     const personPost = posts.requests.some((b) => String(b.mediaType || "").toLowerCase() === "person");
@@ -458,10 +471,24 @@ try {
   if (await collection.count()) {
     await collection.click();
     await page.waitForURL(/\/collection\//, { timeout: 15000 });
+    await page.getByRole("heading", { name: /John Wick/i }).waitFor({ timeout: 15000 }).catch(() => {});
     await shot(page, "clickloop_13_collection.png");
     verdict.steps.collectionSearch = true;
   } else {
-    verdict.steps.collectionSearch = "no-collection-hit";
+    await nav(page, "Discover");
+    await page.getByPlaceholder(/Find a title, actor, or collection/i).fill("John Wick Collection");
+    await page.waitForTimeout(900);
+    await shot(page, "clickloop_12b_discover_wick.png");
+    const discCol = page.getByText(/Collection/i).first();
+    if (await discCol.count()) {
+      await discCol.click();
+      await page.waitForURL(/\/collection\//, { timeout: 15000 }).catch(() => {});
+      await shot(page, "clickloop_13_collection.png");
+      verdict.steps.collectionSearch = /\/collection\//.test(page.url()) ? true : "discover-hit";
+    } else {
+      verdict.steps.collectionSearch = "no-collection-hit";
+      await shot(page, "clickloop_13_collection.png");
+    }
   }
   const personPosts = posts.requests.filter((b) => String(b.mediaType || "").toLowerCase() === "person");
   assert.equal(personPosts.length, 0, "posted person ids");
@@ -475,13 +502,17 @@ try {
     Boolean(verdict.steps.hashedUi) &&
     Boolean(verdict.steps.homeNamed) &&
     Boolean(verdict.steps.movieSearch) &&
+    Boolean(verdict.steps.movieRequest) &&
     Boolean(verdict.steps.tvSearch) &&
+    Boolean(verdict.steps.tvRequest) &&
     Boolean(verdict.steps.requestsTab) &&
     Boolean(verdict.steps.homeAfterDislike) &&
     Boolean(verdict.steps.resetCurator) &&
     Boolean(verdict.steps.rookieHonest) &&
     Boolean(verdict.steps.noDumpTwin) &&
-    Boolean(verdict.steps.noPersonPost);
+    Boolean(verdict.steps.noPersonPost) &&
+    posts.requests.length >= 2 &&
+    !posts.requests.some((b) => String(b.mediaType || "").toLowerCase() === "person");
 
   writeFileSync(join(OUT, "clickloop_verdict.json"), JSON.stringify(verdict, null, 2));
   console.log(JSON.stringify(verdict, null, 2));
