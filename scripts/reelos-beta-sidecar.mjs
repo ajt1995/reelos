@@ -1,7 +1,7 @@
 /**
  * Runtime Arena+Books sidecar. Default off = stable movies/TV.
  * Toggle lives in /var/lib/reelos/ui-settings.json as betaChannel (same #122 key).
- * Does not wipe /media movie/TV. Does not need a second OTA to roll back.
+ * Leaves the movie/TV library under /media. Does not need a second OTA to roll back.
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
@@ -122,7 +122,7 @@ export function idleOffBooksIfNeeded() {
 export function leftoverList() {
   return [
     "Kavita image lscr.io/linuxserver/kavita (optional docker rmi — OTA cleaner can sweep)",
-    "User sideloads in /srv/media/books (not wiped; not movie/TV /media)",
+    "User sideloads in /srv/media/books (kept; not the movie/TV library)",
     "Caddy handle /kavita* (502s when Kavita is stopped; harmless)",
     "compose/configs/kavita/.gitkeep (empty dir)",
     "/var/lib/reelos/beta-arena-books flag (removed on toggle-off)",
