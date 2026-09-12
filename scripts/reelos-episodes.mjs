@@ -5,7 +5,7 @@ import {
   seerrFetch,
   seerrSeasonStatus,
   resolveParsedTitle,
-  seasonIsUnreleased,
+  seasonUnreleasedForRequest,
   findLibraryTitle,
   UNRELEASED_SEASON_COPY,
 } from "./reelos-seerr.mjs";
@@ -223,20 +223,19 @@ export async function loadSeasonEpisodeList({
   }
   let seerrEpisodes = [];
   let seasonRequested = false;
+  let seerrSeason = null;
   if (seerrKey) {
     try {
       const detail = await fetchSeerr(`/api/v1/tv/${tmdb}`, { key: seerrKey, ms: 6000 });
       const media = detail?.json?.mediaInfo || detail?.json?.media || {};
       seasonRequested = seasonWasRequested(seerrSeasonStatus(media, seasonNumber));
+      seerrSeason = (detail?.json?.seasons || []).find((s) => Number(s?.seasonNumber) === seasonNumber) || null;
       const seasonDetail = await fetchSeerr(`/api/v1/tv/${tmdb}/season/${seasonNumber}`, {
         key: seerrKey,
         ms: 6000,
       }).catch(() => null);
       seerrEpisodes = seerrSeasonEpisodes(seasonDetail?.json);
-      if (!seerrEpisodes.length) {
-        const listed = (detail?.json?.seasons || []).find((s) => Number(s?.seasonNumber) === seasonNumber);
-        seerrEpisodes = seerrSeasonEpisodes(listed);
-      }
+      if (!seerrEpisodes.length) seerrEpisodes = seerrSeasonEpisodes(seerrSeason);
     } catch {
       /* Sonarr rows still paint */
     }
@@ -270,14 +269,12 @@ export async function loadSeasonEpisodeList({
     seasonImporting,
   });
   const sonarrSeason = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === seasonNumber);
-  const unreleased = Boolean(
-    (sonarrSeason &&
-      seasonIsUnreleased({
-        ...sonarrSeason,
-        episodes: sonarrEpisodes.length ? sonarrEpisodes : undefined,
-      })) ||
-      (seerrEpisodes.length > 0 && seasonIsUnreleased({ seasonNumber, episodes: seerrEpisodes })),
-  );
+  const unreleased = seasonUnreleasedForRequest({
+    sonarrSeason: sonarrSeason
+      ? { ...sonarrSeason, episodes: sonarrEpisodes.length ? sonarrEpisodes : undefined }
+      : null,
+    seerrSeason: seerrSeason || (seerrEpisodes.length ? { seasonNumber, episodes: seerrEpisodes } : null),
+  });
   if (unreleased) {
     return {
       ok: true,

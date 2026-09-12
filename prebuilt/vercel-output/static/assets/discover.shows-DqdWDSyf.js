@@ -1,0 +1,1 @@
+import{$ as e}from"./store-B6mBa6rG.js";import{a as t}from"./index-DrB9Pp4q.js";import{t as n}from"./discover-browse-view-BjY8DFO0.js";var r=e();function i(){let{genre:e,category:i}=t.useSearch();return(0,r.jsx)(n,{kind:`tv`,genre:e,category:i})}export{i as component};

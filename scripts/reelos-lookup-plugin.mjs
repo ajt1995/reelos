@@ -44,12 +44,13 @@ import {
   overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
   normalizeMediaType,
-  titleIdFor,
   onDiskSeasonsFor,
   decorateTitlesWithDiskSeasons,
   titleRequestSeasonPayload,
   mergeRequestListTitles,
   seasonIsUnreleased,
+  applyRequestMediaType,
+  seasonUnreleasedForRequest,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -1859,14 +1860,8 @@ async function handleRequest(req, res) {
   let parsed = parseTitleId(titleId);
   parsed = await resolveLiveParsed(parsed);
   const bodyType = normalizeMediaType(body.mediaType);
-  if (parsed?.tmdb && bodyType && bodyType !== parsed.mediaType) {
-    parsed = {
-      ...parsed,
-      mediaType: bodyType,
-      titleId: titleIdFor(bodyType, parsed.tmdb),
-    };
-    titleId = parsed.titleId;
-  }
+  parsed = applyRequestMediaType(parsed, bodyType, titleId);
+  if (parsed?.titleId) titleId = parsed.titleId;
   note(`request ${titleId} title=${body.title || ""} season=${season ?? ""} tmdb=${parsed?.tmdb || ""} type=${parsed?.mediaType || ""}`);
   if (!titleId) {
     send(res, 400, { ok: false, error: "No title" });
@@ -1896,13 +1891,13 @@ async function handleRequest(req, res) {
       const facts = await loadPresenceFacts().catch(() => null);
       const series = (facts?.series || []).find((s) => String(s?.tmdbId) === String(parsed.tmdb));
       const sonarrSeason = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === wantSeason);
-      let unreleased = Boolean(sonarrSeason && seasonIsUnreleased(sonarrSeason));
-      if (!unreleased && !sonarrSeason) {
+      let seerrSeason = null;
+      const sonarrLooksComing = Boolean(sonarrSeason && seasonIsUnreleased(sonarrSeason));
+      if (!sonarrSeason || sonarrLooksComing) {
         const tv = await seerrFetch(`/api/v1/tv/${parsed.tmdb}`, { key, ms: 12000 });
-        const seerrSeason = (tv.json?.seasons || []).find((s) => Number(s?.seasonNumber) === wantSeason);
-        unreleased = Boolean(seerrSeason && seasonIsUnreleased(seerrSeason));
+        seerrSeason = (tv.json?.seasons || []).find((s) => Number(s?.seasonNumber) === wantSeason) || null;
       }
-      if (unreleased) {
+      if (seasonUnreleasedForRequest({ sonarrSeason, seerrSeason })) {
         send(res, 200, {
           ok: false,
           error: `Season ${String(wantSeason).padStart(2, "0")} is announced, not released yet`,

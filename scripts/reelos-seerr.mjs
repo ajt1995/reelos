@@ -49,6 +49,34 @@ export function titleIdFor(mediaType, tmdb) {
   return mediaType === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
 }
 
+/** tmdb-155 is Dark Knight. tmdb-tv-155 is 3rd Rock. Prefix wins over body mediaType. */
+export function tmdbPrefixMediaType(titleId) {
+  const s = String(titleId || "").trim();
+  if (s.startsWith("tmdb-tv-")) return "tv";
+  if (/^tmdb-\d/.test(s)) return "movie";
+  return null;
+}
+
+/** Never rewrite a movie-shaped tmdb-<n> POST into tmdb-tv-<n> (or the reverse). */
+export function applyRequestMediaType(parsed, bodyType, titleId) {
+  const locked = tmdbPrefixMediaType(titleId);
+  if (locked && parsed?.tmdb) {
+    return {
+      ...parsed,
+      mediaType: locked,
+      titleId: titleIdFor(locked, parsed.tmdb) || parsed.titleId,
+    };
+  }
+  if (parsed?.tmdb && bodyType && bodyType !== parsed.mediaType) {
+    return {
+      ...parsed,
+      mediaType: bodyType,
+      titleId: titleIdFor(bodyType, parsed.tmdb),
+    };
+  }
+  return parsed;
+}
+
 function collectTitleIds(t) {
   return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""]
     .map((x) => String(x || "").trim())
@@ -837,6 +865,22 @@ export function seasonIsUnreleased(raw, now = Date.now()) {
   return false;
 }
 
+/**
+ * POST /api/request Coming gate. Unmonitored Sonarr seasons look empty (episodeCount 0,
+ * no previousAiring) even when TMDB aired years ago — Seerr/TMDB wins when present.
+ */
+export function seasonUnreleasedForRequest({ sonarrSeason, seerrSeason } = {}, now = Date.now()) {
+  if (seerrSeason) return seasonIsUnreleased(seerrSeason, now);
+  return Boolean(sonarrSeason && seasonIsUnreleased(sonarrSeason, now));
+}
+
+/** TMDB catalog seasons on the TV payload, not Seerr mediaInfo requested-season stubs. */
+export function seerrCatalogSeasons(h) {
+  if (Array.isArray(h?.seasons) && h.seasons.length) return h.seasons;
+  if (Array.isArray(h?.mediaInfo?.seasons) && h.mediaInfo.seasons.length) return h.mediaInfo.seasons;
+  return [];
+}
+
 export const IMPORTING_SEASON_CHIP = "Importing";
 export const IMPORTING_SEASON_COPY = "On disk, importing";
 
@@ -1153,13 +1197,15 @@ export function titleRequestSeasonPayload({
       (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
       (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
   );
+  const fromTitle = [
+    ...(title?.unreleasedSeasons || []),
+    ...unreleasedSeasonNumbers(title?.seasonFacts),
+  ];
+  const fromSonarr = unreleasedSeasonNumbers(seriesRow?.seasons);
+  const haveSeerrCatalog = Array.isArray(title?.seasonFacts) && title.seasonFacts.length > 0;
   const unreleased = [
     ...new Set(
-      [
-        ...(title?.unreleasedSeasons || []),
-        ...unreleasedSeasonNumbers(title?.seasonFacts),
-        ...unreleasedSeasonNumbers(seriesRow?.seasons),
-      ]
+      (haveSeerrCatalog ? fromTitle : fromSonarr)
         .map(Number)
         .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
     ),
@@ -1936,8 +1982,8 @@ export function seerrSearchHit(h, mediaTypeHint) {
   const title = String(h.title || h.name || "Untitled");
   const date = String(h.releaseDate || h.release_date || h.firstAirDate || h.first_air_date || "");
   const year = Number((date.match(/^(\d{4})/) || [])[1] || h.year || 0);
-  const listed = realSeasonNumbers(h.mediaInfo?.seasons || h.seasons);
-  const facts = mediaType === "tv" ? seasonFactsFrom(h.mediaInfo?.seasons || h.seasons) : [];
+  const listed = realSeasonNumbers(seerrCatalogSeasons(h));
+  const facts = mediaType === "tv" ? seasonFactsFrom(seerrCatalogSeasons(h)) : [];
   const fromCount = Number(h.numberOfSeasons || 0);
   const seasons = mediaType === "tv" ? listed.length || (Number.isFinite(fromCount) && fromCount > 0 ? fromCount : undefined) : undefined;
   const id = titleIdFor(mediaType, tmdb);
