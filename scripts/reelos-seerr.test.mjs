@@ -28,6 +28,8 @@ import {
   normalizeMediaType,
   seerrAvailableIsGhost,
   seerrAlreadyHave,
+  discoverOwnedIndex,
+  discoverTitleIsOwned,
   seerrMediaGhostRows,
   parseTitleId,
   realSeasonNumbers,
@@ -1343,6 +1345,45 @@ test("Discover browse drops titles this box already has", () => {
   assert.equal(seerrAlreadyHave({ mediaInfo: { status: 1 } }), false);
 });
 
+test("Discover pick tonight has no John Wick if it is on Home", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  const hits = [
+    { id: 245891, mediaType: "movie", title: "John Wick", releaseDate: "2014-10-24" },
+    { id: 2059, mediaType: "movie", title: "National Treasure", releaseDate: "2004-11-19" },
+    { id: 550, mediaType: "movie", title: "Fight Club", releaseDate: "1999-10-15" },
+  ];
+  const home = [
+    {
+      id: "jf-wick",
+      kind: "movie",
+      title: "John Wick",
+      year: 2014,
+      ids: ["jf-wick"],
+      jellyfinId: "wick",
+    },
+    {
+      id: "tmdb-2059",
+      kind: "movie",
+      title: "National Treasure",
+      year: 2004,
+      ids: ["tmdb-2059"],
+      jellyfinId: "nt",
+    },
+  ];
+  const owned = discoverOwnedIndex(home);
+  assert.equal(discoverTitleIsOwned({ id: "tmdb-245891", title: "John Wick", year: 2014, kind: "movie" }, owned), true);
+  const picks = mapSeerrDiscoverResults(hits, { mediaType: "movie", excludeIds: owned, now });
+  assert.deepEqual(
+    picks.map((t) => t.id),
+    ["tmdb-550"],
+  );
+  const search = mapSeerrSearchResults(hits, { q: "john", excludeOwned: owned });
+  assert.equal(
+    search.some((t) => /john wick$/i.test(t.title) && t.year === 2014),
+    false,
+  );
+});
+
 test("AbortError / timeout is a retryable lookup error, not an empty shelf", () => {
   const abort = new Error("The operation was aborted");
   abort.name = "AbortError";
@@ -1371,20 +1412,28 @@ test("Discover pick tonight drops unreleased 2026 junk", () => {
   );
 });
 
-test("Discover has on this box / finishing / pick tonight; POST never sends seasons=all", () => {
+test("Discover is finishing / pick tonight — library stays on Home", () => {
   const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
+  const home = readFileSync(join(root, "src/components/home-view.tsx"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
   const ping = readFileSync(join(root, "scripts/wizard-honesty.mjs"), "utf8");
   const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
-  assert.match(discover, /On this box/);
+  assert.doesNotMatch(discover, /label="On this box"/);
+  assert.match(discover, /Titles on this box live on Home/);
   assert.match(discover, /Finishing/);
   assert.match(discover, /Pick tonight/);
+  assert.match(discover, /filterDiscoverCatalog/);
+  assert.match(discover, /scope=discover/);
+  assert.match(discover, /Titles on this box live on Home/);
   assert.match(discover, /collapseHomeRequestCards/);
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
   assert.match(discover, /\/api\/discover/);
+  assert.match(home, /On this box/);
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
+  assert.match(lookup, /discoverOwnedIndex/);
+  assert.match(lookup, /searchParams.get\("scope"\)/);
   assert.match(lookup, /\/api\/discover/);
   assert.match(lookup, /discover\/movies\?page=/);
   assert.match(ping, /"User-Agent": "ReelOS"/);

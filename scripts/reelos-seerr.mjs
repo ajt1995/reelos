@@ -257,13 +257,16 @@ export function rankLookupTitles(titles, q) {
 }
 
 /** Map Seerr/TMDB search hits. No year filter — 2012–2016 titles stay in the list. */
-export function mapSeerrSearchResults(hits, { q = "", limit = 16 } = {}) {
+export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned } = {}) {
+  const owned = excludeOwned ? asDiscoverOwned(excludeOwned) : null;
   const titles = [];
   for (const h of hits || []) {
     const mediaType = normalizeMediaType(h?.mediaType);
     if (!mediaType) continue;
+    if (owned && seerrAlreadyHave(h)) continue;
     const t = seerrSearchHit(h, mediaType);
     if (!t) continue;
+    if (owned && discoverTitleIsOwned(t, owned)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }
@@ -287,6 +290,55 @@ function titleIdSet(titles) {
   return ids;
 }
 
+export function discoverOwnedNameKey(t) {
+  const kind = t?.kind === "tv" || t?.kind === "anime" || t?.mediaType === "tv" ? "tv" : "movie";
+  const title = String(t?.title || t?.name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+  const year = Number(t?.year) || Number(String(t?.releaseDate || t?.firstAirDate || "").slice(0, 4)) || 0;
+  if (!title) return "";
+  return `${kind}:${title}:${year || ""}`;
+}
+
+export function discoverOwnedIndex(titles = []) {
+  const ids = titleIdSet(titles);
+  const names = new Set();
+  for (const t of titles || []) {
+    if (t?.jellyfinId) {
+      ids.add(String(t.jellyfinId));
+      ids.add(`jf-${t.jellyfinId}`);
+    }
+    const key = discoverOwnedNameKey(t);
+    if (key) names.add(key);
+  }
+  return { ids, names };
+}
+
+export function asDiscoverOwned(excludeIds) {
+  if (!excludeIds) return { ids: new Set(), names: new Set() };
+  if (excludeIds instanceof Set) return { ids: excludeIds, names: new Set() };
+  if (excludeIds.ids instanceof Set || excludeIds.names instanceof Set) {
+    return {
+      ids: excludeIds.ids instanceof Set ? excludeIds.ids : new Set(),
+      names: excludeIds.names instanceof Set ? excludeIds.names : new Set(),
+    };
+  }
+  return discoverOwnedIndex(excludeIds);
+}
+
+/** JF-available / in-library. In-progress Requests are not owned yet. */
+export function discoverTitleIsOwned(title, owned) {
+  if (!title) return false;
+  if (title.jellyfinId) return true;
+  const index = asDiscoverOwned(owned);
+  if (title.id && index.ids.has(String(title.id))) return true;
+  for (const extra of title.ids || []) {
+    if (index.ids.has(String(extra))) return true;
+  }
+  const key = discoverOwnedNameKey(title);
+  return Boolean(key && index.names.has(key));
+}
+
 /** Upcoming TMDB junk (Mutiny, live-action Moana, Paradise Hotel) is not "pick tonight". */
 export function discoverHitReleased(h, now = Date.now()) {
   const date = String(h?.releaseDate || h?.firstAirDate || "");
@@ -301,7 +353,7 @@ export function discoverHitReleased(h, now = Date.now()) {
 
 /** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
 export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, now = Date.now() } = {}) {
-  const owned = excludeIds instanceof Set ? excludeIds : titleIdSet(excludeIds);
+  const owned = asDiscoverOwned(excludeIds);
   const titles = [];
   for (const h of hits || []) {
     if (seerrAlreadyHave(h)) continue;
@@ -309,7 +361,7 @@ export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeId
     const type = normalizeMediaType(h?.mediaType || mediaType);
     if (!type) continue;
     const t = seerrSearchHit(h, type);
-    if (!t || owned.has(t.id)) continue;
+    if (!t || discoverTitleIsOwned(t, owned)) continue;
     titles.push(t);
     if (titles.length >= limit) break;
   }

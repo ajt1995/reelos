@@ -21,6 +21,7 @@ import {
   attachSeerrDetailTitles,
   mapSeerrSearchResults,
   mapSeerrDiscoverResults,
+  discoverOwnedIndex,
   lookupFailureMessage,
   buildSeerrAddPayload,
   resolveParsedTitle,
@@ -343,6 +344,7 @@ async function handleLookup(req, res) {
   const u = new URL(raw, "http://reelos.local");
   const q = u.searchParams.get("q")?.trim() || "";
   const id = u.searchParams.get("id")?.trim() || "";
+  const discoverScope = u.searchParams.get("scope")?.trim() === "discover";
   const titles = [];
   let error = null;
   const key = seerrApiKey();
@@ -403,8 +405,9 @@ async function handleLookup(req, res) {
       return;
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
-    note(`seerr hits=${hits.length} titles=${titles.length}`);
+    const excludeOwned = discoverScope ? discoverOwnedIndex(titlesForResolve()) : undefined;
+    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16, excludeOwned }));
+    note(`seerr hits=${hits.length} titles=${titles.length} discover=${discoverScope ? "yes" : "no"}`);
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
@@ -412,16 +415,15 @@ async function handleLookup(req, res) {
   send(res, 200, { titles, error });
 }
 
-function ownedDiscoverIds() {
-  const ids = new Set();
+async function ownedDiscoverExclude() {
   const entry = libraryCache.read();
-  for (const t of entry?.titles || []) {
-    if (t?.id) ids.add(String(t.id));
-    for (const extra of t?.ids || []) {
-      if (extra) ids.add(String(extra));
-    }
+  if (!entry?.complete) {
+    await Promise.race([
+      refreshLibraryFull("127.0.0.1"),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]).catch(() => {});
   }
-  return ids;
+  return discoverOwnedIndex(titlesForResolve());
 }
 
 async function handleDiscover(_req, res) {
@@ -451,7 +453,7 @@ async function handleDiscover(_req, res) {
       send(res, 200, { movies, tv, error });
       return;
     }
-    const excludeIds = ownedDiscoverIds();
+    const excludeIds = await ownedDiscoverExclude();
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),

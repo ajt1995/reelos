@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
+import { filterDiscoverCatalog } from "@/lib/discover-owned";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
@@ -95,26 +96,33 @@ export function DiscoverView() {
     };
   }, [booksOn]);
 
-  const hits = useMemo(() => {
-    const seen = new Set<string>();
-    const out: Title[] = [];
-    for (const t of remoteHits) {
-      if (seen.has(t.id)) continue;
-      seen.add(t.id);
-      out.push(t);
-    }
-    return out;
-  }, [remoteHits]);
-
-  const movieShelf = useMemo(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
-  const tvShelf = useMemo(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
   const finishing = useMemo(() => {
     return collapseHomeRequestCards(inflight)
       .map((r) => ({ r, t: titleForRequest(r, catalog) }))
       .filter((x) => x.t?.id);
   }, [inflight, catalog]);
+  const finishingIds = useMemo(() => new Set(finishing.map((x) => x.t.id)), [finishing]);
   const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
   const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);
+  const pickMovies = useMemo(
+    () => filterDiscoverCatalog(browseMovies, shelf, finishingIds),
+    [browseMovies, shelf, finishingIds],
+  );
+  const pickTv = useMemo(
+    () => filterDiscoverCatalog(browseTv, shelf, finishingIds),
+    [browseTv, shelf, finishingIds],
+  );
+
+  const hits = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Title[] = [];
+    for (const t of filterDiscoverCatalog(remoteHits, shelf)) {
+      if (seen.has(t.id)) continue;
+      seen.add(t.id);
+      out.push(t);
+    }
+    return out;
+  }, [remoteHits, shelf]);
 
   useEffect(() => {
     const term = q.trim();
@@ -129,7 +137,7 @@ export function DiscoverView() {
     let cancelled = false;
     const ac = new AbortController();
     const t = window.setTimeout(() => {
-      void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store", signal: ac.signal })
+      void fetch(`/api/lookup?q=${encodeURIComponent(term)}&scope=discover`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
           return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
@@ -160,7 +168,9 @@ export function DiscoverView() {
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Discover</h1>
-      <p className="mt-2 text-sm text-muted">On this box, finishing, or pick tonight. Search to find something else.</p>
+      <p className="mt-2 text-sm text-muted">
+        Pick tonight, finish a grab, or search. Titles on this box live on Home.
+      </p>
       <div className="relative mt-6 max-w-xl">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint" />
         <input
@@ -186,13 +196,8 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          <DiscoverKind
-            heading="Movies"
-            onBox={movieShelf}
-            finishing={finishingMovies}
-            pick={browseMovies}
-          />
-          <DiscoverKind heading="Shows" onBox={tvShelf} finishing={finishingTv} pick={browseTv} />
+          <DiscoverKind heading="Movies" finishing={finishingMovies} pick={pickMovies} />
+          <DiscoverKind heading="Shows" finishing={finishingTv} pick={pickTv} />
           {booksOn && bookFeatured.length > 0 ? (
             <section className="mt-10">
               <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
@@ -212,11 +217,7 @@ export function DiscoverView() {
               </ul>
             </section>
           ) : null}
-          {browseMovies.length === 0 &&
-          browseTv.length === 0 &&
-          movieShelf.length === 0 &&
-          tvShelf.length === 0 &&
-          finishing.length === 0 ? (
+          {pickMovies.length === 0 && pickTv.length === 0 && finishing.length === 0 ? (
             <p className="mt-10 text-sm text-muted">
               {browseErr ||
                 (browseReady ? "Seerr has nothing new to show yet." : "Looking up movies and shows…")}
@@ -230,26 +231,17 @@ export function DiscoverView() {
 
 function DiscoverKind({
   heading,
-  onBox,
   finishing,
   pick,
 }: {
   heading: string;
-  onBox: Title[];
   finishing: { r: MediaRequest; t: Title }[];
   pick: Title[];
 }) {
-  if (!onBox.length && !finishing.length && !pick.length) return null;
+  if (!finishing.length && !pick.length) return null;
   return (
     <div className="mt-10">
       <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
-      {onBox.length ? (
-        <Row label="On this box">
-          {onBox.map((t) => (
-            <TitleCard key={t.id} title={t} />
-          ))}
-        </Row>
-      ) : null}
       {finishing.length ? (
         <Row label="Finishing">
           {finishing.map(({ r, t }) => (
