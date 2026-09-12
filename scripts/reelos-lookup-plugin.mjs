@@ -49,6 +49,7 @@ import {
   decorateTitlesWithDiskSeasons,
   titleRequestSeasonPayload,
   mergeRequestListTitles,
+  seasonIsUnreleased,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -1870,6 +1871,30 @@ async function handleRequest(req, res) {
       parsed.mediaType === "tv" ? `tmdb-tv-${parsed.tmdb}` : `tmdb-${parsed.tmdb}`,
       parsed.mediaType === "tv" ? `tmdb-${parsed.tmdb}` : `tmdb-tv-${parsed.tmdb}`,
     ]);
+    const wantSeason =
+      parsed.mediaType === "tv" && season != null && season !== "" && Number.isFinite(Number(season))
+        ? Number(season)
+        : parsed.mediaType === "tv"
+          ? 1
+          : undefined;
+    if (parsed.mediaType === "tv" && wantSeason) {
+      const facts = await loadPresenceFacts().catch(() => null);
+      const series = (facts?.series || []).find((s) => String(s?.tmdbId) === String(parsed.tmdb));
+      const sonarrSeason = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === wantSeason);
+      let unreleased = Boolean(sonarrSeason && seasonIsUnreleased(sonarrSeason));
+      if (!unreleased && !sonarrSeason) {
+        const tv = await seerrFetch(`/api/v1/tv/${parsed.tmdb}`, { key, ms: 12000 });
+        const seerrSeason = (tv.json?.seasons || []).find((s) => Number(s?.seasonNumber) === wantSeason);
+        unreleased = Boolean(seerrSeason && seasonIsUnreleased(seerrSeason));
+      }
+      if (unreleased) {
+        send(res, 200, {
+          ok: false,
+          error: `Season ${String(wantSeason).padStart(2, "0")} is announced, not released yet`,
+        });
+        return;
+      }
+    }
     const listed = await seerrFetch("/api/v1/request?take=100&filter=all&sort=added", { key, ms: 15000 });
     const existingRows = Array.isArray(listed.json) ? listed.json : listed.json?.results || [];
     const reused = findExistingSeasonRequest(existingRows, {

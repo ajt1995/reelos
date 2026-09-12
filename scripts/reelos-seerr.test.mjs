@@ -34,6 +34,13 @@ import {
   parseTitleId,
   realSeasonNumbers,
   seasonCount,
+  seasonIsUnreleased,
+  seasonChipKind,
+  seasonChipLabel,
+  seasonFactsFrom,
+  unreleasedSeasonNumbers,
+  UNRELEASED_SEASON_CHIP,
+  UNRELEASED_SEASON_COPY,
   seerrRequestRow,
   seerrSearchHit,
   simulateLookupAndRequest,
@@ -187,6 +194,119 @@ test("season selectors skip specials and fake uncapped counts", () => {
   assert.equal(seasonCount(seasons), 3);
   assert.equal(seasonCount(4), 4);
   assert.equal(seasonCount([]), 0);
+});
+
+test("announced season with 0 episodes and future airDate is Coming, not Request/Watch", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  const siloS04 = { seasonNumber: 4, episodeCount: 0, airDate: "2027-06-01" };
+  const siloS03 = { seasonNumber: 3, episodeCount: 10, airDate: "2025-03-27" };
+  const sonarrTba = {
+    seasonNumber: 4,
+    monitored: true,
+    statistics: { episodeFileCount: 0, episodeCount: 1, totalEpisodeCount: 1 },
+  };
+  const airingMissing = {
+    seasonNumber: 8,
+    statistics: {
+      episodeFileCount: 0,
+      episodeCount: 18,
+      previousAiring: "2026-01-15T00:00:00Z",
+      nextAiring: "2026-09-20T00:00:00Z",
+    },
+  };
+  assert.equal(seasonIsUnreleased(siloS04, now), true);
+  assert.equal(seasonIsUnreleased(siloS03, now), false);
+  assert.equal(seasonIsUnreleased(sonarrTba, now), true);
+  assert.equal(seasonIsUnreleased(airingMissing, now), false);
+  assert.equal(seasonChipKind({ unreleased: true }), "coming");
+  assert.equal(seasonChipLabel({ unreleased: true }), UNRELEASED_SEASON_CHIP);
+  assert.equal(seasonChipLabel({ onDisk: true, unreleased: true }), "Watch");
+  assert.equal(seasonChipLabel({}), "Request");
+  assert.notEqual(seasonChipLabel({ unreleased: true }), "Request");
+  assert.notEqual(seasonChipLabel({ unreleased: true }), "Watch");
+  assert.match(UNRELEASED_SEASON_COPY, /not released/i);
+  const facts = seasonFactsFrom([siloS03, siloS04], now);
+  assert.deepEqual(
+    facts.map((f) => `${f.season}:${f.unreleased}:${f.episodeCount}`),
+    ["3:false:10", "4:true:0"],
+  );
+  assert.deepEqual(unreleasedSeasonNumbers([siloS03, siloS04], now), [4]);
+  const missing = missingArrRequests([
+    {
+      id: 10,
+      tmdbId: 125988,
+      title: "Silo",
+      monitored: true,
+      added: "2026-09-10T00:00:00.000Z",
+      statistics: { episodeFileCount: 20 },
+      seasons: [
+        { seasonNumber: 3, monitored: true, statistics: { episodeFileCount: 10, episodeCount: 10, previousAiring: "2025-05-01T00:00:00Z" } },
+        { seasonNumber: 4, monitored: true, statistics: { episodeFileCount: 0, episodeCount: 1, totalEpisodeCount: 1 } },
+      ],
+    },
+  ]);
+  assert.equal(
+    missing.some((r) => r.season === 4),
+    false,
+    "Silo S04 must not infinite-search",
+  );
+  const releasedMissing = missingArrRequests([
+    {
+      id: 11,
+      tmdbId: 79744,
+      title: "The Rookie",
+      monitored: true,
+      added: "2026-09-10T00:00:00.000Z",
+      statistics: { episodeFileCount: 20 },
+      seasons: [
+        {
+          seasonNumber: 5,
+          monitored: true,
+          statistics: { episodeFileCount: 0, episodeCount: 22, previousAiring: "2023-05-01T00:00:00Z" },
+        },
+      ],
+    },
+  ]);
+  assert.deepEqual(
+    releasedMissing.map((r) => r.season),
+    [5],
+    "released missing seasons still Request",
+  );
+  const hit = seerrSearchHit({
+    id: 125988,
+    mediaType: "tv",
+    name: "Silo",
+    firstAirDate: "2023-05-05",
+    seasons: [siloS03, siloS04],
+  });
+  assert.deepEqual(hit.unreleasedSeasons, [4]);
+  const payload = titleRequestSeasonPayload({
+    id: "tmdb-tv-125988",
+    season: 4,
+    parsed: parseTitleId("tmdb-tv-125988"),
+    facts: {
+      series: [
+        {
+          tmdbId: 125988,
+          seasons: [{ seasonNumber: 4, statistics: { episodeFileCount: 0, episodeCount: 1 } }],
+        },
+      ],
+      arrIndex: buildArrIndex({
+        series: [{ tmdbId: 125988, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 10 } }] }],
+      }),
+    },
+    title: hit,
+    honest: { titleId: "tmdb-tv-125988", status: "downloading", engine: "grabbing", reason: "Searching — no file yet" },
+  });
+  assert.equal(payload.reason, UNRELEASED_SEASON_COPY);
+  assert.deepEqual(payload.unreleasedSeasons, [4]);
+  assert.notEqual(payload.status, "downloaded");
+  const accordion = readFileSync(join(root, "src/components/season-episode-accordion.tsx"), "utf8");
+  const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  assert.match(accordion, /seasonChipLabel/);
+  assert.match(accordion, /UNRELEASED_SEASON_COPY/);
+  assert.match(titleView, /thisSeasonUnreleased/);
+  assert.match(titleView, /UNRELEASED_SEASON_CHIP/);
 });
 
 test("search hits map TMDB posters and TV season counts", () => {
@@ -1221,8 +1341,8 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(titleView, /showHashAdapter/);
   assert.match(titleView, /requestTitleIdForPage/);
   assert.match(titleView, />\s*Watch\s*</);
-  assert.match(accordion, /· Watch/);
-  assert.match(accordion, /· Request/);
+  assert.match(accordion, /seasonChipLabel/);
+  assert.match(accordion, /· \$\{chip\}/);
   assert.doesNotMatch(titleView, /· in/);
   assert.match(accordion, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);

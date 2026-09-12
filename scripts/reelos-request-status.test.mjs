@@ -104,6 +104,10 @@ test("movie POST recover MoviesSearchs a 0-file title (Interstellar / John Wick)
     search: true,
     import: true,
   });
+  assert.deepEqual(planArrPostRecover({ mediaType: "tv", season: 4, arrHasFile: false, unreleased: true }), {
+    search: false,
+    import: false,
+  });
 });
 
 test("GET recover lists Interstellar + B99 S01 when *arr has 0 files", () => {
@@ -166,6 +170,36 @@ test("kickTvSeasonRecover SeasonSearch when Sonarr has TWD S01 with 0 files", as
   assert.equal(posts[0]?.name, "SeasonSearch");
   assert.equal(posts[0]?.seasonNumber, 1);
   assert.equal(posts[0]?.seriesId, 9);
+});
+
+test("kickTvSeasonRecover does not SeasonSearch an announced 0-episode season", async () => {
+  const posts = [];
+  const result = await kickTvSeasonRecover({
+    tmdb: 125988,
+    season: 4,
+    sonarrKey: "test",
+    spawnImport: () => true,
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      if (String(url).includes("/series") && (opts.method || "GET") === "GET") {
+        return [
+          {
+            id: 10,
+            tmdbId: 125988,
+            title: "Silo",
+            seasons: [{ seasonNumber: 4, statistics: { episodeFileCount: 0, episodeCount: 1, totalEpisodeCount: 1 } }],
+          },
+        ];
+      }
+      if (String(url).includes("/command")) {
+        posts.push(opts.body);
+        return { id: 1, name: "SeasonSearch" };
+      }
+      return null;
+    },
+  });
+  assert.equal(result.searched, false);
+  assert.equal(posts.length, 0);
+  assert.equal(result.ok, true);
 });
 
 test("Ultra-HD 2160p-only falls back to Any so EZTV 720p can grab", () => {

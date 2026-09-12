@@ -664,3 +664,16 @@ test("tvSeasonChips Watch only from on-disk seasons, not series available", () =
     ["2:Watch", "3:Watch", "4:Watch", "5:Request", "6:Watch"],
   );
 });
+
+test("tvSeasonChips Coming for announced unreleased seasons", () => {
+  const chips = tvSeasonChips(
+    "tmdb-tv-125988",
+    [row({ id: "s4", titleId: "tmdb-tv-125988", season: 4, status: "downloading" })],
+    [{ id: "tmdb-tv-125988", kind: "tv", onDiskSeasons: [1, 2, 3], unreleasedSeasons: [4] }],
+  );
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label}`),
+    ["1:Watch", "2:Watch", "3:Watch", "4:Coming"],
+  );
+  assert.equal(isInFlightRequest({ status: "downloading", reason: "Announced — not released yet" }), false);
+});
