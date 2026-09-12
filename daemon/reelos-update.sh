@@ -118,6 +118,17 @@ watch_progress_file() {
   ) &
   PROGRESS_HB=$!
 }
+watch_progress_detail() {
+  local stage=$1 detail=$2
+  stop_progress_watch
+  write_progress "$stage" 0 0 "$detail"
+  (
+    while sleep 2; do
+      write_progress "$stage" 0 0 "$detail"
+    done
+  ) &
+  PROGRESS_HB=$!
+}
 STEPS=8
 STEP=0
 step() {
@@ -463,7 +474,8 @@ else
   tar -xzf "$WORK/src.tar.gz" -C "$WORK/src" --strip-components=1
   stop_progress_watch
   EX_BYTES=$(du -sb "$WORK/src" 2>/dev/null | awk '{print $1}')
-  write_progress extract "${EX_BYTES:-0}" "${UNCOMP:-$EX_BYTES}" "Extracting"
+  # gzip -l uncompressed is often a few percent high; tar is done — show 100%.
+  write_progress extract "${EX_BYTES:-1}" "${EX_BYTES:-1}" "Extracted"
 fi
 GOT=$(cat "$WORK/src/VERSION" 2>/dev/null || true)
 # Re-exec mailman before version compare. Stale channel.json must not block a newer tarball.
@@ -842,10 +854,14 @@ chmod 755 "$NEXT/bin/"* 2>/dev/null || true
 # (decypharr/cache/dfs) — cp -a of those starved the 4GB box and killed Vite.
 overlay_house_configs() {
   mkdir -p "$NEXT/compose/configs"
+  # House jellyfin/sonarr trees are gigabytes; without a heartbeat the splash
+  # stays on Extracting · 98% (gzip -l vs extracted) for many minutes.
+  watch_progress_detail extract "Copying house settings"
   if command -v rsync >/dev/null 2>&1; then
     rsync -a --exclude 'decypharr/cache/' --exclude '**/cache/dfs/' --exclude 'jellyfin/**/cache/' --exclude 'jellyfin/**/transcodes/' --exclude '**/MediaCover/' --exclude '**/logs/' --exclude '*.db-wal' --exclude '*.db-shm' \
       "$ROOT/compose/configs/" "$NEXT/compose/configs/" \
       || log "config copy skipped vanished sqlite sidecars"
+    stop_progress_watch
     return 0
   fi
   log "rsync missing — copy top-level config dirs without cache/dfs"
@@ -867,6 +883,7 @@ overlay_house_configs() {
       cp -a "$src" "$dest" || log "config copy skipped vanished sqlite sidecars"
     fi
   done
+  stop_progress_watch
 }
 
 if [ -d "$ROOT/compose/configs" ]; then
