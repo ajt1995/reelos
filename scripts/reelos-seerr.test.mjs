@@ -41,6 +41,7 @@ import {
   unreleasedSeasonNumbers,
   UNRELEASED_SEASON_CHIP,
   UNRELEASED_SEASON_COPY,
+  IMPORTING_SEASON_COPY,
   seerrRequestRow,
   seerrSearchHit,
   simulateLookupAndRequest,
@@ -219,6 +220,9 @@ test("announced season with 0 episodes and future airDate is Coming, not Request
   assert.equal(seasonIsUnreleased(sonarrTba, now), true);
   assert.equal(seasonIsUnreleased(airingMissing, now), false);
   assert.equal(seasonChipKind({ unreleased: true }), "coming");
+  assert.equal(seasonChipKind({ importing: true }), "importing");
+  assert.equal(seasonChipKind({ importing: true, unreleased: true }), "coming");
+  assert.equal(seasonChipLabel({ importing: true }), "Importing");
   assert.equal(seasonChipLabel({ unreleased: true }), UNRELEASED_SEASON_CHIP);
   assert.equal(seasonChipLabel({ onDisk: true, unreleased: true }), "Watch");
   assert.equal(seasonChipLabel({}), "Request");
@@ -1060,7 +1064,7 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
       arrSeriesReady: true,
       dumps: { sonarr: ["Justified"] },
     }),
-    "Files linked — waiting for Sonarr import",
+    IMPORTING_SEASON_COPY,
   );
   assert.equal(
     tvRequestReason(row, {
@@ -1068,7 +1072,7 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
       arrSeriesReady: true,
       dumps: { sonarr: ["Justified.2010.S01.1080p.AMZN"] },
     }),
-    "Files linked — waiting for Sonarr import",
+    IMPORTING_SEASON_COPY,
   );
   const expanseS1 = seerrRequestRow(
     {
@@ -1125,7 +1129,7 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
       dumps: { sonarr: ["The Expanse"] },
       torrents: [{ name: "The Expanse S01 1080p" }],
     }),
-    "Files linked — waiting for Sonarr import",
+    IMPORTING_SEASON_COPY,
   );
   assert.equal(
     tvRequestReason(expanseS1, {
@@ -1133,7 +1137,7 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
       arrSeriesReady: true,
       dumps: { sonarr: ["The Expanse", "The Expanse S01 1080p AMZN WEBRip"] },
     }),
-    "Files linked — waiting for Sonarr import",
+    IMPORTING_SEASON_COPY,
   );
   const honest = honestifyRequests([row], {
     series: [series],
@@ -1144,7 +1148,7 @@ test("0-file Sonarr season is honest about the silent 0%", () => {
   });
   assert.equal(honest[0].status, "downloading");
   assert.equal(honest[0].progress, 0);
-  assert.equal(honest[0].reason, "Files linked — waiting for Sonarr import");
+  assert.equal(honest[0].reason, IMPORTING_SEASON_COPY);
 });
 
 test("0-file Radarr movie with no Decypharr client surfaces the missing hop", () => {
@@ -1408,7 +1412,7 @@ test("GET /api/request plugins honestify Seerr rows against library and *arr", (
   assert.match(seerr, /Requested — Radarr has no movie yet/);
   assert.match(seerr, /Searching — no file yet/);
   assert.match(seerr, /tvRequestReason/);
-  assert.match(seerr, /Files linked — waiting for Sonarr import/);
+  assert.match(seerr, /On disk, importing/);
 });
 
 test("2012–2016 movie + TV search is not year-filtered and keeps mediaType", () => {

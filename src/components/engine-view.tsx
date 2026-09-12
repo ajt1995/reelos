@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { adapterProfile, viaLabel } from "@/lib/adapter";
 import { getTitle } from "@/lib/catalog";
 import { sourceLabel, useReelStore } from "@/lib/store";
+import { requestProgressLabel } from "@/lib/sync-requests";
 import { pushIndexer } from "@/lib/appliance";
 import { Button } from "@/components/ui/button";
 
@@ -197,7 +198,7 @@ function AdapterConsole() {
               <div className="flex items-center justify-between gap-3">
                 <span className="truncate font-medium">{t?.title}</span>
                 <span className="shrink-0 font-mono text-xs text-gold">
-                  {r.status === "downloading" ? `${Math.round(r.progress)}%` : "search"}
+                  {r.status === "downloading" ? requestProgressLabel(r) || "Grabbing" : "search"}
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted">
@@ -271,7 +272,7 @@ function Table({
             const status = library.includes(r.id)
               ? "Imported"
               : req?.status === "downloading"
-                ? `${Math.round(req.progress)}%`
+                ? requestProgressLabel(req as { status: string; progress?: number }) || "Grabbing"
                 : req?.status ?? "Missing";
             return (
               <tr key={r.id} className="border-b border-border/70">

@@ -170,6 +170,12 @@ CONTRACTS = (
     ("src/components/title-view-live.tsx", "resolved.jellyfinId"),
     ("src/components/title-view-live.tsx", "Seerr did not find that title"),
     ("scripts/reelos-seerr.mjs", "discoverBrowseSeerrPath"),
+    ("scripts/reelos-library.mjs", "collapseDumpTwins"),
+    ("scripts/reelos-library.mjs", "foldDumpSeasons"),
+    ("src/lib/sync-requests.ts", "requestProgressLabel"),
+    ("src/lib/episode-status.ts", "Importing"),
+    ("src/components/title-card.tsx", "requestProgressLabel"),
+    ("src/components/season-episode-accordion.tsx", "importingSeasons"),
 )
 
 

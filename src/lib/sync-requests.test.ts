@@ -7,6 +7,7 @@ import {
   collapseHomeRequestCards,
   transferringChipCount,
   dropLibraryOverlay,
+  homeInFlightRequests,
   inFlightRequests,
   isGhostRequestLabel,
   isInFlightRequest,
@@ -21,6 +22,7 @@ import {
   titleForRequest,
   titleMatchesId,
   titlePresenceKeys,
+  requestProgressLabel,
   tvSeasonChips,
 } from "./sync-requests.ts";
 import type { MediaRequest, Title } from "./types.ts";
@@ -154,7 +156,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
-  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(home, /homeInFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
   assert.match(home, /collapseHomeRequestCards\(inflight\)/);
   assert.match(home, /transferringChipCount\(inflight\)/);
@@ -676,4 +678,81 @@ test("tvSeasonChips Coming for announced unreleased seasons", () => {
     ["1:Watch", "2:Watch", "3:Watch", "4:Coming"],
   );
   assert.equal(isInFlightRequest({ status: "downloading", reason: "Announced — not released yet" }), false);
+});
+
+test("Rookie dump S02 is Importing not Watch; 0% linked files paint Importing", () => {
+  const chips = tvSeasonChips(
+    "tmdb-tv-79744",
+    [
+      row({
+        id: "s2",
+        titleId: "tmdb-tv-79744",
+        season: 2,
+        status: "downloading",
+        reason: "Files linked — waiting for Sonarr import",
+      }),
+      row({ id: "s9", titleId: "tmdb-tv-79744", season: 9, status: "downloading", reason: "Announced — not released yet" }),
+    ],
+    [{ id: "tmdb-tv-79744", kind: "tv", onDiskSeasons: [1], importingSeasons: [2], unreleasedSeasons: [9] }],
+  );
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label}`),
+    ["1:Watch", "2:Importing", "9:Coming"],
+  );
+  assert.equal(
+    requestProgressLabel(
+      row({
+        id: "s2",
+        titleId: "tmdb-tv-79744",
+        season: 2,
+        status: "downloading",
+        progress: 0,
+        reason: "Files linked — waiting for Sonarr import",
+      }),
+    ),
+    "Importing",
+  );
+  assert.equal(
+    requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", season: 3, status: "downloading", progress: 0, reason: "Searching — no file yet" })),
+    "Searching",
+  );
+  assert.notEqual(
+    requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", status: "downloading", progress: 0 })),
+    "0%",
+  );
+});
+
+test("Home hides Rookie linked-importing when named series is On this box; Requests keep it", () => {
+  const requests = [
+    row({
+      id: "s3",
+      titleId: "tmdb-tv-79744",
+      season: 3,
+      status: "downloading",
+      progress: 0,
+      reason: "On disk, importing",
+    }),
+    row({
+      id: "s2-search",
+      titleId: "tmdb-tv-1402",
+      season: 2,
+      status: "downloading",
+      progress: 0,
+      reason: "Searching — no file yet",
+    }),
+  ];
+  const titles = [
+    {
+      id: "tvdb-350665",
+      kind: "tv" as const,
+      jellyfinId: "01c2efb0f4c9b916b1ccaffe1d81e598",
+      ids: ["tvdb-350665", "tmdb-tv-79744"],
+      onDiskSeasons: [1],
+      importingSeasons: [2],
+    },
+  ];
+  const home = homeInFlightRequests(requests, { titles });
+  assert.deepEqual(home.map((r) => r.id), ["s2-search"]);
+  const tab = inFlightRequests(requests, { titles });
+  assert.ok(tab.some((r) => r.id === "s3"));
 });

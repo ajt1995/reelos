@@ -73,8 +73,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.55";
-export const SHIPPED_VERSION = "1.2.50.55";
+export const LATEST_VERSION = "1.2.50.56";
+export const SHIPPED_VERSION = "1.2.50.56";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -110,6 +110,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.56: Home On this box keeps named Silo / Reacher / The Rookie. UIndex, Torrenting, and Reacher Il Ponte dump cards fold into those titles. Dump files waiting for Sonarr import paint Importing, not Watch. Rookie does not lie 0% while files are linked. TBA seasons stay Coming. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.55: Unreleased TV seasons (Silo S04, Rookie S09) paint Coming / announced — not released, not Request or Watch, and do not SeasonSearch empty future seasons. Released missing seasons still Request. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.54: Caddy handle_errors Updating ReelOS page parses on Ubuntu Caddy 2.6.2 (no <<HTML heredoc). Apply of 53 would copy a Caddyfile 2.6 cannot load and leave :80 dead. Bogus /title miss paints Seerr did not find, not Looking up forever. Overlay Copying house settings, byte % only with bytes, Discover browse, lookupKey, Passengers Watch stay. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.53: Apply splash leaves Extracting for Copying house settings during house overlay rsync (not stuck at 98%). Byte % only when bytes are real. Door restart Caddy handle_errors shows Updating ReelOS, not Chrome 502. Catch-up banner and Home chip as soon as Home is usable if library work is still running. Hash dump Remove does not hide named Rick; Remove is reversible via Request. Finished Requests (Passengers) Watch on Home and Library when Jellyfin has the title. Discover still hides owned library. Movies and Shows headers open genre/category endless scroll, still excluding owned. Title pages keep lookupKey. Continue watching, capped poster, season accordion stay. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",

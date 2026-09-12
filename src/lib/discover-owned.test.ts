@@ -44,3 +44,40 @@ test("Discover search drops already-have and keeps a title that is not on the bo
     ["tmdb-245891-2"],
   );
 });
+
+test("The Rookie on this box is owned for Discover TV", () => {
+  const owned = discoverOwnedIndex([
+    {
+      id: "tvdb-350665",
+      title: "The Rookie",
+      year: 2018,
+      kind: "tv",
+      ids: ["tvdb-350665", "tmdb-tv-79744", "tmdb-79744"],
+      jellyfinId: "01c2efb0f4c9b916b1ccaffe1d81e598",
+    },
+  ]);
+  assert.equal(
+    discoverTitleIsOwned({ id: "tmdb-tv-79744", title: "The Rookie", year: 2018, kind: "tv" }, owned),
+    true,
+  );
+  const catalog = filterDiscoverCatalog(
+    [
+      { id: "tmdb-tv-79744", title: "The Rookie", year: 2018, kind: "tv" },
+      { id: "tmdb-tv-66732", title: "Stranger Things", year: 2016, kind: "tv" },
+    ],
+    [
+      {
+        id: "tvdb-350665",
+        title: "The Rookie",
+        year: 2018,
+        kind: "tv",
+        ids: ["tmdb-tv-79744"],
+        jellyfinId: "01c2",
+      },
+    ],
+  );
+  assert.deepEqual(
+    catalog.map((t) => t.title),
+    ["Stranger Things"],
+  );
+});

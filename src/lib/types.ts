@@ -64,7 +64,9 @@ export interface Title {
   seasons?: number;
   seasonList?: number[];
   onDiskSeasons?: number[];
+  importingSeasons?: number[];
   unreleasedSeasons?: number[];
+  fromDump?: boolean;
   seasonFacts?: Array<{ season: number; episodeCount: number; airDate?: string; unreleased?: boolean }>;
   tracks?: number;
   rating: number;

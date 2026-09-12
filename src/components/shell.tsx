@@ -164,7 +164,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               target="_blank"
               rel="noreferrer"
               className={cn(
-                "ml-auto flex h-11 items-center rounded-xl px-3 text-sm font-medium text-gold",
+                "ml-auto flex h-11 shrink-0 items-center rounded-xl px-3 text-sm font-medium text-gold",
                 arena && "h-8 rounded-full bg-gold px-3 text-xs text-gold-fg arena-gold-press",
               )}
             >

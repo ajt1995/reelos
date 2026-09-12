@@ -59,19 +59,56 @@ export function inFlightRequests(
   );
 }
 
+/** Linked dumps waiting on Sonarr — not a silent 0%, not Watch. */
+export function isLinkedImportingRequest(r?: Pick<MediaRequest, "reason"> | null): boolean {
+  return /on disk, importing|files linked|waiting for.*import/i.test(String(r?.reason || ""));
+}
+
+/**
+ * Home Your requests: hide linked-importing when the named series is already On this box.
+ * Searching / grabbing without files still shows. Requests tab keeps importing rows.
+ */
+export function homeInFlightRequests(
+  requests: MediaRequest[],
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] } = {},
+): MediaRequest[] {
+  return inFlightRequests(requests, opts).filter((r) => {
+    if (!isLinkedImportingRequest(r)) return true;
+    return !requestIsWatchableOnShelf(r, opts);
+  });
+}
+
 export function isTvRequestRow(row: Pick<MediaRequest, "titleId" | "season">): boolean {
   const id = String(row.titleId || "");
   return id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || row.season != null;
 }
 
-/** Per-season Watch vs Request vs Coming from files on disk — series AVAILABLE is not S05 Watch. */
+export type SeasonChipLabel = "Watch" | "Importing" | "Coming" | "Request";
+
+/** Dump files waiting for Sonarr import — never paint as 0%. */
+export function requestProgressLabel(
+  r?: Pick<MediaRequest, "status" | "progress" | "reason" | "via"> | null,
+): string | null {
+  if (!r || (r.status !== "downloading" && r.status !== "waiting")) return null;
+  if (r.via === "cache") return "Cached";
+  if (r.status === "waiting") return "Waiting";
+  const reason = String(r.reason || "");
+  if (/on disk, importing|files linked|waiting for.*import/i.test(reason)) return "Importing";
+  if (/announced|not released/i.test(reason)) return "Coming";
+  if (/searching/i.test(reason)) return "Searching";
+  const pct = Math.round(Number(r.progress) || 0);
+  if (pct <= 0) return "Grabbing";
+  return `${pct}%`;
+}
+
+/** Per-season Watch vs Importing vs Request vs Coming from files on disk — series AVAILABLE is not S05 Watch. */
 export function tvSeasonChips(
   titleId: string,
   requests: MediaRequest[],
-  titles: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons" | "unreleasedSeasons">[] = [],
-): { season: number; label: "Watch" | "Request" | "Coming" }[] {
+  titles: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons" | "importingSeasons" | "unreleasedSeasons">[] = [],
+): { season: number; label: SeasonChipLabel }[] {
   const keys = new Set(titlePresenceKeys(titleId));
-  const bySeason = new Map<number, "Watch" | "Request" | "Coming">();
+  const bySeason = new Map<number, SeasonChipLabel>();
   for (const t of titles) {
     if (!titleMatchesId(t, titleId)) continue;
     for (const n of t.onDiskSeasons || []) {
@@ -82,6 +119,12 @@ export function tvSeasonChips(
       const season = Number(n);
       if (Number.isFinite(season) && season > 0 && bySeason.get(season) !== "Watch") bySeason.set(season, "Coming");
     }
+    for (const n of t.importingSeasons || []) {
+      const season = Number(n);
+      if (Number.isFinite(season) && season > 0 && bySeason.get(season) !== "Watch" && bySeason.get(season) !== "Coming") {
+        bySeason.set(season, "Importing");
+      }
+    }
   }
   for (const row of requests) {
     if (!titlePresenceKeys(row.titleId).some((k) => keys.has(k))) continue;
@@ -89,6 +132,11 @@ export function tvSeasonChips(
     const n = Number(row.season);
     if (!Number.isFinite(n) || n <= 0) continue;
     if (bySeason.get(n) === "Watch" || bySeason.get(n) === "Coming") continue;
+    if (/on disk, importing|files linked|waiting for.*import/i.test(row.reason || "") && bySeason.get(n) !== "Watch") {
+      bySeason.set(n, "Importing");
+      continue;
+    }
+    if (bySeason.get(n) === "Importing") continue;
     bySeason.set(n, "Request");
   }
   return [...bySeason.entries()]
