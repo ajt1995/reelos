@@ -42,6 +42,22 @@ _EP_1X01 = re.compile(r"(?<![A-Za-z0-9])(\d{1,2})[xX](\d{1,3})(?![A-Za-z0-9])")
 _SEASON_ONLY = re.compile(r"(?:^|[\s._-])[Ss](\d{1,2})(?:[\s._-]|$)")
 _SEASON_WORD = re.compile(r"(?i)(?:^|[\s._-])season[\s._-]*(\d{1,2})(?:[\s._-]|$)")
 _EP_ONLY = re.compile(r"(?:^|[\s._-])[Ee](\d{1,3})(?:[\s._-]|$)")
+_INDEXER_HOST = re.compile(
+    r"(?:uindex|torrenting|torrentcouch|eztvx?|1337x|bitsearch|rarbg|yts|tpb|limetorrents|nyaa)",
+    re.I,
+)
+_TLD = r"org|com|net|to|tv|cc|me|info|xyz"
+_TRACKER_TAG = re.compile(r"^\[+[^\]]+\]+\s*")
+_TRACKER_TAG_TAIL = re.compile(r"\s*\[+[^\]]+\]+\s*$")
+_WWW_HOST_TLD = re.compile(rf"^(?:www\.)?[a-z0-9.-]+\.(?:{_TLD})\s*[-–—:.]+\s*", re.I)
+_WWW_DOT = re.compile(r"^www\.[a-z0-9.-]+\s*[-–—:]+\s*", re.I)
+_WWW_SPACED = re.compile(rf"^www[\s._-]+[a-z0-9]+[\s._-]+(?:{_TLD})\b[\s._:-]*", re.I)
+_TLD_PREFIX_SPACE = re.compile(rf"^(?:{_TLD})\s*[-–—:]+\s+", re.I)
+_TLD_PREFIX_GLUE = re.compile(rf"^(?:{_TLD})[-–—:]+(?=[A-Za-z0-9])", re.I)
+_SXX_EXX_TAIL = re.compile(r"\s*[Ss]\d{1,2}\s*[.\-_ ]?\s*[Ee]\d{1,3}\b.*$")
+_SEASON_WORD_TAIL = re.compile(r"\s+season\s+\d{1,2}\b.*$", re.I)
+_SXX_TAIL = re.compile(r"\s+[Ss]\d{1,2}(?!\d)(?![eE]\d).*$")
+_ROMAN_TAIL = re.compile(r"\s+(?:II|III|IV|VI|VII|VIII|IX)\s+[A-Za-z][A-Za-z0-9]{1,14}$", re.I)
 
 
 def is_media_file(path: str) -> bool:
@@ -89,11 +105,35 @@ def _ep_only(name: str) -> int | None:
     return None
 
 
+def strip_indexer_prefix(raw: str) -> str:
+    """www.UIndex.org - The Rookie / org-Silo → the show name. Same rules as relink_dumps."""
+    s = str(raw or "").strip()
+    orig = s
+    while True:
+        stripped = _TRACKER_TAG.sub("", s).strip()
+        if stripped == s:
+            break
+        s = stripped
+    s = _TRACKER_TAG_TAIL.sub("", s).strip()
+    if _INDEXER_HOST.search(s):
+        s = _WWW_HOST_TLD.sub("", s).strip()
+    s = _WWW_DOT.sub("", s).strip()
+    s = _WWW_SPACED.sub("", s).strip()
+    s = _TLD_PREFIX_SPACE.sub("", s).strip()
+    s = _TLD_PREFIX_GLUE.sub("", s).strip()
+    s = s.lstrip("-_ ").strip()
+    return s or orig
+
+
 def strip_release_tokens(raw: str) -> str:
-    cleaned = re.sub(r"\s+", " ", str(raw or "").replace(".", " ").replace("_", " ")).strip()
+    cleaned = strip_indexer_prefix(raw)
+    cleaned = re.sub(r"\s+", " ", str(cleaned or "").replace(".", " ").replace("_", " ")).strip()
     cleaned = _QUALITY_CUT.split(cleaned, maxsplit=1)[0]
     cleaned = re.split(r"\s[-–]\s*[Ss]\d", cleaned, maxsplit=1)[0]
-    cleaned = re.split(r"(?i)\s+season\s+\d", cleaned, maxsplit=1)[0]
+    cleaned = _SEASON_WORD_TAIL.sub("", cleaned)
+    cleaned = _SXX_EXX_TAIL.sub("", cleaned)
+    cleaned = _SXX_TAIL.sub("", cleaned)
+    cleaned = _ROMAN_TAIL.sub("", cleaned)
     cleaned = _YEAR_TAIL.sub("", cleaned)
     return cleaned.strip(" .-_")
 
@@ -437,13 +477,39 @@ def series_episode_file_count(row: dict) -> int:
         return 0
 
 
+def season_episode_file_count(row: dict, season_number: int) -> int:
+    for season in row.get("seasons") or []:
+        if not isinstance(season, dict):
+            continue
+        try:
+            n = int(season.get("seasonNumber"))
+        except (TypeError, ValueError):
+            continue
+        if n != season_number:
+            continue
+        stats = season.get("statistics") if isinstance(season.get("statistics"), dict) else {}
+        try:
+            return int(stats.get("episodeFileCount") or 0)
+        except (TypeError, ValueError):
+            return 0
+    return 0
+
+
 def folder_already_imported(folder: str, series_rows: list[dict]) -> bool:
-    """True when this dump folder maps to a series Sonarr already has files for."""
-    guess = strip_release_tokens(Path(folder).name)
+    """Skip a dump only when THAT season already has files.
+
+    Named folder without a season token is not skipped — S02–S08 dumps
+    must still import after S01 is in. Coming (episodeCount 0) is not a skip.
+    """
+    name = Path(folder).name
+    guess = strip_release_tokens(name)
     hit = _match_series(series_rows, guess)
     if not hit:
         return False
-    return series_episode_file_count(hit) > 0
+    season = _season_only(name)
+    if season is None:
+        return False
+    return season_episode_file_count(hit, season) > 0
 
 
 def _hw():
@@ -967,6 +1033,10 @@ def _self_test() -> int:
             self.assertEqual(_series_title_guess(path), "The Walking Dead")
             movie = "/mnt/symlinks/radarr/Night.at.the.Museum.2006.2160p.WEB-DL.DDP5.1/Night.at.the.Museum.2006.mkv"
             self.assertEqual(_series_title_guess(movie), "Night at the Museum")
+            uindex = "/mnt/symlinks/sonarr/www.UIndex.org - The.Rookie.S02E14.Casualties.1080p/E14.mkv"
+            self.assertEqual(_series_title_guess(uindex), "The Rookie")
+            silo = "/mnt/symlinks/sonarr/www Torrenting com - Silo/Silo.S02E03.mkv"
+            self.assertEqual(_series_title_guess(silo), "Silo")
 
         def test_expand_scan_folders_per_subfolder_and_dedupe(self):
             import tempfile
@@ -998,11 +1068,35 @@ def _self_test() -> int:
             )
             self.assertLess(LIST_TIMEOUT_SEC, 120)
 
-        def test_folder_already_imported_skips_series_with_files(self):
-            series = [{"id": 9, "title": "The Walking Dead", "statistics": {"episodeFileCount": 6}}]
-            self.assertTrue(folder_already_imported("/symlinks/sonarr/The Walking Dead", series))
-            empty = [{"id": 9, "title": "The Walking Dead", "statistics": {"episodeFileCount": 0}}]
-            self.assertFalse(folder_already_imported("/symlinks/sonarr/The Walking Dead", empty))
+        def test_folder_already_imported_is_per_season(self):
+            series = [
+                {
+                    "id": 9,
+                    "title": "The Rookie",
+                    "statistics": {"episodeFileCount": 20},
+                    "seasons": [
+                        {"seasonNumber": 1, "statistics": {"episodeFileCount": 20, "episodeCount": 20}},
+                        {"seasonNumber": 2, "statistics": {"episodeFileCount": 0, "episodeCount": 20}},
+                        {"seasonNumber": 9, "statistics": {"episodeFileCount": 0, "episodeCount": 0}},
+                    ],
+                }
+            ]
+            self.assertFalse(folder_already_imported("/symlinks/sonarr/The Rookie", series))
+            self.assertTrue(
+                folder_already_imported(
+                    "/symlinks/sonarr/www.UIndex.org - The.Rookie.S01E01",
+                    series,
+                )
+            )
+            self.assertFalse(
+                folder_already_imported(
+                    "/symlinks/sonarr/www.UIndex.org - The.Rookie.S02E14",
+                    series,
+                )
+            )
+            self.assertFalse(
+                folder_already_imported("/symlinks/sonarr/The.Rookie.S09.2160p", series)
+            )
             notes = []
             global log_wire
             prev = log_wire
@@ -1012,10 +1106,14 @@ def _self_test() -> int:
 
                 with tempfile.TemporaryDirectory() as d:
                     base = Path(d) / "sonarr"
-                    (base / "The Walking Dead").mkdir(parents=True)
-                    (base / "Brand New Show 2010").mkdir()
+                    (base / "The Rookie").mkdir(parents=True)
+                    (base / "www.UIndex.org - The.Rookie.S01E01").mkdir()
+                    (base / "www.UIndex.org - The.Rookie.S02E14").mkdir()
                     out = _expand_scan_folders([str(base)], series_rows=series)
-                self.assertEqual([Path(p).name for p in out], ["Brand New Show 2010"])
+                names = [Path(p).name for p in out]
+                self.assertIn("The Rookie", names)
+                self.assertIn("www.UIndex.org - The.Rookie.S02E14", names)
+                self.assertNotIn("www.UIndex.org - The.Rookie.S01E01", names)
                 self.assertTrue(any("already has files" in n for n in notes))
             finally:
                 log_wire = prev

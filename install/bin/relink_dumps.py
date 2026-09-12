@@ -18,13 +18,49 @@ MEDIA_EXT = (".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts")
 CATEGORIES = ("sonarr", "radarr")
 SKIP_DUMP_NAMES = {"radarr", "sonarr", "anime", "music", "debrid"}
 _SEASON_TAIL = re.compile(r"(?:s\d{1,2}(?:e\d{1,3})?|season\d{1,2})$")
+_SEASON_IN_STEM = re.compile(r"s\d{1,2}(?:e\d{1,3})?.*$")
 _TRACKER_TAG = re.compile(r"^\[+[^\]]+\]+\s*")
+_TRACKER_TAG_TAIL = re.compile(r"\s*\[+[^\]]+\]+\s*$")
 _QUALITY_SPLIT = re.compile(r"(?:19|20)\d{2}|2160p|1080p|720p|webdl|webrip|bluray|bdremux|remux")
+_INDEXER_HOST = re.compile(
+    r"(?:uindex|torrenting|torrentcouch|eztvx?|1337x|bitsearch|rarbg|yts|tpb|limetorrents|nyaa)",
+    re.I,
+)
+_TLD = r"org|com|net|to|tv|cc|me|info|xyz"
+_WWW_HOST_TLD = re.compile(rf"^(?:www\.)?[a-z0-9.-]+\.(?:{_TLD})\s*[-–—:.]+\s*", re.I)
+_WWW_DOT = re.compile(r"^www\.[a-z0-9.-]+\s*[-–—:]+\s*", re.I)
+_WWW_SPACED = re.compile(rf"^www[\s._-]+[a-z0-9]+[\s._-]+(?:{_TLD})\b[\s._:-]*", re.I)
+_TLD_PREFIX_SPACE = re.compile(rf"^(?:{_TLD})\s*[-–—:]+\s+", re.I)
+_TLD_PREFIX_GLUE = re.compile(rf"^(?:{_TLD})[-–—:]+(?=[A-Za-z0-9])", re.I)
+_DUMP_SEASON = re.compile(r"(?i)(?:^|[\s._-])s(\d{1,2})(?:[\s._-]*e\d{1,3}|[\s._-]|$)")
+_DUMP_SEASON_WORD = re.compile(r"(?i)(?:^|[\s._-])season[\s._-]*(\d{1,2})(?:[\s._-]|$)")
+_ROMAN_TAIL = re.compile(r"(?:ii|iii|iv|vi|vii|viii|ix)[a-z][a-z0-9]{1,14}$")
+STEM_MIN = 4
+
+
+def strip_indexer_prefix(raw: str) -> str:
+    """www.UIndex.org - The Rookie / org-Silo / [TorrentCouch.com] Show → the show name."""
+    s = str(raw or "").strip()
+    orig = s
+    while True:
+        stripped = _TRACKER_TAG.sub("", s).strip()
+        if stripped == s:
+            break
+        s = stripped
+    s = _TRACKER_TAG_TAIL.sub("", s).strip()
+    if _INDEXER_HOST.search(s):
+        s = _WWW_HOST_TLD.sub("", s).strip()
+    s = _WWW_DOT.sub("", s).strip()
+    s = _WWW_SPACED.sub("", s).strip()
+    s = _TLD_PREFIX_SPACE.sub("", s).strip()
+    s = _TLD_PREFIX_GLUE.sub("", s).strip()
+    s = s.lstrip("-_ ").strip()
+    return s or orig
 
 
 def relink_stem(name: str) -> str:
     """Title stem only — do not match Museum into a Walking Dead dump via 20-char prefix."""
-    raw = str(name or "")
+    raw = strip_indexer_prefix(name)
     while True:
         stripped = _TRACKER_TAG.sub("", raw).strip()
         if stripped == raw:
@@ -32,8 +68,24 @@ def relink_stem(name: str) -> str:
         raw = stripped
     s = re.sub(r"[^a-z0-9]+", "", raw.lower())
     s = _QUALITY_SPLIT.split(s, maxsplit=1)[0]
+    s = _SEASON_IN_STEM.sub("", s)
     s = _SEASON_TAIL.sub("", s)
+    s = _ROMAN_TAIL.sub("", s)
     return s
+
+
+def dump_season(name: str) -> int | None:
+    """S02 / Season 2 from a dump folder. Years are not seasons."""
+    s = strip_indexer_prefix(name)
+    if re.search(r"(?:19|20)\d{2}", s) and not re.search(r"(?i)s\d{1,2}|season", s):
+        return None
+    m = _DUMP_SEASON.search(s)
+    if m:
+        return int(m.group(1))
+    m = _DUMP_SEASON_WORD.search(s)
+    if m:
+        return int(m.group(1))
+    return None
 
 
 def title_stems(titles: list[str]) -> list[str]:
@@ -41,7 +93,7 @@ def title_stems(titles: list[str]) -> list[str]:
     seen: set[str] = set()
     for raw in titles:
         stem = relink_stem(raw)
-        if len(stem) < 8 or stem in seen:
+        if len(stem) < STEM_MIN or stem in seen:
             continue
         seen.add(stem)
         out.append(stem)
@@ -49,13 +101,13 @@ def title_stems(titles: list[str]) -> list[str]:
 
 
 def stems_equal(a: str, b: str) -> bool:
-    return bool(a) and a == b and len(a) >= 8
+    return bool(a) and a == b and len(a) >= STEM_MIN
 
 
 def classify_pack(pack_name: str, wanted: dict | None) -> str | None:
     """Map a FUSE pack onto sonarr or radarr using *arr title stems. Ambiguous → None."""
     stem = relink_stem(pack_name)
-    if len(stem) < 8:
+    if len(stem) < STEM_MIN:
         return None
     wanted = wanted or {}
     sonarr = [s for s in (wanted.get("sonarr") or []) if stems_equal(s, stem)]
@@ -139,7 +191,7 @@ def fuse_catalog(all_root: Path) -> dict[str, Path]:
 
 def best_pack_for_stem(stem: str, catalog: dict[str, Path], prefer_name: str = "") -> Path | None:
     """Pick one FUSE pack for a title stem. Prefer the *arr folder name over tracker dumps."""
-    if len(stem) < 8:
+    if len(stem) < STEM_MIN:
         return None
     hits = [p for name, p in catalog.items() if stems_equal(relink_stem(name), stem)]
     if not hits:
@@ -346,6 +398,23 @@ def _self_test() -> int:
             self.assertEqual(relink_stem("Justified.S01.BDRemux.1080p.TeamHD"), "justified")
             self.assertEqual(relink_stem("Justified"), "justified")
             self.assertNotEqual(relink_stem("Justified.City.Primeval.S01E01.2160p"), "justified")
+
+        def test_indexer_prefix_maps_to_named_title(self):
+            self.assertEqual(strip_indexer_prefix("www.UIndex.org - The Rookie"), "The Rookie")
+            self.assertEqual(strip_indexer_prefix("www.UIndex.org    -    The.Rookie.S02E14"), "The.Rookie.S02E14")
+            self.assertEqual(strip_indexer_prefix("www Torrenting com - Silo"), "Silo")
+            self.assertEqual(strip_indexer_prefix("org-Silo"), "Silo")
+            self.assertEqual(relink_stem("www.UIndex.org - The.Rookie.S02E14.Casualties.1080p"), "therookie")
+            self.assertEqual(relink_stem("www Torrenting com - Silo"), "silo")
+            self.assertEqual(relink_stem("www.Torrenting.com - Silo S02E03 Solo"), "silo")
+            self.assertEqual(relink_stem("Reacher II Ponte"), "reacher")
+            self.assertTrue(stems_equal(relink_stem("The Rookie"), relink_stem("www.UIndex.org - The.Rookie.S02")))
+            self.assertTrue(stems_equal(relink_stem("Silo"), relink_stem("org-Silo")))
+            self.assertEqual(dump_season("www.UIndex.org - The.Rookie.S02E14"), 2)
+            self.assertEqual(dump_season("The Rookie S01"), 1)
+            self.assertIsNone(dump_season("The Rookie"))
+            self.assertIsNone(dump_season("Night.at.the.Museum.2006.2160p"))
+
 
         def test_classify_uses_wanted_only(self):
             wanted = wanted_from_arr_rows(

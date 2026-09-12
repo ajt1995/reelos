@@ -61,6 +61,22 @@ export function seasonChipLabel(
   return "Request";
 }
 
+/** Accordion "Request this season" follows the chip — not whether episode rows already say Requested. */
+export function seasonShowsRequestButton(
+  opts: {
+    blocked?: boolean;
+    onDisk?: boolean;
+    importing?: boolean;
+    unreleased?: boolean;
+    removedHere?: boolean;
+    open?: boolean;
+    loading?: boolean;
+  } = {},
+): boolean {
+  if (opts.blocked || !opts.open || opts.loading) return false;
+  return seasonChipKind(opts) === "request";
+}
+
 /** Fixture: announced, episodeCount 0, airDate future → Coming, not Request/Watch. */
 export function seasonIsUnreleasedFact(
   fact: {

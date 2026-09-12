@@ -35,6 +35,8 @@ import {
   realSeasonNumbers,
   seasonCount,
   seasonIsUnreleased,
+  applyRequestMediaType,
+  seasonUnreleasedForRequest,
   seasonChipKind,
   seasonChipLabel,
   seasonFactsFrom,
@@ -61,6 +63,7 @@ import {
   findLibraryTitle,
   lookupPayloadForId,
   overlayLookupWithLibrary,
+  seerrCatalogSeasons,
   pickSeerrSearchForLibrary,
   discoverBrowseSeerrPath,
   discoverBrowseKind,
@@ -84,6 +87,13 @@ test("TV ids stay distinct from movie tmdb ids", () => {
   });
   assert.equal(titleIdFor("tv", 80566), "tmdb-tv-80566");
   assert.equal(titleIdFor("movie", 550), "tmdb-550");
+  const darkKnight = parseTitleId("tmdb-155");
+  const asTv = applyRequestMediaType(darkKnight, "tv", "tmdb-155");
+  assert.equal(asTv.mediaType, "movie");
+  assert.equal(asTv.titleId, "tmdb-155");
+  const thirdRock = applyRequestMediaType(parseTitleId("tmdb-tv-155"), "movie", "tmdb-tv-155");
+  assert.equal(thirdRock.mediaType, "tv");
+  assert.equal(thirdRock.titleId, "tmdb-tv-155");
   assert.deepEqual(parseTitleId("73ceff573dc30bebc3fcf26f61de07b25f927a74"), {
     hash: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
     titleId: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
@@ -219,6 +229,27 @@ test("announced season with 0 episodes and future airDate is Coming, not Request
   assert.equal(seasonIsUnreleased(siloS03, now), false);
   assert.equal(seasonIsUnreleased(sonarrTba, now), true);
   assert.equal(seasonIsUnreleased(airingMissing, now), false);
+  const sonarrEmptyReleased = {
+    seasonNumber: 2,
+    monitored: false,
+    statistics: { episodeFileCount: 0, episodeCount: 0, totalEpisodeCount: 13 },
+  };
+  const seerrAired = { seasonNumber: 2, episodeCount: 13, airDate: "2009-03-08" };
+  assert.equal(seasonIsUnreleased(sonarrEmptyReleased, now), true, "empty Sonarr S02 looks Coming");
+  assert.equal(
+    seasonUnreleasedForRequest({ sonarrSeason: sonarrEmptyReleased, seerrSeason: seerrAired }, now),
+    false,
+    "Breaking Bad S02 still Request when Seerr has aired episodes",
+  );
+  assert.equal(
+    seasonUnreleasedForRequest({ sonarrSeason: sonarrTba, seerrSeason: siloS04 }, now),
+    true,
+    "Silo S04 stays Coming",
+  );
+  const plugin = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
+  assert.match(plugin, /applyRequestMediaType/);
+  assert.match(plugin, /seasonUnreleasedForRequest/);
+  assert.doesNotMatch(plugin, /bodyType !== parsed\.mediaType/);
   assert.equal(seasonChipKind({ unreleased: true }), "coming");
   assert.equal(seasonChipKind({ importing: true }), "importing");
   assert.equal(seasonChipKind({ importing: true, unreleased: true }), "coming");
@@ -305,6 +336,46 @@ test("announced season with 0 episodes and future airDate is Coming, not Request
   assert.equal(payload.reason, UNRELEASED_SEASON_COPY);
   assert.deepEqual(payload.unreleasedSeasons, [4]);
   assert.notEqual(payload.status, "downloaded");
+  const mediaInfoOnlyRequested = seerrSearchHit({
+    id: 125988,
+    mediaType: "tv",
+    name: "Silo",
+    seasons: [siloS03, siloS04],
+    mediaInfo: { seasons: [{ seasonNumber: 1, episodeCount: 10 }] },
+  });
+  assert.deepEqual(mediaInfoOnlyRequested.unreleasedSeasons, [4]);
+  assert.equal(seerrCatalogSeasons({ seasons: [siloS04], mediaInfo: { seasons: [{ seasonNumber: 1 }] } })[0].seasonNumber, 4);
+  const bbHit = seerrSearchHit({
+    id: 1396,
+    mediaType: "tv",
+    name: "Breaking Bad",
+    seasons: [
+      { seasonNumber: 1, episodeCount: 7, airDate: "2008-01-20" },
+      { seasonNumber: 2, episodeCount: 13, airDate: "2009-03-08" },
+      { seasonNumber: 5, episodeCount: 16, airDate: "2012-07-15" },
+    ],
+  });
+  const bbPayload = titleRequestSeasonPayload({
+    id: "tmdb-tv-1396",
+    season: 2,
+    parsed: parseTitleId("tmdb-tv-1396"),
+    facts: {
+      series: [
+        {
+          tmdbId: 1396,
+          seasons: [
+            { seasonNumber: 4, statistics: { episodeFileCount: 0, episodeCount: 0, totalEpisodeCount: 13 } },
+            { seasonNumber: 5, statistics: { episodeFileCount: 0, episodeCount: 0, totalEpisodeCount: 16 } },
+          ],
+        },
+      ],
+      arrIndex: buildArrIndex({ series: [{ tmdbId: 1396, seasons: [{ seasonNumber: 1, statistics: { episodeFileCount: 7 } }] }] }),
+    },
+    title: bbHit,
+    honest: { titleId: "tmdb-tv-1396", status: "downloading", engine: "grabbing", reason: "Searching — no file yet" },
+  });
+  assert.deepEqual(bbPayload.unreleasedSeasons, []);
+  assert.notEqual(bbPayload.reason, UNRELEASED_SEASON_COPY);
   const accordion = readFileSync(join(root, "src/components/season-episode-accordion.tsx"), "utf8");
   const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
   assert.match(accordion, /seasonChipLabel/);

@@ -7,6 +7,7 @@ import {
   EPISODE_STATUSES,
   seasonChipLabel,
   seasonIsUnreleasedFact,
+  seasonShowsRequestButton,
   UNRELEASED_SEASON_COPY,
 } from "./episode-status.ts";
 
@@ -43,4 +44,14 @@ test("announced season fixture is Coming, not Request or Watch", () => {
   assert.notEqual(seasonChipLabel({ importing: true }), "Watch");
   assert.equal(seasonChipLabel({}), "Request");
   assert.match(UNRELEASED_SEASON_COPY, /not released/i);
+  assert.equal(seasonShowsRequestButton({ open: true, loading: false }), true);
+  assert.equal(
+    seasonShowsRequestButton({ open: true, loading: false, onDisk: false, importing: false, unreleased: false }),
+    true,
+  );
+  assert.equal(seasonShowsRequestButton({ open: true, loading: false, unreleased: true }), false);
+  assert.equal(seasonShowsRequestButton({ open: true, loading: false, importing: true }), false);
+  assert.equal(seasonShowsRequestButton({ open: true, loading: false, onDisk: true }), false);
+  assert.equal(seasonShowsRequestButton({ open: true, loading: true }), false);
+  assert.equal(seasonShowsRequestButton({ open: false, loading: false }), false);
 });
