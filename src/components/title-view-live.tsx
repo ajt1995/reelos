@@ -178,13 +178,9 @@ export function TitleView({ id }: { id: string }) {
   });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
   const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
-  const thisSeasonOnBox =
-    !series ||
-    diskSeasons.includes(season) ||
-    request?.status === "available" ||
-    engineStatus === "downloaded" ||
-    engineStatus === "available";
+  const thisSeasonOnBox = !series || diskSeasons.includes(season);
   // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
+  // Seerr AVAILABLE / engine downloaded is not S05·in.
   const onBox = series ? thisSeasonOnBox : inJellyfin || inLibrary;
   const available = onBox;
   const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
@@ -249,7 +245,7 @@ export function TitleView({ id }: { id: string }) {
                     }
                   >
                     Season {n}
-                    {diskSeasons.includes(n) ? " · in" : ""}
+                    {diskSeasons.includes(n) ? " · Watch" : " · Request"}
                   </button>
                 ))
               )}
@@ -268,7 +264,7 @@ export function TitleView({ id }: { id: string }) {
                   }
                 >
                   Season {n}
-                  {diskSeasons.includes(n) ? " · in" : ""}
+                  {diskSeasons.includes(n) ? " · Watch" : " · Request"}
                 </button>
               ))}
             </div>

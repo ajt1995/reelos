@@ -33,6 +33,10 @@ import {
   pickSeerrSearchForLibrary,
   normalizeMediaType,
   titleIdFor,
+  onDiskSeasonsFor,
+  decorateTitlesWithDiskSeasons,
+  titleRequestSeasonPayload,
+  mergeRequestListTitles,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -53,6 +57,7 @@ import {
   rememberRemovedTitleIds,
   removeLibraryTitle,
   removedIdsStillOnShelf,
+  writeRemovedTitleIds,
 } from "./reelos-library-remove.mjs";
 import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
@@ -68,12 +73,27 @@ import {
   serveLibrary,
   writeLibraryCacheFile,
   dedupeLibraryTitles,
+  healRemovedIds,
 } from "./reelos-library.mjs";
 
 const jellyfinTokens = createTokenCache();
 const libraryCache = createLibraryCache();
 const seeded = readLibraryCacheFile(LIBRARY_CACHE_FILE);
 if (seeded) libraryCache.write(seeded.titles, { now: seeded.at, complete: seeded.complete });
+
+function healedLibraryRemovedIds() {
+  const prev = readRemovedTitleIds();
+  const next = healRemovedIds(prev, libraryCache.read()?.titles || []);
+  const same = prev.length === next.length && prev.every((id, i) => id === next[i]);
+  if (!same) {
+    try {
+      writeRemovedTitleIds(next);
+    } catch {
+      /* */
+    }
+  }
+  return next;
+}
 
 function latchStackInstalled() {
   try {
@@ -401,7 +421,14 @@ async function handleLookup(req, res) {
       } else {
         missingTmdb = !libraryTitle;
       }
-      const payload = lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb });
+      const facts = await loadPresenceFacts().catch(() => null);
+      const payload = lookupPayloadForId({
+        seerrTitle,
+        libraryTitle,
+        missingTmdb,
+        onDiskSeasons: onDiskSeasonsFor(parsed, facts?.arrIndex),
+      });
+      if (facts) payload.titles = decorateTitlesWithDiskSeasons(payload.titles || [], facts);
       send(res, 200, payload);
       return;
     }
@@ -1402,7 +1429,12 @@ async function handleRequestList(res) {
     }
     const assembled = assembleRequestPayload(requests, facts, mediaItems);
     const filled = await attachSeerrDetailTitles(assembled.requests, { seerrFetch, key });
-    send(res, 200, { requests: filled.rows, titles: filled.titles, engine: "seerr", pipeline: assembled.pipeline });
+    send(res, 200, {
+      requests: filled.rows,
+      titles: mergeRequestListTitles(filled.titles, facts),
+      engine: "seerr",
+      pipeline: assembled.pipeline,
+    });
   } catch (e) {
     send(res, 200, { requests: [], titles: [], error: String(e) });
   }
@@ -1421,16 +1453,25 @@ async function handleRequestStatus(req, res) {
   }
   try {
     const parsed = await resolveLiveParsed(parseTitleId(id));
+    const seasonRaw = u.searchParams.get("season");
+    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
     if (!parsed?.tmdb) {
-      if (libraryHasTitle(titlesForResolve(), id)) {
-        send(res, 200, {
-          status: "downloaded",
-          engine: "seerr",
-          titleId: id,
-          progress: 100,
-          requestStatus: "available",
-          reason: "On this box",
-        });
+      const titles = titlesForResolve();
+      if (libraryHasTitle(titles, id)) {
+        const facts = await loadPresenceFacts().catch(() => ({ arrIndex: null, libraryTitles: titles }));
+        send(
+          res,
+          200,
+          titleRequestSeasonPayload({
+            id,
+            season,
+            parsed,
+            facts,
+            libraryTitles: facts.libraryTitles || titles,
+            honest: { titleId: id, status: "unknown", engine: "unknown" },
+            title: findLibraryTitle(titles, id),
+          }),
+        );
         return;
       }
       send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
@@ -1440,8 +1481,6 @@ async function handleRequestStatus(req, res) {
     const r = await seerrFetch(path, { key, ms: 15000 });
     const media = r.json?.mediaInfo || r.json?.media || {};
     const reqs = Array.isArray(media.requests) ? media.requests : [];
-    const seasonRaw = u.searchParams.get("season");
-    const season = seasonRaw != null && seasonRaw !== "" ? Number(seasonRaw) : undefined;
     const last = pickSeerrRequestForTitle(reqs, {
       media: { ...media, tmdbId: parsed.tmdb },
       mediaType: parsed.mediaType,
@@ -1450,22 +1489,21 @@ async function handleRequestStatus(req, res) {
     const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
     const facts = await loadPresenceFacts();
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
-    const status = honest.engine || "unknown";
-    if (status === "downloaded") await jellyfinRefresh(id);
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
       parsed,
     );
-    send(res, 200, {
-      status,
-      engine: "seerr",
-      title: title?.title,
-      titleId: mapped.titleId,
-      seasons: title?.seasons,
-      seasonList: title?.seasonList,
-      progress: honest.status === "available" ? 100 : honest.progress,
-      requestStatus: honest.status,
+    const body = titleRequestSeasonPayload({
+      id,
+      season,
+      parsed,
+      facts,
+      libraryTitles: facts.libraryTitles || titlesForResolve(),
+      honest,
+      title,
     });
+    if (body.status === "downloaded") await jellyfinRefresh(id);
+    send(res, 200, body);
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });
   }
@@ -2162,7 +2200,7 @@ async function handleLibrary(req, res) {
     url: req.url || "/api/library",
     host,
     cache: libraryCache,
-    removedIds: readRemovedTitleIds(),
+    removedIds: healedLibraryRemovedIds(),
     getAuth: async () => {
       const a = answers();
       return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
@@ -2318,6 +2356,7 @@ async function handleReady(req, res) {
         url: `/api/library?limit=${encodeURIComponent(String(limit))}`,
         host,
         cache: libraryCache,
+        removedIds: healedLibraryRemovedIds(),
         getAuth: async () => {
           const a = answers();
           return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");

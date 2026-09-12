@@ -110,7 +110,7 @@ test("stack: VERSION / channel / stamps agree (1.2.50.51)", () => {
   assert.match(chan.notes[12], /TorBox/);
   assert.match(chan.notes[12], /DirectPlay/);
   assert.match(chan.notes[12], /prebuilt hashed UI/);
-  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: \[\.\.\.shelf, \.\.\.remoteTitles\] \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
 });

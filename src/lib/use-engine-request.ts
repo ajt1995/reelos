@@ -20,7 +20,7 @@ export function useEngineRequest(id: string, season?: number) {
     let stop = false;
     const ac = new AbortController();
     void fetch("/api/library", { cache: "no-store", signal: ac.signal })
-      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string }[] }>)
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string; onDiskSeasons?: number[] }[] }>)
       .then((j) => {
         if (stop) return;
         const hit = (j.titles || []).find((t) => titleMatchesId(t, id));
@@ -28,8 +28,11 @@ export function useEngineRequest(id: string, season?: number) {
         if (hit) {
           aliases = [...new Set([...aliases, ...titlePresenceKeys(hit.id, hit.ids || [])])];
           setExtraIds(aliases);
+          const disk = seasonNumbersFrom(hit.onDiskSeasons);
+          if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
         }
-        if (!hit || id.startsWith("tmdb-tv-")) return;
+        // TV: series-in-library is not every season. Do not mark a whole-show row available.
+        if (!hit || id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || id.startsWith("jf-")) return;
         useReelStore.setState((s) => ({
           requests: s.requests.map((x) =>
             x.titleId === id && x.status !== "available" && x.season == null
@@ -59,7 +62,7 @@ export function useEngineRequest(id: string, season?: number) {
           const fromApi = seasonNumbersFrom(j.seasonList);
           if (fromApi.length) setSeasonList(fromApi);
           const disk = seasonNumbersFrom(j.onDiskSeasons);
-          if (disk.length) setOnDiskSeasons(disk);
+          if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
           const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
           const apiProg =
             typeof j.progress === "number"
@@ -67,12 +70,17 @@ export function useEngineRequest(id: string, season?: number) {
               : typeof j.percent === "number"
                 ? j.percent
                 : undefined;
+          const diskNow = seasonNumbersFrom(j.onDiskSeasons);
+          const pollStatus =
+            season != null && (j.status === "downloaded" || j.status === "available") && !diskNow.includes(Number(season))
+              ? "unknown"
+              : j.status;
           useReelStore.setState((s) => ({
             requests: applyTitleRequestPoll(s.requests, {
               titleId: id,
               extraIds: pollIds,
               season,
-              status: j.status,
+              status: pollStatus,
               progress: apiProg,
               reason: j.reason,
             }),

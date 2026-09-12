@@ -28,8 +28,9 @@ export function useSyncRequests() {
         useReelStore.getState().rememberTitles?.(titles);
         const live = Array.isArray(j.requests) ? j.requests : [];
         useReelStore.setState((s) => {
+          const overlayTitles = [...s.shelf, ...titles];
           const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
-            titles: s.shelf,
+            titles: overlayTitles,
           });
           return { requests };
         });

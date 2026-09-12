@@ -36,6 +36,8 @@ import {
   jellyfinHasPrimaryImage,
   UNKNOWN_ON_BOX,
   libraryRowHidden,
+  homeShelfRows,
+  healRemovedIds,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -756,7 +758,7 @@ test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.deepEqual(out[0].onDiskSeasons, [4]);
 });
 
-test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster", () => {
+test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.deepEqual(
     seasonsFromDumpNames(["Rick And Morty S04E01 Edge Of Tomorty.mkv", "Rick And Morty S04E10.mkv"]),
     [4],
@@ -780,4 +782,49 @@ test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster",
 test("Jellyfin Items URL asks for Path so hash dumps can be named from files", () => {
   assert.match(libraryItemsUrl(), /Fields=Path%2CProviderIds%2CImageTags|Fields=Path,ProviderIds,ImageTags/);
   assert.doesNotMatch(libraryItemsUrl(), /Overview/);
+});
+
+test("Home hides the hash leftover when named Rick is on the shelf", () => {
+  const named = {
+    id: "tvdb-275274",
+    kind: "tv",
+    title: "Rick and Morty",
+    year: 2013,
+    poster: "/api/jf/Items/named/Images/Primary",
+    ids: ["tvdb-275274", "tmdb-tv-60625", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    jellyfinId: "3d32e281cfcb09816952099c4ff468f6",
+  };
+  const hash = {
+    id: "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    kind: "tv",
+    title: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    year: 0,
+    poster: "",
+    ids: ["73ceff573dc30bebc3fcf26f61de07b25f927a74", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    jellyfinId: "103ae87fbbbd9bb920ee3803dcffc570",
+    fromHashDump: true,
+  };
+  const shown = homeShelfRows([hash, named]);
+  assert.deepEqual(shown.map((t) => t.id), ["tvdb-275274"]);
+  assert.equal(libraryRowHidden(named, [
+    "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    "tvdb-275274",
+    "tmdb-60625",
+    "tmdb-tv-60625",
+  ]), false);
+  assert.deepEqual(
+    healRemovedIds(
+      [
+        "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+        "jf-103ae87fbbbd9bb920ee3803dcffc570",
+        "tvdb-275274",
+        "tmdb-60625",
+        "tmdb-tv-60625",
+      ],
+      [named],
+    ).some((id) => /^(tmdb-|tvdb-)/.test(id)),
+    false,
+  );
+  assert.deepEqual(seasonsFromDumpNames(["Season 04", "Rick And Morty S04E01.mkv"]), [4]);
 });
