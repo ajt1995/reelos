@@ -91,6 +91,16 @@ test("autoinstall: reelos, GitHub main, firstboot once, :80 wizard, no secrets",
 
   assert.match(wizard, /const TOTAL = 7/);
   assert.match(firstboot, /ConditionPathExists=!\/var\/lib\/reelos\/stack-installed/);
+
+  const appliance = read("install/reelos-install.sh");
+  assert.equal(appliance, read("daemon/install.sh"));
+  assert.match(appliance, /deb\.nodesource\.com\/setup_22\.x/);
+  assert.match(appliance, /Paste a TorBox key/);
+  assert.doesNotMatch(appliance, /Real-Debrid key/);
+  const nInstall = spawnSync("bash", ["-n", join(root, "install/reelos-install.sh")], {
+    encoding: "utf8",
+  });
+  assert.equal(nInstall.status, 0, nInstall.stderr);
 });
 
 test("reelos-make-usb.sh dry-run stages nocloud without writing a device", () => {

@@ -117,13 +117,17 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 enable_unit docker
 
-# apt nodejs+npm first (fixes ExecStart 127). Nodesource only if still missing.
-if ! command -v npm >/dev/null 2>&1; then
-  apt-get install -y nodejs npm || true
-fi
-if ! command -v npm >/dev/null 2>&1; then
+# Node 22 — Ubuntu 24.04 apt is Node 18; start:box / Vite 8 need 20+.
+# Do not settle for distro nodejs if it is too old (that left ExecStart on 18).
+node_major() {
+  node -p "parseInt(process.versions.node,10)||0" 2>/dev/null || echo 0
+}
+if ! command -v node >/dev/null 2>&1 || [ "$(node_major)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - || true
   apt-get install -y nodejs || true
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  apt-get install -y nodejs npm || true
 fi
 
 hostnamectl set-hostname reelos 2>/dev/null || hostname reelos
@@ -244,6 +248,6 @@ systemctl disable getty@tty1.service >/dev/null 2>&1 || true
 echo
 echo "ReelOS is up."
 echo "From another device on this network, open http://reelos.local"
-echo "First boot is the seven-question wizard. Paste a Real-Debrid key to ping the live account."
+echo "First boot is the seven-question wizard. Paste a TorBox key to ping the live account."
 echo "This installer does not seed indexers and does not fetch copyrighted media."
 

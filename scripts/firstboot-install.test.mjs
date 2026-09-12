@@ -62,4 +62,7 @@ test("install.sh twins and firstboot unit stay the stack-installed latch", () =>
   assert.equal(read("install/systemd/reelos-firstboot.service"), read("firstboot/reelos-firstboot.service"));
   assert.match(read("install/systemd/reelos-firstboot.service"), /ConditionPathExists=!\/var\/lib\/reelos\/stack-installed/);
   assert.equal(read("daemon/reelos-update.sh").includes("enable reelos-firstboot"), false);
+  assert.match(install, /deb\.nodesource\.com\/setup_22\.x/);
+  assert.match(install, /Paste a TorBox key/);
+  assert.doesNotMatch(install, /Real-Debrid key/);
 });
