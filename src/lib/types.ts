@@ -74,6 +74,21 @@ export interface Title {
   ids?: string[];
   maxQuality: "1080p" | "4k";
   popularity: number;
+  inLibrary?: boolean;
+  collection?: { id: number; name: string; poster?: string };
+}
+
+export interface PersonHit {
+  id: number;
+  name: string;
+  poster?: string;
+  knownForDepartment?: string;
+}
+
+export interface CollectionHit {
+  id: number;
+  name: string;
+  poster?: string;
 }
 
 export interface MediaRequest {

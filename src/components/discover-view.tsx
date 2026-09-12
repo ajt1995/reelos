@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
-import type { Kind, MediaRequest, Title } from "@/lib/types";
+import type { CollectionHit, Kind, MediaRequest, PersonHit, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
 
 function isKind(t: Title | undefined, want: Kind) {
@@ -17,6 +18,8 @@ function isKind(t: Title | undefined, want: Kind) {
 export function DiscoverView() {
   const [q, setQ] = useState("");
   const [remoteHits, setRemoteHits] = useState<Title[]>([]);
+  const [peopleHits, setPeopleHits] = useState<PersonHit[]>([]);
+  const [collectionHits, setCollectionHits] = useState<CollectionHit[]>([]);
   const [looking, setLooking] = useState(false);
   const [lookupErr, setLookupErr] = useState<string | null>(null);
   const [browseMovies, setBrowseMovies] = useState<Title[]>([]);
@@ -120,6 +123,8 @@ export function DiscoverView() {
     const term = q.trim();
     if (term.length < 2) {
       setRemoteHits([]);
+      setPeopleHits([]);
+      setCollectionHits([]);
       setLookupErr(null);
       setLooking(false);
       return;
@@ -132,20 +137,31 @@ export function DiscoverView() {
       void fetch(`/api/lookup?q=${encodeURIComponent(term)}`, { cache: "no-store", signal: ac.signal })
         .then(async (res) => {
           if (!res.ok) throw new Error(`lookup ${res.status}`);
-          return res.json() as Promise<{ titles?: Title[]; error?: string | null }>;
+          return res.json() as Promise<{
+            titles?: Title[];
+            people?: PersonHit[];
+            collections?: CollectionHit[];
+            error?: string | null;
+          }>;
         })
         .then((r) => {
           if (cancelled) return;
           const titles = Array.isArray(r?.titles) ? r.titles : [];
+          const people = Array.isArray(r?.people) ? r.people : [];
+          const collections = Array.isArray(r?.collections) ? r.collections : [];
           rememberCatalogTitles(titles);
           rememberTitles?.(titles);
           setRemoteHits(titles);
-          setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
+          setPeopleHits(people);
+          setCollectionHits(collections);
+          setLookupErr(titles.length || people.length || collections.length ? null : r?.error || "Seerr returned no titles");
           setLooking(false);
         })
         .catch((e) => {
           if (cancelled || e?.name === "AbortError") return;
           setRemoteHits([]);
+          setPeopleHits([]);
+          setCollectionHits([]);
           setLookupErr(String(e?.name === "AbortError" ? "Seerr lookup timed out. Try the search again." : e));
           setLooking(false);
         });
@@ -166,17 +182,65 @@ export function DiscoverView() {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Find a title"
+          placeholder="Find a title or actor"
           className="h-12 w-full rounded-2xl bg-card pl-11 pr-4 text-sm shadow-[var(--shadow-border)] placeholder:text-faint"
         />
       </div>
       {q.trim().length >= 2 ? (
-        hits.length > 0 ? (
-          <Row label="Results">
-            {hits.map((t) => (
-              <TitleCard key={t.id} title={t} />
-            ))}
-          </Row>
+        hits.length > 0 || peopleHits.length > 0 || collectionHits.length > 0 ? (
+          <>
+            {peopleHits.length ? (
+              <section className="mt-8">
+                <h2 className="font-display text-xl font-semibold tracking-tight">People</h2>
+                <ul className="mt-3 divide-y divide-border">
+                  {peopleHits.map((p) => (
+                    <li key={p.id}>
+                      <Link to="/person/$id" params={{ id: String(p.id) }} className="flex items-center gap-3 py-3">
+                        {p.poster ? (
+                          <img src={p.poster} alt="" className="size-12 rounded-full object-cover" />
+                        ) : (
+                          <span className="size-12 rounded-full bg-card-2" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{p.name}</span>
+                          <span className="block text-xs text-muted">Actor</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {collectionHits.length ? (
+              <section className="mt-8">
+                <h2 className="font-display text-xl font-semibold tracking-tight">Collections</h2>
+                <ul className="mt-3 divide-y divide-border">
+                  {collectionHits.map((c) => (
+                    <li key={c.id}>
+                      <Link to="/collection/$id" params={{ id: String(c.id) }} className="flex items-center gap-3 py-3">
+                        {c.poster ? (
+                          <img src={c.poster} alt="" className="h-16 w-11 rounded-md object-cover" />
+                        ) : (
+                          <span className="h-16 w-11 rounded-md bg-card-2" />
+                        )}
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium">{c.name}</span>
+                          <span className="block text-xs text-muted">Collection</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            {hits.length ? (
+              <Row label="Results">
+                {hits.map((t) => (
+                  <TitleCard key={t.id} title={t} />
+                ))}
+              </Row>
+            ) : null}
+          </>
         ) : looking ? (
           <p className="mt-10 text-sm text-muted">Looking up movies and shows…</p>
         ) : (
