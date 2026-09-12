@@ -335,7 +335,7 @@ export function mapSeerrSearchResults(hits, { q = "", limit = 16, excludeOwned }
   const owned = excludeOwned ? asDiscoverOwned(excludeOwned) : null;
   const titles = [];
   for (const h of hits || []) {
-    const mediaType = normalizeMediaType(h?.mediaType);
+    const mediaType = normalizeMediaType(h?.mediaType || h?.media_type);
     if (!mediaType) continue;
     if (owned && seerrAlreadyHave(h)) continue;
     const t = seerrSearchHit(h, mediaType);
@@ -1485,12 +1485,12 @@ export function assembleRequestPayload(seerrRows, facts = {}, mediaItems = []) {
 }
 
 export function seerrSearchHit(h, mediaTypeHint) {
-  const mediaType = normalizeMediaType(h?.mediaType || mediaTypeHint);
+  const mediaType = normalizeMediaType(h?.mediaType || h?.media_type || mediaTypeHint);
   if (!mediaType) return null;
   const tmdb = h?.id ?? h?.tmdbId ?? h?.mediaInfo?.tmdbId;
   if (!tmdb) return null;
   const title = String(h.title || h.name || "Untitled");
-  const date = String(h.releaseDate || h.firstAirDate || "");
+  const date = String(h.releaseDate || h.release_date || h.firstAirDate || h.first_air_date || "");
   const year = Number((date.match(/^(\d{4})/) || [])[1] || h.year || 0);
   const listed = realSeasonNumbers(h.mediaInfo?.seasons || h.seasons);
   const fromCount = Number(h.numberOfSeasons || 0);
@@ -1505,8 +1505,8 @@ export function seerrSearchHit(h, mediaTypeHint) {
     title,
     year,
     overview: String(h.overview || ""),
-    poster: tmdbPoster(h.posterPath || h.remotePoster),
-    rating: Number(h.voteAverage || 0),
+    poster: tmdbPoster(h.posterPath || h.poster_path || h.remotePoster),
+    rating: Number(h.voteAverage || h.vote_average || 0),
     genres: Array.isArray(h.genres)
       ? h.genres.map((g) => (typeof g === "string" ? g : g?.name || "")).filter(Boolean)
       : [],
@@ -1514,6 +1514,174 @@ export function seerrSearchHit(h, mediaTypeHint) {
     popularity: Number(h.popularity || 50),
     seasons,
     seasonList: mediaType === "tv" && listed.length ? listed : undefined,
+  };
+}
+
+/** TMDB collection/person ids are digits. tmdb-<n> is a movie namespace — do not reuse it here. */
+export function tmdbNumericId(raw) {
+  const s = String(raw ?? "").trim();
+  if (!/^\d+$/.test(s)) return 0;
+  const n = Number(s);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Real TMDB franchise on a movie detail. Missing/empty → no collection chip. Never invent from similar titles. */
+export function collectionFromSeerrMovie(json) {
+  const raw = json?.collection || json?.belongsToCollection || json?.belongs_to_collection || null;
+  if (!raw || typeof raw !== "object") return null;
+  const id = tmdbNumericId(raw.id);
+  const name = String(raw.name || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(raw.posterPath || raw.poster_path);
+  return { id, name, poster: poster || undefined };
+}
+
+export function seerrPersonHit(h) {
+  const type = String(h?.mediaType || h?.media_type || "").toLowerCase();
+  if (type !== "person") return null;
+  const id = tmdbNumericId(h?.id);
+  const name = String(h?.name || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(h.profilePath || h.profile_path);
+  return {
+    id,
+    name,
+    poster: poster || undefined,
+    knownForDepartment: String(h.knownForDepartment || h.known_for_department || "Acting"),
+  };
+}
+
+export function seerrCollectionHit(h) {
+  const type = String(h?.mediaType || h?.media_type || "").toLowerCase();
+  if (type !== "collection") return null;
+  const id = tmdbNumericId(h?.id);
+  const name = String(h?.name || h?.title || "").trim();
+  if (!id || !name) return null;
+  const poster = tmdbPoster(h.posterPath || h.poster_path);
+  return { id, name, poster: poster || undefined };
+}
+
+export function mapSeerrPersonHits(json, { limit = 8 } = {}) {
+  const hits = Array.isArray(json) ? json : json?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const p = seerrPersonHit(h);
+    if (!p) continue;
+    out.push(p);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function mapSeerrCollectionHits(json, { limit = 8 } = {}) {
+  const hits = Array.isArray(json) ? json : json?.results || [];
+  const out = [];
+  for (const h of hits) {
+    const c = seerrCollectionHit(h);
+    if (!c) continue;
+    out.push(c);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export function overlayLibraryOnTitle(title, libraryTitles) {
+  if (!title) return title;
+  const hit =
+    findLibraryTitle(libraryTitles, title.id) ||
+    (title.ids || []).map((id) => findLibraryTitle(libraryTitles, id)).find(Boolean) ||
+    null;
+  const attached = attachLibraryPresence(title, hit);
+  return { ...attached, inLibrary: Boolean(hit) };
+}
+
+export function mapCollectionParts(parts, libraryTitles) {
+  const out = [];
+  for (const p of parts || []) {
+    const hit = seerrSearchHit({ ...p, mediaType: p?.mediaType || p?.media_type || "movie" }, "movie");
+    if (!hit) continue;
+    out.push(overlayLibraryOnTitle(hit, libraryTitles));
+  }
+  return out;
+}
+
+export function mapCollectionDetail(json, libraryTitles) {
+  const id = tmdbNumericId(json?.id);
+  const name = String(json?.name || "").trim();
+  if (!id || !name) return null;
+  const parts = mapCollectionParts(json?.parts, libraryTitles);
+  return {
+    id,
+    name,
+    overview: String(json?.overview || ""),
+    poster: tmdbPoster(json?.posterPath || json?.poster_path) || undefined,
+    source: "tmdb",
+    parts,
+    onBox: parts.filter((p) => p.inLibrary).length,
+  };
+}
+
+export function mapPersonCredits(creditsJson, libraryTitles, { limit = 48 } = {}) {
+  const cast = Array.isArray(creditsJson?.cast)
+    ? creditsJson.cast
+    : Array.isArray(creditsJson)
+      ? creditsJson
+      : [];
+  const mapped = [];
+  const seen = new Set();
+  for (const c of cast) {
+    const hit = seerrSearchHit(c, c?.mediaType || c?.media_type);
+    if (!hit || seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    mapped.push(overlayLibraryOnTitle(hit, libraryTitles));
+  }
+  mapped.sort((a, b) => (Number(b.year) || 0) - (Number(a.year) || 0));
+  return mapped.slice(0, limit);
+}
+
+export function mapPersonDetail(json, creditsJson, libraryTitles) {
+  const id = tmdbNumericId(json?.id);
+  const name = String(json?.name || "").trim();
+  if (!id || !name) return null;
+  const embedded = json?.combinedCredits || json?.combined_credits;
+  const credits = mapPersonCredits(creditsJson || embedded, libraryTitles);
+  return {
+    id,
+    name,
+    biography: String(json?.biography || ""),
+    poster: tmdbPoster(json?.profilePath || json?.profile_path) || undefined,
+    knownForDepartment: String(json?.knownForDepartment || json?.known_for_department || "Acting"),
+    credits,
+    onBox: credits.filter((t) => t.inLibrary).length,
+  };
+}
+
+/** POST /api/request body for a collection/filmography row. Person and collection ids never go here. */
+export function requestBodyForTitle(title, season) {
+  const id = String(title?.id || "");
+  if (!id || id.startsWith("person-") || id.startsWith("collection-")) return null;
+  const mediaType =
+    title?.kind === "tv" || title?.kind === "anime" ? "tv" : id.startsWith("tmdb-tv-") ? "tv" : "movie";
+  const tmdb =
+    mediaType === "tv"
+      ? id.startsWith("tmdb-tv-")
+        ? tmdbNumericId(id.slice(8))
+        : 0
+      : id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-")
+        ? tmdbNumericId(id.slice(5))
+        : 0;
+  const payload = buildSeerrAddPayload({
+    mediaType,
+    tmdb,
+    season: mediaType === "tv" ? season || 1 : undefined,
+  });
+  if (!payload) return null;
+  return {
+    titleId: id,
+    title: title.title,
+    mediaType,
+    tmdb,
+    season: mediaType === "tv" ? (Number(season) > 0 ? Number(season) : 1) : undefined,
   };
 }
 

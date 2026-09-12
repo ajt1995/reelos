@@ -219,6 +219,15 @@ export function TitleView({ id }: { id: string }) {
             {resolved.director ? ` · ${resolved.director}` : null}
           </p>
           <p className="mt-2 text-xs text-faint">{(resolved.genres ?? []).join(" · ")}</p>
+          {resolved.kind === "movie" && resolved.collection?.id && resolved.collection.name ? (
+            <Link
+              to="/collection/$id"
+              params={{ id: String(resolved.collection.id) }}
+              className="mt-3 inline-flex text-sm text-gold"
+            >
+              Collection · {resolved.collection.name}
+            </Link>
+          ) : null}
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
           {(series && !onBox && !blocked && !request) || (!series && !available && !blocked && !request) ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
