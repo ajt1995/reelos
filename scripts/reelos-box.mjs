@@ -7,7 +7,7 @@
  * Not a Go rewrite. Not vite --host on the house when prebuilt exists.
  * Leftover Vite is `vite preview` only if nitro+api cannot bind.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createReadStream, existsSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
 import { parseListenerInodes } from "./preview.mjs";
 import http from "node:http";
@@ -360,7 +360,23 @@ export function killOrphan8080({ port = PORT, kill = process.kill, selfPid = pro
   return killOrphanPortPids(pids, { kill, selfPid });
 }
 
+export function ensureHardwareProfile(root = ROOT) {
+  const py = existsSync(join(root, "bin/reelos_hardware.py"))
+    ? join(root, "bin/reelos_hardware.py")
+    : join(root, "daemon/reelos_hardware.py");
+  if (!existsSync(py)) return { ran: false };
+  const state = process.env.REELOS_STATE || "/var/lib/reelos";
+  const saved = join(state, "hardware-profile.json");
+  if (existsSync(saved)) {
+    spawn("python3", [py, "--ensure"], { detached: true, stdio: "ignore" }).unref();
+    return { ran: true, skippedSync: true };
+  }
+  const r = spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000 });
+  return { ran: true, skippedSync: false, status: r.status };
+}
+
 export async function startBox({ root = ROOT } = {}) {
+  ensureHardwareProfile(root);
   killOrphan8080();
   const client = findClientRoot(root);
   if (client) {

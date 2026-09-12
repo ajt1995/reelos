@@ -20,6 +20,12 @@ if [ "$door_or_tmp" = "1" ]; then
   exit 0
 fi
 
+if [ -f "$HERE/reelos_hardware.py" ]; then
+  python3 "$HERE/reelos_hardware.py" --ensure || true
+elif [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --ensure || true
+fi
+
 if [ -f "$HERE/reelos_os_tune.py" ]; then
   python3 "$HERE/reelos_os_tune.py" --apply || true
 elif [ -f "$ROOT/bin/reelos_os_tune.py" ]; then

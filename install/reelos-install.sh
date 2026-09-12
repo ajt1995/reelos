@@ -174,6 +174,10 @@ if [ -d "$ROOT/bin" ]; then
   chmod 755 "$ROOT/bin/"* || true
 fi
 
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --ensure || true
+fi
+
 if [ -d "$HERE/avahi" ]; then
   cp -a "$HERE/avahi/reelos.service" /etc/avahi/services/reelos.service
 fi

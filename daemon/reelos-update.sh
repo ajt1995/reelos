@@ -410,6 +410,8 @@ need src/components/applying-bar.tsx 'engines are still configuring'
 need src/components/applying-bar.tsx 'Updating ReelOS'
 need src/components/splash.tsx 'Updating ReelOS'
 need src/components/splash.tsx 'Not a percent'
+need src/components/splash.tsx '/api/hardware'
+need src/components/settings-panels.tsx 'This computer'
 need src/components/gate.tsx 'Splash updating'
 need daemon/reelos-update.sh 'Updating ReelOS'
 need daemon/reelos-update.sh 'OTA cleaner — leftover nonsense'
@@ -536,6 +538,8 @@ need daemon/reelos_hardware.py 'disk_kind'
 need daemon/reelos_hardware.py 'catchup_memory_max'
 need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
+need daemon/reelos_hardware.py 'probe_version'
+need daemon/reelos_hardware.py 'root-on-internal'
 need daemon/reelos_os_tune.py 'zram on rotational disk'
 need daemon/reelos_os_tune.py 'do not reserve 512M kdump'
 need daemon/reelos-library-catchup.sh 'TorBox filesystem busy'
@@ -836,14 +840,18 @@ caddy_updating() {
   if [ -f /etc/caddy/Caddyfile ]; then
     cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
   fi
-  cat >/etc/caddy/Caddyfile <<'EOF'
+  hw_tune=""
+  if [ -f /var/lib/reelos/hardware-profile.json ]; then
+    hw_tune=$(python3 -c 'import json; p=json.load(open("/var/lib/reelos/hardware-profile.json")); print(p.get("splash_tune") or p.get("knobs",{}).get("splash_tune") or "")' 2>/dev/null || true)
+  fi
+  cat >/etc/caddy/Caddyfile <<EOF
 {
 	auto_https off
 	admin off
 }
 :80 {
 	header Content-Type "text/html; charset=utf-8"
-	respond "Updating ReelOS… Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
+	respond "Updating ReelOS… ${hw_tune} Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
 }
 EOF
   caddy_dropin

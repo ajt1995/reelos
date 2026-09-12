@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { catchupLocksHome } from "@/lib/library-catchup";
@@ -18,6 +19,37 @@ function stepLabel(status: BootStepStatus) {
   return "Waiting";
 }
 
+function UpdatingSplash() {
+  const [tune, setTune] = useState("");
+  useEffect(() => {
+    void fetch("/api/hardware", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ splashTune?: string; summary?: string }>)
+      .then((j) => setTune(j.splashTune || j.summary || ""))
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
+      />
+      <div className="rise relative">
+        <Wordmark className="flex-col gap-5" markClassName="size-20" spinRing />
+      </div>
+      <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
+        Updating ReelOS…
+      </p>
+      <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">
+        Download, extract, clean leftover builds, restart the door. Honest wait — Not a percent.
+        Browse and request come back when this page lifts.
+      </p>
+      {tune ? (
+        <p className="rise rise-4 mx-auto mt-3 max-w-md text-sm text-gold-bright">{tune}</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function Splash({ compact = false, warming = false, updating = false }: { compact?: boolean; warming?: boolean; updating?: boolean }) {
   const provisioned = useReelStore((s) => s.provisioned);
   const bootSteps = useReelStore((s) => s.bootSteps);
@@ -31,24 +63,7 @@ export function Splash({ compact = false, warming = false, updating = false }: {
   };
 
   if (updating) {
-    return (
-      <div className="relative flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-background px-6 text-center">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-[28%] size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gold/12 blur-[120px]"
-        />
-        <div className="rise relative">
-          <Wordmark className="flex-col gap-5" markClassName="size-20" spinRing />
-        </div>
-        <p className="rise rise-2 mt-8 font-display text-sm tracking-[0.34em] text-gold-bright uppercase">
-          Updating ReelOS…
-        </p>
-        <p className="rise rise-3 mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted">
-          Download, extract, clean leftover builds, restart the door. Honest wait — Not a percent.
-          Browse and request come back when this page lifts.
-        </p>
-      </div>
-    );
+    return <UpdatingSplash />;
   }
 
   return (
