@@ -78,6 +78,14 @@ function houseRookieLibrary() {
         "The Rookie S08",
       ],
     },
+    requests: [
+      { titleId: "tmdb-tv-79744", season: 3, reason: "Files linked — waiting for Sonarr import" },
+      { titleId: "tmdb-tv-79744", season: 4, reason: "Files linked — waiting for Sonarr import" },
+      { titleId: "tmdb-tv-79744", season: 5, reason: "Searching — no file yet" },
+      { titleId: "tmdb-tv-79744", season: 6, reason: "Files linked — waiting for Sonarr import" },
+      { titleId: "tmdb-tv-79744", season: 7, reason: "Files linked — waiting for Sonarr import" },
+      { titleId: "tmdb-tv-79744", season: 8, reason: "Files linked — waiting for Sonarr import" },
+    ],
   });
 }
 
@@ -93,6 +101,9 @@ test("house Rookie fixture: named 2018 card, no UIndex twin, S01 Watch S02 Impor
   assert.ok(rookie.onDiskSeasons.includes(1));
   assert.ok(!rookie.onDiskSeasons.includes(2), "dump S02 must not be Watch");
   assert.ok(rookie.importingSeasons.includes(2));
+  assert.ok(rookie.importingSeasons.includes(3));
+  assert.ok(rookie.importingSeasons.includes(8));
+  assert.ok(!rookie.importingSeasons.includes(5), "S05 searching is Request, not Importing");
   assert.equal(seasonChipLabel({ onDisk: true }), "Watch");
   assert.equal(seasonChipLabel({ importing: true }), "Importing");
   assert.equal(seasonChipLabel({ unreleased: true }), "Coming");
@@ -119,6 +130,9 @@ test("house Rookie fixture: named 2018 card, no UIndex twin, S01 Watch S02 Impor
   assert.ok(payload.onDiskSeasons.includes(1));
   assert.ok(!payload.onDiskSeasons.includes(2));
   assert.ok(payload.importingSeasons.includes(2));
+  assert.ok(payload.importingSeasons.includes(3));
+  assert.ok(payload.importingSeasons.includes(8));
+  assert.ok(!payload.importingSeasons.includes(5));
   assert.ok(payload.unreleasedSeasons.includes(9));
   const s2 = titleRequestSeasonPayload({
     id: "tmdb-tv-79744",
@@ -149,8 +163,11 @@ test("house Rookie fixture: named 2018 card, no UIndex twin, S01 Watch S02 Impor
   assert.match(home, /homeInFlightRequests/);
   assert.match(home, /homeShelfRows/);
   assert.match(titlePage, /IMPORTING_SEASON_COPY/);
+  assert.match(titlePage, /importingSeasonNumbersForTitle/);
   assert.match(accordion, /IMPORTING_SEASON_COPY/);
   assert.match(accordion, /thisImporting/);
+  assert.match(accordion, /setEpisodes\(\[\]\)/);
+  assert.match(accordion, /thisUnreleased \? null/);
 });
 
 test("Rookie journey stamp stays wizard 7 / beta off / skip 49", () => {

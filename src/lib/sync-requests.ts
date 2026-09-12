@@ -64,6 +64,27 @@ export function isLinkedImportingRequest(r?: Pick<MediaRequest, "reason"> | null
   return /on disk, importing|files linked|waiting for.*import/i.test(String(r?.reason || ""));
 }
 
+/** Files-linked Seerr rows for this title — Importing chips even when JF only saw dump S02. */
+export function importingSeasonNumbersForTitle(
+  titleId: string,
+  requests: Pick<MediaRequest, "titleId" | "season" | "reason" | "requestedSeasons">[],
+  extraIds: string[] = [],
+): number[] {
+  const keys = new Set(titlePresenceKeys(titleId, extraIds));
+  const out: number[] = [];
+  for (const r of requests) {
+    if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) continue;
+    if (!isLinkedImportingRequest(r)) continue;
+    const n = Number(r.season);
+    if (Number.isFinite(n) && n > 0) out.push(n);
+    for (const s of r.requestedSeasons || []) {
+      const sn = Number(s);
+      if (Number.isFinite(sn) && sn > 0) out.push(sn);
+    }
+  }
+  return [...new Set(out)].sort((a, b) => a - b);
+}
+
 /**
  * Home Your requests: hide linked-importing when the named series is already On this box.
  * Searching / grabbing without files still shows. Requests tab keeps importing rows.
@@ -111,9 +132,12 @@ export function tvSeasonChips(
   const bySeason = new Map<number, SeasonChipLabel>();
   for (const t of titles) {
     if (!titleMatchesId(t, titleId)) continue;
+    const importing = new Set((t.importingSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0));
     for (const n of t.onDiskSeasons || []) {
       const season = Number(n);
-      if (Number.isFinite(season) && season > 0) bySeason.set(season, "Watch");
+      if (!Number.isFinite(season) || season <= 0) continue;
+      if (importing.has(season)) continue;
+      bySeason.set(season, "Watch");
     }
     for (const n of t.unreleasedSeasons || []) {
       const season = Number(n);
@@ -510,7 +534,10 @@ export function applyTitleRequestPoll(
 /** Movies on the JF shelf are AVAILABLE even if Seerr still says grabbing. TV stays season-by-season. */
 export function overlayLibraryPresence(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] },
+  opts: {
+    libraryIds?: string[];
+    titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons" | "importingSeasons">[];
+  },
 ): MediaRequest[] {
   const movieKeys = new Set<string>();
   const tvDisk = new Map<string, Set<number>>();
@@ -520,7 +547,10 @@ export function overlayLibraryPresence(
   }
   for (const t of opts.titles || []) {
     if (t.kind === "tv" || t.kind === "anime") {
-      const disk = (t.onDiskSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0);
+      const importing = new Set((t.importingSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0));
+      const disk = (t.onDiskSeasons || [])
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !importing.has(n));
       if (!disk.length) continue;
       for (const k of titlePresenceKeys(t.id, t.ids || [])) {
         const set = tvDisk.get(k) || new Set<number>();
@@ -545,6 +575,7 @@ export function overlayLibraryPresence(
       return row;
     }
     if (row.season == null) return row;
+    if (isLinkedImportingRequest(row)) return row;
     const onDisk = titlePresenceKeys(row.titleId).some((k) => tvDisk.get(k)?.has(Number(row.season)));
     return onDisk ? markAvailable(row) : row;
   });

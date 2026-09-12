@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
@@ -18,12 +18,18 @@ import {
   requestTitleIdForPage,
   titleMatchesId,
   titlePresenceKeys,
+  importingSeasonNumbersForTitle,
+  isLinkedImportingRequest,
 } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
 import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
 import { IMPORTING_SEASON_CHIP, IMPORTING_SEASON_COPY, UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
+
+function uniqSeasons(nums: number[]) {
+  return [...new Set(nums.map(Number).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+}
 
 function looksLikeHashTitle(name?: string) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
@@ -60,18 +66,28 @@ export function TitleView({ id }: { id: string }) {
           ? { ...raw, title: "Unknown on this box" }
           : null
     : raw;
-  const extraIds = titlePresenceKeys(id, resolved?.ids || []);
   const [season, setSeason] = useState(1);
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
   const [removedHere, setRemovedHere] = useState(false);
   const [lookupKey, setLookupKey] = useState(0);
+  const {
+    inJellyfin,
+    engineStatus,
+    seasonList,
+    onDiskSeasons,
+    importingSeasons,
+    unreleasedSeasons,
+    extraIds: engineIds,
+  } = useEngineRequest(id, season);
+  const extraIds = [...new Set([...titlePresenceKeys(id, resolved?.ids || []), ...engineIds])];
   const request = useReelStore((s) => {
     const keys = new Set(extraIds);
     const moviePage = resolved?.kind === "movie" || (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-") && !id.startsWith("tvdb-"));
     return s.requests.find((r) => {
       if (r.status === "failed") return false;
+      if (isLinkedImportingRequest(r) && r.season != null && r.season !== season) return false;
       if (moviePage && String(r.titleId).startsWith("tmdb-tv-")) return false;
       if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) return false;
       return r.season == null || r.season === season;
@@ -79,8 +95,19 @@ export function TitleView({ id }: { id: string }) {
   });
   const failed = useReelStore((s) => {
     const keys = new Set(extraIds);
-    return s.requests.find((r) => r.status === "failed" && titlePresenceKeys(r.titleId).some((k) => keys.has(k)));
+    return s.requests.find((r) => {
+      if (r.status !== "failed") return false;
+      if (isLinkedImportingRequest(r)) return false;
+      if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) return false;
+      if (r.season != null && r.season !== season) return false;
+      return true;
+    });
   });
+  const storeRequests = useReelStore((s) => s.requests);
+  const requestImporting = useMemo(
+    () => importingSeasonNumbersForTitle(id, storeRequests, extraIds),
+    [id, storeRequests, extraIds],
+  );
   const inLibrary = useReelStore((s) => {
     if (s.library.includes(id)) return true;
     return [...s.shelf, ...s.remoteTitles].some((t) => titleMatchesId(t, id) && s.library.some((lib) => titleMatchesId(t, lib)));
@@ -93,7 +120,6 @@ export function TitleView({ id }: { id: string }) {
   const ipv4 = useReelStore((s) => s.ipv4);
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watchDoor = useReelStore((s) => s.watch);
-  const { inJellyfin, engineStatus, seasonList, onDiskSeasons, importingSeasons, unreleasedSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
@@ -223,25 +249,19 @@ export function TitleView({ id }: { id: string }) {
     jellyfinId: resolved.jellyfinId,
   });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
-  const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
-  const linkingSeasons = [
-    ...new Set(
-      [...(importingSeasons || []), ...(resolved.importingSeasons || [])]
-        .map(Number)
-        .filter((n) => n > 0 && !diskSeasons.includes(n)),
-    ),
-  ];
-  const comingSeasons = [
-    ...new Set(
-      [
-        ...(unreleasedSeasons || []),
-        ...(resolved.unreleasedSeasons || []),
-        ...((resolved.seasonFacts || []).filter((s) => s.unreleased).map((s) => s.season)),
-      ]
-        .map(Number)
-        .filter((n) => n > 0),
-    ),
-  ];
+  const comingSeasons = uniqSeasons([
+    ...(unreleasedSeasons || []),
+    ...(resolved.unreleasedSeasons || []),
+    ...((resolved.seasonFacts || []).filter((s) => s.unreleased).map((s) => s.season)),
+  ]);
+  const linkingSeasons = uniqSeasons([
+    ...(importingSeasons || []),
+    ...(resolved.importingSeasons || []),
+    ...requestImporting,
+  ]).filter((n) => !comingSeasons.includes(n));
+  const diskSeasons = uniqSeasons([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])]).filter(
+    (n) => !linkingSeasons.includes(n) && !comingSeasons.includes(n),
+  );
   const thisSeasonOnBox = !removedHere && (!series || diskSeasons.includes(season));
   const thisSeasonUnreleased = Boolean(series && comingSeasons.includes(season) && !thisSeasonOnBox);
   const thisSeasonImporting = Boolean(

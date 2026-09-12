@@ -1782,7 +1782,7 @@ async function handleRequestStatus(req, res) {
             id,
             season,
             parsed,
-            facts,
+            facts: { ...facts, requests: facts.requests || [] },
             libraryTitles: facts.libraryTitles || titles,
             honest: { titleId: id, status: "unknown", engine: "unknown" },
             title: findLibraryTitle(titles, id),
@@ -1802,9 +1802,24 @@ async function handleRequestStatus(req, res) {
       mediaType: parsed.mediaType,
       season,
     });
-    const mapped = seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
+    const mappedRows = (reqs.length ? reqs : last ? [last] : []).map((item) =>
+      seerrRequestRow({
+        ...item,
+        media: { ...media, tmdbId: parsed.tmdb, ...(item.media || {}) },
+        type: parsed.mediaType,
+      }),
+    );
+    const mapped =
+      mappedRows[0] || seerrRequestRow({ ...last, media: { ...media, tmdbId: parsed.tmdb }, type: parsed.mediaType });
     const facts = await loadPresenceFacts();
-    const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
+    const seerrMediaByTitleId = { [mapped.titleId]: media };
+    const honestRows = honestifyRequests(mappedRows.length ? mappedRows : [mapped], { ...facts, seerrMediaByTitleId });
+    const honest =
+      (season != null && Number.isFinite(season)
+        ? honestRows.find((row) => Number(row.season) === Number(season))
+        : null) ||
+      honestRows[0] ||
+      mapped;
     const title = attachTitleAliases(
       seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
       parsed,
@@ -1813,7 +1828,7 @@ async function handleRequestStatus(req, res) {
       id,
       season,
       parsed,
-      facts,
+      facts: { ...facts, requests: honestRows },
       libraryTitles: facts.libraryTitles || titlesForResolve(),
       honest,
       title,
