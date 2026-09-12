@@ -145,19 +145,42 @@ export function mergeLookupJson(json, id) {
   for (const t of titles) {
     const hit = houseTitleById(t.id) || house;
     if (!hit) continue;
-    const disk = [...new Set([...(t.onDiskSeasons || []), ...(hit.onDiskSeasons || [])])];
-    const importing = [...new Set([...(t.importingSeasons || []), ...(hit.importingSeasons || [])])];
-    const unreleased = [...new Set([...(t.unreleasedSeasons || []), ...(hit.unreleasedSeasons || [])])];
-    t.onDiskSeasons = disk.filter((n) => !importing.includes(n) && !unreleased.includes(n));
-    t.importingSeasons = importing.filter((n) => !disk.includes(n) && !unreleased.includes(n));
-    t.unreleasedSeasons = unreleased.filter((n) => !disk.includes(n));
-    t.seasonList = [...new Set([...(t.seasonList || []), ...(hit.seasonList || []), ...disk, ...importing, ...unreleased])].sort(
-      (a, b) => a - b,
-    );
+    // House fixture wins overlapping seasons so live Seerr Watch does not cancel Importing/Coming.
+    const unreleased = [...new Set(hit.unreleasedSeasons || [])];
+    const importing = [...new Set(hit.importingSeasons || [])].filter((n) => !unreleased.includes(n));
+    const disk = [...new Set(hit.onDiskSeasons || [])].filter((n) => !importing.includes(n) && !unreleased.includes(n));
+    t.onDiskSeasons = disk;
+    t.importingSeasons = importing;
+    t.unreleasedSeasons = unreleased;
+    t.seasonList = [...new Set([...(hit.seasonList || []), ...disk, ...importing, ...unreleased])].sort((a, b) => a - b);
     t.year = t.year || hit.year;
     t.jellyfinId = t.jellyfinId || hit.jellyfinId;
+    if (t.reason && /0%/.test(String(t.reason))) t.reason = "On disk, importing";
   }
   return { ...json, titles, error: json?.error || null };
+}
+
+/** Leftover ota.lock flock — never delete the lock; lie only to the click-loop session. */
+export function idleUpdateStatus(local = "1.2.50.56") {
+  return {
+    ok: true,
+    running: false,
+    held: false,
+    local,
+    target: null,
+    log: "",
+    library: {
+      status: "done",
+      splashLock: false,
+      needsImport: false,
+      message: "Library catch-up done",
+      folder: 0,
+      total: 0,
+      skipped: 0,
+      timeouts: 0,
+    },
+    progress: { message: "", percent: null, stalled: false, label: "idle", stageIndex: 0, stageCount: 0 },
+  };
 }
 
 /** Leftover cloud flock on ota.lock must not splash-lock hashed Home. Never delete the lock. */

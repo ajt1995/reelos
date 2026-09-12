@@ -16,6 +16,7 @@ import {
   mergeLibraryJson,
   mergeLookupJson,
   honestReadyJson,
+  idleUpdateStatus,
   HOUSE_UNMATCHED_DUMP,
 } from "./cloud-house-shelf.mjs";
 
@@ -84,11 +85,40 @@ async function snapshotDoorApis() {
 }
 
 async function installProductRoutes(page, posts, snap) {
-  const shelf = houseHomeShelf();
-  const readyBody = JSON.stringify(honestReadyJson(snap.ready, shelf));
-  const libraryBody = JSON.stringify(mergeLibraryJson(snap.library || { titles: [] }));
+  const removed = new Set();
+  const namedRefuse = new Set(["tvdb-350665", "tmdb-tv-79744", "rook", "tmdb-tv-125988", "tvdb-403245", "silo", "reach"]);
+
+  function dropRemoved(titles) {
+    return (titles || []).filter((t) => {
+      const keys = [t.id, t.jellyfinId, ...(t.ids || [])].map(String);
+      return !keys.some((k) => removed.has(k));
+    });
+  }
+  function readyJson() {
+    const base = honestReadyJson(snap.ready, houseHomeShelf());
+    return { ...base, titles: dropRemoved(base.titles) };
+  }
+  function libraryJson() {
+    const base = mergeLibraryJson(snap.library || { titles: [] });
+    return { ...base, titles: dropRemoved(base.titles) };
+  }
+
+  await page.route(/\/api\/update\/(status|progress|check)(\?|$)/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(idleUpdateStatus()),
+    });
+  });
+  await page.route(/\/api\/update\/apply(\?|$)/, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: false, error: "click loop does not Apply" }),
+    });
+  });
   await page.route(/\/api\/ready(\?|$)/, async (route) => {
-    await route.fulfill({ status: 200, contentType: "application/json", body: readyBody });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(readyJson()) });
   });
   await page.route(/\/api\/library(\?|$)/, async (route) => {
     const req = route.request();
@@ -96,7 +126,7 @@ async function installProductRoutes(page, posts, snap) {
       const body = jsonFrom(route) || {};
       posts.deletes.push(body);
       const id = String(body.titleId || body.jellyfinId || "");
-      if (id === "tvdb-350665" || id === "tmdb-tv-79744" || id === "rook") {
+      if (namedRefuse.has(id) || /350665|79744/.test(JSON.stringify(body))) {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -104,6 +134,7 @@ async function installProductRoutes(page, posts, snap) {
         });
         return;
       }
+      for (const k of [id, body.jellyfinId, ...(body.ids || [])]) if (k) removed.add(String(k));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -111,7 +142,7 @@ async function installProductRoutes(page, posts, snap) {
       });
       return;
     }
-    await route.fulfill({ status: 200, contentType: "application/json", body: libraryBody });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(libraryJson()) });
   });
   await page.route(/\/api\/lookup(\?|$)/, async (route) => {
     const url = new URL(route.request().url());
@@ -148,6 +179,7 @@ async function installProductRoutes(page, posts, snap) {
         .then((r) => r.json())
         .catch(() => ({}));
       const house = houseRawShelf().find((t) => t.id === "tvdb-350665");
+      const zero = /0%/.test(String(live.reason || live.status || ""));
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -157,7 +189,8 @@ async function installProductRoutes(page, posts, snap) {
           importingSeasons: house.importingSeasons,
           unreleasedSeasons: house.unreleasedSeasons,
           seasonList: house.seasonList,
-          reason: live.reason && /0%/.test(String(live.reason)) ? "On disk, importing" : live.reason,
+          reason: zero ? "On disk, importing" : live.reason,
+          status: zero ? "downloading" : live.status,
         }),
       });
       return;
@@ -182,12 +215,17 @@ async function nav(page, label) {
 }
 
 async function waitHome(page) {
-  await page.waitForTimeout(400);
-  const body = await page.locator("body").innerText();
-  if (/Updating ReelOS|Downloading update|Applying 1\.2/i.test(body) && !/On this box|Search movies/i.test(body)) {
-    throw new Error(`splash-locked hashed Home: ${body.slice(0, 240)}`);
+  try {
+    await page.waitForFunction(() => {
+      const t = document.body?.innerText || "";
+      if (/Updating ReelOS|Downloading update|Applying 1\.2/i.test(t)) return false;
+      return /Search movies, shows, people/i.test(t);
+    }, { timeout: 25000 });
+  } catch (err) {
+    const body = await page.locator("body").innerText().catch(() => "");
+    throw new Error(`hashed Home never left splash: ${body.slice(0, 400)}\n${err}`);
   }
-  await page.getByPlaceholder(/Search movies, shows, people/i).waitFor({ timeout: 20000 });
+  await page.getByPlaceholder(/Search movies, shows, people/i).waitFor({ timeout: 8000 });
 }
 
 async function searchAndOpen(page, query, { title, kind } = {}) {
@@ -251,6 +289,23 @@ try {
   browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const posts = { requests: [], deletes: [] };
+  await page.addInitScript((idle) => {
+    const orig = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
+      if (/\/api\/update\/apply/.test(url) && String(init?.method || "GET").toUpperCase() === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: false, error: "click loop does not Apply" }), {
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      if (/\/api\/update\/(status|progress|check)/.test(url)) {
+        return Promise.resolve(new Response(JSON.stringify(idle), { headers: { "content-type": "application/json" } }));
+      }
+      return orig(input, init);
+    };
+  }, idleUpdateStatus());
   await installProductRoutes(page, posts, snap);
 
   await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 30000 });
