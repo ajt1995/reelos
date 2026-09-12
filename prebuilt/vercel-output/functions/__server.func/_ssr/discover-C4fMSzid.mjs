@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, l as syntheticRelease, o as getTitle, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
 import { c as Search } from "../_libs/lucide-react.mjs";
-import { T as titleForRequest, g as inFlightRequests, p as useReelStore } from "./router-2YMnuui2.mjs";
-import { c as TitleCard, i as Gate, m as useSyncRequests, s as Row } from "./gate-4q4-7_5m.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/discover-DszpGLLk.js
+import { T as titleForRequest, g as inFlightRequests, h as collapseHomeRequestCards, p as useReelStore } from "./router-zh-O7tu9.mjs";
+import { c as TitleCard, i as Gate, m as useSyncRequests, s as Row } from "./gate-D_1U4NDe.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/discover-C4fMSzid.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function uid(prefix) {
@@ -123,16 +123,10 @@ function DiscoverView() {
 	const movieShelf = (0, import_react.useMemo)(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
 	const tvShelf = (0, import_react.useMemo)(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
 	const finishing = (0, import_react.useMemo)(() => {
-		const rows = [];
-		for (const r of inflight) {
-			const t = titleForRequest(r, catalog);
-			if (!t?.id) continue;
-			rows.push({
-				r,
-				t
-			});
-		}
-		return rows;
+		return collapseHomeRequestCards(inflight).map((r) => ({
+			r,
+			t: titleForRequest(r, catalog)
+		})).filter((x) => x.t?.id);
 	}, [inflight, catalog]);
 	const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
 	const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);

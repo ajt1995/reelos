@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-2YMnuui2.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-zh-O7tu9.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -1733,27 +1733,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-Ch67cWkw.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-BC0y6gQw.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-cYVY23-O.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-BUEGnFTm.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-CHGIu9p9.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-CMoQi1Yc.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-DszpGLLk.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-C4fMSzid.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-C_BNg5ea.mjs");
+var $$splitComponentImporter$6 = () => import("./library-Cfb68Bfc.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-D0mXBubT.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-BzAX5UBP.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-BPeEvvvr.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-h-_QII53.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-Dt4PHwuE.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-Cb6XF3sp.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-BwqRYvWq.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-BgdAStPA.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-Bbsf_55e.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-DCK3pNDg.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-Iin__PXx.mjs");
+var $$splitComponentImporter = () => import("./title._id-blQeDOCk.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",

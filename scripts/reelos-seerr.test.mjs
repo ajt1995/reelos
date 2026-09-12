@@ -1314,6 +1314,7 @@ test("Discover has on this box / finishing / pick tonight; POST never sends seas
   assert.match(discover, /On this box/);
   assert.match(discover, /Finishing/);
   assert.match(discover, /Pick tonight/);
+  assert.match(discover, /collapseHomeRequestCards/);
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
   assert.match(discover, /\/api\/discover/);
