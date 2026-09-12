@@ -110,8 +110,19 @@ CONTRACTS = (
     ("src/components/applying-bar.tsx", "Applying"),
     ("scripts/reelos-ota-status.mjs", "applyProductRunning"),
     ("scripts/reelos-ota-status.mjs", "shouldSplashLock"),
+    ("src/components/applying-bar.tsx", "Updating ReelOS"),
+    ("src/components/splash.tsx", "Updating ReelOS"),
+    ("src/components/splash.tsx", "Not a percent"),
     ("src/lib/library-catchup.ts", "catchupLocksHome"),
-    ("src/components/gate.tsx", "catchupLocksHome"),
+    ("src/lib/library-catchup.ts", "updateLocksUi"),
+    ("src/components/gate.tsx", "updateLocksUi"),
+    ("src/components/gate.tsx", "Splash updating"),
+    ("daemon/reelos-ota-clean.sh", "Never /media"),
+    ("daemon/reelos-ota-clean.sh", "Never ota.lock"),
+    ("daemon/reelos-ota-clean.sh", "OTA cleaner done"),
+    ("daemon/reelos_os_tune.py", "crashkernel=no"),
+    ("daemon/wire-engines.parts/09.part", "ota-clean bounded heal"),
+    ("scripts/reelos-box.mjs", "killOrphan8080"),
     ("scripts/reelos-ota-status.mjs", "productSwapDone"),
     ("scripts/reelos-lookup-plugin.mjs", "libraryCatchup"),
     ("install/systemd/reelos-library-catchup.service", "TimeoutStartSec=infinity"),
@@ -256,6 +267,23 @@ def main() -> int:
     install_up = root / "install/bin/reelos-update.sh"
     if install_up.is_file() and install_up.read_text() != updater:
         return fail("OTA contract: install/bin/reelos-update.sh must match daemon/")
+    for rel_a, rel_b in (
+        ("daemon/reelos-ota-clean.sh", "install/bin/reelos-ota-clean.sh"),
+        ("daemon/reelos_ota_clean.py", "install/bin/reelos_ota_clean.py"),
+        ("daemon/reelos_os_tune.py", "install/bin/reelos_os_tune.py"),
+    ):
+        a, b = root / rel_a, root / rel_b
+        if a.is_file() and b.is_file() and a.read_text() != b.read_text():
+            return fail(f"OTA contract: {rel_b} must match {rel_a}")
+
+    cleaner = updater.find("OTA cleaner — leftover nonsense")
+    if cleaner < 0 or not (cleaner < applied):
+        return fail("OTA contract: cleaner must run before applied.")
+    tmp_clean = updater.find('reelos-ota-clean.sh" --tmp')
+    if tmp_clean < 0 or tmp_clean < applied:
+        return fail("OTA contract: tmp leftover cleaner must come after applied.")
+    if "Home can open" in updater:
+        return fail("OTA contract: mailman must not say Home can open during Apply")
 
     fatal = 0
     warns = 0

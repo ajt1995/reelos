@@ -10,13 +10,16 @@ function read(rel) {
   return readFileSync(join(root, rel), "utf8");
 }
 
-test("client splash-locks Home only via catchupLocksHome (running + needsImport)", () => {
+test("client splash-locks chrome via updateLocksUi while applying; catch-up is a banner", () => {
   const helper = read("src/lib/library-catchup.ts");
   assert.match(helper, /export function catchupLocksHome/);
+  assert.match(helper, /export function updateLocksUi/);
   assert.match(helper, /needsImport/);
   assert.match(helper, /SETTLED/);
-  assert.match(read("src/components/gate.tsx"), /catchupLocksHome/);
+  assert.match(read("src/components/gate.tsx"), /updateLocksUi/);
+  assert.match(read("src/components/gate.tsx"), /Splash updating/);
   assert.match(read("src/components/splash.tsx"), /catchupLocksHome/);
+  assert.match(read("src/components/splash.tsx"), /Updating ReelOS/);
 });
 
 test("skip-only leftover JSON does not splash-lock when catch-up is idle", () => {

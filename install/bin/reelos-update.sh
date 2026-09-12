@@ -407,6 +407,18 @@ need scripts/reelos-lookup-plugin.mjs '/api/intent'
 need scripts/reelos-lookup-plugin.mjs 'applyIsRunning'
 need scripts/reelos-ota-status.mjs 'lockIsHeld'
 need src/components/applying-bar.tsx 'engines are still configuring'
+need src/components/applying-bar.tsx 'Updating ReelOS'
+need src/components/splash.tsx 'Updating ReelOS'
+need src/components/splash.tsx 'Not a percent'
+need src/components/gate.tsx 'Splash updating'
+need daemon/reelos-update.sh 'Updating ReelOS'
+need daemon/reelos-update.sh 'OTA cleaner — leftover nonsense'
+need daemon/reelos_os_tune.py 'zram on rotational'
+need daemon/reelos_os_tune.py 'crashkernel=no'
+need daemon/wire-engines.parts/09.part 'ota-clean bounded heal'
+need daemon/reelos-ota-clean.sh 'Never /media'
+need daemon/reelos-ota-clean.sh 'Never ota.lock'
+need scripts/reelos-box.mjs 'killOrphan8080'
 need src/routes/__root.tsx 'syncUpdateFromBox'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
@@ -821,7 +833,7 @@ caddy_updating() {
 }
 :80 {
 	header Content-Type "text/html; charset=utf-8"
-	respond "ReelOS is updating. The shell comes back first; engines may still be configuring." 200
+	respond "Updating ReelOS… Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
 }
 EOF
   caddy_dropin
@@ -961,6 +973,11 @@ trap restore ERR
 caddy_updating
 log "stopping shell for mv (seconds, not minutes)"
 systemctl stop reelos 2>/dev/null || true
+if [ -f "$NEXT/bin/reelos_ota_clean.py" ]; then
+  python3 "$NEXT/bin/reelos_ota_clean.py" --door || log "orphan :8080 cleaner non-fatal"
+elif [ -f "$WORK/src/daemon/reelos_ota_clean.py" ]; then
+  python3 "$WORK/src/daemon/reelos_ota_clean.py" --door || log "orphan :8080 cleaner non-fatal"
+fi
 mv "$ROOT/app" "$ROOT.prev/app"
 mv "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
@@ -1014,6 +1031,12 @@ if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   done || true
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
+log "OTA cleaner — leftover nonsense from previous builds"
+if [ -f "$ROOT/bin/reelos-ota-clean.sh" ]; then
+  bash "$ROOT/bin/reelos-ota-clean.sh" --keep-work-src || log "OTA cleaner non-fatal"
+elif [ -f "$WORK/src/daemon/reelos-ota-clean.sh" ]; then
+  bash "$WORK/src/daemon/reelos-ota-clean.sh" --keep-work-src || log "OTA cleaner non-fatal"
+fi
 start_shell
 
 probe_home() {
@@ -1060,7 +1083,7 @@ probe_port80() {
       sleep 1
       continue
     fi
-    if echo "$page" | grep -qi 'ReelOS is updating'; then
+    if echo "$page" | grep -qiE 'Updating ReelOS|ReelOS is updating'; then
       log ":80 still updating page — restart caddy (reload is a no-op with admin off)"
       caddy_reelos
       sleep 2
@@ -1530,6 +1553,9 @@ if [ -n "${HEAD_SHA:-}" ]; then
 fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
+if [ -f "$ROOT/bin/reelos-ota-clean.sh" ]; then
+  bash "$ROOT/bin/reelos-ota-clean.sh" --tmp || log "OTA tmp cleaner non-fatal"
+fi
 # Dump import/heal after stamp so Check is "applied" without waiting on the
 # whole library. Persistent reelos-library-catchup oneshot outlives selfheal 90s.
 # Do not await kick_imports. Do not let a later import/heal red un-stamp this.

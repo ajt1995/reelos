@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.48**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.50**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,18 +21,23 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.48 is the ship.*** Hands-off home: Discover rows are on this box / finishing / pick tonight (not unreleased 2026 Mutiny/Colony/Moana/Paradise Hotel). Home posters skip empty ImageTags so 404 is a blank card, not title-on-poster plus caption. One Watch to LAN/Tailscale IP:8096. Requests stay visible while National Treasure is downloading; recover adds the Radarr movie without a magnet. 47 request honesty, 46 hash-dump titles, 45 title-page honesty stay. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House was **1.2.50.47**. **One house Apply of 48 after merge.** Never twice.
+***1.2.50.50 is the ship.*** OTA cleaner + Updating ReelOS splash until browse/request work. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.48**. **Do not house-Apply 50 until told.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.48`
+- **VERSION / channel:** `1.2.50.50`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.47; Discover rows + Home posters + one Watch + Radarr heal. 1.2.50.47 request honesty, 1.2.50.46 hash titles, 1.2.50.45 tvdb/tmdb title page, 1.2.50.43 Home honesty, 1.2.50.42 ffprobe stub stay. 1.2.50.41 hardware, 1.2.50.40 catch-up clock, 1.2.50.38 DirectPlay, 1.2.50.37 prebuilt.
+- **Base:** `main` at 1.2.50.48; Discover rows + Home posters + one Watch + Radarr heal. 1.2.50.47 request honesty, 1.2.50.46 hash titles, 1.2.50.45 tvdb/tmdb title page, 1.2.50.43 Home honesty, 1.2.50.42 ffprobe stub stay. 1.2.50.41 hardware, 1.2.50.40 catch-up clock, 1.2.50.38 DirectPlay, 1.2.50.37 prebuilt.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.47** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
+
+### OTA cleaner + update splash (1.2.50.50)
+
+Every Apply runs a bounded cleaner (orphan :8080, retired stacks not in current compose, ghost JF ids via existing heal, OS tune zram/kdump on ≤4.5Gi, tmp OTA leftovers). Never /media, never ota.lock, never firstboot, never docker restart Sonarr. Full-screen Updating ReelOS splash until the door accepts browse/request; library catch-up is a banner and POST /api/request still works. Post-OTA heal is faster (39 stamp-first, 42 no dump ffprobe, one FUSE, skip-nanosecond). Tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Skip 49. Do not house-Apply yet.
+
 
 ### Hands-off home (Discover, posters, Watch, Radarr heal)
 
