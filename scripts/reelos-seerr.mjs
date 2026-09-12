@@ -186,6 +186,13 @@ export function attachLibraryPresence(title, libraryTitle) {
         .filter((n) => Number.isFinite(n) && n > 0),
     ),
   ].sort((a, b) => a - b);
+  const unreleased = [
+    ...new Set(
+      [...(title.unreleasedSeasons || []), ...(libraryTitle.unreleasedSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
+    ),
+  ].sort((a, b) => a - b);
   return {
     ...title,
     ids,
@@ -194,7 +201,8 @@ export function attachLibraryPresence(title, libraryTitle) {
     inLibrary: Boolean(title.jellyfinId || libraryTitle.jellyfinId),
     year: title.year || libraryTitle.year || 0,
     onDiskSeasons: disk.length ? disk : title.onDiskSeasons || libraryTitle.onDiskSeasons,
-    importingSeasons: importing.filter((n) => !disk.includes(n)).sort((a, b) => a - b),
+    importingSeasons: importing.filter((n) => !disk.includes(n) && !unreleased.includes(n)).sort((a, b) => a - b),
+    unreleasedSeasons: unreleased,
     seasonList: listed.length ? listed : title.seasonList || libraryTitle.seasonList,
   };
 }
@@ -220,10 +228,14 @@ export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDi
           .filter((n) => Number.isFinite(n) && n > 0),
       ),
     ].sort((a, b) => a - b);
+    const unreleased = [
+      ...new Set((title.unreleasedSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n))),
+    ].sort((a, b) => a - b);
     return {
       ...title,
       onDiskSeasons: disk.length ? disk : title.onDiskSeasons,
-      importingSeasons: importing.filter((n) => !disk.includes(n)).sort((a, b) => a - b),
+      importingSeasons: importing.filter((n) => !disk.includes(n) && !unreleased.includes(n)).sort((a, b) => a - b),
+      unreleasedSeasons: unreleased,
       seasonList: listed.length ? listed : title.seasonList,
     };
   };

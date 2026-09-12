@@ -488,6 +488,8 @@ export function applyTitleRequestPoll(
       return x;
     }
     if (x.status === "available" && mapped !== "available") return x;
+    if (isLinkedImportingRequest(x) && mapped === "failed") return x;
+    if (isLinkedImportingRequest(x) && /searching — no file yet/i.test(String(opts.reason || ""))) return x;
     const status = mapped || x.status;
     const progress =
       status === "available"
