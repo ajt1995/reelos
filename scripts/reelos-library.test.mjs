@@ -32,6 +32,7 @@ import {
   dumpSearchPaths,
   repairHashTitles,
   UNKNOWN_ON_BOX,
+  libraryRowHidden,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -675,6 +676,29 @@ test("hash dump of Rick and Morty S04 collapses onto the tvdb series and keeps j
   assert.equal(out[0].id, "tvdb-275274");
   assert.ok(out[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
   assert.ok(out[0].ids.includes("tvdb-275274"));
+});
+
+test("a removed leftover complete-pack jf id does not hide the tvdb series", () => {
+  const series = titleFrom({
+    Id: "jf-expanse",
+    Name: "The Expanse",
+    Type: "Series",
+    ProductionYear: 2015,
+    ProviderIds: { Tvdb: "280619", Tmdb: "63639" },
+  });
+  const complete = titleFrom({
+    Id: "77e7da0ad1f894e644580d250824ebee",
+    Name: "The EXPANSE Complete Season 5 S05 (2020) 1080p AMZN Web-DL x264",
+    Type: "Series",
+    ProductionYear: 2020,
+    ProviderIds: {},
+  });
+  const out = dedupeLibraryTitles([complete, series]);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, "tvdb-280619");
+  assert.equal(out[0].ids.includes("jf-77e7da0ad1f894e644580d250824ebee"), false);
+  assert.equal(libraryRowHidden(out[0], ["jf-77e7da0ad1f894e644580d250824ebee", "77e7da0ad1f894e644580d250824ebee"]), false);
+  assert.equal(libraryRowHidden(out[0], ["tvdb-280619"]), true);
 });
 
 test("stale cache hash rows repair from dump filenames then collapse", () => {

@@ -152,7 +152,7 @@ export function repairHashTitles(titles, { listFiles } = {}) {
     if (!t || !looksLikeHashTitle(t.title)) return t;
     const files = list(t) || [];
     const ided = identifyLibraryTitle({ name: t.title, path: t.path, files });
-    return { ...t, title: ided.title, year: t.year || ided.year || 0 };
+    return { ...t, title: ided.title, year: t.year || ided.year || 0, fromHashDump: true };
   });
 }
 
@@ -165,7 +165,7 @@ export function mapJellyfinItems(items, host, { listFiles } = {}) {
         ? listFiles(it) || []
         : dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p));
     const ided = identifyLibraryTitle({ name: it?.Name, path: it?.Path, files });
-    return { ...t, title: ided.title, year: t.year || ided.year || 0 };
+    return { ...t, title: ided.title, year: t.year || ided.year || 0, fromHashDump: true };
   });
 }
 
@@ -256,6 +256,20 @@ export function titleProviderId(t) {
   return String(ids.find((i) => /^tmdb-|^tvdb-/.test(String(i))) || "");
 }
 
+export function catalogIdsOf(t) {
+  return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].map(String).filter((id) => /^(tmdb-|tvdb-)/.test(id));
+}
+
+/** Leftover dump jf-* in the removed list must not hide the real titled series. */
+export function libraryRowHidden(t, hide) {
+  const set = hide instanceof Set ? hide : new Set(hide || []);
+  if (!set.size) return false;
+  const catalog = catalogIdsOf(t);
+  if (catalog.length) return catalog.some((id) => set.has(id));
+  const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
+  return ids.some((id) => id && set.has(String(id)));
+}
+
 export function titleYear(t) {
   return Number(t?.year) || 0;
 }
@@ -340,11 +354,12 @@ export function dedupeLibraryTitles(titles) {
       ];
       return { ...keep, ids };
     };
+    const mergeAliases = Boolean(t.fromHashDump || slot.best.fromHashDump);
     if (betterScore || preferSeriesName) {
-      slot.best = mergeRow(t, slot.best);
+      slot.best = mergeAliases ? mergeRow(t, slot.best) : t;
       if (year) slot.year = year;
     } else {
-      slot.best = mergeRow(slot.best, t);
+      slot.best = mergeAliases ? mergeRow(slot.best, t) : slot.best;
       slot.year = slot.year || year;
     }
   }
@@ -418,10 +433,7 @@ export function createLibraryCache({ ttlMs = LIBRARY_CACHE_TTL_MS } = {}) {
       mem = {
         at: now,
         complete: mem.complete,
-        titles: mem.titles.filter((t) => {
-          const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
-          return !ids.some((id) => id && hide.has(String(id)));
-        }),
+        titles: mem.titles.filter((t) => !libraryRowHidden(t, hide)),
       };
       return mem;
     },
@@ -469,8 +481,7 @@ export async function serveLibrary({
   const withoutRemoved = (titles) => {
     if (!hide.size) return titles || [];
     return (titles || []).filter((t) => {
-      const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
-      return !ids.some((id) => id && hide.has(String(id)));
+      return !libraryRowHidden(t, hide);
     });
   };
 
