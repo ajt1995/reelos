@@ -2,14 +2,16 @@
 """Public Prowlarr indexers ReelOS may add. No private tracker credentials.
 
 YTS is movies-only — it will not grab Brooklyn Nine-Nine. EZTV / ShowRSS are
-the TV public defs. 1337x and TPB are mixed. TorBox torznab is separate.
+the TV RSS defs (SeasonSearch cannot query them). 1337x and TPB are mixed
+search; cloud OTA often CloudFlare-blocks their sites, so firstboot still
+forceSaves them for a house/LAN box. Knaben + TorrentsCSV are native search
+indexers that answer from datacenter IPs. TorBox torznab is separate and
+must attach to Sonarr as mixed search, not movies-only.
 
 #58 only POSTed when Cardigann schema hints matched (`eztv`, `showrss`).
-Prowlarr's always-present native fallback is TorrentRssIndexer ("Torrent RSS
-Feed"), which does not contain those strings. House 1.2.24 got native TPB;
-EZTV/ShowRSS logged `no schema` and Apply still succeeded. 1.2.50.7 adds a
-TorrentRss RSS fallback and a doctor listing that fails closed if TV publics
-are missing.
+Prowlarr tests on add unless forceSave=true — a CF 400 then logged `no schema`
+and left SeasonSearch RSS-only. 1.2.50.7 added TorrentRss fallback for EZTV/
+ShowRSS; search indexers still need forceSave + a working TV search source.
 """
 from __future__ import annotations
 
@@ -17,6 +19,8 @@ from __future__ import annotations
 PUBLIC_INDEXERS = (
     ("ReelOS-1337x", ("1337x",), "both"),
     ("ReelOS-tpb", ("thepiratebay", "the pirate bay"), "both"),
+    ("ReelOS-knaben", ("knaben",), "both"),
+    ("ReelOS-torrentcsv", ("torrentscsv", "torrents csv"), "both"),
     ("ReelOS-yts", ("yts", "yify"), "movie"),
     ("ReelOS-eztv", ("eztv",), "tv"),
     ("ReelOS-showrss", ("showrss", "show rss"), "tv"),
@@ -57,8 +61,25 @@ def movie_only_public_indexer_names() -> list[str]:
 
 
 def required_tv_public_names() -> list[str]:
-    """Must be on Prowlarr (and synced to Sonarr) for sitcom SeasonSearch."""
+    """RSS TV publics that must exist. SeasonSearch still needs a search indexer."""
     return [n for n, _hints, role in PUBLIC_INDEXERS if role == "tv"]
+
+
+def required_tv_search_names() -> list[str]:
+    """Mixed public search indexers SeasonSearch can query (not YTS, not RSS)."""
+    return [n for n, _hints, role in PUBLIC_INDEXERS if role == "both"]
+
+
+def name_looks_like_tv_search(name: str) -> bool:
+    n = str(name or "").lower()
+    if "yts" in n or "yify" in n:
+        return False
+    if "eztv" in n or "showrss" in n:
+        return False
+    return any(
+        token in n
+        for token in ("1337", "tpb", "pirate", "knaben", "csv", "torbox", "bitsearch", "nyaa")
+    )
 
 
 def ota_should_add_missing_public_indexers() -> bool:
@@ -68,6 +89,14 @@ def ota_should_add_missing_public_indexers() -> bool:
 
 def ota_should_skip_live_indexer_tests() -> bool:
     return True
+
+
+def prowlarr_indexer_write_url(origin: str = "http://127.0.0.1:9696/api/v1", iid=None) -> str:
+    """Prowlarr tests on add unless forceSave=true — CF 400 then never saved 1337x/TPB."""
+    base = f"{str(origin or '').rstrip('/')}/indexer"
+    if iid is not None:
+        base = f"{base}/{iid}"
+    return f"{base}?forceSave=true"
 
 
 def prowlarr_app_sync_level() -> str:
@@ -317,7 +346,7 @@ def apply_public_indexers(have_rows, schemas, post, log=None) -> list[str]:
             "rss fallback",
         ):
             continue
-        log(f"public indexer no schema {name}")
+        log(f"public indexer skipped {name} ({plan.get('reason') or via})")
 
     for req in required_tv_public_names():
         if req in names:
@@ -455,12 +484,19 @@ def enabled_indexer_names(rows) -> list[str]:
 
 
 def indexer_is_rss_only(ix: dict) -> bool:
-    """TorrentRss EZTV/ShowRSS cannot MoviesSearch or SeasonSearch, even with search flags on."""
+    """TorrentRss cannot SeasonSearch. Cardigann EZTV is search — do not key off the name."""
     if not isinstance(ix, dict):
         return False
     impl = str(ix.get("implementation") or "").lower()
     name = str(ix.get("name") or "").lower()
-    return impl == "torrentrssindexer" or "rss" in impl or "eztv" in name or "showrss" in name
+    if impl in ("torrentrssindexer", "showrss"):
+        return True
+    if "rss" in impl:
+        return True
+    # showRSS is an RSS product even when Cardigann-wrapped. EZTV Cardigann searches.
+    if "showrss" in name:
+        return True
+    return False
 
 
 def sonarr_indexer_kind(ix: dict) -> str:
@@ -492,11 +528,13 @@ def sonarr_indexer_kind(ix: dict) -> str:
     interactive = ix.get("enableInteractiveSearch")
     if auto is False and interactive is False:
         return "none"
-    if tv_cats or "tpb" in name or "pirate" in name or "1337" in name or impl in (
+    if tv_cats or name_looks_like_tv_search(name) or impl in (
         "thepiratebay",
         "cardigann",
         "torznab",
         "newznab",
+        "knaben",
+        "torrentscsv",
     ):
         return "search"
     return "none"
@@ -519,7 +557,9 @@ def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
     """Doctor must list every enabled indexer, not the first live-test pass.
 
     House 1.2.50.6 showed only ReelOS-tpb because releases_hop returned on the
-    first indexer/test success. Missing EZTV/ShowRSS is a failed hop.
+    first indexer/test success. Missing EZTV/ShowRSS is a failed hop. RSS-only
+    (no 1337x/TPB/Knaben/TorrentsCSV/TorBox) is also a failed hop — SeasonSearch
+    cannot query TorrentRss.
     """
     names = [str(n) for n in (enabled_names or []) if n]
     have = set(names)
@@ -527,6 +567,9 @@ def doctor_releases_detail(enabled_names) -> tuple[str, bool]:
     listed = ",".join(names) if names else "none"
     if missing:
         return f"{listed} (missing {','.join(missing)})", False
+    have_search = any(name_looks_like_tv_search(n) or n in required_tv_search_names() for n in names)
+    if not have_search:
+        return f"{listed} (RSS-only — SeasonSearch needs a search indexer)", False
     return listed, True
 
 
@@ -559,12 +602,14 @@ def radarr_indexer_kind(ix: dict) -> str:
     interactive = ix.get("enableInteractiveSearch")
     if auto is False and interactive is False:
         return "none"
-    if movie_cats or "yts" in name or "yify" in name or "tpb" in name or "pirate" in name or "1337" in name or impl in (
+    if movie_cats or "yts" in name or "yify" in name or name_looks_like_tv_search(name) or impl in (
         "thepiratebay",
         "yts",
         "cardigann",
         "torznab",
         "newznab",
+        "knaben",
+        "torrentscsv",
     ):
         return "search"
     return "none"
@@ -598,14 +643,14 @@ def indexer_is_search_source(ix: dict) -> bool:
 
 
 def indexer_matches_role(ix: dict, role: str) -> bool:
+    """YTS is movies-only. Everything else searchable (TorBox, Knaben, TPB) is mixed."""
     name = str(ix.get("name") or "")
     for n, _hints, r in PUBLIC_INDEXERS:
         if n == name:
             return r == role or r == "both"
-    if role == "movie":
-        return "yts" in name.lower() or "yify" in name.lower() or "tpb" in name.lower() or "1337" in name.lower()
-    if role == "tv":
-        return "tpb" in name.lower() or "1337" in name.lower() or "pirate" in name.lower()
+    lname = name.lower()
+    if "yts" in lname or "yify" in lname:
+        return role == "movie"
     return True
 
 
@@ -949,6 +994,17 @@ HOUSE_TPB_YTS_SCHEMAS = (
     },
 )
 
+HOUSE_TV_SEARCH_SCHEMAS = (
+    {"name": "Knaben", "implementation": "Knaben", "implementationName": "Knaben", "fields": []},
+    {
+        "name": "TorrentsCSV",
+        "implementation": "TorrentsCSV",
+        "implementationName": "TorrentsCSV",
+        "fields": [],
+    },
+    {"name": "1337x", "implementation": "Cardigann", "fields": [{"name": "definitionFile", "value": "1337x"}]},
+)
+
 # Real Radarr Torznab schema shape. Categories + minimumSeeders are required.
 HOUSE_ARR_TORZNAB_SCHEMA = {
     "implementation": "Torznab",
@@ -1123,6 +1179,45 @@ def _self_test() -> int:
             self.assertIn("ReelOS-showrss", tv)
             self.assertIn("ReelOS-1337x", tv)
             self.assertIn("ReelOS-tpb", tv)
+            self.assertIn("ReelOS-knaben", tv)
+            self.assertIn("ReelOS-torrentcsv", tv)
+            search = required_tv_search_names()
+            self.assertEqual(
+                search, ["ReelOS-1337x", "ReelOS-tpb", "ReelOS-knaben", "ReelOS-torrentcsv"]
+            )
+            self.assertNotIn("ReelOS-yts", search)
+            self.assertNotIn("ReelOS-eztv", search)
+
+        def test_torbox_and_knaben_match_tv_role(self):
+            torbox = {"id": 9, "name": "ReelOS-torbox", "enable": True, "implementation": "Torznab"}
+            knaben = {"id": 8, "name": "ReelOS-knaben", "enable": True, "implementation": "Knaben"}
+            csv = {"id": 7, "name": "ReelOS-torrentcsv", "enable": True, "implementation": "TorrentsCSV"}
+            yts = {"id": 2, "name": "ReelOS-yts", "enable": True, "implementation": "YTS"}
+            self.assertTrue(indexer_is_search_source(torbox))
+            self.assertTrue(indexer_matches_role(torbox, "tv"))
+            self.assertTrue(indexer_matches_role(torbox, "movie"))
+            self.assertTrue(indexer_matches_role(knaben, "tv"))
+            self.assertTrue(indexer_matches_role(csv, "tv"))
+            self.assertFalse(indexer_matches_role(yts, "tv"))
+            self.assertTrue(indexer_matches_role(yts, "movie"))
+            self.assertEqual(sonarr_indexer_kind(knaben), "search")
+            self.assertEqual(sonarr_indexer_kind(csv), "search")
+            self.assertEqual(sonarr_indexer_kind(torbox), "search")
+
+        def test_prowlarr_force_save_skips_live_test(self):
+            self.assertTrue(prowlarr_indexer_write_url().endswith("/indexer?forceSave=true"))
+            self.assertIn(
+                "/indexer/3?forceSave=true",
+                prowlarr_indexer_write_url("http://127.0.0.1:9696/api/v1", 3),
+            )
+
+        def test_cardigann_eztv_is_search_not_rss(self):
+            card = {"enable": True, "name": "ReelOS-eztv", "implementation": "Cardigann"}
+            rss = {"enable": True, "name": "ReelOS-eztv", "implementation": "TorrentRssIndexer"}
+            self.assertFalse(indexer_is_rss_only(card))
+            self.assertTrue(indexer_is_rss_only(rss))
+            self.assertEqual(sonarr_indexer_kind(card), "search")
+            self.assertEqual(sonarr_indexer_kind(rss), "rss")
 
         def test_house_with_only_yts_still_needs_tv_publics(self):
             missing = plan_missing_public_indexers(["ReelOS-yts", "ReelOS-torbox"])
@@ -1207,6 +1302,53 @@ def _self_test() -> int:
             plan = pick_add_plan("ReelOS-eztv", ("eztv",), schemas)
             self.assertEqual(plan["method"], "schema")
             self.assertEqual(plan["schema"]["name"], "EZTV")
+
+        def test_knaben_and_torrentcsv_schema_posts_as_search(self):
+            schemas = list(HOUSE_TPB_YTS_SCHEMAS) + list(HOUSE_TV_SEARCH_SCHEMAS)
+            bodies = plan_adds(["ReelOS-tpb", "ReelOS-yts"], schemas)
+            names = [b["name"] for b in bodies]
+            self.assertIn("ReelOS-knaben", names)
+            self.assertIn("ReelOS-torrentcsv", names)
+            self.assertIn("ReelOS-1337x", names)
+            kn = next(b for b in bodies if b["name"] == "ReelOS-knaben")
+            self.assertEqual(kn["implementation"], "Knaben")
+            self.assertEqual(kn["_method"], "schema")
+            csv = next(b for b in bodies if b["name"] == "ReelOS-torrentcsv")
+            self.assertEqual(csv["implementation"], "TorrentsCSV")
+            posted = []
+
+            def post(name, body, via):
+                posted.append(name)
+                return True
+
+            apply_public_indexers(
+                [{"name": "ReelOS-tpb", "enable": True}],
+                schemas,
+                post=post,
+            )
+            self.assertIn("ReelOS-knaben", posted)
+            self.assertIn("ReelOS-torrentcsv", posted)
+            self.assertIn("ReelOS-1337x", posted)
+
+        def test_torbox_attaches_to_sonarr_as_tv_search(self):
+            prow = [
+                {"id": 9, "name": "ReelOS-torbox", "enable": True, "implementation": "Torznab"},
+                {"id": 8, "name": "ReelOS-knaben", "enable": True, "implementation": "Knaben"},
+                {
+                    "id": 3,
+                    "name": "ReelOS-eztv",
+                    "enable": True,
+                    "implementation": "TorrentRssIndexer",
+                },
+            ]
+            posts = []
+            apply_arr_search_indexers(prow, [], "tv", "prow-key", lambda n, b: posts.append(b) or True, lambda *_a: True)
+            names = [b["name"] for b in posts]
+            self.assertIn("ReelOS-torbox", names)
+            self.assertIn("ReelOS-knaben", names)
+            self.assertNotIn("ReelOS-eztv", names)
+            detail, ok = doctor_sonarr_indexers_detail(posts)
+            self.assertTrue(ok, detail)
 
         def test_sonarr_rss_only_is_not_a_search_path(self):
             rss = {
@@ -1628,6 +1770,14 @@ def _self_test() -> int:
             self.assertTrue(ok2)
             self.assertEqual(good, "ReelOS-tpb,ReelOS-eztv,ReelOS-showrss")
             self.assertNotIn("missing", good)
+            rss, rss_ok = doctor_releases_detail(["ReelOS-eztv", "ReelOS-showrss", "ReelOS-yts"])
+            self.assertFalse(rss_ok)
+            self.assertIn("RSS-only", rss)
+            kn, kn_ok = doctor_releases_detail(
+                ["ReelOS-knaben", "ReelOS-torrentcsv", "ReelOS-eztv", "ReelOS-showrss"]
+            )
+            self.assertTrue(kn_ok)
+            self.assertIn("ReelOS-knaben", kn)
 
         def test_hybrid_profile_allows_eztv_720p(self):
             items = [

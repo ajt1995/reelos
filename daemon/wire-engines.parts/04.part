@@ -86,15 +86,13 @@ def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
         "fields": fields,
     }
     try:
-        call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+        call("http://127.0.0.1:9696/api/v1/indexer?forceSave=true", prow_key, method="POST", body=body)
         log_wire(f"provider indexer added {name} via Torznab search-api")
         return True
     except urllib.error.HTTPError as e:
         err = e.read().decode()[:400] if e.fp else str(e)
         set_releases_error(f"Prowlarr {e.code}: {err}")
-        if e.code == 400 and name.lower() in err.lower():
-            return indexer_enabled(prow_key, name)
-        return False
+        return indexer_enabled(prow_key, name)
     except NET_ERR as e:
         set_releases_error(f"torznab POST failed {e}")
         return False
@@ -128,9 +126,12 @@ def indexer_enabled(prow_key: str, name: str) -> bool:
 
 
 # Fallback if public_indexers.py is missing on an old bin/. YTS is movies-only.
+# Knaben + TorrentsCSV are the cloud-reachable TV search path when 1337x/TPB CF.
 PUBLIC_INDEXERS = (
     ("ReelOS-1337x", ("1337x",)),
     ("ReelOS-tpb", ("thepiratebay", "the pirate bay")),
+    ("ReelOS-knaben", ("knaben",)),
+    ("ReelOS-torrentcsv", ("torrentscsv", "torrents csv")),
     ("ReelOS-yts", ("yts", "yify")),
     ("ReelOS-eztv", ("eztv",)),
     ("ReelOS-showrss", ("showrss", "show rss")),
@@ -165,8 +166,14 @@ def _public_roster() -> list:
 
 
 def _post_public_indexer(prow_key: str, name: str, body: dict, via: str) -> bool:
+    mod = _load_public_indexers()
+    url = (
+        mod.prowlarr_indexer_write_url()
+        if mod and getattr(mod, "prowlarr_indexer_write_url", None)
+        else "http://127.0.0.1:9696/api/v1/indexer?forceSave=true"
+    )
     try:
-        call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+        call(url, prow_key, method="POST", body=body)
         log_wire(f"public indexer added {name} via {via}")
         return True
     except urllib.error.HTTPError as e:
@@ -174,10 +181,10 @@ def _post_public_indexer(prow_key: str, name: str, body: dict, via: str) -> bool
         log_wire(f"public indexer {name} {e.code}: {err}")
         if e.code == 400 and name.lower() in err.lower():
             return indexer_enabled(prow_key, name)
-        return False
+        return indexer_enabled(prow_key, name)
     except NET_ERR as e:
         log_wire(f"public indexer {name} {e}")
-        return False
+        return indexer_enabled(prow_key, name)
 
 
 def _hard_tv_rss_body(name: str, url: str) -> dict:

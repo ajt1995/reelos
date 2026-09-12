@@ -36,7 +36,12 @@ def _add_from_schema(prow_key: str, name: str, key: str, hit: dict) -> None:
         "configContract": hit.get("configContract"),
         "fields": fields,
     }
-    call("http://127.0.0.1:9696/api/v1/indexer", prow_key, method="POST", body=body)
+    call(
+        "http://127.0.0.1:9696/api/v1/indexer?forceSave=true",
+        prow_key,
+        method="POST",
+        body=body,
+    )
     log_wire(f"provider indexer added {name} via {hit.get('implementation')}")
 
 
