@@ -21,6 +21,7 @@ import {
   titleForRequest,
   titleMatchesId,
   titlePresenceKeys,
+  requestProgressLabel,
   tvSeasonChips,
 } from "./sync-requests.ts";
 import type { MediaRequest, Title } from "./types.ts";
@@ -676,4 +677,46 @@ test("tvSeasonChips Coming for announced unreleased seasons", () => {
     ["1:Watch", "2:Watch", "3:Watch", "4:Coming"],
   );
   assert.equal(isInFlightRequest({ status: "downloading", reason: "Announced — not released yet" }), false);
+});
+
+test("Rookie dump S02 is Importing not Watch; 0% linked files paint Importing", () => {
+  const chips = tvSeasonChips(
+    "tmdb-tv-79744",
+    [
+      row({
+        id: "s2",
+        titleId: "tmdb-tv-79744",
+        season: 2,
+        status: "downloading",
+        reason: "Files linked — waiting for Sonarr import",
+      }),
+      row({ id: "s9", titleId: "tmdb-tv-79744", season: 9, status: "downloading", reason: "Announced — not released yet" }),
+    ],
+    [{ id: "tmdb-tv-79744", kind: "tv", onDiskSeasons: [1], importingSeasons: [2], unreleasedSeasons: [9] }],
+  );
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label}`),
+    ["1:Watch", "2:Importing", "9:Coming"],
+  );
+  assert.equal(
+    requestProgressLabel(
+      row({
+        id: "s2",
+        titleId: "tmdb-tv-79744",
+        season: 2,
+        status: "downloading",
+        progress: 0,
+        reason: "Files linked — waiting for Sonarr import",
+      }),
+    ),
+    "Importing",
+  );
+  assert.equal(
+    requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", season: 3, status: "downloading", progress: 0, reason: "Searching — no file yet" })),
+    "Searching",
+  );
+  assert.notEqual(
+    requestProgressLabel(row({ id: "s3", titleId: "tmdb-tv-79744", status: "downloading", progress: 0 })),
+    "0%",
+  );
 });

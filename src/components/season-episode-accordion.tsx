@@ -23,6 +23,7 @@ export function SeasonEpisodeAccordion({
   selectedSeason,
   onSelectSeason,
   diskSeasons,
+  importingSeasons,
   unreleasedSeasons,
   titleId,
   seasonsLoading,
@@ -37,6 +38,7 @@ export function SeasonEpisodeAccordion({
   selectedSeason: number;
   onSelectSeason: (n: number) => void;
   diskSeasons: number[];
+  importingSeasons?: number[];
   unreleasedSeasons?: number[];
   titleId: string;
   seasonsLoading?: boolean;
@@ -129,8 +131,9 @@ export function SeasonEpisodeAccordion({
           const selected = selectedSeason === n;
           const expanded = selected && open;
           const onDisk = diskSeasons.includes(n) && !removedHere;
+          const importing = Boolean(importingSeasons?.includes(n)) && !onDisk;
           const unreleased = Boolean(unreleasedSeasons?.includes(n));
-          const chip = seasonChipLabel({ onDisk, unreleased, removedHere });
+          const chip = seasonChipLabel({ onDisk, importing, unreleased, removedHere });
           return (
             <button
               key={n}

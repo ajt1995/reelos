@@ -219,6 +219,8 @@ test("announced season with 0 episodes and future airDate is Coming, not Request
   assert.equal(seasonIsUnreleased(sonarrTba, now), true);
   assert.equal(seasonIsUnreleased(airingMissing, now), false);
   assert.equal(seasonChipKind({ unreleased: true }), "coming");
+  assert.equal(seasonChipKind({ importing: true }), "importing");
+  assert.equal(seasonChipLabel({ importing: true }), "Importing");
   assert.equal(seasonChipLabel({ unreleased: true }), UNRELEASED_SEASON_CHIP);
   assert.equal(seasonChipLabel({ onDisk: true, unreleased: true }), "Watch");
   assert.equal(seasonChipLabel({}), "Request");

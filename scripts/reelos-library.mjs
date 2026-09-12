@@ -149,26 +149,61 @@ export function looksLikeHashTitle(name) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
 }
 
+const INDEXER_HOST =
+  /(?:uindex|torrenting|torrentcouch|eztvx?|1337x|bitsearch|rarbg|yts|tpb|limetorrents|nyaa)/i;
+
+const TLD = "org|com|net|to|tv|cc|me|info|xyz";
+
+/** "www.UIndex.org - The Rookie" / "org - Silo" / "[TorrentCouch.com] Show" → the show name. */
+export function stripIndexerPrefix(raw) {
+  let s = String(raw || "").trim();
+  while (true) {
+    const stripped = s.replace(/^\[+[^\]]+\]+\s*/, "").trim();
+    if (stripped === s) break;
+    s = stripped;
+  }
+  s = s.replace(/\s*\[+\s*[^\]]+\]+\s*$/g, "").trim();
+  if (INDEXER_HOST.test(s)) {
+    s = s.replace(new RegExp(`^(?:www\\.)?[a-z0-9.-]+\\.(?:${TLD})\\s*[-–—:.]+\\s*`, "i"), "").trim();
+  }
+  s = s.replace(/^www\.[a-z0-9.-]+\s*[-–—:]+\s*/i, "").trim();
+  s = s.replace(new RegExp(`^www[\\s._-]+[a-z0-9]+[\\s._-]+(?:${TLD})\\b[\\s._:-]*`, "i"), "").trim();
+  s = s.replace(new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+`, "i"), "").trim();
+  s = s.replace(/^[-_\s]+/, "").trim();
+  return s || String(raw || "").trim();
+}
+
+export function looksLikeIndexerDump(name) {
+  const s = String(name || "").trim();
+  if (!s) return false;
+  if (/^www[\s._-]/i.test(s) || /^www\./i.test(s)) return true;
+  if (new RegExp(`^(?:${TLD})\\s*[-–—:]+\\s+\\S`, "i").test(s)) return true;
+  if (INDEXER_HOST.test(s) && (/[-.]/.test(s) || /^\[[^\]]+\]/.test(s) || /\[[^\]]+\]\s*$/.test(s))) return true;
+  const stripped = stripIndexerPrefix(s);
+  return Boolean(stripped) && stripped !== s;
+}
+
 const QUALITY_CUT = /[\s._-]+(?:\d{3,4}p|2160p|1080p|720p|480p|4k|uhd|web-?dl|webrip|bluray|b[dr]rip|hdtv|hdrip|hdr10|dolby|vision|ddp?5\.?1|atmos|truehd|dts|x26[45]|h\.?26[45]|hevc|avc|aac|proper|repack|internal|multi|complete|h264|h265)\b/i;
 
 /** "Rick And Morty S04E01 … 720p BluRay.mp4" → Rick And Morty. Never ffprobe. */
 export function humanTitleFromSceneName(raw) {
   let s = String(raw || "").trim();
   s = s.replace(/\.[a-z0-9]{2,4}$/i, "");
-  while (true) {
-    const stripped = s.replace(/^\[+[^\]]+\]+\s*/, "").trim();
-    if (stripped === s) break;
-    s = stripped;
-  }
+  s = stripIndexerPrefix(s);
   s = s.replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+  s = stripIndexerPrefix(s);
   if (!s || looksLikeHashTitle(s)) return { title: "", year: 0 };
   const yearHit = s.match(/\b((?:19|20)\d{2})\b/);
   const year = yearHit ? Number(yearHit[1]) : 0;
   s = s.split(QUALITY_CUT)[0].trim();
+  s = s.replace(/^(?:[Ss]\d{1,2}\s*[Ee]\d{1,3})\s+/, "").trim();
   s = s.replace(/\s*[Ss]\d{1,2}\s*[.\-_ ]?\s*[Ee]\d{1,3}\b.*$/, "").trim();
   s = s.replace(/\s+season\s+\d{1,2}\b.*$/i, "").trim();
   s = s.replace(/\s+[Ss]\d{1,2}(?!\d)(?![eE]\d).*$/, "").trim();
   s = s.replace(/\s+\(?((?:19|20)\d{2})\)?\s*$/, "").trim();
+  // "Reacher II Ponte" is S02 + scene group, not a second named title.
+  s = s.replace(/\s+(?:II|III|IV|VI|VII|VIII|IX)\s+[A-Za-z][A-Za-z0-9]{1,14}$/i, "").trim();
+  s = s.replace(/\s+-[A-Z][A-Za-z0-9]{2,14}$/g, "").trim();
   s = s.replace(/^[-_\s]+|[-_\s]+$/g, "").trim();
   if (!s || looksLikeHashTitle(s) || /^s\d{1,2}e\d{1,3}$/i.test(s)) return { title: "", year: 0 };
   return { title: s, year };
@@ -246,7 +281,7 @@ export function repairHashTitles(titles, { listFiles } = {}) {
       return [];
     });
   return (titles || []).map((t) => {
-    if (!t || !looksLikeHashTitle(t.title)) return t;
+    if (!t || !(looksLikeHashTitle(t.title) || looksLikeIndexerDump(t.title))) return t;
     const files = list(t) || [];
     const ided = identifyLibraryTitle({ name: t.title, path: t.path, files });
     const hashes = hashDumpIds(t.title, t.path);
@@ -256,8 +291,9 @@ export function repairHashTitles(titles, { listFiles } = {}) {
       title: ided.title,
       year: t.year || ided.year || 0,
       fromHashDump: true,
+      fromDump: namedCatalogTitle(t) ? false : true,
       ids: [...new Set([...(t.ids || []), ...hashes])],
-      onDiskSeasons: [...new Set([...(t.onDiskSeasons || []), ...disk])].sort((a, b) => a - b),
+      importingSeasons: [...new Set([...(t.importingSeasons || []), ...disk])].sort((a, b) => a - b),
     };
   });
 }
@@ -281,19 +317,35 @@ export function mapJellyfinItems(items, host, { listFiles } = {}) {
             return [...names, ...nested];
           });
     const hashes = hashDumpIds(it?.Name, it?.Path);
-    const disk = seasonsFromDumpNames(files);
-    if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title) && !hashes.length) {
+    const disk = seasonsFromDumpNames([...files, it?.Path, it?.Name]);
+    const hashish = looksLikeHashTitle(it?.Name) || looksLikeHashTitle(t.title) || hashes.length;
+    const indexerDump =
+      looksLikeIndexerDump(it?.Name) || looksLikeIndexerDump(t.title) || looksLikeIndexerDump(it?.Path);
+    const dumpish = Boolean(hashish || indexerDump);
+    const named = namedCatalogTitle(t);
+    if (!dumpish) {
       return disk.length ? { ...t, onDiskSeasons: disk } : t;
     }
     const ided = identifyLibraryTitle({ name: it?.Name, path: it?.Path, files });
+    // Named Rookie with a UIndex dump Path is the show — dump seasons are Importing, never Watch.
+    if (named) {
+      return {
+        ...t,
+        path: it?.Path || t.path,
+        fromDump: false,
+        importingSeasons: disk,
+      };
+    }
     return {
       ...t,
-      title: ided.title,
-      year: t.year || ided.year || 0,
-      fromHashDump: true,
+      title: ided.title || t.title,
+      year: indexerDump ? 0 : t.year || ided.year || 0,
+      fromHashDump: Boolean(hashish),
+      fromDump: true,
       ids: [...new Set([...(t.ids || []), ...hashes])],
       path: it?.Path || t.path,
-      onDiskSeasons: disk,
+      importingSeasons: disk,
+      onDiskSeasons: [],
     };
   });
 }
@@ -314,11 +366,12 @@ export function mapJellyfinItem(it, host) {
     kind === "tv" ? (tvdb ? `tvdb-${tvdb}` : ids[0]) : tmdb ? `tmdb-${tmdb}` : ids[0];
   const year = Number(it.ProductionYear) || 0;
   const poster = jellyfinHasPrimaryImage(it) ? jellyfinPosterUrl(host, it.Id) : "";
+  const rawName = stripIndexerPrefix(it.Name || "Untitled");
   return {
     id,
     ids,
     kind,
-    title: stripMatchingYear(it.Name || "Untitled", year),
+    title: stripMatchingYear(rawName, year),
     year,
     overview: "",
     poster,
@@ -385,8 +438,70 @@ export function shelfLiteralKey(t) {
 }
 
 export function titleProviderId(t) {
-  const ids = Array.isArray(t?.ids) ? t.ids : [];
-  return String(ids.find((i) => /^tmdb-|^tvdb-/.test(String(i))) || "");
+  const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].map(String);
+  return ids.find((i) => /^(tmdb-|tvdb-)/.test(i)) || "";
+}
+
+/** TMDB/TVDB card with a human name — not a dump leftover, even if Path is a UIndex folder. */
+export function namedCatalogTitle(t) {
+  return Boolean(
+    titleProviderId(t) && t?.title && !looksLikeHashTitle(t.title) && !looksLikeIndexerDump(t.title),
+  );
+}
+
+function seasonNums(list) {
+  return [...new Set((list || []).map(Number).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+}
+
+function dumpSeasonBucket(t) {
+  if (namedCatalogTitle(t)) {
+    const onDisk = seasonNums(t.onDiskSeasons);
+    return { onDisk, importing: seasonNums(t.importingSeasons).filter((n) => !onDisk.includes(n)) };
+  }
+  const dumped = Boolean(t?.fromDump || isDumpTwinCard(t) || looksLikeIndexerDump(t?.title) || looksLikeHashTitle(t?.title));
+  if (dumped) {
+    return { onDisk: [], importing: seasonNums([...(t.onDiskSeasons || []), ...(t.importingSeasons || [])]) };
+  }
+  const onDisk = seasonNums(t.onDiskSeasons);
+  return { onDisk, importing: seasonNums(t.importingSeasons).filter((n) => !onDisk.includes(n)) };
+}
+
+/** Named Watch seasons stay; dump/hash seasons become Importing. */
+export function mergeTitleRows(keep, drop) {
+  if (!keep) return drop;
+  if (!drop) return keep;
+  const k = dumpSeasonBucket(keep);
+  const d = dumpSeasonBucket(drop);
+  const onDiskSeasons = seasonNums([...k.onDisk, ...d.onDisk]);
+  const importingSeasons = seasonNums([...k.importing, ...d.importing]).filter((n) => !onDiskSeasons.includes(n));
+  const ids = [
+    ...new Set(
+      [
+        ...(keep.ids || []),
+        ...(drop.ids || []),
+        keep.id,
+        drop.id,
+        keep.jellyfinId,
+        drop.jellyfinId,
+        keep.jellyfinId ? `jf-${keep.jellyfinId}` : "",
+        drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
+      ]
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+  const winner = namedCatalogTitle(keep) || !namedCatalogTitle(drop) ? keep : drop;
+  return {
+    ...winner,
+    ids,
+    onDiskSeasons,
+    importingSeasons,
+    unreleasedSeasons: seasonNums([...(keep.unreleasedSeasons || []), ...(drop.unreleasedSeasons || [])]),
+    poster: keep.poster || drop.poster,
+    year: Number(keep.year) > 0 ? keep.year : drop.year,
+    fromDump: namedCatalogTitle(winner) ? false : Boolean(keep.fromDump || drop.fromDump),
+    fromHashDump: namedCatalogTitle(winner) ? Boolean(keep.fromHashDump && !namedCatalogTitle(keep)) : Boolean(keep.fromHashDump || drop.fromHashDump),
+  };
 }
 
 export function catalogIdsOf(t) {
@@ -431,6 +546,133 @@ export function isHashDumpCard(t) {
   return false;
 }
 
+function titleWords(name) {
+  return String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+export function dumpTitleWords(t) {
+  const cleaned = stripIndexerPrefix(
+    stripCompletePackSuffix(stripSeasonFolderSuffix(humanTitleFromSceneName(t?.title || "").title || t?.title || "")),
+  );
+  return titleWords(cleaned);
+}
+
+/** Unmatched indexer / scene / hash leftover — not a TMDB/TVDB card. */
+export function isDumpTwinCard(t) {
+  if (!t) return false;
+  if (namedCatalogTitle(t)) return false;
+  if (isHashDumpCard(t)) return true;
+  if (t.fromDump) return true;
+  if (looksLikeIndexerDump(t.title) || looksLikeIndexerDump(t.path)) return true;
+  if (titleProviderId(t)) return false;
+  if (!(Number(t.year) > 0) || !t.poster) return true;
+  if (/\b[Ss]\d{1,2}\s*[Ee]\d{1,3}\b/.test(String(t.title || ""))) return true;
+  return false;
+}
+
+export function dumpMatchesNamed(dump, named) {
+  if (!dump || !named) return false;
+  const dumpClean = stripIndexerPrefix(
+    stripCompletePackSuffix(stripSeasonFolderSuffix(humanTitleFromSceneName(dump.title).title || dump.title || "")),
+  );
+  const namedClean = stripCompletePackSuffix(stripSeasonFolderSuffix(named.title || ""));
+  const dn = normalizeTitle(dumpClean);
+  const nn = normalizeTitle(namedClean);
+  if (!dn || !nn || dn === "unknownonthisbox") return false;
+  if (dn === nn) return true;
+  const dumpWords = titleWords(dumpClean);
+  const namedWords = titleWords(namedClean);
+  if (!namedWords.length || dumpWords.length < namedWords.length) return false;
+  const namedCore = nn.replace(/^(the|a|an)/, "");
+  const namedSig = namedWords.filter((w) => w !== "the" && w !== "a" && w !== "an");
+  if (namedCore.length < 4 && namedSig.length < 2) return false;
+  for (let i = 0; i <= dumpWords.length - namedWords.length; i++) {
+    if (namedWords.every((w, j) => dumpWords[i + j] === w)) return true;
+  }
+  return false;
+}
+
+function seasonNums(list) {
+  return [...new Set((list || []).map(Number).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+}
+
+/** Dump files waiting for Sonarr import are Importing — they do not become Watch. */
+export function foldDumpSeasons(keep, drop) {
+  const watch = new Set(seasonNums(keep?.onDiskSeasons));
+  const importing = seasonNums([
+    ...(keep?.importingSeasons || []),
+    ...(drop?.importingSeasons || []),
+    ...(drop?.onDiskSeasons || []).filter((n) => !watch.has(Number(n))),
+  ]).filter((n) => !watch.has(n));
+  return { onDiskSeasons: [...watch].sort((a, b) => a - b), importingSeasons: importing };
+}
+
+function shouldAliasDumpId(t) {
+  if (!t) return false;
+  if (t.fromHashDump || looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) return true;
+  return looksLikeIndexerDump(t.title) || looksLikeIndexerDump(t.path);
+}
+
+function mergeDumpIntoNamed(keep, drop) {
+  const extra = shouldAliasDumpId(drop)
+    ? [
+        ...(drop.ids || []),
+        drop.id,
+        drop.jellyfinId,
+        drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
+      ]
+    : [];
+  const ids = [
+    ...new Set(
+      [...(keep.ids || []), keep.id, keep.jellyfinId, keep.jellyfinId ? `jf-${keep.jellyfinId}` : "", ...extra]
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+  return {
+    ...keep,
+    ids,
+    ...foldDumpSeasons(keep, drop),
+    poster: keep.poster || drop.poster,
+  };
+}
+
+/** Named JF/TMDB/TVDB card wins; UIndex / Torrenting / episode-dump twins fold into it. */
+export function collapseDumpTwins(titles) {
+  const list = (titles || []).filter(Boolean).map((t) => ({ ...t }));
+  const namedIdx = [];
+  for (let i = 0; i < list.length; i++) {
+    if (titleProviderId(list[i]) && !isDumpTwinCard(list[i])) namedIdx.push(i);
+  }
+  const drop = new Set();
+  for (let i = 0; i < list.length; i++) {
+    const t = list[i];
+    if (!isDumpTwinCard(t) && titleProviderId(t)) continue;
+    if (!isDumpTwinCard(t) && !looksLikeIndexerDump(t.title)) continue;
+    let best = -1;
+    let bestScore = -1;
+    for (const j of namedIdx) {
+      if (j === i) continue;
+      if (!dumpMatchesNamed(t, list[j])) continue;
+      const exact = normalizeTitle(t.title) === normalizeTitle(list[j].title) ? 2 : 0;
+      const score = exact + String(list[j].title || "").length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = j;
+      }
+    }
+    if (best < 0) continue;
+    list[best] = mergeDumpIntoNamed(list[best], t);
+    drop.add(i);
+  }
+  return list.filter((_, i) => !drop.has(i));
+}
+
 function titleAliasIds(t) {
   return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""]
     .filter(Boolean)
@@ -439,22 +681,22 @@ function titleAliasIds(t) {
 
 /** Home: never paint a 40-char hash / year-0 empty poster when the named show is on the shelf. */
 export function homeShelfRows(titles) {
-  const list = (titles || []).filter(Boolean);
-  const named = list.filter((t) => !isHashDumpCard(t) && t.title && t.title !== UNKNOWN_ON_BOX && !looksLikeHashTitle(t.title));
+  const list = collapseDumpTwins((titles || []).filter(Boolean));
+  const named = list.filter(
+    (t) => !isDumpTwinCard(t) && t.title && t.title !== UNKNOWN_ON_BOX && !looksLikeHashTitle(t.title),
+  );
   const namedIds = new Set(named.flatMap(titleAliasIds));
   const namedNames = new Set(named.map((t) => normalizeTitle(t.title)));
   return list.filter((t) => {
     if (looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) {
-      if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
-      const name = normalizeTitle(t.title);
-      if (name && namedNames.has(name)) return false;
       return false;
     }
-    if (isHashDumpCard(t)) {
+    if (isDumpTwinCard(t)) {
       if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
       const name = normalizeTitle(t.title);
       if (name && namedNames.has(name)) return false;
-      if (!(Number(t.year) > 0) && !t.poster) return false;
+      if (named.some((n) => dumpMatchesNamed(t, n))) return false;
+      if (isHashDumpCard(t) && !(Number(t.year) > 0) && !t.poster) return false;
     }
     return true;
   });
@@ -559,18 +801,37 @@ export function dedupeLibraryTitles(titles) {
       return {
         ...keep,
         ids,
+        poster: keep.poster || drop.poster,
+      };
+    };
+    const mergeAliases = shouldAliasDumpId(t) || shouldAliasDumpId(slot.best);
+    const mergeDisk = (keep, drop) => {
+      const dumpIntoNamed =
+        (isDumpTwinCard(drop) && !isDumpTwinCard(keep)) || (drop.fromHashDump && !keep.fromHashDump);
+      const namedIntoDump =
+        (isDumpTwinCard(keep) && !isDumpTwinCard(drop)) || (keep.fromHashDump && !drop.fromHashDump);
+      if (dumpIntoNamed) {
+        return { ...keep, ...foldDumpSeasons(keep, drop), poster: keep.poster || drop.poster };
+      }
+      if (namedIntoDump) {
+        return {
+          ...drop,
+          ids: [...new Set([...(drop.ids || []), ...(keep.ids || [])].filter(Boolean).map(String))],
+          ...foldDumpSeasons(drop, keep),
+          poster: drop.poster || keep.poster,
+        };
+      }
+      return {
+        ...keep,
         onDiskSeasons: [...new Set([...(keep.onDiskSeasons || []), ...(drop.onDiskSeasons || [])])].sort(
+          (a, b) => a - b,
+        ),
+        importingSeasons: [...new Set([...(keep.importingSeasons || []), ...(drop.importingSeasons || [])])].sort(
           (a, b) => a - b,
         ),
         poster: keep.poster || drop.poster,
       };
     };
-    const mergeAliases = Boolean(t.fromHashDump || slot.best.fromHashDump);
-    const mergeDisk = (keep, drop) => ({
-      ...keep,
-      onDiskSeasons: [...new Set([...(keep.onDiskSeasons || []), ...(drop.onDiskSeasons || [])])].sort((a, b) => a - b),
-      poster: keep.poster || drop.poster,
-    });
     if (betterScore || preferSeriesName) {
       slot.best = mergeDisk(mergeAliases ? mergeRow(t, slot.best) : t, slot.best);
       if (year) slot.year = year;
@@ -579,9 +840,9 @@ export function dedupeLibraryTitles(titles) {
       slot.year = slot.year || year;
     }
   }
-  return [...groups.values()]
-    .flat()
-    .map((s) => (s.year && !titleYear(s.best) ? { ...s.best, year: s.year } : s.best));
+  return collapseDumpTwins(
+    [...groups.values()].flat().map((s) => (s.year && !titleYear(s.best) ? { ...s.best, year: s.year } : s.best)),
+  );
 }
 
 export function withPosterHost(titles, host) {

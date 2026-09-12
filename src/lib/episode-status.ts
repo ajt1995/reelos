@@ -31,16 +31,19 @@ export function episodeRequestAction(status: EpisodeStatus, removedHere = false)
 
 export const UNRELEASED_SEASON_COPY = "Announced — not released yet";
 export const UNRELEASED_SEASON_CHIP = "Coming";
+export const IMPORTING_SEASON_CHIP = "Importing";
 
-export function seasonChipKind(opts: { onDisk?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "watch" | "coming" | "request" {
+export function seasonChipKind(opts: { onDisk?: boolean; importing?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "watch" | "importing" | "coming" | "request" {
   if (opts.onDisk && !opts.removedHere) return "watch";
+  if (opts.importing && !opts.removedHere) return "importing";
   if (opts.unreleased) return "coming";
   return "request";
 }
 
-export function seasonChipLabel(opts: { onDisk?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "Watch" | "Coming" | "Request" {
+export function seasonChipLabel(opts: { onDisk?: boolean; importing?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "Watch" | "Importing" | "Coming" | "Request" {
   const kind = seasonChipKind(opts);
   if (kind === "watch") return "Watch";
+  if (kind === "importing") return IMPORTING_SEASON_CHIP;
   if (kind === "coming") return UNRELEASED_SEASON_CHIP;
   return "Request";
 }

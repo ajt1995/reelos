@@ -187,6 +187,13 @@ export function attachLibraryPresence(title, libraryTitle) {
     inLibrary: Boolean(title.jellyfinId || libraryTitle.jellyfinId),
     year: title.year || libraryTitle.year || 0,
     onDiskSeasons: disk.length ? disk : title.onDiskSeasons || libraryTitle.onDiskSeasons,
+    importingSeasons: [
+      ...new Set(
+        [...(title.importingSeasons || []), ...(libraryTitle.importingSeasons || [])]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
+      ),
+    ].sort((a, b) => a - b),
     seasonList: listed.length ? listed : title.seasonList || libraryTitle.seasonList,
   };
 }
@@ -813,8 +820,11 @@ export function seasonIsUnreleased(raw, now = Date.now()) {
   return false;
 }
 
-export function seasonChipKind({ onDisk = false, unreleased = false, removedHere = false } = {}) {
+export const IMPORTING_SEASON_CHIP = "Importing";
+
+export function seasonChipKind({ onDisk = false, importing = false, unreleased = false, removedHere = false } = {}) {
   if (onDisk && !removedHere) return "watch";
+  if (importing && !removedHere) return "importing";
   if (unreleased) return "coming";
   return "request";
 }
@@ -822,6 +832,7 @@ export function seasonChipKind({ onDisk = false, unreleased = false, removedHere
 export function seasonChipLabel(opts = {}) {
   const kind = seasonChipKind(opts);
   if (kind === "watch") return "Watch";
+  if (kind === "importing") return IMPORTING_SEASON_CHIP;
   if (kind === "coming") return UNRELEASED_SEASON_CHIP;
   return "Request";
 }
@@ -1001,6 +1012,9 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
           .filter((n) => Number.isFinite(n) && n > 0),
       ),
     ].sort((a, b) => a - b);
+    const importing = [
+      ...new Set((t.importingSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n))),
+    ].sort((a, b) => a - b);
     const listed = realSeasonNumbers(
       (facts.series || []).find(
         (s) =>
@@ -1014,6 +1028,7 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
     return {
       ...t,
       onDiskSeasons: disk,
+      importingSeasons: importing,
       seasonList: seasonList.length ? seasonList : t.seasonList,
     };
   });
@@ -1095,10 +1110,19 @@ export function titleRequestSeasonPayload({
         .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
     ),
   ].sort((a, b) => a - b);
+  const importing = [
+    ...new Set(
+      [...(lib?.importingSeasons || []), ...(title?.importingSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n) && !unreleased.includes(n)),
+    ),
+  ].sort((a, b) => a - b);
   const thisUnreleased = seasonN != null && unreleased.includes(seasonN);
+  const thisImporting = seasonN != null && importing.includes(seasonN);
   const honestEngine = honest?.engine || honest?.status || "unknown";
   const seriesAvailable = honest?.status === "available" || honestEngine === "downloaded";
   const status = seasonN != null ? (seasonOnDisk ? "downloaded" : seriesAvailable ? "unknown" : honestEngine) : honestEngine;
+  const importReason = "Files linked — waiting for Sonarr import";
   return {
     status: thisUnreleased ? "unknown" : status,
     engine: "seerr",
@@ -1107,10 +1131,11 @@ export function titleRequestSeasonPayload({
     seasons: title?.seasons,
     seasonList: listed.length ? listed : title?.seasonList,
     onDiskSeasons: disk,
+    importingSeasons: importing,
     unreleasedSeasons: unreleased,
     seasonFacts: title?.seasonFacts,
-    progress: seasonOnDisk ? 100 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
-    reason: seasonOnDisk ? undefined : thisUnreleased ? UNRELEASED_SEASON_COPY : honest?.reason,
+    progress: seasonOnDisk ? 100 : thisImporting || thisUnreleased ? 0 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
+    reason: seasonOnDisk ? undefined : thisUnreleased ? UNRELEASED_SEASON_COPY : thisImporting ? importReason : honest?.reason,
     requestStatus: seasonOnDisk ? "available" : thisUnreleased || (seasonN != null && seriesAvailable) ? undefined : honest?.status,
   };
 }
@@ -1395,11 +1420,18 @@ export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
       merged.set(t.id, t);
       continue;
     }
+    const onDiskSeasons = [...new Set([...(prev.onDiskSeasons || []), ...(t.onDiskSeasons || [])])].sort((a, b) => a - b);
     merged.set(t.id, {
       ...prev,
       ...t,
       ids: [...new Set([...(prev.ids || []), ...(t.ids || [])])],
-      onDiskSeasons: [...new Set([...(prev.onDiskSeasons || []), ...(t.onDiskSeasons || [])])].sort((a, b) => a - b),
+      onDiskSeasons,
+      importingSeasons: [
+        ...new Set([...(prev.importingSeasons || []), ...(t.importingSeasons || [])]),
+      ]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !onDiskSeasons.includes(n))
+        .sort((a, b) => a - b),
     });
   }
   return [...merged.values()];

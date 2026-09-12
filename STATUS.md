@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.55**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.56**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,18 +21,22 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.55 is the ship.*** Unreleased TV seasons (Silo S04, Rookie S09) paint Coming / announced — not released, not Request/Watch, and do not SeasonSearch empty future seasons. Released missing seasons still Request. 54 Caddy 2.6 Updating page stays. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.54**. **Do not house-Apply until told.** Never twice.
+***1.2.50.56 is the ship.*** Home On this box keeps named Silo / Reacher / The Rookie. UIndex, Torrenting, and Reacher Il Ponte dump cards fold into those titles. Dump files waiting for Sonarr import paint Importing, not Watch. Rookie does not lie 0% while files are linked. TBA seasons stay Coming. 55 unreleased seasons Coming stay. 54 Caddy 2.6 Updating page stays. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.55**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.55`
+- **VERSION / channel:** `1.2.50.56`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.54; unreleased season honesty. 54 Caddy 2.6 Updating page. 53 overlay heartbeat. 52 lookupKey. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
-- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.54** installed
+- **Base:** `main` at 1.2.50.55; On this box dump-twin collapse. 55 unreleased season honesty. 54 Caddy 2.6 Updating page. 53 overlay heartbeat. 52 lookupKey. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 1.2.50.46 hash titles. 1.2.50.45 Request. 1.2.50.43 Passengers. 1.2.50.42 hash-dump. 1.2.50.41 honesty. 1.2.50.40 door. 1.2.50.38 Library. 1.2.50.37 Discover.
+- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.55** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
+
+### 1.2.50.56 named titles win / Importing ≠ Watch / Rookie 0%
+
+Austin house screenshot: On this box still painted `www UIndex org - Silo`, Torrenting Silo, `Reacher Il Ponte`, and Rookie at **0%**. Named Silo / Reacher / The Rookie already exist. 56 named title wins — dump/hash/UIndex twins collapse when a JF/TMDB/TVDB card exists. Dump files waiting for Sonarr import paint **Importing**, not Watch. Linked-at-0% paints Importing / Searching / Grabbing, never a fake **0%**. TBA seasons stay Coming (55). Empty art is a placeholder; titles wrap; year 0 stays off. Wizard stays 7. Beta off. Skip 49. Do not house-Apply until told.
 
 ### 1.2.50.55 unreleased seasons are Coming, not Request/Watch
 
@@ -138,7 +142,7 @@ Seven-step wizard is unchanged. Default source is TorBox. Continue on the source
 ## Proof
 
 ```
-python3 scripts/check-ota.py .   # ok version=1.2.50.55
+python3 scripts/check-ota.py .   # ok version=1.2.50.56
 node --test scripts/stack-smoke.test.mjs scripts/apply-stamp-first-39.test.mjs scripts/apply-library-split-40.test.mjs scripts/scale-hardware-41.test.mjs scripts/fuse-no-ffprobe-42.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs scripts/sonarr-manual-import.test.mjs scripts/relink-dumps.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box

@@ -3,7 +3,7 @@ import { ThumbsDown } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { titleInCache } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import { titleMatchesId } from "@/lib/sync-requests";
+import { titleMatchesId, requestProgressLabel } from "@/lib/sync-requests";
 import type { MediaRequest } from "@/lib/types";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -38,12 +38,14 @@ export function TitleCard({
   const showCache =
     !request && !inLibrary && source !== "local-vpn" && titleInCache(title);
   const painted = { ...title, poster: posterArt(title, remoteTitles) };
+  const pct = Number(request?.progress) || 0;
+  const downloadingLabel = requestProgressLabel(request);
 
   return (
     <Link
       to="/title/$id"
       params={{ id: title.id }}
-      className={cn("group block w-[148px] shrink-0 sm:w-[168px]", className)}
+      className={cn("group block w-[148px] min-w-0 max-w-full shrink-0 overflow-hidden sm:w-[168px]", className)}
     >
       <div className="relative overflow-hidden rounded-xl transition-transform duration-200 ease-out group-hover:-translate-y-0.5">
         <Poster title={painted} className="rounded-xl" />
@@ -52,9 +54,9 @@ export function TitleCard({
             Cached
           </span>
         ) : null}
-        {status === "downloading" ? (
+        {status === "downloading" && pct > 0 ? (
           <div className="absolute inset-x-0 bottom-0 h-1 bg-background/40">
-            <div className="h-full bg-gold" style={{ width: `${request?.progress ?? 0}%` }} />
+            <div className="h-full bg-gold" style={{ width: `${pct}%` }} />
           </div>
         ) : null}
         {onHide ? (
@@ -72,21 +74,17 @@ export function TitleCard({
             <ThumbsDown className="size-3.5" />
           </button>
         ) : null}
-        {typeof progress === "number" && progress > 0 && progress < 0.97 ? (
+        {typeof progress === "number" && progress > 0.03 && progress < 0.97 ? (
           <div className="absolute inset-x-0 bottom-0 h-0.5 bg-background/40">
             <div className="h-full bg-live" style={{ width: `${progress * 100}%` }} />
           </div>
         ) : null}
       </div>
-      <p className="mt-2 truncate text-sm font-medium">{title.title}</p>
+      <p className="mt-2 line-clamp-2 break-words text-sm font-medium leading-snug">{title.title}</p>
       <p className="text-xs text-muted">
-        {title.year ? title.year : null}
+        {Number(title.year) > 0 ? title.year : null}
         {status === "available" ? (request?.via === "cache" ? " · Cached" : " · Available now") : null}
-        {status === "downloading"
-          ? request?.via === "cache"
-            ? " · Cached"
-            : ` · ${Math.round(request?.progress ?? 0)}%`
-          : null}
+        {status === "downloading" && downloadingLabel ? ` · ${downloadingLabel}` : null}
         {status === "waiting" ? " · Waiting" : null}
         {status === "failed" ? " · Failed" : null}
       </p>

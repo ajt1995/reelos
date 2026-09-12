@@ -35,6 +35,8 @@ test("announced season fixture is Coming, not Request or Watch", () => {
   assert.notEqual(seasonChipLabel({ unreleased: true }), "Request");
   assert.notEqual(seasonChipLabel({ unreleased: true }), "Watch");
   assert.equal(seasonChipLabel({ onDisk: true }), "Watch");
+  assert.equal(seasonChipLabel({ importing: true }), "Importing");
+  assert.notEqual(seasonChipLabel({ importing: true }), "Watch");
   assert.equal(seasonChipLabel({}), "Request");
   assert.match(UNRELEASED_SEASON_COPY, /not released/i);
 });

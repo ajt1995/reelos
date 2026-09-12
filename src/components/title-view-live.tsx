@@ -92,7 +92,7 @@ export function TitleView({ id }: { id: string }) {
   const ipv4 = useReelStore((s) => s.ipv4);
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watchDoor = useReelStore((s) => s.watch);
-  const { inJellyfin, engineStatus, seasonList, onDiskSeasons, unreleasedSeasons } = useEngineRequest(id, season);
+  const { inJellyfin, engineStatus, seasonList, onDiskSeasons, importingSeasons, unreleasedSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
@@ -223,6 +223,13 @@ export function TitleView({ id }: { id: string }) {
   });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
   const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
+  const linkingSeasons = [
+    ...new Set(
+      [...(importingSeasons || []), ...(resolved.importingSeasons || [])]
+        .map(Number)
+        .filter((n) => n > 0 && !diskSeasons.includes(n)),
+    ),
+  ];
   const comingSeasons = [
     ...new Set(
       [
@@ -300,6 +307,7 @@ export function TitleView({ id }: { id: string }) {
                 selectedSeason={season}
                 onSelectSeason={setSeason}
                 diskSeasons={diskSeasons}
+                importingSeasons={linkingSeasons}
                 unreleasedSeasons={comingSeasons}
                 titleId={requestTitleId}
                 seasonsLoading={seasonsLoading}

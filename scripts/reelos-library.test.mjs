@@ -41,6 +41,11 @@ import {
   libraryRowHidden,
   homeShelfRows,
   healRemovedIds,
+  stripIndexerPrefix,
+  looksLikeIndexerDump,
+  dumpMatchesNamed,
+  collapseDumpTwins,
+  isDumpTwinCard,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -856,7 +861,8 @@ test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.equal(out[0].title, "Rick and Morty");
   assert.ok(out[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
   assert.ok(out[0].ids.includes("73ceff573dc30bebc3fcf26f61de07b25f927a74"));
-  assert.deepEqual(out[0].onDiskSeasons, [4]);
+  assert.deepEqual(out[0].onDiskSeasons || [], []);
+  assert.deepEqual(out[0].importingSeasons, [4]);
 });
 
 test("stale cache hash rows repair from dump filenames then collapse", () => {
@@ -929,3 +935,164 @@ test("Home hides the hash leftover when named Rick is on the shelf", () => {
   );
   assert.deepEqual(seasonsFromDumpNames(["Season 04", "Rick And Morty S04E01.mkv"]), [4]);
 });
+
+test("UIndex / Torrenting prefixes strip to the show name", () => {
+  assert.equal(stripIndexerPrefix("www UIndex org    -    The Rookie"), "The Rookie");
+  assert.equal(stripIndexerPrefix("www.UIndex.org    -    The.Rookie.S02E14"), "The.Rookie.S02E14");
+  assert.equal(stripIndexerPrefix("www Torrenting com - Silo"), "Silo");
+  assert.equal(looksLikeIndexerDump("www UIndex org    -    The Rookie"), true);
+  assert.equal(looksLikeIndexerDump("Brooklyn Nine-Nine"), false);
+  const uindex = humanTitleFromSceneName(
+    "www.UIndex.org    -    The.Rookie.S02E14.Casualties.1080p.HEVC.x265-MeGusta",
+  );
+  assert.equal(uindex.title, "The Rookie");
+  const torrenting = humanTitleFromSceneName(
+    "www.Torrenting.com - Silo S02E03 Solo 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR H 265-Kitsune",
+  );
+  assert.equal(torrenting.title, "Silo");
+});
+
+test("Austin On this box dump twins collapse onto named Rookie / Silo / Reacher", () => {
+  const named = (id, name, year, ids, jf) => ({
+    id,
+    kind: "tv",
+    title: name,
+    year,
+    poster: `/api/jf/Items/${jf}/Images/Primary`,
+    ids,
+    jellyfinId: jf,
+    onDiskSeasons: [1],
+  });
+  const dump = (jf, name, year, path) => ({
+    id: `jf-${jf}`,
+    kind: "tv",
+    title: name,
+    year,
+    poster: "",
+    ids: [`jf-${jf}`],
+    jellyfinId: jf,
+    path,
+    onDiskSeasons: [2],
+  });
+  const rookie = named("tvdb-350665", "The Rookie", 2018, ["tmdb-tv-79744", "tvdb-350665", "jf-01c2"], "01c2");
+  const silo = named("tvdb-403245", "Silo", 2023, ["tmdb-tv-125988", "tvdb-403245", "jf-09e8"], "09e8");
+  const reacher = named("tvdb-366924", "Reacher", 2022, ["tmdb-tv-108978", "tvdb-366924", "jf-0052"], "0052");
+  const b99 = named("tvdb-269586", "Brooklyn Nine-Nine", 2013, ["tmdb-tv-48891", "tvdb-269586", "jf-10a0"], "10a0");
+  const twins = [
+    dump("2386", "www UIndex org    -    The Rookie", 0, "/symlinks/sonarr/www.UIndex.org    -    The.Rookie.S02E14.Casualties.1080p.HEVC.x265-MeGusta"),
+    dump("37b7", "www UIndex org    -    Silo", 0, "/symlinks/sonarr/www.UIndex.org    -    Silo S01E06 The Relic"),
+    dump("a36b", "www Torrenting com - Silo", 0, "/symlinks/sonarr/www.Torrenting.com - Silo S02E03 Solo"),
+    dump("598e", "Reacher Il Ponte", 2026, "/symlinks/sonarr/Reacher Il Ponte - S04 E0508 (2026) WEBRip"),
+    dump("ef2a", "S04E06 Reacher Lo Sfortunato Plum", 2026, "/symlinks/sonarr/S04E06 Reacher Lo Sfortunato Plum (2026) WEBRip"),
+    dump("0b76", "Reacher Tutti Con Sampson", 2026, "/symlinks/sonarr/Reacher Tutti Con Sampson - S04 E0708 (2026)"),
+    dump("37cb", "Reacher Karambit Mortale", 2026, "/symlinks/sonarr/Reacher Karambit Mortale - S04 E0408(2026)"),
+  ];
+  assert.equal(dumpMatchesNamed(twins[0], rookie), true);
+  assert.equal(dumpMatchesNamed(twins[1], silo), true);
+  assert.equal(dumpMatchesNamed(twins[2], silo), true);
+  assert.equal(dumpMatchesNamed(twins[3], reacher), true);
+  assert.equal(dumpMatchesNamed(twins[4], reacher), true);
+  assert.equal(isDumpTwinCard(twins[0]), true);
+  assert.equal(isDumpTwinCard(rookie), false);
+  const mapped = mapJellyfinItems(
+    [
+      {
+        Id: "2386",
+        Name: "www UIndex org    -    The Rookie",
+        Type: "Series",
+        ProductionYear: 0,
+        Path: "/symlinks/sonarr/www.UIndex.org    -    The.Rookie.S02E14.Casualties.1080p.HEVC.x265-MeGusta",
+        ProviderIds: {},
+        ImageTags: {},
+      },
+    ],
+    "10.0.0.5",
+    { listFiles: () => [] },
+  )[0];
+  assert.equal(mapped.title, "The Rookie");
+  const shelf = [...twins, rookie, silo, reacher, b99];
+  const shown = homeShelfRows(shelf);
+  assert.deepEqual(
+    shown.map((t) => t.title).sort(),
+    ["Brooklyn Nine-Nine", "Reacher", "Silo", "The Rookie"],
+  );
+  const deduped = dedupeLibraryTitles(shelf);
+  assert.deepEqual(
+    deduped.map((t) => t.title).sort(),
+    ["Brooklyn Nine-Nine", "Reacher", "Silo", "The Rookie"],
+  );
+  assert.ok(deduped.find((t) => t.title === "The Rookie").ids.includes("jf-2386"));
+  assert.ok(collapseDumpTwins(shelf).every((t) => !/^www /i.test(t.title)));
+  const namedRookie = deduped.find((t) => t.title === "The Rookie");
+  assert.deepEqual(namedRookie.onDiskSeasons, [1]);
+  assert.deepEqual(namedRookie.importingSeasons, [2]);
+  const namedSilo = deduped.find((t) => t.title === "Silo");
+  assert.deepEqual(namedSilo.onDiskSeasons, [1]);
+  assert.ok(namedSilo.importingSeasons.includes(2));
+  assert.equal(dumpMatchesNamed({ title: "Reacher II Ponte" }, reacher), true);
+  const foundation = named("tvdb-1", "Foundation", 2021, ["tvdb-1", "tmdb-tv-1"], "found1");
+  const found = named("tvdb-2", "Found", 2023, ["tvdb-2", "tmdb-tv-2"], "found2");
+  assert.equal(dumpMatchesNamed(foundation, found), false);
+  assert.equal(dedupeLibraryTitles([foundation, found]).length, 2);
+});
+
+/** House screenshot: org-Silo, Reacher, Reacher II Ponte, Torrenting dump, Rookie 0%. Named titles win. Importing ≠ Watch. TBA = Coming. */
+test("house screenshot fixture: named titles win, dump files are Importing, TBA is Coming", () => {
+  const named = (id, name, year, ids, jf, disk, extra = {}) => ({
+    id,
+    kind: "tv",
+    title: name,
+    year,
+    poster: `/p/${jf}.jpg`,
+    ids,
+    jellyfinId: jf,
+    onDiskSeasons: disk,
+    ...extra,
+  });
+  const dump = (jf, name, path, seasons) => ({
+    id: `jf-${jf}`,
+    kind: "tv",
+    title: name,
+    year: 0,
+    poster: "",
+    ids: [`jf-${jf}`],
+    jellyfinId: jf,
+    path,
+    importingSeasons: seasons,
+    fromDump: true,
+  });
+  const silo = named("tvdb-403245", "Silo", 2023, ["tvdb-403245", "tmdb-tv-125988"], "silo", [1, 2, 3], {
+    unreleasedSeasons: [4],
+  });
+  const reacher = named("tvdb-366924", "Reacher", 2022, ["tvdb-366924", "tmdb-tv-108978"], "reach", [1]);
+  const rookie = named("tvdb-350665", "The Rookie", 2018, ["tvdb-350665", "tmdb-tv-79744"], "rook", [1], {
+    unreleasedSeasons: [9],
+  });
+  const shelf = [
+    dump("orgsilo", "www UIndex org - Silo", "/symlinks/sonarr/www.UIndex.org - Silo", [1]),
+    reacher,
+    dump("ponte", "Reacher II Ponte", "/symlinks/sonarr/Reacher II Ponte", [2]),
+    dump("torrsilo", "www Torrenting com - Silo", "/symlinks/sonarr/www.Torrenting.com - Silo", [2]),
+    dump("orgrook", "www UIndex org - The Rookie", "/symlinks/sonarr/www.UIndex.org - The.Rookie.S02E14", [2]),
+    silo,
+    rookie,
+  ];
+  const home = homeShelfRows(shelf);
+  assert.deepEqual(home.map((t) => t.title).sort(), ["Reacher", "Silo", "The Rookie"]);
+  assert.equal(home.some((t) => /uindex|torrenting|ponte/i.test(t.title)), false);
+  const out = dedupeLibraryTitles(shelf);
+  const siloOut = out.find((t) => t.title === "Silo");
+  const rookieOut = out.find((t) => t.title === "The Rookie");
+  const reacherOut = out.find((t) => t.title === "Reacher");
+  assert.deepEqual(siloOut.onDiskSeasons, [1, 2, 3]);
+  assert.ok(!siloOut.importingSeasons.includes(1));
+  assert.ok(siloOut.importingSeasons.includes(2) || siloOut.onDiskSeasons.includes(2));
+  assert.deepEqual(rookieOut.onDiskSeasons, [1]);
+  assert.deepEqual(rookieOut.importingSeasons, [2]);
+  assert.ok(!rookieOut.onDiskSeasons.includes(2), "dump S02 is Importing, not Watch");
+  assert.deepEqual(reacherOut.onDiskSeasons, [1]);
+  assert.ok(reacherOut.importingSeasons.includes(2));
+  assert.deepEqual(siloOut.unreleasedSeasons, [4]);
+  assert.deepEqual(rookieOut.unreleasedSeasons, [9]);
+});
+

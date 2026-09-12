@@ -93,8 +93,8 @@ export function LibraryView() {
       ) : (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {shown.map((t) => (
-            <div key={t.id}>
-              <TitleCard title={t} className="w-auto" />
+            <div key={t.id} className="min-w-0 overflow-hidden">
+              <TitleCard title={t} className="w-full max-w-full" />
               <RemoveFromBox title={t} compact />
             </div>
           ))}

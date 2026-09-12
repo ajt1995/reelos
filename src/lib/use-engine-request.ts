@@ -13,6 +13,7 @@ export function useEngineRequest(id: string, season?: number) {
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
   const [seasonList, setSeasonList] = useState<number[]>([]);
   const [onDiskSeasons, setOnDiskSeasons] = useState<number[]>([]);
+  const [importingSeasons, setImportingSeasons] = useState<number[]>([]);
   const [unreleasedSeasons, setUnreleasedSeasons] = useState<number[]>([]);
   const [extraIds, setExtraIds] = useState<string[]>(() => titlePresenceKeys(id));
 
@@ -21,7 +22,7 @@ export function useEngineRequest(id: string, season?: number) {
     let stop = false;
     const ac = new AbortController();
     void fetch("/api/library", { cache: "no-store", signal: ac.signal })
-      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string; onDiskSeasons?: number[] }[] }>)
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string; onDiskSeasons?: number[]; importingSeasons?: number[] }[] }>)
       .then((j) => {
         if (stop) return;
         const hit = (j.titles || []).find((t) => titleMatchesId(t, id));
@@ -31,6 +32,8 @@ export function useEngineRequest(id: string, season?: number) {
           setExtraIds(aliases);
           const disk = seasonNumbersFrom(hit.onDiskSeasons);
           if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
+          const importing = seasonNumbersFrom((hit as { importingSeasons?: number[] }).importingSeasons);
+          if (importing.length) setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
         }
         // TV: series-in-library is not every season. Do not mark a whole-show row available.
         if (!hit || id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || id.startsWith("jf-")) return;
@@ -55,6 +58,7 @@ export function useEngineRequest(id: string, season?: number) {
           titleId?: string;
           seasonList?: number[];
           onDiskSeasons?: number[];
+          importingSeasons?: number[];
           unreleasedSeasons?: number[];
           seasons?: number;
         }>)
@@ -65,6 +69,8 @@ export function useEngineRequest(id: string, season?: number) {
           if (fromApi.length) setSeasonList(fromApi);
           const disk = seasonNumbersFrom(j.onDiskSeasons);
           if (disk.length) setOnDiskSeasons((prev) => [...new Set([...prev, ...disk])].sort((a, b) => a - b));
+          const importing = seasonNumbersFrom(j.importingSeasons);
+          if (importing.length) setImportingSeasons((prev) => [...new Set([...prev, ...importing])].sort((a, b) => a - b));
           const coming = seasonNumbersFrom(j.unreleasedSeasons);
           if (coming.length) setUnreleasedSeasons((prev) => [...new Set([...prev, ...coming])].sort((a, b) => a - b));
           const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
@@ -101,5 +107,5 @@ export function useEngineRequest(id: string, season?: number) {
     };
   }, [id, season]);
 
-  return { inJellyfin, engineStatus, seasonList, onDiskSeasons, unreleasedSeasons, extraIds };
+  return { inJellyfin, engineStatus, seasonList, onDiskSeasons, importingSeasons, unreleasedSeasons, extraIds };
 }

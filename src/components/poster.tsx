@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+function posterInitial(title: Title) {
+  const ch = String(title.title || "")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .charAt(0)
+    .toUpperCase();
+  return ch || "•";
+}
+
 export function Poster({
   title,
   className,
@@ -19,7 +27,7 @@ export function Poster({
   return (
     <div
       className={cn(
-        "relative min-w-0 max-w-full overflow-hidden bg-card-2",
+        "relative w-full min-h-0 min-w-0 max-w-full overflow-hidden bg-card-2",
         sizes === "poster" ? "aspect-[2/3]" : "aspect-[16/9]",
         className,
       )}
@@ -34,7 +42,12 @@ export function Poster({
           onError={() => setOk(false)}
         />
       ) : (
-        <div className="absolute inset-0 bg-linear-to-br from-card-2 to-background" />
+        <div
+          className="absolute inset-0 flex items-center justify-center bg-linear-to-br from-card-2 via-card to-background"
+          aria-hidden
+        >
+          <span className="font-display text-3xl font-medium text-muted/70">{posterInitial(title)}</span>
+        </div>
       )}
     </div>
   );

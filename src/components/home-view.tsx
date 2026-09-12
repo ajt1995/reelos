@@ -275,8 +275,8 @@ export function HomeView() {
       {boxShelf.length > 0 ? (
         <Row label="On this box">
           {boxShelf.slice(0, 24).map((t) => (
-            <div key={t.id} className="w-[148px] shrink-0 sm:w-[168px]">
-              <TitleCard title={t} className="w-auto" />
+            <div key={t.id} className="w-[148px] min-w-[148px] max-w-[148px] shrink-0 overflow-hidden sm:w-[168px] sm:min-w-[168px] sm:max-w-[168px]">
+              <TitleCard title={t} className="w-full max-w-full" />
               <RemoveFromBox title={t} compact />
             </div>
           ))}
