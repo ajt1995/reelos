@@ -60,7 +60,7 @@ test("TS copy matches the box profile module", () => {
   assert.match(ts, /How old are you\?/);
   assert.match(ts, /Jellyfin username and password\/PIN/);
   assert.match(wizard, /MEMBER_WIZARD_TOTAL/);
-  assert.match(wizard, /How old are you\?/);
+  assert.match(wizard, /MEMBER_WIZARD_QUESTIONS/);
   assert.match(house, /const TOTAL = 7/);
   assert.doesNotMatch(house, /How old are you\?/);
   assert.doesNotMatch(house, /Jellyfin username and password\/PIN/);
@@ -232,8 +232,8 @@ test("setup creates a member session as that Jellyfin user, not the owner", asyn
 test("bindJellyfinAccount authenticates an existing user without Users/New", async () => {
   let created = 0;
   const r = await bindJellyfinAccount({
-    fetchImpl: async () => {
-      created += 1;
+    fetchImpl: async (url) => {
+      if (String(url).includes("/Users/New")) created += 1;
       return { ok: false, text: async () => "no" };
     },
     jellyfinToken: async (user, pin) => (user === "Ada" && pin === "adaada" ? { token: "t", id: "1" } : null),
@@ -244,7 +244,7 @@ test("bindJellyfinAccount authenticates an existing user without Users/New", asy
     parentalMax: null,
   });
   assert.equal(r.ok, true);
-  assert.equal(created, 1);
+  assert.equal(created, 0);
 });
 
 test("house wizard file stays seven steps", () => {
