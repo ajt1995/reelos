@@ -45,6 +45,8 @@ test("os tune --apply-files writes zram + crashkernel=no without touching /media
         REELOS_ZRAM_CONF: join(dir, "zram.conf"),
         REELOS_GRUB_DROPIN: join(dir, "grub.d", "reelos-nokdump.cfg"),
         REELOS_KDUMP_DEFAULT: join(dir, "kdump-tools"),
+        REELOS_OS_TUNE_STAMP: join(dir, "os-tune-plan.json"),
+        REELOS_STATE: dir,
       },
     });
     assert.equal(apply.status, 0, apply.stdout + apply.stderr);

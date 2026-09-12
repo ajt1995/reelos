@@ -135,8 +135,8 @@ test("re-probe hooks: firstboot, OTA before cleaner, door start", () => {
   assert.match(install, /reelos_hardware.py" --ensure/);
   assert.equal(install, read("install/reelos-install.sh"));
   const updater = read("daemon/reelos-update.sh");
-  const hw = updater.indexOf('reelos_hardware.py" --apply');
-  const clean = updater.indexOf("OTA cleaner — leftover nonsense");
+  const hw = updater.indexOf('python3 "$ROOT/bin/reelos_hardware.py" --apply');
+  const clean = updater.indexOf('log "OTA cleaner — leftover nonsense');
   assert.ok(hw > 0 && clean > hw, "probe before cleaner");
   assert.match(read("daemon/reelos-ota-clean.sh"), /reelos_hardware.py" --ensure/);
   assert.match(read("firstboot/reelos.service"), /reelos_hardware.py --ensure/);
