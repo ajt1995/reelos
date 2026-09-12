@@ -1,6 +1,6 @@
 import { S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
-import { t as Boot } from "./gate-RHWa-VSK.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/routes-b0Hq2ayH.js
+import { t as Boot } from "./gate-eGqezGxj.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/routes-Cw6nsgrS.js
 var import_jsx_runtime = require_jsx_runtime();
 function Home() {
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Boot, {});

@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { C as titleMatchesId, b as requestShowsRetry, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as titlePresenceKeys, x as showRequestQueueControls } from "./router-CnJP4qFl.mjs";
-import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-RHWa-VSK.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/title._id-nYrPMRA0.js
+import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-C2x6vXTT.mjs";
+import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-eGqezGxj.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/title._id-DyK5MaKt.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {
@@ -17,6 +17,7 @@ function useEngineRequest(id, season) {
 	const [inJellyfin, setInJellyfin] = (0, import_react.useState)(false);
 	const [engineStatus, setEngineStatus] = (0, import_react.useState)(null);
 	const [seasonList, setSeasonList] = (0, import_react.useState)([]);
+	const [onDiskSeasons, setOnDiskSeasons] = (0, import_react.useState)([]);
 	const [extraIds, setExtraIds] = (0, import_react.useState)(() => titlePresenceKeys(id));
 	(0, import_react.useEffect)(() => {
 		let aliases = titlePresenceKeys(id);
@@ -52,6 +53,8 @@ function useEngineRequest(id, season) {
 				setEngineStatus(j.status || null);
 				const fromApi = seasonNumbersFrom(j.seasonList);
 				if (fromApi.length) setSeasonList(fromApi);
+				const disk = seasonNumbersFrom(j.onDiskSeasons);
+				if (disk.length) setOnDiskSeasons(disk);
 				const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
 				const apiProg = typeof j.progress === "number" ? j.progress : typeof j.percent === "number" ? j.percent : void 0;
 				useReelStore.setState((s) => ({ requests: applyTitleRequestPoll(s.requests, {
@@ -76,6 +79,7 @@ function useEngineRequest(id, season) {
 		inJellyfin,
 		engineStatus,
 		seasonList,
+		onDiskSeasons,
 		extraIds
 	};
 }
@@ -111,8 +115,10 @@ function TitleView({ id }) {
 	const [reqErr, setReqErr] = (0, import_react.useState)(null);
 	const request = useReelStore((s) => {
 		const keys = new Set(extraIds);
+		const moviePage = resolved?.kind === "movie" || id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-") && !id.startsWith("tvdb-");
 		return s.requests.find((r) => {
 			if (r.status === "failed") return false;
+			if (moviePage && String(r.titleId).startsWith("tmdb-tv-")) return false;
 			if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) return false;
 			return r.season == null || r.season === season;
 		});
@@ -130,7 +136,7 @@ function TitleView({ id }) {
 	const requestTitle = useReelStore((s) => s.requestTitle);
 	const retryRequest = useReelStore((s) => s.retryRequest);
 	const pasteRelease = useReelStore((s) => s.pasteRelease);
-	const { inJellyfin, engineStatus, seasonList } = useEngineRequest(id, season);
+	const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
 	const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 	(0, import_react.useEffect)(() => {
 		let stop = false;
@@ -174,8 +180,8 @@ function TitleView({ id }) {
 	const sendRequest = (payload) => {
 		setReqErr(null);
 		const titleId = payload.titleId;
-		const mediaType = titleId.startsWith("tmdb-tv-") || titleId.startsWith("tvdb-") || resolved?.kind === "tv" || resolved?.kind === "anime" ? "tv" : "movie";
-		const tmdb = titleId.startsWith("tmdb-tv-") ? titleId.slice(8) : titleId.startsWith("tmdb-") ? titleId.slice(5) : extraIds.find((k) => k.startsWith("tmdb-tv-"))?.slice(8) || extraIds.find((k) => /^tmdb-\d/.test(k))?.slice(5);
+		const mediaType = requestMediaTypeForPage(id, resolved?.kind);
+		const tmdb = mediaType === "tv" ? titleId.startsWith("tmdb-tv-") ? titleId.slice(8) : extraIds.find((k) => k.startsWith("tmdb-tv-"))?.slice(8) || extraIds.find((k) => /^tmdb-\d/.test(k))?.slice(5) : titleId.startsWith("tmdb-") && !titleId.startsWith("tmdb-tv-") ? titleId.slice(5) : extraIds.find((k) => /^tmdb-\d/.test(k) && !k.startsWith("tmdb-tv-"))?.slice(5);
 		fetch("/api/request", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
@@ -204,10 +210,15 @@ function TitleView({ id }) {
 	});
 	const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
 	const series = resolved.kind === "tv" || resolved.kind === "anime";
-	const seasonReady = request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
-	const onBox = inJellyfin || inLibrary || seasonReady;
-	const available = onBox;
-	const requestTitleId = extraIds.find((k) => k.startsWith("tmdb-tv-")) || extraIds.find((k) => k.startsWith("tmdb-")) || resolved.id;
+	const diskSeasons = [.../* @__PURE__ */ new Set([...onDiskSeasons || [], ...resolved.onDiskSeasons || []])];
+	const thisSeasonOnBox = !series || diskSeasons.includes(season) || request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
+	const onBox = inJellyfin || inLibrary || thisSeasonOnBox && series;
+	const available = series ? thisSeasonOnBox || inJellyfin || inLibrary : onBox;
+	const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
+	const hashPaste = showHashAdapter({
+		pageId: id,
+		title: resolved.title
+	});
 	const blocked = resolved.kind === "music" && !intent.music || resolved.kind === "anime" && !intent.anime || resolved.kind === "kids" && !intent.kids || resolved.kind === "movie" && !intent.movies || resolved.kind === "tv" && !intent.tv;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "pb-16",
@@ -317,8 +328,8 @@ function TitleView({ id }) {
 								children: "This collection is off. Enable it in Settings."
 							}) : showRequestQueueControls({
 								kind: resolved.kind,
-								available,
-								requestStatus: request?.status
+								available: series ? thisSeasonOnBox : available,
+								requestStatus: thisSeasonOnBox && series ? "available" : request?.status
 							}) ? request?.status === "downloading" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 								className: "inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold",
 								children: typeof request.progress === "number" && request.progress > 0 ? `Grabbing · ${Math.round(request.progress)}%` : request.reason ? request.reason : request.via === "cache" ? "Cache hit · importing" : "Grabbing"
@@ -354,7 +365,7 @@ function TitleView({ id }) {
 						className: "mt-4 text-sm text-danger",
 						children: reqErr
 					}) : null,
-					!available && !blocked ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+					!available && !blocked && hashPaste ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
 						className: "mt-6 max-w-md",
 						onSubmit: (e) => {
 							e.preventDefault();
