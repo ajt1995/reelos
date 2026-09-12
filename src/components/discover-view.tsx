@@ -3,8 +3,16 @@ import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import type { Title } from "@/lib/types";
+import { inFlightRequests, titleForRequest } from "@/lib/sync-requests";
+import { useSyncRequests } from "@/lib/use-sync-requests";
+import type { Kind, MediaRequest, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
+
+function isKind(t: Title | undefined, want: Kind) {
+  if (!t) return false;
+  if (want === "tv") return t.kind === "tv" || t.kind === "anime";
+  return t.kind === "movie";
+}
 
 export function DiscoverView() {
   const [q, setQ] = useState("");
@@ -16,10 +24,21 @@ export function DiscoverView() {
   const [browseErr, setBrowseErr] = useState<string | null>(null);
   const [browseReady, setBrowseReady] = useState(false);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const hydrateShelf = useReelStore((s) => s.hydrateShelf);
+  const shelf = useReelStore((s) => s.shelf);
+  const remoteTitles = useReelStore((s) => s.remoteTitles);
+  const requests = useReelStore((s) => s.requests);
+  const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
+  const inflight = inFlightRequests(requests, { titles: shelf });
+  useSyncRequests();
 
   useEffect(() => {
     installHonestRequest();
   }, []);
+
+  useEffect(() => {
+    hydrateShelf({ limit: 24 });
+  }, [hydrateShelf]);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,6 +81,20 @@ export function DiscoverView() {
     }
     return out;
   }, [remoteHits]);
+
+  const movieShelf = useMemo(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
+  const tvShelf = useMemo(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
+  const finishing = useMemo(() => {
+    const rows: { r: MediaRequest; t: Title }[] = [];
+    for (const r of inflight) {
+      const t = titleForRequest(r, catalog);
+      if (!t?.id) continue;
+      rows.push({ r, t });
+    }
+    return rows;
+  }, [inflight, catalog]);
+  const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
+  const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);
 
   useEffect(() => {
     const term = q.trim();
@@ -107,7 +140,7 @@ export function DiscoverView() {
   return (
     <div className="px-5 py-6 md:px-10 md:py-8">
       <h1 className="font-display text-3xl font-semibold tracking-tight">Discover</h1>
-      <p className="mt-2 text-sm text-muted">Titles this box does not have. Search to find something else.</p>
+      <p className="mt-2 text-sm text-muted">On this box, finishing, or pick tonight. Search to find something else.</p>
       <div className="relative mt-6 max-w-xl">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-faint" />
         <input
@@ -133,21 +166,18 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          {browseMovies.length > 0 ? (
-            <Row label="Movies">
-              {browseMovies.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
-          {browseTv.length > 0 ? (
-            <Row label="Shows">
-              {browseTv.map((t) => (
-                <TitleCard key={t.id} title={t} />
-              ))}
-            </Row>
-          ) : null}
-          {browseMovies.length === 0 && browseTv.length === 0 ? (
+          <DiscoverKind
+            heading="Movies"
+            onBox={movieShelf}
+            finishing={finishingMovies}
+            pick={browseMovies}
+          />
+          <DiscoverKind heading="Shows" onBox={tvShelf} finishing={finishingTv} pick={browseTv} />
+          {browseMovies.length === 0 &&
+          browseTv.length === 0 &&
+          movieShelf.length === 0 &&
+          tvShelf.length === 0 &&
+          finishing.length === 0 ? (
             <p className="mt-10 text-sm text-muted">
               {browseErr ||
                 (browseReady ? "Seerr has nothing new to show yet." : "Looking up movies and shows…")}
@@ -155,6 +185,46 @@ export function DiscoverView() {
           ) : null}
         </>
       )}
+    </div>
+  );
+}
+
+function DiscoverKind({
+  heading,
+  onBox,
+  finishing,
+  pick,
+}: {
+  heading: string;
+  onBox: Title[];
+  finishing: { r: MediaRequest; t: Title }[];
+  pick: Title[];
+}) {
+  if (!onBox.length && !finishing.length && !pick.length) return null;
+  return (
+    <div className="mt-10">
+      <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
+      {onBox.length ? (
+        <Row label="On this box">
+          {onBox.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
+      {finishing.length ? (
+        <Row label="Finishing">
+          {finishing.map(({ r, t }) => (
+            <TitleCard key={r.id} title={t} request={r} />
+          ))}
+        </Row>
+      ) : null}
+      {pick.length ? (
+        <Row label="Pick tonight">
+          {pick.map((t) => (
+            <TitleCard key={t.id} title={t} />
+          ))}
+        </Row>
+      ) : null}
     </div>
   );
 }

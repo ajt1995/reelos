@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,11 @@ export function Poster({
   className?: string;
   sizes?: "poster" | "hero";
 }) {
-  const [ok, setOk] = useState(true);
+  const src = String(title.poster || "").trim();
+  const [ok, setOk] = useState(Boolean(src));
+  useEffect(() => {
+    setOk(Boolean(src));
+  }, [src]);
   return (
     <div
       className={cn(
@@ -20,9 +24,9 @@ export function Poster({
         className,
       )}
     >
-      {ok ? (
+      {src && ok ? (
         <img
-          src={title.poster}
+          src={src}
           alt=""
           loading="lazy"
           decoding="async"

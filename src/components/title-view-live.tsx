@@ -18,6 +18,7 @@ import {
   titlePresenceKeys,
 } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
+import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
 
 function looksLikeHashTitle(name?: string) {
@@ -83,6 +84,9 @@ export function TitleView({ id }: { id: string }) {
   const requestTitle = useReelStore((s) => s.requestTitle);
   const retryRequest = useReelStore((s) => s.retryRequest);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
+  const ipv4 = useReelStore((s) => s.ipv4);
+  const tailscaleIp = useReelStore((s) => s.tailscaleIp);
+  const watchDoor = useReelStore((s) => s.watch);
   const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
@@ -164,7 +168,14 @@ export function TitleView({ id }: { id: string }) {
     );
   }
 
-  const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
+  const hostname = typeof window !== "undefined" ? window.location.hostname : "";
+  const jellyfin = jellyfinWatchHref({
+    ipv4,
+    tailscaleIp,
+    watch: watchDoor,
+    hostname,
+    jellyfinId: resolved.jellyfinId,
+  });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
   const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
   const thisSeasonOnBox =
@@ -262,13 +273,18 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
 
           <div className="mt-6 flex flex-wrap gap-3">
-            {available ? (
+            {available && jellyfin ? (
               <a href={jellyfin} target="_blank" rel="noreferrer">
                 <Button size="lg">
                   <Play className="size-4" fill="currentColor" />
                   Watch
                 </Button>
               </a>
+            ) : available ? (
+              <Button size="lg" disabled>
+                <Play className="size-4" fill="currentColor" />
+                Watch
+              </Button>
             ) : (
               <Button size="lg" disabled>
                 <Play className="size-4" />

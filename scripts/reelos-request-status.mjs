@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
-import { arrHasFile, buildArrIndex } from "./reelos-seerr.mjs";
+import { arrHasFile, buildArrIndex, parseTitleId, seerrApiKey, seerrFetch, tmdbPoster } from "./reelos-seerr.mjs";
 
 export function xmlApiKey(file) {
   if (!existsSync(file)) return null;
@@ -123,7 +123,7 @@ export function seerrRecoverScope(seerrRows) {
     if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = row?.tmdb ?? row?.tmdbId;
+    const tmdb = requestRowTmdb(row);
     if (tmdb == null) continue;
     if (mediaType === "movie") movies.add(String(tmdb));
     else tv.add(String(tmdb));
@@ -158,6 +158,12 @@ export function listMissingRecoverTargets({ series = [], movies = [], seerrRows 
 }
 
 /** Seerr requested National Treasure, Radarr never grew a row — recover must still add+search. */
+export function requestRowTmdb(row) {
+  if (row?.tmdb != null && String(row.tmdb).trim() !== "") return row.tmdb;
+  if (row?.tmdbId != null && String(row.tmdbId).trim() !== "") return row.tmdbId;
+  return parseTitleId(row?.titleId)?.tmdb ?? null;
+}
+
 export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}) {
   const have = new Set(
     (movies || []).map((m) => (m?.tmdbId == null ? "" : String(m.tmdbId))).filter(Boolean),
@@ -170,7 +176,7 @@ export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}
     if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = row?.tmdb ?? row?.tmdbId;
+    const tmdb = requestRowTmdb(row);
     if (mediaType !== "movie" || tmdb == null) continue;
     const id = String(tmdb);
     if (have.has(id) || seen.has(id)) continue;
@@ -187,7 +193,7 @@ export function listUnmonitoredMovieRecoverTargets({ seerrRows = [], movies = []
     if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = row?.tmdb ?? row?.tmdbId;
+    const tmdb = requestRowTmdb(row);
     if (mediaType !== "movie" || tmdb == null) continue;
     requested.add(String(tmdb));
   }
@@ -214,7 +220,7 @@ export function listUnmonitoredSeasonRecoverTargets({ seerrRows = [], series = [
     if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = row?.tmdb ?? row?.tmdbId;
+    const tmdb = requestRowTmdb(row);
     if (mediaType !== "tv" || tmdb == null) continue;
     const n = Number(row.season);
     if (!Number.isFinite(n) || n <= 0) continue;
@@ -243,7 +249,7 @@ export function listSeerrOrphanSeriesTargets({ seerrRows = [], series = [] } = {
     if (row?.status === "available" || row?.engine === "downloaded") continue;
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = row?.tmdb ?? row?.tmdbId;
+    const tmdb = requestRowTmdb(row);
     if (mediaType !== "tv" || tmdb == null) continue;
     if (have.has(String(tmdb))) continue;
     const n = Number(row.season);
@@ -580,14 +586,42 @@ export function pickRadarrLookupMovie(hits, tmdb) {
   return rows.find((m) => m && typeof m === "object" && String(m.tmdbId) === want) || null;
 }
 
+export async function movieFromSeerrDetail(tmdb, { seerrGet = seerrFetch } = {}) {
+  if (tmdb == null) return null;
+  const key = seerrApiKey();
+  if (!key && seerrGet === seerrFetch) return null;
+  try {
+    const r = await seerrGet(`/api/v1/movie/${encodeURIComponent(String(tmdb))}`, { key, ms: 8000 });
+    const j = r?.json;
+    if (!r?.ok || !j || typeof j !== "object") return null;
+    const title = String(j.title || "").trim();
+    if (!title) return null;
+    const year = Number(String(j.releaseDate || "").slice(0, 4)) || 0;
+    const slug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-${tmdb}`;
+    return {
+      title,
+      tmdbId: Number(tmdb),
+      year,
+      titleSlug: slug,
+      images: j.posterPath ? [{ coverType: "poster", url: tmdbPoster(j.posterPath) }] : [],
+      monitored: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Seerr 200 but Radarr never got the movie (National Treasure). Lookup/tmdb + add, then MoviesSearch. */
-export async function addRadarrMovie({ fetchArr = arrJson, radarrKey, tmdb } = {}) {
+export async function addRadarrMovie({ fetchArr = arrJson, radarrKey, tmdb, seerrGet = seerrFetch } = {}) {
   if (!radarrKey || tmdb == null) return null;
   let movie = null;
   for (const url of radarrLookupUrls(tmdb)) {
-    const hits = await fetchArr(url, radarrKey);
+    const hits = await fetchArr(url, radarrKey, 20000);
     movie = pickRadarrLookupMovie(hits, tmdb);
     if (movie) break;
+  }
+  if (!movie || typeof movie !== "object") {
+    movie = await movieFromSeerrDetail(tmdb, { seerrGet });
   }
   if (!movie || typeof movie !== "object") return null;
   const roots = await fetchArr("http://127.0.0.1:7878/api/v3/rootfolder", radarrKey);
@@ -626,6 +660,7 @@ export async function kickArrRecover({
   radarrKey = arrApiKey("radarr"),
   waitTries = 6,
   waitMs = 400,
+  seerrGet = seerrFetch,
 } = {}) {
   const type = mediaType === "tv" ? "tv" : mediaType === "movie" ? "movie" : null;
   let seriesId = null;
@@ -710,7 +745,7 @@ export async function kickArrRecover({
     });
     let added = false;
     if (!hit?.id) {
-      const created = await addRadarrMovie({ fetchArr, radarrKey, tmdb });
+      const created = await addRadarrMovie({ fetchArr, radarrKey, tmdb, seerrGet });
       added = Boolean(created);
       hit =
         created?.id && matchMovie(created)

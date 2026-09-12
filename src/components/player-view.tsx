@@ -3,6 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { getTitle } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import { titleMatchesId } from "@/lib/sync-requests";
+import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
+
+/** Opens the working Jellyfin door (LAN/Tailscale IP:8096), never hostname:8096. */
 
 export function PlayerView({ id }: { id: string }) {
   const catalog = getTitle(id);
@@ -11,13 +14,20 @@ export function PlayerView({ id }: { id: string }) {
   const title = catalog ?? shelf ?? remote;
   const jfId = shelf?.jellyfinId;
 
+  const ipv4 = useReelStore((s) => s.ipv4);
+  const tailscaleIp = useReelStore((s) => s.tailscaleIp);
+  const watch = useReelStore((s) => s.watch);
+
   useEffect(() => {
-    const host = window.location.hostname;
-    const dest = jfId
-      ? `http://${host}:8096/web/#/details?id=${encodeURIComponent(jfId)}`
-      : `http://${host}:8096`;
-    window.location.replace(dest);
-  }, [jfId]);
+    const dest = jellyfinWatchHref({
+      ipv4,
+      tailscaleIp,
+      watch,
+      hostname: window.location.hostname,
+      jellyfinId: jfId,
+    });
+    if (dest) window.location.replace(dest);
+  }, [jfId, ipv4, tailscaleIp, watch]);
 
   if (!title) {
     return (

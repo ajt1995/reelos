@@ -487,6 +487,8 @@ test("phone chrome keeps one Watch and the tab bar", () => {
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(home, /Watch in this browser/);
   assert.match(shell, />\s*Watch\s*</);
+  assert.match(shell, /jellyfinWatchHref/);
+  assert.doesNotMatch(shell, /window\.location\.hostname\}:8096/);
   assert.match(shell, /to: "\/discover"/);
   assert.match(shell, /to: "\/settings"/);
 });

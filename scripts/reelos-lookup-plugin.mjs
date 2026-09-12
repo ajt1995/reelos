@@ -431,9 +431,11 @@ async function handleDiscover(_req, res) {
     return;
   }
   try {
-    const [movieRes, tvRes] = await Promise.all([
-      seerrFetch("/api/v1/discover/movies", { key, ms: 45000 }),
-      seerrFetch("/api/v1/discover/tv", { key, ms: 45000 }),
+    const [movieRes, movieRes2, tvRes, tvRes2] = await Promise.all([
+      seerrFetch("/api/v1/discover/movies?page=1", { key, ms: 45000 }),
+      seerrFetch("/api/v1/discover/movies?page=2", { key, ms: 45000 }),
+      seerrFetch("/api/v1/discover/tv?page=1", { key, ms: 45000 }),
+      seerrFetch("/api/v1/discover/tv?page=2", { key, ms: 45000 }),
     ]);
     if (!movieRes.ok && !tvRes.ok) {
       error =
@@ -445,15 +447,21 @@ async function handleDiscover(_req, res) {
       return;
     }
     const excludeIds = ownedDiscoverIds();
-    if (movieRes.ok) {
-      const hits = Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || [];
-      movies.push(...mapSeerrDiscoverResults(hits, { mediaType: "movie", limit: 16, excludeIds }));
+    const movieHits = [
+      ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
+      ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
+    ];
+    const tvHits = [
+      ...(Array.isArray(tvRes.json) ? tvRes.json : tvRes.json?.results || []),
+      ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
+    ];
+    if (movieRes.ok || movieRes2.ok) {
+      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds }));
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
-    if (tvRes.ok) {
-      const hits = Array.isArray(tvRes.json) ? tvRes.json : tvRes.json?.results || [];
-      tv.push(...mapSeerrDiscoverResults(hits, { mediaType: "tv", limit: 16, excludeIds }));
+    if (tvRes.ok || tvRes2.ok) {
+      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds }));
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
@@ -2285,6 +2293,9 @@ async function handleReady(req, res) {
     provisioned: Boolean(slice.provisioned),
     answers: publicAnswers(slice.answers),
     jellyfin: slice.jellyfin,
+    ipv4: slice.ipv4 || "",
+    watch: slice.watch || "",
+    tailscaleIp: slice.tailscaleIp || "",
     update: update || { ok: true, local: localVersion(), running: false, target: null, log: "" },
     libraryCatchup: update?.library || readLibraryProgress(),
     titles: Array.isArray(library?.titles) ? library.titles : [],

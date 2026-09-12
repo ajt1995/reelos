@@ -27,6 +27,7 @@ import {
   pickSonarrLookupSeries,
   seasonNeedsMonitor,
   seriesWithMonitoredSeason,
+  addRadarrMovie,
 } from "./reelos-request-status.mjs";
 
 test("presence facts read the JF shelf cache and *arr hasFile index", async () => {
@@ -465,6 +466,13 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
     targets.map((t) => `${t.mediaType}:${t.tmdb}`),
     ["movie:2059"],
   );
+  assert.deepEqual(
+    listSeerrOrphanMovieTargets({
+      seerrRows: [{ titleId: "tmdb-2059", mediaType: "movie", status: "downloading" }],
+      movies: [],
+    }).map((t) => String(t.tmdb)),
+    ["2059"],
+  );
 });
 
 test("recover with Seerr rows does not MoviesSearch the whole Radarr backlog", () => {
@@ -660,6 +668,32 @@ test("kickArrRecover adds National Treasure when Seerr requested but Radarr is e
   assert.equal(search?.body?.name, "MoviesSearch");
 });
 
+test("addRadarrMovie uses Seerr movie detail when Radarr lookup is empty", async () => {
+  const created = await addRadarrMovie({
+    tmdb: 2059,
+    radarrKey: "test",
+    seerrGet: async () => ({
+      ok: true,
+      json: { title: "National Treasure", releaseDate: "2004-11-19", posterPath: "/nt.jpg" },
+    }),
+    fetchArr: async (url, _key, _ms, opts = {}) => {
+      const method = opts.method || "GET";
+      if (String(url).includes("/lookup")) return [];
+      if (String(url).includes("/rootfolder")) return [{ path: "/symlinks/radarr" }];
+      if (String(url).includes("/qualityprofile") && method === "GET") {
+        return [{ id: 1, name: "Any" }];
+      }
+      if (String(url).includes("/movie") && method === "POST") {
+        return { id: 9, tmdbId: 2059, title: "National Treasure" };
+      }
+      if (String(url).includes("/movie") && method === "GET") return [];
+      return { ok: true };
+    },
+  });
+  assert.equal(created?.tmdbId, 2059);
+  assert.equal(created?.id, 9);
+});
+
 test("recover never adds a mismatched lookup hit under the requested tmdbId", async () => {
   const other = { tmdbId: 999999, title: "Some Other Film", year: 1998, titleSlug: "some-other-film-999999" };
   assert.equal(pickRadarrLookupMovie([other], 2059), null);
@@ -677,6 +711,7 @@ test("recover never adds a mismatched lookup hit under the requested tmdbId", as
     waitTries: 1,
     waitMs: 0,
     spawnImport: () => false,
+    seerrGet: async () => ({ ok: false, json: null }),
     fetchArr: async (url, _key, _ms, opts = {}) => {
       const method = opts.method || "GET";
       calls.push({ method, url, body: opts.body });

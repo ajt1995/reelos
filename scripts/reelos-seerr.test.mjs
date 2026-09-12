@@ -20,6 +20,7 @@ import {
   lookupFailureMessage,
   mapSeerrDiscoverResults,
   mapSeerrSearchResults,
+  discoverHitReleased,
   mapSeerrStatus,
   proveEraLookupRequest,
   mergeUnfinishedRows,
@@ -1219,10 +1220,10 @@ test("lookup+request: Brooklyn Nine-Nine (2013) S01 only — never seasons=all",
 
 test("Discover browse drops titles this box already has", () => {
   const hits = [
-    { id: 157336, mediaType: "movie", title: "Interstellar", mediaInfo: { status: 5 } },
-    { id: 27205, mediaType: "movie", title: "Inception", mediaInfo: { status: 1 } },
-    { id: 155, mediaType: "movie", title: "The Dark Knight", mediaInfo: { status: 4 } },
-    { id: 550, mediaType: "movie", title: "Fight Club", mediaInfo: { status: 2 } },
+    { id: 157336, mediaType: "movie", title: "Interstellar", releaseDate: "2014-11-07", mediaInfo: { status: 5 } },
+    { id: 27205, mediaType: "movie", title: "Inception", releaseDate: "2010-07-16", mediaInfo: { status: 1 } },
+    { id: 155, mediaType: "movie", title: "The Dark Knight", releaseDate: "2008-07-18", mediaInfo: { status: 4 } },
+    { id: 550, mediaType: "movie", title: "Fight Club", releaseDate: "1999-10-15", mediaInfo: { status: 2 } },
   ];
   const out = mapSeerrDiscoverResults(hits, {
     mediaType: "movie",
@@ -1244,20 +1245,41 @@ test("AbortError / timeout is a retryable lookup error, not an empty shelf", () 
   assert.deepEqual(mapSeerrSearchResults([], { q: "interstellar" }), []);
 });
 
-test("Discover stays free of In progress; POST never sends seasons=all", () => {
+test("Discover pick tonight drops unreleased 2026 junk", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  assert.equal(discoverHitReleased({ title: "Moon", releaseDate: "2009-07-17" }, now), true);
+  assert.equal(discoverHitReleased({ title: "Mutiny", releaseDate: "2026-11-06" }, now), false);
+  assert.equal(discoverHitReleased({ name: "Paradise Hotel", firstAirDate: "2026-12-01" }, now), false);
+  assert.equal(discoverHitReleased({ title: "Moana", releaseDate: "2026-11-25" }, now), false);
+  const picks = mapSeerrDiscoverResults(
+    [
+      { id: 1, title: "Mutiny", releaseDate: "2026-11-06", mediaType: "movie" },
+      { id: 17431, title: "Moon", releaseDate: "2009-07-17", mediaType: "movie" },
+      { id: 2, title: "Colony", releaseDate: "2027-01-01", mediaType: "movie" },
+    ],
+    { mediaType: "movie", limit: 16, now },
+  );
+  assert.deepEqual(
+    picks.map((t) => t.id),
+    ["tmdb-17431"],
+  );
+});
+
+test("Discover has on this box / finishing / pick tonight; POST never sends seasons=all", () => {
   const discover = readFileSync(join(root, "src/components/discover-view.tsx"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");
   const ping = readFileSync(join(root, "scripts/wizard-honesty.mjs"), "utf8");
   const title = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
-  assert.doesNotMatch(discover, /In progress/i);
-  assert.doesNotMatch(discover, /request=\{/);
+  assert.match(discover, /On this box/);
+  assert.match(discover, /Finishing/);
+  assert.match(discover, /Pick tonight/);
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
   assert.match(discover, /\/api\/discover/);
-  assert.doesNotMatch(discover, /Movies on this box/);
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
   assert.match(lookup, /\/api\/discover/);
+  assert.match(lookup, /discover\/movies\?page=/);
   assert.match(ping, /"User-Agent": "ReelOS"/);
   assert.match(lookup, /buildSeerrAddPayload/);
   assert.match(lookup, /lookupFailureMessage/);

@@ -287,12 +287,25 @@ function titleIdSet(titles) {
   return ids;
 }
 
+/** Upcoming TMDB junk (Mutiny, live-action Moana, Paradise Hotel) is not "pick tonight". */
+export function discoverHitReleased(h, now = Date.now()) {
+  const date = String(h?.releaseDate || h?.firstAirDate || "");
+  if (date) {
+    const ts = Date.parse(date);
+    if (Number.isFinite(ts)) return ts <= now + 24 * 60 * 60 * 1000;
+  }
+  const year = Number((date.match(/^(\d{4})/) || [])[1] || h?.year || 0);
+  const yNow = new Date(now).getUTCFullYear();
+  return Number.isFinite(year) && year > 1970 && year < yNow;
+}
+
 /** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
-export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds } = {}) {
+export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, now = Date.now() } = {}) {
   const owned = excludeIds instanceof Set ? excludeIds : titleIdSet(excludeIds);
   const titles = [];
   for (const h of hits || []) {
     if (seerrAlreadyHave(h)) continue;
+    if (!discoverHitReleased(h, now)) continue;
     const type = normalizeMediaType(h?.mediaType || mediaType);
     if (!type) continue;
     const t = seerrSearchHit(h, type);
