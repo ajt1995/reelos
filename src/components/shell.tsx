@@ -72,7 +72,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <ApplyingBar />
       <LibraryCatchupBar />
       <div className={cn("md:flex", arena && "relative z-10")}>
-      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-border md:flex">
+      <aside className="relative z-20 hidden w-[220px] shrink-0 flex-col border-r border-border bg-background md:flex">
         <div className="flex items-center gap-2.5 px-5 py-5">
           <ReelMark className="size-7" />
           <span
@@ -147,8 +147,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col pb-[4.5rem] md:pb-0">
-        <header className="flex items-center gap-3 px-4 pt-4 md:hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip pb-[4.5rem] md:pb-0">
+        <header className="relative z-20 flex items-center gap-3 bg-background px-4 pt-4 md:hidden">
           <ReelMark className="size-7" />
           <span
             className={cn(

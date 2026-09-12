@@ -197,18 +197,18 @@ export function TitleView({ id }: { id: string }) {
     (resolved.kind === "tv" && !intent.tv);
 
   return (
-    <div className="pb-16">
-      <div className="relative min-h-[280px] overflow-hidden md:min-h-[360px]">
+    <div className="title-page pb-16">
+      <div className="title-hero" aria-hidden="true">
         <img
           src={resolved.poster}
           alt=""
-          className="absolute inset-0 size-full object-cover opacity-40 kenburns"
+          className="title-hero-art kenburns"
         />
-        <div className="absolute inset-0 bg-linear-to-t from-background via-background/70 to-background/20" />
+        <div className="title-hero-fade" />
       </div>
-      <div className="relative z-10 mx-auto -mt-40 grid max-w-5xl gap-8 px-5 md:-mt-48 md:grid-cols-[200px_1fr] md:px-10">
-        <Poster title={resolved} className="mx-auto w-[180px] rounded-2xl md:w-auto" />
-        <div className="pt-2">
+      <div className="title-body">
+        <Poster title={resolved} className="title-poster rounded-2xl" />
+        <div className="title-copy">
           <p className="text-xs tracking-[0.18em] text-gold uppercase">{kindLabel(resolved.kind)}</p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{resolved.title}</h1>
           <p className="mt-2 text-sm text-muted">
