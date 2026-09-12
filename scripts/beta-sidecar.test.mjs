@@ -30,6 +30,8 @@ test("sidecar: VERSION is 1.2.50.50; Arena+Books are in-tree behind betaChannel 
   assert.match(read("src/styles.css"), /\.arena-page/);
   assert.match(read("scripts/reelos-beta-sidecar.mjs"), /applyBetaSidecar/);
   assert.doesNotMatch(read("src/components/settings-updates.tsx"), /stub today/);
+  assert.doesNotMatch(read("src/components/settings-updates.tsx"), /Do not house Apply this PR/);
+  assert.doesNotMatch(read("src/components/settings-updates.tsx"), /sidecar tarball/);
 });
 
 test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50", () => {

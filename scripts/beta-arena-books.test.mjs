@@ -87,6 +87,17 @@ test("beta: composeProfiles only starts books when the toggle is on", () => {
   assert.match(plugin, /applyBetaSidecar/);
 });
 
+test("beta: Settings copy is in-tree 1.2.50.50, not the old sidecar PR warning", () => {
+  const updates = read("src/components/settings-updates.tsx");
+  assert.match(updates, /On 1\.2\.50\.50/);
+  assert.match(updates, /no second 2\.0\.0 Apply/);
+  assert.match(updates, /Check stays on/);
+  assert.match(updates, /4GB house may struggle with Kavita RAM/);
+  assert.doesNotMatch(updates, /sidecar tarball/);
+  assert.doesNotMatch(updates, /Do not house Apply this PR/);
+  assert.doesNotMatch(updates, /Check still reads\s+channel-beta when on/);
+});
+
 test("beta: phone hydrates Arena from /api/settings so a slow /api/ready cannot keep ReelOS chrome", () => {
   const root = read("src/routes/__root.tsx");
   assert.match(root, /fetch\("\/api\/settings"/);
