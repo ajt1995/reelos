@@ -43,7 +43,7 @@ export function HomeView() {
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
   useEffect(() => {
     if (!booksOn) {
@@ -90,6 +90,9 @@ export function HomeView() {
           rememberTitles?.(titles);
           setRemoteHits(titles);
           setLookupErr(titles.length ? null : r?.error || "Seerr returned no titles");
+          if (titles.some((t) => t.jellyfinId)) {
+            useReelStore.getState().hydrateShelf({ limit: 24, force: true });
+          }
         })
         .catch((e) => {
           if (cancelled || e?.name === "AbortError") return;

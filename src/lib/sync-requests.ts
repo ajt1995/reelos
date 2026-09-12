@@ -26,12 +26,36 @@ export function isInFlightRequest(r: { status: string; engine?: string }): boole
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
-/** Home "Your requests", Requests page, and transferring chip: overlay library hits, then keep in-flight only. */
+/** JF Watch exists for this request — Requests can drop it. Seerr-available is not enough. */
+export function requestIsWatchableOnShelf(
+  row: Pick<MediaRequest, "titleId">,
+  opts: { titles?: Pick<Title, "id" | "ids" | "jellyfinId">[] } = {},
+): boolean {
+  const keys = new Set(titlePresenceKeys(row.titleId));
+  for (const t of opts.titles || []) {
+    if (!t.jellyfinId) continue;
+    if (titlePresenceKeys(t.id, t.ids || []).some((k) => keys.has(k))) return true;
+  }
+  return false;
+}
+
+/** Overlay JF hits, keep grabbing/waiting, and keep finished titles until Watch. */
+export function requestNeedsLibraryHandoff(
+  row: Pick<MediaRequest, "titleId" | "status" | "engine">,
+  opts: { titles?: Pick<Title, "id" | "ids" | "jellyfinId">[] } = {},
+): boolean {
+  if (row.status !== "available" && row.engine !== "downloaded") return false;
+  return !requestIsWatchableOnShelf(row, opts);
+}
+
+/** Home/Requests: overlay JF hits, keep grabbing/waiting, keep finished titles until Watch. */
 export function inFlightRequests(
   requests: MediaRequest[],
-  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind">[] } = {},
+  opts: { libraryIds?: string[]; titles?: Pick<Title, "id" | "ids" | "kind" | "jellyfinId">[] } = {},
 ): MediaRequest[] {
-  return overlayLibraryPresence(requests, opts).filter(isInFlightRequest);
+  return overlayLibraryPresence(requests, opts).filter(
+    (r) => isInFlightRequest(r) || requestNeedsLibraryHandoff(r, opts),
+  );
 }
 
 /** Movies: hide Request/Grabbing/Waiting once the title is available. TV/anime: hide only when this season is available. */
@@ -183,9 +207,9 @@ export function collapseHomeRequestCards(rows: MediaRequest[]): MediaRequest[] {
   return out;
 }
 
-/** Transferring chip matches the collapsed Home cards, not every season row. */
+/** Transferring chip matches grabbing/waiting Home cards, not Seerr-available waiting for Watch. */
 export function transferringChipCount(rows: MediaRequest[]): number {
-  return collapseHomeRequestCards(rows).length;
+  return collapseHomeRequestCards(rows.filter(isInFlightRequest)).length;
 }
 
 function markAvailable(row: MediaRequest): MediaRequest {

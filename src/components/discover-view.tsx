@@ -42,7 +42,7 @@ export function DiscoverView() {
   }, []);
 
   useEffect(() => {
-    hydrateShelf({ limit: 24 });
+    hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
 
   useEffect(() => {

@@ -580,7 +580,9 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(plugin, /handleJellyfinImage/);
   assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
-  assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
+  assert.match(home, /hydrateShelf\(\{ limit: 24, force: true \}\)/);
+  assert.doesNotMatch(home, /setInterval/);
+  assert.doesNotMatch(home, /visibilitychange/);
   assert.match(home, /jfLive/);
   assert.match(home, /jellyfinHop/);
   assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
@@ -591,7 +593,9 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(rootFile, /\/api\/ready\?limit=24/);
   assert.match(rootFile, /applyReadyPayload/);
   assert.match(rootFile, /AbortSignal\.timeout\(4000\)/);
-  assert.match(store, /if \(get\(\)\.shelfReady\) return/);
+  assert.match(store, /if \(!force && get\(\)\.shelfReady\) return/);
+  const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
+  assert.match(sync, /hydrateShelf\(\{ limit: 24, force: true, fresh: true \}\)/);
 });
 
 test("cache freshness helper", () => {
