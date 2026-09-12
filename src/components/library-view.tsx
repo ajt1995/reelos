@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { TitleCard } from "@/components/title-card";
 import { RemoveFromBox } from "@/components/remove-from-box";
+import { homeShelfRows } from "@/lib/shelf";
 import { useReelStore } from "@/lib/store";
+import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Kind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +19,9 @@ const TABS: { id: "all" | Kind; label: string }[] = [
 export function LibraryView() {
   const [tab, setTab] = useState<(typeof TABS)[number]["id"]>("all");
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
-  const items = useReelStore((s) => s.shelf);
+  const shelf = useReelStore((s) => s.shelf);
+  const items = useMemo(() => homeShelfRows(shelf), [shelf]);
+  useSyncRequests();
   const err = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
   const intent = useReelStore((s) => s.answers.intent);
@@ -25,7 +29,7 @@ export function LibraryView() {
   const [books, setBooks] = useState<{ title: string; author: string; rel: string }[]>([]);
 
   useEffect(() => {
-    hydrateShelf({ force: true });
+    hydrateShelf({ force: true, fresh: true });
   }, [hydrateShelf]);
   useEffect(() => {
     if (!booksOn) {

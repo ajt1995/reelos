@@ -208,7 +208,10 @@ export function TitleView({ id }: { id: string }) {
   const thisSeasonOnBox = !removedHere && (!series || diskSeasons.includes(season));
   // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
   // Seerr AVAILABLE / engine downloaded is not S05·in.
-  const onBox = series ? thisSeasonOnBox : inJellyfin || inLibrary;
+  // JF is truth — lookup overlay jellyfinId must Watch even if the limited Home shelf missed the id.
+  const onBox = series
+    ? thisSeasonOnBox
+    : Boolean(resolved.jellyfinId) || inJellyfin || inLibrary;
   const available = onBox;
   const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
   const hashPaste = showHashAdapter({ pageId: id, title: resolved.title });

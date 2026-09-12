@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Search } from "lucide-react";
+import { Search, ChevronRight } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { filterCuratorHidden } from "@/lib/discover-curator";
@@ -294,8 +294,8 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          <DiscoverKind heading="Movies" finishing={finishingMovies} pick={pickMovies} onHide={hideTitle} />
-          <DiscoverKind heading="Shows" finishing={finishingTv} pick={pickTv} onHide={hideTitle} />
+          <DiscoverKind heading="Movies" to="/discover/movies" finishing={finishingMovies} pick={pickMovies} onHide={hideTitle} />
+          <DiscoverKind heading="Shows" to="/discover/shows" finishing={finishingTv} pick={pickTv} onHide={hideTitle} />
           {booksOn && bookFeatured.length > 0 ? (
             <section className="mt-10">
               <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
@@ -329,19 +329,23 @@ export function DiscoverView() {
 
 function DiscoverKind({
   heading,
+  to,
   finishing,
   pick,
   onHide,
 }: {
   heading: string;
+  to: "/discover/movies" | "/discover/shows";
   finishing: { r: MediaRequest; t: Title }[];
   pick: Title[];
   onHide: (title: Title) => void;
 }) {
-  if (!finishing.length && !pick.length) return null;
   return (
     <div className="mt-10">
-      <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
+      <Link to={to} className="flex items-center gap-1">
+        <h2 className="font-display text-xl font-semibold tracking-tight">{heading}</h2>
+        <ChevronRight className="size-5 text-muted" />
+      </Link>
       {finishing.length ? (
         <Row label="Finishing">
           {finishing.map(({ r, t }) => (

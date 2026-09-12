@@ -53,6 +53,8 @@ test("Discover rows are finishing / pick tonight; library stays on Home; search 
   assert.match(discover, /request=\{r\}/);
   assert.doesNotMatch(discover, /progress=\{/);
   assert.doesNotMatch(discover, /In progress/i);
+  assert.match(discover, /to="\/discover\/movies"/);
+  assert.match(discover, /to="\/discover\/shows"/);
   assert.doesNotMatch(discover, /Movies on this box/);
   assert.match(card, /showCache/);
   assert.match(adapter, /isLiveEngineTitleId/);

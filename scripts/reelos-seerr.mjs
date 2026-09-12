@@ -506,6 +506,80 @@ export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeId
   return titles;
 }
 
+export const DISCOVER_CATEGORIES = [
+  { id: "popular", label: "Popular" },
+  { id: "upcoming", label: "Upcoming" },
+  { id: "trending", label: "Trending" },
+];
+
+export const FALLBACK_MOVIE_GENRES = [
+  { id: 28, name: "Action" },
+  { id: 12, name: "Adventure" },
+  { id: 16, name: "Animation" },
+  { id: 35, name: "Comedy" },
+  { id: 80, name: "Crime" },
+  { id: 99, name: "Documentary" },
+  { id: 18, name: "Drama" },
+  { id: 10751, name: "Family" },
+  { id: 14, name: "Fantasy" },
+  { id: 36, name: "History" },
+  { id: 27, name: "Horror" },
+  { id: 10402, name: "Music" },
+  { id: 9648, name: "Mystery" },
+  { id: 10749, name: "Romance" },
+  { id: 878, name: "Science Fiction" },
+  { id: 53, name: "Thriller" },
+  { id: 10752, name: "War" },
+  { id: 37, name: "Western" },
+];
+
+export const FALLBACK_TV_GENRES = [
+  { id: 10759, name: "Action & Adventure" },
+  { id: 16, name: "Animation" },
+  { id: 35, name: "Comedy" },
+  { id: 80, name: "Crime" },
+  { id: 99, name: "Documentary" },
+  { id: 18, name: "Drama" },
+  { id: 10751, name: "Family" },
+  { id: 10762, name: "Kids" },
+  { id: 9648, name: "Mystery" },
+  { id: 10765, name: "Sci-Fi & Fantasy" },
+  { id: 10768, name: "War & Politics" },
+  { id: 37, name: "Western" },
+];
+
+export function mapSeerrGenres(json, fallback = []) {
+  const list = Array.isArray(json) ? json : json?.genres || [];
+  const out = [];
+  for (const g of list) {
+    const id = Number(g?.id);
+    const name = String(g?.name || "").trim();
+    if (!Number.isFinite(id) || id <= 0 || !name) continue;
+    out.push({ id, name });
+  }
+  return out.length ? out : fallback;
+}
+
+/** Seerr/Overseerr browse path. Landing /api/discover stays page 1+2 popular. */
+export function discoverBrowseSeerrPath({ kind = "movie", genre = "", category = "popular", page = 1 } = {}) {
+  const tv = kind === "tv" || kind === "shows" || kind === "anime";
+  const media = tv ? "tv" : "movies";
+  const p = Math.max(1, Number(page) || 1);
+  const g = String(genre || "").replace(/\D/g, "");
+  const cat = String(category || "popular").toLowerCase();
+  if (g) return `/api/v1/discover/${media}/genre/${g}?page=${p}`;
+  if (cat === "upcoming") return `/api/v1/discover/${media}/upcoming?page=${p}`;
+  if (cat === "trending") return `/api/v1/discover/trending?page=${p}`;
+  return `/api/v1/discover/${media}?page=${p}`;
+}
+
+export function discoverBrowseKind(raw) {
+  const s = String(raw || "").toLowerCase();
+  if (s === "tv" || s === "show" || s === "shows") return "tv";
+  if (s === "movie" || s === "movies") return "movie";
+  return "";
+}
+
 /**
  * Unit-sandbox: search hits → pick title → Seerr POST body → honest status.
  * Mock Seerr/*arr only. No house keys.

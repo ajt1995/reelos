@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "channel": "beta",
   "notes": [
-    "2.0.0 sidecar: Settings Beta toggle (ui-settings.json betaChannel, default off) turns on Arena chrome and Books in place on 1.2.50.52. Off is identical to stable movies/TV. Toggle-off rolls back without a second OTA (stops Kavita, hides Books routes, drops Kavita indexes). Check does not Apply 2.0.0 over this stamp. Licensed novels = buy/borrow/sideload. 1.2.51 parked (was Tron chrome; scrapped — do not reuse)."
+    "2.0.0 sidecar: Settings Beta toggle (ui-settings.json betaChannel, default off) turns on Arena chrome and Books in place on 1.2.50.53. Off is identical to stable movies/TV. Toggle-off rolls back without a second OTA (stops Kavita, hides Books routes, drops Kavita indexes). Check does not Apply 2.0.0 over this stamp. Licensed novels = buy/borrow/sideload. 1.2.51 parked (was Tron chrome; scrapped — do not reuse)."
   ],
   "tarball": "https://github.com/ajt1995/reelos/archive/refs/heads/cursor/beta-arena-books-5ba6.tar.gz"
 }

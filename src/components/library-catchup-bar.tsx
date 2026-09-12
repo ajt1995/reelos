@@ -1,12 +1,12 @@
 import { LoaderCircle } from "lucide-react";
-import { catchupLocksHome } from "@/lib/library-catchup";
+import { catchupShowsBanner } from "@/lib/library-catchup";
 import { useReelStore } from "@/lib/store";
 
 export function LibraryCatchupBar() {
   const catchup = useReelStore((s) => s.libraryCatchup);
   const applying = useReelStore((s) => s.update.status === "applying");
   if (applying) return null;
-  if (!catchup || (!catchupLocksHome(catchup) && catchup.status !== "backoff")) return null;
+  if (!catchupShowsBanner(catchup)) return null;
   const text =
     catchup.message ||
     (catchup.status === "backoff"

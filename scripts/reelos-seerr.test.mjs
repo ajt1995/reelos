@@ -54,6 +54,10 @@ import {
   lookupPayloadForId,
   overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
+  discoverBrowseSeerrPath,
+  discoverBrowseKind,
+  mapSeerrGenres,
+  FALLBACK_MOVIE_GENRES,
   onDiskSeasonsFor,
   expandTvSeasonRows,
   decorateTitlesWithDiskSeasons,
@@ -1556,6 +1560,15 @@ test("Discover is finishing / pick tonight — library stays on Home", () => {
   assert.match(lookup, /searchParams.get\("scope"\)/);
   assert.match(lookup, /\/api\/discover/);
   assert.match(lookup, /discover\/movies\?page=/);
+  assert.match(lookup, /discoverBrowseSeerrPath/);
+  assert.match(lookup, /searchParams.get\("kind"\)/);
+  assert.match(discover, /to="\/discover\/movies"/);
+  assert.match(discover, /to="\/discover\/shows"/);
+  const browse = readFileSync(join(root, "src/components/discover-browse-view.tsx"), "utf8");
+  assert.match(browse, /\/api\/discover\?/);
+  assert.match(browse, /IntersectionObserver/);
+  assert.match(browse, /filterDiscoverCatalog/);
+  assert.match(title, /resolved.jellyfinId/);
   assert.match(ping, /"User-Agent": "ReelOS"/);
   assert.match(lookup, /buildSeerrAddPayload/);
   assert.match(lookup, /lookupFailureMessage/);
@@ -1611,6 +1624,8 @@ test("compose and Caddy name the service seerr on 5055", () => {
   assert.match(caddy, /127\.0\.0\.1:5055/);
   assert.doesNotMatch(caddy, /handle \/play\*/);
   assert.match(caddy, /ReelOS shell player/);
+  assert.match(caddy, /handle_errors/);
+  assert.match(caddy, /Updating ReelOS/);
 });
 
 test("needsRequestTitle treats tmdb-2059 as unnamed", () => {
@@ -1691,6 +1706,19 @@ test("person credits keep owned library titles even if Discover hid them", () =>
     "John Wick stays on the actor page because it is on this box",
   );
   assert.equal(person.credits[0].inLibrary, true);
+});
+
+test("Discover browse paths are genre/category pages excluding owned", () => {
+  assert.equal(discoverBrowseKind("movies"), "movie");
+  assert.equal(discoverBrowseKind("shows"), "tv");
+  assert.equal(discoverBrowseSeerrPath({ kind: "movie", page: 2 }), "/api/v1/discover/movies?page=2");
+  assert.equal(discoverBrowseSeerrPath({ kind: "tv", genre: "18", page: 3 }), "/api/v1/discover/tv/genre/18?page=3");
+  assert.equal(
+    discoverBrowseSeerrPath({ kind: "movie", category: "upcoming" }),
+    "/api/v1/discover/movies/upcoming?page=1",
+  );
+  assert.match(discoverBrowseSeerrPath({ kind: "movie", category: "trending" }), /trending/);
+  assert.equal(mapSeerrGenres([], FALLBACK_MOVIE_GENRES)[0].name, "Action");
 });
 
 

@@ -86,6 +86,12 @@ test("Seerr-available Passengers stays on Requests until JF Watch is on the shel
     titles: [{ id: "tmdb-274870", kind: "movie", ids: ["tmdb-274870"], jellyfinId: "de7507" }],
   });
   assert.equal(watchable.length, 0);
+  const title = readFileSync(new URL("../components/title-view-live.tsx", import.meta.url), "utf8");
+  assert.match(title, /Boolean\(resolved\.jellyfinId\)/);
+  const library = readFileSync(new URL("../components/library-view.tsx", import.meta.url), "utf8");
+  assert.match(library, /homeShelfRows/);
+  assert.match(library, /useSyncRequests/);
+  assert.match(library, /fresh: true/);
   assert.equal(transferringChipCount(pending), 0, "available waiting for Watch is not transferring");
   const engineDone = row({
     id: "debrid-pass-eng",
@@ -166,7 +172,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(reqs, />\s*Cancel\s*</);
   const sync = readFileSync(new URL("./use-sync-requests.ts", import.meta.url), "utf8");
   assert.match(sync, /requestNeedsLibraryHandoff/);
-  assert.match(sync, /hydrateShelf\(\{ limit: 24, force: true, fresh: true \}\)/);
+  assert.match(sync, /hydrateShelf\(\{ force: true, fresh: true \}\)/);
   assert.doesNotMatch(home, /setInterval/);
   assert.doesNotMatch(reqs, /setInterval/);
 });
