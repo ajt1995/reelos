@@ -36,7 +36,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ### 1.2.50.54 Caddy 2.6 Updating page actually loads
 
-53 copied a `handle_errors` heredoc (`respond <<HTML`) Ubuntu Caddy **2.6.2** cannot parse. `caddy adapt` fails; Apply would restart Caddy onto that file and leave `:80` dead (empty Chrome 502). 54 uses a backtick `respond` string 2.6 accepts and still paints **Updating ReelOS**. Overlay Copying house settings / byte % / Discover browse / lookupKey stay. Do not house-Apply until told.
+53 copied a `handle_errors` heredoc (`respond <<HTML`) Ubuntu Caddy **2.6.2** cannot parse. `caddy adapt` fails; Apply would restart Caddy onto that file and leave `:80` dead (empty Chrome 502). 54 uses a backtick `respond` string 2.6 accepts and still paints **Updating ReelOS**. Bogus `/title/tmdb-*` miss paints Seerr did not find (Retry), not Looking up forever. Overlay Copying house settings / byte % / Discover browse / lookupKey stay. Do not house-Apply until told.
 
 ### 1.2.50.53 overlay splash, door 502, Discover browse, Passengers Watch
 

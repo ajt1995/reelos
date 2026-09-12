@@ -185,6 +185,23 @@ export function TitleView({ id }: { id: string }) {
   };
 
   if (!resolved) {
+    if (!seasonsLoading) {
+      return (
+        <div className="px-6 py-16">
+          <p className="text-muted">{seasonErr || "Seerr did not find that title"}</p>
+          <button
+            type="button"
+            className="mt-4 text-gold"
+            onClick={() => setLookupKey((n) => n + 1)}
+          >
+            Retry
+          </button>
+          <Link to="/" className="mt-4 ml-4 inline-block text-gold">
+            Home
+          </Link>
+        </div>
+      );
+    }
     return (
       <div className="px-6 py-16">
         <p className="text-muted">Looking up that title…</p>

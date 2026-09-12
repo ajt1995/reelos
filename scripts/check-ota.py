@@ -168,6 +168,7 @@ CONTRACTS = (
     ("src/components/discover-view.tsx", "/discover/movies"),
     ("src/components/discover-view.tsx", "/discover/shows"),
     ("src/components/title-view-live.tsx", "resolved.jellyfinId"),
+    ("src/components/title-view-live.tsx", "Seerr did not find that title"),
     ("scripts/reelos-seerr.mjs", "discoverBrowseSeerrPath"),
 )
 
