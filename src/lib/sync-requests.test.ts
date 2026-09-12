@@ -604,6 +604,7 @@ test("title page hides magnet paste and prefers movie POST", () => {
   assert.match(view, /showHashAdapter/);
   assert.match(view, /thisSeasonOnBox/);
   assert.match(view, /Series-in-Jellyfin is not this season/);
+  assert.match(view, /SeasonEpisodeAccordion/);
   assert.match(view, /request\?\.status === "downloading" \|\| request\?\.status === "waiting"/);
   assert.doesNotMatch(view, /thisSeasonOnBox \|\| inJellyfin/);
   assert.doesNotMatch(view, /engineStatus === "downloaded"/);

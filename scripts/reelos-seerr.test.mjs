@@ -1205,12 +1205,16 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(lookup, /resolveParsedTitle/);
   assert.match(readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8"), /Could not map that title to TMDB/);
   const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  const accordion = readFileSync(join(root, "src/components/season-episode-accordion.tsx"), "utf8");
   assert.match(progress, /onDiskSeasons/);
   assert.match(lookup, /bodyType/);
   assert.match(titleView, /showHashAdapter/);
   assert.match(titleView, /requestTitleIdForPage/);
   assert.match(titleView, />\s*Watch\s*</);
-  assert.match(titleView, /Could not load seasons from Seerr/);
+  assert.match(accordion, /· Watch/);
+  assert.match(accordion, /· Request/);
+  assert.doesNotMatch(titleView, /· in/);
+  assert.match(accordion, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
   assert.match(titleView, /Series-in-Jellyfin is not this season/);
   assert.match(titleView, /series \? thisSeasonOnBox : inJellyfin \|\| inLibrary/);

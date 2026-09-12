@@ -14,6 +14,8 @@ import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { reelosLookupPlugin } from "./scripts/reelos-lookup-plugin.mjs";
 // @ts-expect-error JS plugin alongside the TS vite config
 import { reelosRequestProgressPlugin } from "./scripts/reelos-request-progress-plugin.mjs";
+// @ts-expect-error JS plugin alongside the TS vite config
+import { reelosEpisodesPlugin } from "./scripts/reelos-episodes-plugin.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
 
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
@@ -166,6 +168,7 @@ export default defineConfig(({ command, isPreview }) => ({
   plugins: [
     pgliteBootstrapPlugin(),
     reelosRequestProgressPlugin(),
+    reelosEpisodesPlugin(),
     reelosLookupPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),

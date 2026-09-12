@@ -654,6 +654,7 @@ export async function kickArrRecover({
   mediaType,
   tmdb,
   season,
+  episode,
   fetchArr = arrJson,
   spawnImport = spawnWireImport,
   sonarrKey = arrApiKey("sonarr"),
@@ -708,16 +709,45 @@ export async function kickArrRecover({
         if (saved) hit = { ...body, ...(saved.id ? saved : {}) };
         else hit = body;
       }
-      const hasFile = arrHasFile(
-        { titleId: `tmdb-tv-${tmdb}`, season: wantSeason },
-        buildArrIndex({ series: [hit] }),
-      );
+      const wantEpisode = Number(episode);
+      const episodeN = Number.isFinite(wantEpisode) && wantEpisode > 0 ? wantEpisode : null;
+      let episodeRow = null;
+      if (episodeN && wantSeason) {
+        const listed = await fetchArr(
+          `http://127.0.0.1:8989/api/v3/episode?seriesId=${encodeURIComponent(hit.id)}&seasonNumber=${wantSeason}`,
+          sonarrKey,
+          8000,
+        );
+        episodeRow = (Array.isArray(listed) ? listed : []).find((row) => Number(row?.episodeNumber) === episodeN) || null;
+        if (episodeRow?.id && episodeRow.monitored === false) {
+          await fetchArr(`http://127.0.0.1:8989/api/v3/episode/${episodeRow.id}`, sonarrKey, 8000, {
+            method: "PUT",
+            body: { ...episodeRow, monitored: true },
+          });
+        }
+      }
+      const hasFile = episodeN
+        ? Boolean(episodeRow?.hasFile)
+        : arrHasFile(
+            { titleId: `tmdb-tv-${tmdb}`, season: wantSeason },
+            buildArrIndex({ series: [hit] }),
+          );
       const plan = planArrPostRecover({
         mediaType: "tv",
         season: wantSeason,
         arrHasFile: hasFile,
       });
-      if (plan.search) {
+      if (episodeN && episodeRow?.id && !episodeRow.hasFile) {
+        wantedSearch = true;
+        grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
+        grabPath.added = added;
+        const posted = await fetchArr("http://127.0.0.1:8989/api/v3/command", sonarrKey, 12000, {
+          method: "POST",
+          body: { name: "EpisodeSearch", episodeIds: [episodeRow.id] },
+        });
+        searched = commandPosted(posted);
+        command = searched ? "EpisodeSearch" : null;
+      } else if (plan.search) {
         wantedSearch = true;
         grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
         grabPath.added = added;
