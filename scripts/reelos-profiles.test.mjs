@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -252,4 +252,19 @@ test("house wizard file stays seven steps", () => {
   assert.match(wizard, /const TOTAL = 7/);
   assert.match(wizard, /step === 7 && <StepAccess/);
   assert.doesNotMatch(wizard, /const TOTAL = 8/);
+});
+
+test("prebuilt hashed UI ships the member wizard and owner toggles", () => {
+  const dir = join(root, "prebuilt/vercel-output/static/assets");
+  const blob = readdirSync(dir)
+    .filter((n) => n.endsWith(".js"))
+    .map((n) => readFileSync(join(dir, n), "utf8"))
+    .join("\n");
+  assert.match(blob, /How old are you\?/);
+  assert.match(blob, /Jellyfin username and password\/PIN/);
+  assert.match(blob, /Can request titles/);
+  assert.match(blob, /Trakt \(optional\)/);
+  assert.match(blob, /Not a Google TV scrape/);
+  assert.match(blob, /Who is watching\?/);
+  assert.doesNotMatch(read("src/components/wizard.tsx"), /How old are you\?/);
 });
