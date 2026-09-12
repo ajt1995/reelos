@@ -1,1 +1,0 @@
-import{Q as e}from"./store-CEmLkFxy.js";import{i as t,n}from"./gate-Dux1bjpg.js";var r=e();function i(){return(0,r.jsx)(n,{children:(0,r.jsx)(t,{})})}export{i as component};
