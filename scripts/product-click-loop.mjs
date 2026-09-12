@@ -253,12 +253,13 @@ async function searchAndOpen(page, query, { title, kind } = {}) {
 async function clickRequestIfPresent(page) {
   const btn = page.getByRole("button", { name: /^(Request( S\d+)?)$/ }).first();
   try {
-    await btn.waitFor({ state: "visible", timeout: 12000 });
+    await btn.waitFor({ state: "attached", timeout: 12000 });
   } catch {
     return false;
   }
   if (await btn.isDisabled()) return false;
   await btn.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(200);
   await btn.click();
   await page.waitForTimeout(900);
   return true;
@@ -342,6 +343,15 @@ try {
   await shot(page, "clickloop_02b_moon_request.png");
   verdict.steps.movieSearch = true;
   verdict.steps.movieRequest = moonRequested;
+  const moonCollection = page.getByRole("link", { name: /Collection/i }).first();
+  if (await moonCollection.count()) {
+    await moonCollection.scrollIntoViewIfNeeded();
+    await moonCollection.click();
+    await page.waitForURL(/\/collection\//, { timeout: 15000 });
+    await page.getByRole("heading", { name: /Moon/i }).waitFor({ timeout: 15000 }).catch(() => {});
+    await shot(page, "clickloop_13_collection.png");
+    verdict.steps.collectionSearch = true;
+  }
   await nav(page, "Home");
   await waitHome(page);
   await searchAndOpen(page, "Slow Horses", { title: "Slow Horses" });
