@@ -208,6 +208,8 @@ ZRAM
   fi
   if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4718592 ]; then
     mkdir -p /etc/default/grub.d
+    # grub.d sources this later; keep ${GRUB_CMDLINE_LINUX_DEFAULT} literal.
+    # shellcheck disable=SC2016
     cat >/etc/default/grub.d/reelos-nokdump.cfg <<'GRUB'
 # ReelOS — do not reserve 512M kdump on ≤4.5Gi RAM.
 GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} crashkernel=no"
