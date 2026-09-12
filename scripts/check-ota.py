@@ -155,6 +155,8 @@ CONTRACTS = (
     ("scripts/reelos-lookup-plugin.mjs", "/api/update/progress"),
     ("scripts/reelos-ota-progress.mjs", "honestApplyProgress"),
     ("daemon/reelos-update.sh", "apply-progress.json"),
+    ("daemon/reelos-update.sh", "Copying house settings"),
+    ("daemon/reelos-update.sh", 'write_progress extract "${EX_BYTES:-1}" "${EX_BYTES:-1}" "Extracted"'),
     ("daemon/reelos_apply_progress.py", "byte_percent"),
     ("src/components/settings-updates.tsx", "Roll back"),
 )
