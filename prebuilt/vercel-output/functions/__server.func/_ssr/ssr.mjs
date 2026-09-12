@@ -5,7 +5,7 @@ import { n as createMemoryHistory } from "../_libs/tanstack__history.mjs";
 import { a as getOrigin, c as createSerializationAdapter, d as toCrossJSONAsync, f as toCrossJSONStream, i as getNormalizedURL, l as makeSerovalPlugin, n as mergeHeaders, o as defaultSerovalPlugins, r as attachRouterServerSsrUtils, s as createRawStreamRPCPlugin, t as waitForRequest, u as fromJSON } from "../_libs/@tanstack/router-core+[...].mjs";
 import { n as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
-//#region node_modules/.nitro/vite/services/ssr/index.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/index.js
 var ssr_exports = /* @__PURE__ */ __exportAll({
 	createServerEntry: () => createServerEntry,
 	default: () => server_default,
@@ -88,7 +88,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-DHK-l1aS.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-CaSpSqvp.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -110,35 +110,35 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"258f0c1890e4544d82619f31600079d1a054c2e11b8af15418d099f7d01f07e0": {
 		functionName: "pullStackImages_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"41d2c07472a4f1e5dcb4aab96fabd1ba92e389d7e8e8e8645f602cca3019fa35": {
 		functionName: "checkChannel_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"8e2c75e67287fd6b481a987be04b658a98350cf13e5ff73b0a11f19adf3d801f": {
 		functionName: "pushRequest_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"95fc432c40828f34b0a9df54f531530faf3cf2c3132f82e6f301329ef0df2d0d": {
 		functionName: "applyChannel_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"9b1162b45ecf77c4e9f949cb833621bae5038735658ddada1011101c1b77d7a5": {
 		functionName: "pushIndexer_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"9dfc77b31da6c0fd514d28a91d4dbd04a3b1978d535211e18a7589379263907e": {
 		functionName: "runDoctor_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"da29a55faba4a3535cedb4ac09bfa8bbf09aefb1c5ca11099c758b2b1ff3f6c3": {
 		functionName: "lookupMedia_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	},
 	"e527b35fb0741ee0fe03221620fa9230845510147ace7804948043c6fad06cb2": {
 		functionName: "runTerminal_createServerFn_handler",
-		importer: () => import("./appliance-Dk74LcNF.mjs")
+		importer: () => import("./appliance-CsV_BBL_.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1408,9 +1408,9 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-DddgKIQJ.mjs").then((n) => n.t),
-		import("./start-5Z2QO8AU.mjs"),
-		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
+		import("./router-B2ojDOqc.mjs").then((n) => n.t),
+		import("./start-Cl7ERJbw.mjs"),
+		import("./empty-plugin-adapters-V3Y20QRU.mjs")
 	]);
 	return {
 		routerEntry,
