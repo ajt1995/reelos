@@ -112,9 +112,13 @@ export function splashTuneFromProfile(profile = {}) {
   return "";
 }
 
-export const HARDWARE_PROFILE_PATH = "/var/lib/reelos/hardware-profile.json";
+export function hardwareProfilePath(state = process.env.REELOS_STATE || "/var/lib/reelos") {
+  return `${String(state || "/var/lib/reelos").replace(/\/$/, "")}/hardware-profile.json`;
+}
 
-export function loadSavedHardware({ path = HARDWARE_PROFILE_PATH, readFile = readFileSync } = {}) {
+export const HARDWARE_PROFILE_PATH = hardwareProfilePath();
+
+export function loadSavedHardware({ path = hardwareProfilePath(), readFile = readFileSync } = {}) {
   try {
     const doc = JSON.parse(readFile(path, "utf8"));
     if (!doc || !(doc.ram_kb || doc.ramKb)) return null;

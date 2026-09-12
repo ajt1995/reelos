@@ -1,6 +1,6 @@
+/** Full-screen apply splash. Copy is contract: Updating ReelOS / Not a percent. Fail splash: Update failed, still on previous. */
 import { useEffect, useState } from "react";
 import { Wordmark } from "@/components/logo";
-/** Full-screen apply splash. Copy is contract: Updating ReelOS / Not a percent. Fail splash: Update failed, still on previous. */
 import { Button } from "@/components/ui/button";
 import { catchupLocksHome } from "@/lib/library-catchup";
 import { useReelStore, type BootStepId, type BootStepStatus } from "@/lib/store";

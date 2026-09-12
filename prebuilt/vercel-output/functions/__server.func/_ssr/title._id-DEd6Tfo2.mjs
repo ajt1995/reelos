@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-BAvapKev.mjs";
-import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-BGuBQR0D.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/title._id-HsAe8cP1.js
+import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-Cyqilklf.mjs";
+import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-HC30e6vZ.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/title._id-DEd6Tfo2.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {

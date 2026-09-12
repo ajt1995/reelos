@@ -711,7 +711,10 @@ export const useReelStore = create<ReelState>()(
               });
               return;
             }
-            if (st.failed || (cur.update.status === "applying" && /update failed, still on previous|restore after failure/.test(st.log || ""))) {
+            if (
+              cur.update.status === "applying" &&
+              (st.failed || /update failed, still on previous|restore after failure/.test(st.log || ""))
+            ) {
               set({
                 update: {
                   ...cur.update,

@@ -3,10 +3,10 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as adapterProfile, n as HOSTNAME } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, C as Cpu, D as ChevronRight, M as Bell, a as SlidersHorizontal, b as HardDrive, l as ScrollText, m as LoaderCircle, n as Users, o as Shield, r as TriangleAlert, t as Wrench, u as RefreshCw, v as KeyRound, y as House } from "../_libs/lucide-react.mjs";
-import { O as catchupLocksHome, a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-BAvapKev.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-BGuBQR0D.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-Ek4OIv_D.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/settings-DVRP20RZ.js
+import { O as catchupLocksHome, a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-Cyqilklf.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-HC30e6vZ.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-Ds6ZJUwA.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/settings-GGsopDUB.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {
@@ -176,6 +176,51 @@ function PwaRow() {
 			className: "mt-0.5 text-xs text-muted",
 			children: "Browser menu → Add to Home Screen. Already a PWA — not an APK."
 		})]
+	});
+}
+function HardwareDetectedCard() {
+	const [summary, setSummary] = (0, import_react.useState)("");
+	const [probed, setProbed] = (0, import_react.useState)(false);
+	const [detail, setDetail] = (0, import_react.useState)("");
+	(0, import_react.useEffect)(() => {
+		fetch("/api/hardware", { cache: "no-store" }).then((r) => r.json()).then((j) => {
+			setSummary(j.summary || "");
+			setProbed(Boolean(j.probed));
+			const disk = j.diskKind === "rotational" ? "HDD" : j.diskKind === "ssd" ? "SSD" : "disk";
+			const bits = [
+				j.product || "",
+				j.ramGb ? `${j.ramGb} Gi visible RAM` : "",
+				j.cpus ? `${j.cpus} cores` : "",
+				j.cpuModel || "",
+				disk,
+				j.rootOnUsb ? "root on USB" : "root on internal disk"
+			].filter(Boolean);
+			setDetail(bits.join(" · "));
+		}).catch(() => {});
+	}, []);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+		className: "rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]",
+		children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "flex items-start gap-3",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Cpu, { className: "mt-0.5 size-5 text-muted" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "font-display font-medium",
+					children: "This is what I detected"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-sm text-foreground",
+					children: summary || "Not measured yet — ReelOS will probe on the next update or door start."
+				}),
+				detail ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-sm text-muted",
+					children: detail
+				}) : null,
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-sm text-muted",
+					children: probed ? "Cheap read of RAM, CPU, HDD vs SSD, USB-root, and kdump — not a speed test. Drive knobs follow this profile. Re-probes on install, OTA, or disk change; skips if unchanged." : "A 4.5Gi RAM guess is used until the probe runs. This is not a speed test."
+				})
+			] })]
+		})
 	});
 }
 function PerformanceRow() {
@@ -1222,6 +1267,7 @@ function SettingsView() {
 				title: "Box",
 				hint: "Updates, changelog, performance, logs. Apply still lives here.",
 				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(HardwareDetectedCard, {}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(UpdatesRow, {
 						open: panel === "updates",
 						onClick: () => setPanel(panel === "updates" ? null : "updates")

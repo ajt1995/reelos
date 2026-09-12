@@ -2600,18 +2600,20 @@ function hardwarePy() {
 
 async function handleHardware(req, res) {
   const method = (req.method || "GET").toUpperCase();
-  mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+  const state = process.env.REELOS_STATE || "/var/lib/reelos";
+  const path = `${state.replace(/\/$/, "")}/hardware-profile.json`;
+  mkdirSync(state, { recursive: true, mode: 0o700 });
   if (method === "POST") {
     const py = hardwarePy();
     if (py) {
-      spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000 });
+      spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000, env: process.env });
     }
   } else if (method !== "GET") {
     send(res, 405, { ok: false });
     return;
   }
-  const view = publicHardware(loadSavedHardware(), readHostMemKb());
-  send(res, 200, { ok: true, detected: "this is what I detected", ...view, path: "/var/lib/reelos/hardware-profile.json" });
+  const view = publicHardware(loadSavedHardware({ path }), readHostMemKb());
+  send(res, 200, { ok: true, detected: "this is what I detected", ...view, path });
 }
 
 export async function dispatchReelOsApi(req, res) {
