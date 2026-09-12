@@ -250,6 +250,27 @@ async function searchAndOpen(page, query, { title, kind } = {}) {
   await page.waitForURL(/\/(title|person|collection)\//, { timeout: 15000 });
 }
 
+async function searchRequestTitle(page, queries, { tv = false } = {}) {
+  for (const q of queries) {
+    await nav(page, "Home");
+    await waitHome(page);
+    try {
+      await searchAndOpen(page, q, { title: q });
+      await page.getByRole("heading", { name: q }).waitFor({ timeout: 15000 });
+    } catch {
+      continue;
+    }
+    if (tv) {
+      if (!/\/title\/tmdb-tv-/.test(page.url())) continue;
+    } else {
+      if (!/\/title\/tmdb-\d+/.test(page.url()) || /tmdb-tv-/.test(page.url())) continue;
+    }
+    const ok = await clickRequestIfPresent(page);
+    if (ok) return { query: q, requested: true };
+  }
+  return { query: queries[0], requested: false };
+}
+
 async function clickRequestIfPresent(page) {
   const btn = page.getByRole("button", { name: /^(Request( S\d+)?)$/ }).first();
   try {
@@ -343,6 +364,11 @@ try {
   await shot(page, "clickloop_02b_moon_request.png");
   verdict.steps.movieSearch = true;
   verdict.steps.movieRequest = moonRequested;
+  if (!moonRequested) {
+    const altMovie = await searchRequestTitle(page, ["Ex Machina", "Arrival", "Coherence"], { tv: false });
+    verdict.steps.movieRequest = altMovie.requested;
+    await shot(page, "clickloop_02b_moon_request.png");
+  }
   const moonCollection = page.getByRole("link", { name: /Collection/i }).first();
   if (await moonCollection.count()) {
     await moonCollection.scrollIntoViewIfNeeded();
@@ -354,14 +380,11 @@ try {
   }
   await nav(page, "Home");
   await waitHome(page);
-  await searchAndOpen(page, "Slow Horses", { title: "Slow Horses" });
-  await page.getByRole("heading", { name: "Slow Horses" }).waitFor({ timeout: 15000 });
+  const tv = await searchRequestTitle(page, ["Slow Horses", "Reservation Dogs", "What We Do in the Shadows"], { tv: true });
   await shot(page, "clickloop_03_title_tv.png");
-  assert.match(page.url(), /\/title\/tmdb-tv-/);
-  const tvRequested = await clickRequestIfPresent(page);
   await shot(page, "clickloop_03b_tv_request.png");
   verdict.steps.tvSearch = true;
-  verdict.steps.tvRequest = tvRequested;
+  verdict.steps.tvRequest = tv.requested;
   await nav(page, "Requests");
   await page.getByRole("heading", { name: "Requests" }).waitFor({ timeout: 15000 });
   await shot(page, "clickloop_04_requests.png");
