@@ -714,7 +714,7 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(rootFile, /AbortSignal\.timeout\(4000\)/);
   assert.match(store, /if \(!force && get\(\)\.shelfReady\) return/);
   const sync = readFileSync(join(root, "src/lib/use-sync-requests.ts"), "utf8");
-  assert.match(sync, /hydrateShelf\(\{ limit: 24, force: true, fresh: true \}\)/);
+  assert.match(sync, /hydrateShelf\(\{ force: true, fresh: true \}\)/);
 });
 
 test("cache freshness helper", () => {

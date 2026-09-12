@@ -28,7 +28,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 - **VERSION / channel:** `1.2.50.53`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.52; harvest #152 overlay heartbeat. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home.
+- **Base:** `main` at 1.2.50.52; harvest #152 overlay heartbeat. 51 Discover hide-owned / Passengers / splash / Continue watching. 50 OTA cleaner. 48 hands-off home. 47 request honesty. 46 hash titles. 45 Request. 43 Passengers. 42 hash-dump. 41 honesty. 40 door. 38 Library. 37 Discover.
 - **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.52** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 

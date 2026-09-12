@@ -1227,7 +1227,10 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(accordion, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
   assert.match(titleView, /Series-in-Jellyfin is not this season/);
-  assert.match(titleView, /series \? thisSeasonOnBox : inJellyfin \|\| inLibrary/);
+  assert.match(
+    titleView,
+    /series\s*\?\s*thisSeasonOnBox\s*:\s*Boolean\(resolved\.jellyfinId\)\s*\|\|\s*inJellyfin\s*\|\|\s*inLibrary/,
+  );
   assert.doesNotMatch(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
   assert.doesNotMatch(titleView, /Play in Jellyfin/);
   assert.match(titleView, /Unknown on this box/);
