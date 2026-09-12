@@ -444,7 +444,8 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
     orphans.map((t) => t.tmdb),
     [2059],
   );
-  // A row Seerr already calls available is in the library: recover must not re-add + re-grab it.
+  // Seerr available + Radarr empty (National Treasure) still recovers. A title
+  // already in Radarr is skipped by have.has even if Seerr says downloaded.
   assert.deepEqual(
     listSeerrOrphanMovieTargets({
       seerrRows: [
@@ -452,9 +453,9 @@ test("recover includes Seerr movie orphans that Radarr never grew", () => {
         { titleId: "tmdb-603", mediaType: "movie", tmdb: 603, status: "available", progress: 100 },
         { titleId: "tmdb-604", mediaType: "movie", tmdb: 604, status: "downloading" },
       ],
-      movies: [],
+      movies: [{ tmdbId: 603, hasFile: true }],
     }).map((t) => t.tmdb),
-    [604],
+    [2059, 604],
   );
   const targets = listRecoverTargets({
     series: [],
