@@ -709,7 +709,7 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.doesNotMatch(home, /visibilitychange/);
   assert.match(home, /jfLive/);
   assert.match(home, /jellyfinHop/);
-  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
+  assert.match(home, /homeInFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.doesNotMatch(home, /\/api\/box/);
   assert.match(store, /shelf: s\.shelf/);
   const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");

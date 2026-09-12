@@ -471,44 +471,6 @@ function dumpSeasonBucket(t) {
   return { onDisk, importing: seasonNums(t.importingSeasons).filter((n) => !onDisk.includes(n)) };
 }
 
-/** Named Watch seasons stay; dump/hash seasons become Importing. */
-export function mergeTitleRows(keep, drop) {
-  if (!keep) return drop;
-  if (!drop) return keep;
-  const k = dumpSeasonBucket(keep);
-  const d = dumpSeasonBucket(drop);
-  const onDiskSeasons = seasonNums([...k.onDisk, ...d.onDisk]);
-  const importingSeasons = seasonNums([...k.importing, ...d.importing]).filter((n) => !onDiskSeasons.includes(n));
-  const ids = [
-    ...new Set(
-      [
-        ...(keep.ids || []),
-        ...(drop.ids || []),
-        keep.id,
-        drop.id,
-        keep.jellyfinId,
-        drop.jellyfinId,
-        keep.jellyfinId ? `jf-${keep.jellyfinId}` : "",
-        drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
-      ]
-        .filter(Boolean)
-        .map(String),
-    ),
-  ];
-  const winner = namedCatalogTitle(keep) || !namedCatalogTitle(drop) ? keep : drop;
-  return {
-    ...winner,
-    ids,
-    onDiskSeasons,
-    importingSeasons,
-    unreleasedSeasons: seasonNums([...(keep.unreleasedSeasons || []), ...(drop.unreleasedSeasons || [])]),
-    poster: keep.poster || drop.poster,
-    year: Number(keep.year) > 0 ? keep.year : drop.year,
-    fromDump: namedCatalogTitle(winner) ? false : Boolean(keep.fromDump || drop.fromDump),
-    fromHashDump: namedCatalogTitle(winner) ? Boolean(keep.fromHashDump && !namedCatalogTitle(keep)) : Boolean(keep.fromHashDump || drop.fromHashDump),
-  };
-}
-
 export function catalogIdsOf(t) {
   return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].map(String).filter((id) => /^(tmdb-|tvdb-)/.test(id));
 }
@@ -615,8 +577,60 @@ export function foldDumpSeasons(keep, drop) {
 
 function shouldAliasDumpId(t) {
   if (!t) return false;
+  if (looksLikeCompletePackTitle(t.title) || looksLikeSeasonFolderTitle(t.title)) return false;
   if (t.fromHashDump || looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) return true;
+  if (t.fromDump) return true;
   return looksLikeIndexerDump(t.title) || looksLikeIndexerDump(t.path);
+}
+
+function dumpAliasIds(t) {
+  if (!shouldAliasDumpId(t)) {
+    return [...(t?.ids || [])].filter((id) => /^(tmdb-|tvdb-)/.test(String(id)));
+  }
+  return [
+    ...(t.ids || []),
+    t.id,
+    t.jellyfinId,
+    t.jellyfinId ? `jf-${t.jellyfinId}` : "",
+  ];
+}
+
+/** Named Watch seasons stay; dump/hash seasons become Importing. */
+export function mergeTitleRows(keep, drop) {
+  if (!keep) return drop;
+  if (!drop) return keep;
+  const k = dumpSeasonBucket(keep);
+  const d = dumpSeasonBucket(drop);
+  const onDiskSeasons = seasonNums([...k.onDisk, ...d.onDisk]);
+  const importingSeasons = seasonNums([...k.importing, ...d.importing]).filter((n) => !onDiskSeasons.includes(n));
+  const namedKeep = namedCatalogTitle(keep) || !namedCatalogTitle(drop) ? keep : drop;
+  const other = namedKeep === keep ? drop : keep;
+  const ids = [
+    ...new Set(
+      [
+        ...(namedKeep.ids || []),
+        namedKeep.id,
+        namedKeep.jellyfinId,
+        namedKeep.jellyfinId ? `jf-${namedKeep.jellyfinId}` : "",
+        ...dumpAliasIds(other),
+      ]
+        .filter(Boolean)
+        .map(String),
+    ),
+  ];
+  return {
+    ...namedKeep,
+    ids,
+    onDiskSeasons,
+    importingSeasons,
+    unreleasedSeasons: seasonNums([...(keep.unreleasedSeasons || []), ...(drop.unreleasedSeasons || [])]),
+    poster: keep.poster || drop.poster,
+    year: Number(keep.year) > 0 ? keep.year : drop.year,
+    fromDump: namedCatalogTitle(namedKeep) ? false : Boolean(keep.fromDump || drop.fromDump),
+    fromHashDump: namedCatalogTitle(namedKeep)
+      ? Boolean(keep.fromHashDump && !namedCatalogTitle(keep))
+      : Boolean(keep.fromHashDump || drop.fromHashDump),
+  };
 }
 
 function mergeDumpIntoNamed(keep, drop) {
