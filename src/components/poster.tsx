@@ -19,7 +19,7 @@ export function Poster({
   return (
     <div
       className={cn(
-        "relative overflow-hidden bg-card-2",
+        "relative min-w-0 max-w-full overflow-hidden bg-card-2",
         sizes === "poster" ? "aspect-[2/3]" : "aspect-[16/9]",
         className,
       )}
