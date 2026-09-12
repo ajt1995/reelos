@@ -20,6 +20,12 @@ import {
   assembleRequestPayload,
   attachSeerrDetailTitles,
   mapSeerrSearchResults,
+  mapSeerrPersonHits,
+  mapSeerrCollectionHits,
+  mapPersonDetail,
+  mapCollectionDetail,
+  collectionFromSeerrMovie,
+  overlayLibraryOnTitle,
   mapSeerrDiscoverResults,
   lookupFailureMessage,
   buildSeerrAddPayload,
@@ -335,7 +341,9 @@ async function seerrTitleDetail(parsed) {
   const r = await seerrFetch(path, { key, ms: 20000 });
   if (!r.ok || !r.json) return { title: null, parsed: resolved };
   const hit = seerrSearchHit({ ...r.json, id: Number(resolved.tmdb) || r.json.id, mediaType: resolved.mediaType }, resolved.mediaType);
-  return { title: attachTitleAliases(hit, resolved), parsed: resolved };
+  const titled = attachTitleAliases(hit, resolved);
+  const collection = resolved.mediaType === "tv" ? null : collectionFromSeerrMovie(r.json);
+  return { title: titled && collection ? { ...titled, collection } : titled, parsed: resolved };
 }
 
 async function handleLookup(req, res) {
@@ -344,19 +352,21 @@ async function handleLookup(req, res) {
   const q = u.searchParams.get("q")?.trim() || "";
   const id = u.searchParams.get("id")?.trim() || "";
   const titles = [];
+  const people = [];
+  const collections = [];
   let error = null;
   const key = seerrApiKey();
   note(`api q=${q} id=${id} seerr=${key ? "yes" : "NO"}`);
   if (id) {
     const libraryTitle = findLibraryTitle(titlesForResolve(), id);
     if (!key && libraryTitle) {
-      send(res, 200, { titles: [libraryTitle], error: null });
+      send(res, 200, { titles: [libraryTitle], people, collections, error: null });
       return;
     }
   }
   if (!key) {
     error = "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.";
-    send(res, 200, { titles, error });
+    send(res, 200, { titles, people, collections, error });
     return;
   }
   try {
@@ -392,24 +402,85 @@ async function handleLookup(req, res) {
       return;
     }
     if (q.length < 2) {
-      send(res, 200, { titles, error });
+      send(res, 200, { titles, people, collections, error });
       return;
     }
     const r = await seerrFetch(`/api/v1/search?query=${encodeURIComponent(q)}`, { key, ms: 45000 });
     if (!r.ok) {
       error = `seerr ${r.status}`;
       note(`seerr search ${r.status}`);
-      send(res, 200, { titles, error });
+      send(res, 200, { titles, people, collections, error });
       return;
     }
     const hits = Array.isArray(r.json) ? r.json : r.json?.results || [];
-    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }));
-    note(`seerr hits=${hits.length} titles=${titles.length}`);
+    titles.push(...mapSeerrSearchResults(hits, { q, limit: 16 }).map((t) => overlayLibraryOnTitle(t, titlesForResolve())));
+    people.push(...mapSeerrPersonHits(hits));
+    collections.push(...mapSeerrCollectionHits(hits));
+    note(`seerr hits=${hits.length} titles=${titles.length} people=${people.length} collections=${collections.length}`);
   } catch (e) {
     error = lookupFailureMessage(e);
     note(`seerr ${e}`);
   }
-  send(res, 200, { titles, error });
+  send(res, 200, { titles, people, collections, error });
+}
+
+async function handleCollection(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = String(u.searchParams.get("id") || "").trim();
+  const key = seerrApiKey();
+  if (!/^\d+$/.test(id)) {
+    send(res, 200, { collection: null, error: "Need a TMDB collection id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, {
+      collection: null,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/collection/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, { collection: null, error: r.ok ? "TMDB has no collection with that id." : `seerr ${r.status}` });
+      return;
+    }
+    send(res, 200, { collection: mapCollectionDetail(r.json, titlesForResolve()), error: null });
+  } catch (e) {
+    send(res, 200, { collection: null, error: lookupFailureMessage(e) });
+  }
+}
+
+async function handlePerson(req, res) {
+  const u = new URL(req.url ?? "", "http://reelos.local");
+  const id = String(u.searchParams.get("id") || "").trim();
+  const key = seerrApiKey();
+  if (!/^\d+$/.test(id)) {
+    send(res, 200, { person: null, error: "Need a TMDB person id." });
+    return;
+  }
+  if (!key) {
+    send(res, 200, {
+      person: null,
+      error: "Request UI (Seerr) has no API key yet. Apply, then finish Seerr → Radarr/Sonarr/Jellyfin.",
+    });
+    return;
+  }
+  try {
+    const r = await seerrFetch(`/api/v1/person/${id}`, { key, ms: 20000 });
+    if (!r.ok || !r.json) {
+      send(res, 200, { person: null, error: r.ok ? "TMDB has no person with that id." : `seerr ${r.status}` });
+      return;
+    }
+    let creditsJson = r.json.combinedCredits || r.json.combined_credits || null;
+    if (!creditsJson?.cast && !Array.isArray(creditsJson)) {
+      const c = await seerrFetch(`/api/v1/person/${id}/combined_credits`, { key, ms: 20000 });
+      creditsJson = c.ok ? c.json : null;
+    }
+    send(res, 200, { person: mapPersonDetail(r.json, creditsJson, titlesForResolve()), error: null });
+  } catch (e) {
+    send(res, 200, { person: null, error: lookupFailureMessage(e) });
+  }
 }
 
 function ownedDiscoverIds() {
@@ -2650,6 +2721,14 @@ export async function dispatchReelOsApi(req, res) {
   }
   if (pathOnly === "/api/lookup") {
     await handleLookup(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/collection") {
+    await handleCollection(req, res);
+    return true;
+  }
+  if (pathOnly === "/api/person") {
+    await handlePerson(req, res);
     return true;
   }
   if (pathOnly === "/api/discover") {
