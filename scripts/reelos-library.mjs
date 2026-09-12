@@ -56,8 +56,11 @@ export function hashDumpIds(name, path) {
 export function seasonsFromDumpNames(files = []) {
   const out = new Set();
   for (const f of files || []) {
-    const m = /(?:^|[^a-z0-9])[Ss](\d{1,2})[Ee]\d{1,3}(?:[^a-z0-9]|$)/.exec(String(f));
-    if (m) out.add(Number(m[1]));
+    const s = String(f);
+    const ep = /(?:^|[^a-z0-9])[Ss](\d{1,2})[Ee]\d{1,3}(?:[^a-z0-9]|$)/.exec(s);
+    if (ep) out.add(Number(ep[1]));
+    const folder = /(?:^|\/)(?:Season[\s._-]*|S)(\d{1,2})(?:\/|$)/i.exec(s);
+    if (folder) out.add(Number(folder[1]));
   }
   return [...out].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
 }
@@ -203,9 +206,18 @@ export function mapJellyfinItems(items, host, { listFiles } = {}) {
     const files =
       typeof listFiles === "function"
         ? listFiles(it) || []
-        : looksLikeHashTitle(it?.Name) || looksLikeHashTitle(t.title)
-          ? dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p))
-          : [];
+        : dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => {
+            const names = listDumpNames(p);
+            if (t.kind !== "tv" && t.kind !== "anime") return names;
+            const nested = [];
+            for (const n of names.slice(0, 24)) {
+              if (!/^(?:Season[\s._-]*\d{1,2}|S\d{1,2})$/i.test(String(n).trim())) continue;
+              nested.push(
+                ...listDumpNames(`${p.replace(/\/$/, "")}/${n}`).map((f) => `${n}/${f}`),
+              );
+            }
+            return [...names, ...nested];
+          });
     const hashes = hashDumpIds(it?.Name, it?.Path);
     const disk = seasonsFromDumpNames(files);
     if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title) && !hashes.length) {
@@ -319,13 +331,84 @@ export function catalogIdsOf(t) {
   return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : [])].map(String).filter((id) => /^(tmdb-|tvdb-)/.test(id));
 }
 
+export function isHashDumpId(id) {
+  const s = String(id || "").trim();
+  if (!s) return false;
+  if (looksLikeHashTitle(s)) return true;
+  if (s.startsWith("jf-") && looksLikeHashTitle(s.slice(3))) return true;
+  return false;
+}
+
+/** Hash leftover ids in library-removed.json must not tombstone the named show. */
+export function hideIdsForLibrary(removedIds) {
+  const ids = [...(removedIds || [])].map(String).filter(Boolean);
+  const set = new Set(ids);
+  if (![...set].some((id) => isHashDumpId(id))) return set;
+  for (const id of [...set]) {
+    if (/^(tmdb-|tvdb-)/.test(id)) set.delete(id);
+  }
+  return set;
+}
+
+/** Drop catalog ids a hash-card Remove used to expand, and stale leftover hashes once the dump is gone. */
+export function healRemovedIds(removedIds, titles = []) {
+  const set = hideIdsForLibrary(removedIds);
+  const leftoverOnDisk = (titles || []).some((t) => isHashDumpCard(t));
+  if (!leftoverOnDisk) {
+    for (const id of [...set]) {
+      if (isHashDumpId(id)) set.delete(id);
+    }
+  }
+  return [...set];
+}
+
+export function isHashDumpCard(t) {
+  if (!t) return false;
+  if (looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) return true;
+  if (t.fromHashDump && !(Number(t.year) > 0 && t.poster)) return true;
+  return false;
+}
+
+function titleAliasIds(t) {
+  return [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""]
+    .filter(Boolean)
+    .map(String);
+}
+
+/** Home: never paint a 40-char hash / year-0 empty poster when the named show is on the shelf. */
+export function homeShelfRows(titles) {
+  const list = (titles || []).filter(Boolean);
+  const named = list.filter((t) => !isHashDumpCard(t) && t.title && t.title !== UNKNOWN_ON_BOX && !looksLikeHashTitle(t.title));
+  const namedIds = new Set(named.flatMap(titleAliasIds));
+  const namedNames = new Set(named.map((t) => normalizeTitle(t.title)));
+  return list.filter((t) => {
+    if (looksLikeHashTitle(t.title) || looksLikeHashTitle(t.id)) {
+      if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
+      const name = normalizeTitle(t.title);
+      if (name && namedNames.has(name)) return false;
+      return false;
+    }
+    if (isHashDumpCard(t)) {
+      if (titleAliasIds(t).some((id) => namedIds.has(id))) return false;
+      const name = normalizeTitle(t.title);
+      if (name && namedNames.has(name)) return false;
+      if (!(Number(t.year) > 0) && !t.poster) return false;
+    }
+    return true;
+  });
+}
+
 /** Leftover dump jf-* in the removed list must not hide the real titled series. */
 export function libraryRowHidden(t, hide) {
-  const set = hide instanceof Set ? hide : new Set(hide || []);
+  const set = hide instanceof Set ? hideIdsForLibrary(hide) : hideIdsForLibrary(hide || []);
   if (!set.size) return false;
-  const catalog = catalogIdsOf(t);
-  if (catalog.length) return catalog.some((id) => set.has(id));
-  const ids = [t?.id, ...(Array.isArray(t?.ids) ? t.ids : []), t?.jellyfinId, t?.jellyfinId ? `jf-${t.jellyfinId}` : ""];
+  if (!isHashDumpCard(t) && catalogIdsOf(t).length && ![...set].some((id) => isHashDumpId(id))) {
+    return catalogIdsOf(t).some((id) => set.has(id));
+  }
+  if (!isHashDumpCard(t) && catalogIdsOf(t).length) {
+    return false;
+  }
+  const ids = titleAliasIds(t);
   return ids.some((id) => id && set.has(String(id)));
 }
 
@@ -452,10 +535,12 @@ export function applyLibraryLimit(titles, limit) {
 }
 
 export function mergeShelf(prev, next, limited) {
-  if (!limited) return next;
-  if (!prev?.length) return next;
-  const have = new Set(next.map((t) => t.id));
-  return dedupeLibraryTitles([...next, ...prev.filter((t) => !have.has(t.id))]);
+  const incoming = homeShelfRows(next || []);
+  if (!limited) return incoming;
+  if (!prev?.length) return incoming;
+  const have = new Set(incoming.flatMap(titleAliasIds));
+  const extra = homeShelfRows(prev).filter((t) => !titleAliasIds(t).some((k) => have.has(k)));
+  return homeShelfRows([...incoming, ...extra]);
 }
 
 export function cacheIsFresh(entry, now, ttlMs = LIBRARY_CACHE_TTL_MS) {
@@ -551,9 +636,7 @@ export async function serveLibrary({
   const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
   const withoutRemoved = (titles) => {
     if (!hide.size) return titles || [];
-    return (titles || []).filter((t) => {
-      return !libraryRowHidden(t, hide);
-    });
+    return homeShelfRows((titles || []).filter((t) => !libraryRowHidden(t, hide)));
   };
 
   const serve = (titles, extra = {}) => ({

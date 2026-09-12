@@ -39,7 +39,7 @@ export function isTvRequestRow(row: Pick<MediaRequest, "titleId" | "season">): b
   return id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || row.season != null;
 }
 
-/** Per-season Watch vs Request without a title-page click. */
+/** Per-season Watch vs Request from files on disk — series AVAILABLE is not S05 Watch. */
 export function tvSeasonChips(
   titleId: string,
   requests: MediaRequest[],
@@ -59,8 +59,8 @@ export function tvSeasonChips(
     if (row.season == null) continue;
     const n = Number(row.season);
     if (!Number.isFinite(n) || n <= 0) continue;
-    if (row.status === "available" || row.engine === "downloaded") bySeason.set(n, "Watch");
-    else if (!bySeason.has(n)) bySeason.set(n, "Request");
+    if (bySeason.get(n) === "Watch") continue;
+    bySeason.set(n, "Request");
   }
   return [...bySeason.entries()]
     .sort((a, b) => a[0] - b[0])
@@ -307,6 +307,11 @@ export function titleForRequest(
   };
 }
 
+function isHashDumpId(id: string) {
+  const s = String(id || "");
+  return /^[0-9a-f]{32,64}$/i.test(s) || /^jf-[0-9a-f]{32,64}$/i.test(s);
+}
+
 function titleInDropSet(t: Pick<Title, "id" | "ids" | "jellyfinId">, keys: Set<string>): boolean {
   const ids = titlePresenceKeys(t.id, t.ids || []);
   if (t.jellyfinId) {
@@ -322,19 +327,36 @@ export function dropLibraryOverlay(
   extraIds: string[] = [],
 ): { shelf: Title[]; library: string[]; requests: MediaRequest[]; keys: string[] } {
   const keys = new Set(titlePresenceKeys(titleId, extraIds));
+  const hashOnly = [...keys].some(isHashDumpId) && ![...keys].some((k) => /^(tmdb-|tvdb-)/.test(k));
   for (const t of state.shelf || []) {
     if (!titleInDropSet(t, keys)) continue;
-    for (const k of titlePresenceKeys(t.id, t.ids || [])) keys.add(k);
-    if (t.jellyfinId) {
+    for (const k of titlePresenceKeys(t.id, t.ids || [])) {
+      if (hashOnly && /^(tmdb-|tvdb-)/.test(k)) continue;
+      if (hashOnly && !isHashDumpId(k) && !k.startsWith("jf-")) continue;
+      keys.add(k);
+    }
+    if (t.jellyfinId && !hashOnly) {
       keys.add(String(t.jellyfinId));
       keys.add(`jf-${t.jellyfinId}`);
+    } else if (t.jellyfinId && hashOnly) {
+      const jf = String(t.jellyfinId);
+      if ([titleId, ...extraIds].some((id) => String(id) === jf || String(id) === `jf-${jf}`)) {
+        keys.add(jf);
+        keys.add(`jf-${jf}`);
+      }
     }
   }
   const gone = (id: string) => keys.has(id) || titlePresenceKeys(id).some((k) => keys.has(k));
+  const keepNamed = (t: Pick<Title, "id" | "ids">) =>
+    hashOnly && [t.id, ...(t.ids || [])].some((id) => /^(tmdb-|tvdb-)/.test(String(id)));
   return {
-    shelf: (state.shelf || []).filter((t) => !titleInDropSet(t, keys)),
-    library: (state.library || []).filter((id) => !gone(String(id))),
-    requests: (state.requests || []).filter((r) => !r?.titleId || !gone(r.titleId)),
+    shelf: (state.shelf || []).filter((t) => keepNamed(t) || !titleInDropSet(t, keys)),
+    library: (state.library || []).filter((id) => (hashOnly && /^(tmdb-|tvdb-)/.test(String(id))) || !gone(String(id))),
+    requests: (state.requests || []).filter((r) => {
+      if (!r?.titleId) return true;
+      if (hashOnly && /^(tmdb-|tvdb-)/.test(String(r.titleId))) return true;
+      return !gone(r.titleId);
+    }),
     keys: [...keys],
   };
 }

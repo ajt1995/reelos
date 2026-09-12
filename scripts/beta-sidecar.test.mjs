@@ -33,9 +33,9 @@ test("sidecar: VERSION is 1.2.50.52; Arena+Books are in-tree behind betaChannel 
 });
 
 test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50", () => {
-  assert.ok(cmpVer("2.0.0", "1.2.50.52") > 0);
-  assert.equal(isRollback("2.0.0", "1.2.50.52", false), true);
-  assert.equal(isRollback("2.0.0", "1.2.50.52", true), false);
+  assert.ok(cmpVer("2.0.0", "1.2.50.50") > 0);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", false), true);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", true), false);
 });
 
 test("sidecar: mailman prefers main channel-beta and skips the stub", () => {

@@ -38,6 +38,10 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 GET /api/request (and ?recover=1) expands multi-season Seerr rows and attaches titles[].onDiskSeasons from Sonarr/library. Request page chips S01 Watch / S02 Request without a season click. All-available shows leave the list. Movies unchanged. Wizard 7. Arena off. Do not house-Apply until 50 is done.
 
+### Home hash leftover + title season chips (1.2.50.52)
+
+Post-OTA 50 Home kept a year-0 empty poster named `73ceff…` (historically Rick S04) next to named titles. Hash-card Remove expanded into tvdb/tmdb and could delete the named Sonarr series. Title `/title/jf-103ae…` painted S5/S9 In from series-in-Jellyfin / Seerr AVAILABLE. 52 hides hash dump Home rows when the named show is on the shelf, maps 73ceff onto Rick S04, season chips follow files on disk (no click), and leftover-hash Remove does not target the named series. Do not house-Apply until told.
+
 ### OTA cleaner + update splash (1.2.50.50)
 
 Every Apply runs a bounded cleaner (orphan :8080, retired stacks not in current compose, ghost JF ids via existing heal, OS tune zram/kdump on ≤4.5Gi, tmp OTA leftovers). Never /media, never ota.lock, never firstboot, never docker restart Sonarr. Full-screen Updating ReelOS splash until the door accepts browse/request; library catch-up is a banner and POST /api/request still works. Post-OTA heal is faster (39 stamp-first, 42 no dump ffprobe, one FUSE, skip-nanosecond). Tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Skip 49. Do not house-Apply yet.

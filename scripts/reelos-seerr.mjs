@@ -64,26 +64,9 @@ export function tmdbFromTitleIds(ids) {
   return null;
 }
 
-/** Fill tvdb when the page is already tmdb-tv-* so Sonarr tvdb: keys match. */
-export function fillTvdbAlias(parsed, { titles = [], series = [] } = {}) {
-  if (!parsed || parsed.mediaType !== "tv" || parsed.tvdb) return parsed;
-  const tmdb = parsed.tmdb ? String(parsed.tmdb) : "";
-  if (tmdb) {
-    for (const t of titles || []) {
-      const ids = collectTitleIds(t);
-      if (!ids.includes(`tmdb-tv-${tmdb}`) && !ids.includes(`tmdb-${tmdb}`)) continue;
-      const tvdb = (ids.find((i) => i.startsWith("tvdb-")) || "").replace(/^tvdb-/, "");
-      if (tvdb) return { ...parsed, tvdb };
-    }
-    const s = (series || []).find((x) => String(x?.tmdbId) === tmdb);
-    if (s?.tvdbId) return { ...parsed, tvdb: String(s.tvdbId) };
-  }
-  return parsed;
-}
-
 export function resolveParsedTitle(parsed, { titles = [], series = [], movies = [] } = {}) {
   if (!parsed) return parsed;
-  if (parsed.tmdb) return fillTvdbAlias(parsed, { titles, series });
+  if (parsed.tmdb) return parsed;
   const tvdbKey = parsed.tvdb ? `tvdb-${parsed.tvdb}` : "";
   const pageId = String(parsed.titleId || "");
   for (const t of titles || []) {
@@ -181,21 +164,60 @@ export function attachLibraryPresence(title, libraryTitle) {
         .map(String),
     ),
   ];
+  const disk = [
+    ...new Set(
+      [...(title.onDiskSeasons || []), ...(libraryTitle.onDiskSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const listed = [
+    ...new Set(
+      [...(title.seasonList || []), ...(libraryTitle.seasonList || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
   return {
     ...title,
     ids,
     jellyfinId: title.jellyfinId || libraryTitle.jellyfinId,
     poster: title.poster || libraryTitle.poster,
+    year: title.year || libraryTitle.year || 0,
+    onDiskSeasons: disk.length ? disk : title.onDiskSeasons || libraryTitle.onDiskSeasons,
+    seasonList: listed.length ? listed : title.seasonList || libraryTitle.seasonList,
   };
 }
 
 /** Seerr is for requests. A JF row already on the box is the title page. */
-export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb } = {}) {
+export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDiskSeasons, seasonList } = {}) {
+  const decorate = (title) => {
+    if (!title) return title;
+    const disk = [
+      ...new Set(
+        [...(title.onDiskSeasons || []), ...(onDiskSeasons || [])]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    const listed = [
+      ...new Set(
+        [...(title.seasonList || []), ...(seasonList || [])]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    return {
+      ...title,
+      onDiskSeasons: disk.length ? disk : title.onDiskSeasons,
+      seasonList: listed.length ? listed : title.seasonList,
+    };
+  };
   if (seerrTitle) {
-    return { titles: [attachLibraryPresence(seerrTitle, libraryTitle)], error: null };
+    return { titles: [decorate(attachLibraryPresence(seerrTitle, libraryTitle))], error: null };
   }
   if (libraryTitle) {
-    return { titles: [libraryTitle], error: null };
+    return { titles: [decorate(libraryTitle)], error: null };
   }
   if (missingTmdb) {
     return { titles: [], error: "Could not map that title to TMDB. Retry, or open it from Library." };
@@ -577,36 +599,33 @@ export function buildArrIndex({ movies = [], series = [] } = {}) {
   return { movieHasFile, seasonHasFile };
 }
 
-function seasonOnArrDisk(parsed, season, index) {
-  if (!parsed || season == null || !index?.seasonHasFile) return false;
-  if (parsed.tmdb && index.seasonHasFile.has(`tmdb:${parsed.tmdb}:${season}`)) return true;
-  if (parsed.tvdb && index.seasonHasFile.has(`tvdb:${parsed.tvdb}:${season}`)) return true;
-  return false;
-}
-
-export function arrHasFile(row, index, facts = {}) {
+export function arrHasFile(row, index) {
   if (!row?.titleId || !index) return false;
-  const parsed = fillTvdbAlias(parseTitleId(row.titleId), facts);
+  const parsed = parseTitleId(row.titleId);
   if (!parsed) return false;
   if (parsed.mediaType === "movie") return Boolean(index.movieHasFile?.has(String(parsed.tmdb)));
   const season = row.season;
   if (season == null) {
-    const listed = (Array.isArray(row.requestedSeasons) ? row.requestedSeasons : [])
-      .map(Number)
-      .filter((n) => Number.isFinite(n) && n > 0);
-    if (!listed.length) return false;
-    return listed.every((n) => seasonOnArrDisk(parsed, n, index));
+    const tmdbPrefix = parsed.tmdb ? `tmdb:${parsed.tmdb}:` : "";
+    const tvdbPrefix = parsed.tvdb ? `tvdb:${parsed.tvdb}:` : "";
+    for (const key of index.seasonHasFile || []) {
+      const k = String(key);
+      if (tmdbPrefix && k.startsWith(tmdbPrefix)) return true;
+      if (tvdbPrefix && k.startsWith(tvdbPrefix)) return true;
+    }
+    return false;
   }
-  return seasonOnArrDisk(parsed, season, index);
+  if (parsed.tmdb && index.seasonHasFile?.has(`tmdb:${parsed.tmdb}:${season}`)) return true;
+  if (parsed.tvdb && index.seasonHasFile?.has(`tvdb:${parsed.tvdb}:${season}`)) return true;
+  return false;
 }
 
 /** Seasons *arr already has files for — Request Sxx must hide these. */
-export function onDiskSeasonsFor(parsed, index, facts = {}) {
-  const resolved = fillTvdbAlias(parsed, facts);
-  if (!resolved || resolved.mediaType === "movie" || !index?.seasonHasFile) return [];
+export function onDiskSeasonsFor(parsed, index) {
+  if (!parsed || parsed.mediaType === "movie" || !index?.seasonHasFile) return [];
   const out = [];
-  const tmdbPrefix = resolved.tmdb ? `tmdb:${resolved.tmdb}:` : "";
-  const tvdbPrefix = resolved.tvdb ? `tvdb:${resolved.tvdb}:` : "";
+  const tmdbPrefix = parsed.tmdb ? `tmdb:${parsed.tmdb}:` : "";
+  const tvdbPrefix = parsed.tvdb ? `tvdb:${parsed.tvdb}:` : "";
   for (const key of index.seasonHasFile) {
     const k = String(key);
     let n = 0;
@@ -617,6 +636,117 @@ export function onDiskSeasonsFor(parsed, index, facts = {}) {
   return [...new Set(out)].sort((a, b) => a - b);
 }
 
+export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
+  const index = facts.arrIndex || buildArrIndex({ series: facts.series, movies: facts.movies });
+  return (titles || []).map((t) => {
+    if (!t) return t;
+    const parsed = resolveParsedTitle(parseTitleId(t.id) || parseTitleId((t.ids || [])[0]), {
+      titles: [t, ...(facts.libraryTitles || [])],
+      series: facts.series,
+      movies: facts.movies,
+    });
+    const disk = [
+      ...new Set(
+        [...(t.onDiskSeasons || []), ...onDiskSeasonsFor(parsed, index)]
+          .map(Number)
+          .filter((n) => Number.isFinite(n) && n > 0),
+      ),
+    ].sort((a, b) => a - b);
+    const listed = realSeasonNumbers(
+      (facts.series || []).find(
+        (s) =>
+          (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
+          (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
+      )?.seasons,
+    );
+    const seasonList = [
+      ...new Set([...(t.seasonList || []), ...listed].map(Number).filter((n) => Number.isFinite(n) && n > 0)),
+    ].sort((a, b) => a - b);
+    return {
+      ...t,
+      onDiskSeasons: disk,
+      seasonList: seasonList.length ? seasonList : t.seasonList,
+    };
+  });
+}
+
+/** Whole-show Seerr rows with several seasons stay mixed — S01 on disk is not S05 in. */
+export function expandTvSeasonRows(rows, facts = {}) {
+  const out = [];
+  for (const row of rows || []) {
+    if (!row) continue;
+    const parsed = parseTitleId(row.titleId);
+    if (parsed?.mediaType !== "tv" || row.season != null) {
+      out.push(row);
+      continue;
+    }
+    const requested = [...new Set((row.requestedSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0))];
+    if (requested.length <= 1) {
+      out.push(row);
+      continue;
+    }
+    const disk = new Set(onDiskSeasonsFor(parsed, facts.arrIndex));
+    if (requested.every((n) => disk.has(n))) {
+      out.push({ ...row, status: "available", engine: "downloaded", progress: 100 });
+      continue;
+    }
+    for (const n of requested) {
+      out.push({
+        ...row,
+        id: `${row.id}-s${String(n).padStart(2, "0")}`,
+        season: n,
+        requestedSeasons: undefined,
+      });
+    }
+  }
+  return out;
+}
+
+/** GET /api/request body: season chips from *arr files, never series-in-JF as every season in. */
+export function titleRequestSeasonPayload({
+  id,
+  season,
+  parsed,
+  facts,
+  libraryTitles = [],
+  honest,
+  title,
+} = {}) {
+  const index = facts?.arrIndex;
+  const lib = findLibraryTitle(libraryTitles, id);
+  const disk = [
+    ...new Set(
+      [...onDiskSeasonsFor(parsed, index), ...(lib?.onDiskSeasons || []), ...(title?.onDiskSeasons || [])]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const listed = [
+    ...new Set(
+      [...(title?.seasonList || []), ...(lib?.seasonList || []), ...disk]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0),
+    ),
+  ].sort((a, b) => a - b);
+  const seasonN = season != null && season !== "" && Number.isFinite(Number(season)) ? Number(season) : undefined;
+  const seasonOnDisk = seasonN != null && disk.includes(seasonN);
+  const honestEngine = honest?.engine || honest?.status || "unknown";
+  const seriesAvailable = honest?.status === "available" || honestEngine === "downloaded";
+  const status = seasonN != null ? (seasonOnDisk ? "downloaded" : seriesAvailable ? "unknown" : honestEngine) : honestEngine;
+  return {
+    status,
+    engine: "seerr",
+    title: title?.title,
+    titleId: honest?.titleId || parsed?.titleId || id,
+    seasons: title?.seasons,
+    seasonList: listed.length ? listed : title?.seasonList,
+    onDiskSeasons: disk,
+    progress: seasonOnDisk ? 100 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
+    reason: seasonOnDisk ? undefined : honest?.reason,
+    requestStatus: seasonOnDisk ? "available" : seasonN != null && seriesAvailable ? undefined : honest?.status,
+  };
+}
+
 export function isTvSeasonRow(row) {
   if (!row?.titleId) return false;
   const parsed = parseTitleId(row.titleId);
@@ -624,10 +754,10 @@ export function isTvSeasonRow(row) {
 }
 
 /** Seerr AVAILABLE is a ghost when *arr is up and this movie/season has no file. */
-export function seerrAvailableIsGhost(row, { arrIndex = null, arrReady = false, libraryTitles = [], series = [] } = {}) {
+export function seerrAvailableIsGhost(row, { arrIndex = null, arrReady = false, libraryTitles = [] } = {}) {
   if (!row) return false;
   if (libraryHit(row, libraryTitles)) return false;
-  if (arrHasFile(row, arrIndex, { libraryTitles, series })) return false;
+  if (arrHasFile(row, arrIndex)) return false;
   if (!arrReady || !arrIndex) return false;
   const parsed = parseTitleId(row.titleId);
   if (!parsed) return false;
@@ -808,7 +938,7 @@ export function overlayPresence(
     if (typeof seerrMediaByTitleId.get === "function") return seerrMediaByTitleId.get(row.titleId) || null;
     return seerrMediaByTitleId[row.titleId] || null;
   };
-  const presence = { arrIndex, arrReady, libraryTitles, series: facts.series };
+  const presence = { arrIndex, arrReady, libraryTitles };
   return (rows || []).map((row) => {
     if (!row) return row;
     if (row.status === "available" || row.engine === "downloaded") {
@@ -817,7 +947,12 @@ export function overlayPresence(
     }
     const media = mediaOf(row);
     if (media) {
-      const engine = mapSeerrStatus(media.status, null, seerrSeasonStatus(media, row.season));
+      const seasonSt = seerrSeasonStatus(media, row.season);
+      // Series AVAILABLE is not S05 in. Per-season chips / rows need that season's status or files.
+      const engine =
+        row.season != null && seasonSt !== 5 && seasonSt !== 3 && seasonSt !== 4 && seasonSt !== 1 && seasonSt !== 2
+          ? mapSeerrStatus(0, null, 0)
+          : mapSeerrStatus(media.status, null, seasonSt);
       if (engine === "downloaded") {
         const promoted = markAvailable(row);
         if (seerrAvailableIsGhost(promoted, presence)) return demoteGhost(row, facts);
@@ -825,7 +960,7 @@ export function overlayPresence(
       }
     }
     if (libraryHit(row, libraryTitles)) return markAvailable(row);
-    if (arrHasFile(row, arrIndex, facts)) return markAvailable(row);
+    if (arrHasFile(row, arrIndex)) return markAvailable(row);
     const reason = movieRequestReason(row, facts) || tvRequestReason(row, facts);
     return reason ? { ...row, reason } : row;
   });
@@ -856,60 +991,6 @@ export function reconcileRequestRows(rows) {
   return out.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 }
 
-function seasonsToExpand(row, facts = {}) {
-  const fromRequest = (Array.isArray(row?.requestedSeasons) ? row.requestedSeasons : [])
-    .map(Number)
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (fromRequest.length) return [...new Set(fromRequest)].sort((a, b) => a - b);
-  const parsed = fillTvdbAlias(parseTitleId(row?.titleId), facts);
-  if (!parsed || parsed.mediaType !== "tv") return [];
-  const hit = (facts.series || []).find(
-    (s) =>
-      (parsed.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-      (parsed.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-  );
-  const fromArr = (hit?.seasons || [])
-    .map((s) => Number(s?.seasonNumber))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  return [...new Set(fromArr)].sort((a, b) => a - b);
-}
-
-/** List/row must know per-season availability — same as GET /api/request?id=&season=. */
-export function expandTvSeasonRows(rows, facts = {}) {
-  const out = [];
-  for (const row of rows || []) {
-    if (!row) continue;
-    const parsed = parseTitleId(row.titleId);
-    if (parsed?.mediaType !== "tv" || row.season != null) {
-      out.push(row);
-      continue;
-    }
-    const seasons = seasonsToExpand(row, facts);
-    if (seasons.length <= 1) {
-      out.push(seasons.length === 1 ? { ...row, season: seasons[0] } : row);
-      continue;
-    }
-    for (const n of seasons) {
-      out.push({ ...row, id: `${row.id}#${n}`, season: n, requestedSeasons: seasons });
-    }
-  }
-  return out;
-}
-
-export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
-  const index = facts.arrIndex || null;
-  return (titles || []).map((t) => {
-    if (!t) return t;
-    const parsed = fillTvdbAlias(resolveParsedTitle(parseTitleId(t.id), facts) || parseTitleId(t.id), facts);
-    const disk = onDiskSeasonsFor(parsed, index, facts);
-    if (!disk.length) return t;
-    return {
-      ...t,
-      onDiskSeasons: [...new Set([...(t.onDiskSeasons || []), ...disk])].sort((a, b) => a - b),
-    };
-  });
-}
-
 export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
   const fromSeries = (facts.series || [])
     .filter((s) => s?.tmdbId != null)
@@ -920,7 +1001,10 @@ export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
         tvdb: s.tvdbId != null ? String(s.tvdbId) : undefined,
         titleId: titleIdFor("tv", s.tmdbId),
       };
-      const disk = onDiskSeasonsFor(parsed, facts.arrIndex, facts);
+      const disk = onDiskSeasonsFor(
+        parsed,
+        facts.arrIndex || buildArrIndex({ series: facts.series, movies: facts.movies }),
+      );
       return {
         id: parsed.titleId,
         kind: "tv",

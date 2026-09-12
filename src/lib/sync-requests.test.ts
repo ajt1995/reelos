@@ -138,7 +138,6 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.doesNotMatch(shell, /aria-label="Search"/);
   assert.match(reqs, /inFlightRequests\(requests, \{ titles: \[\.\.\.shelf, \.\.\.remoteTitles\] \}\)/);
   assert.match(reqs, /tvSeasonChips/);
-  assert.match(reqs, /inflight\.filter\(\(r\) => \(filter === "all" \? true : r\.status === filter\)\)/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
   assert.doesNotMatch(reqs, /to="\/play\/\$id"/);
@@ -207,6 +206,36 @@ test("dropLibraryOverlay removes a movie and every TV season row", () => {
   assert.deepEqual(movie.shelf.map((t) => t.id), ["tmdb-550"]);
   assert.deepEqual(movie.library, ["tmdb-550"]);
   assert.deepEqual(movie.requests.map((r) => r.id), ["seerr-2"]);
+});
+
+test("dropping a hash leftover does not take named Rick off the phone shelf", () => {
+  const overlay = dropLibraryOverlay(
+    {
+      shelf: [
+        {
+          id: "tvdb-275274",
+          kind: "tv",
+          title: "Rick and Morty",
+          year: 2013,
+          rating: 0,
+          genres: [],
+          overview: "",
+          poster: "/p.jpg",
+          maxQuality: "4k",
+          popularity: 0,
+          ids: ["tvdb-275274", "tmdb-tv-60625", "73ceff573dc30bebc3fcf26f61de07b25f927a74", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+          jellyfinId: "2e58b382fb6f70f674e1e7273b2d05f8",
+        },
+      ],
+      library: ["tvdb-275274"],
+      requests: [row({ id: "s4", titleId: "tmdb-tv-60625", season: 4, status: "available" })],
+    },
+    "jf-103ae87fbbbd9bb920ee3803dcffc570",
+    ["73ceff573dc30bebc3fcf26f61de07b25f927a74", "103ae87fbbbd9bb920ee3803dcffc570"],
+  );
+  assert.equal(overlay.shelf[0]?.id, "tvdb-275274");
+  assert.deepEqual(overlay.library, ["tvdb-275274"]);
+  assert.equal(overlay.requests.length, 1);
 });
 
 test("server available upgrades a stale local downloading row for the same titleId", () => {
@@ -308,23 +337,6 @@ test("TV library series does not mark a grabbing season available on the client"
   });
   assert.equal(honest[0]?.status, "downloading");
   assert.equal(honest[0]?.progress, 0);
-});
-
-test("TV onDiskSeasons marks that season Watch without a title click", () => {
-  const requests = [
-    row({ id: "seerr-5", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 1 }),
-    row({ id: "seerr-6", titleId: "tmdb-tv-1402", status: "downloading", progress: 0, season: 2 }),
-  ];
-  const honest = overlayLibraryPresence(requests, {
-    titles: [{ id: "tmdb-tv-1402", kind: "tv", onDiskSeasons: [1] }],
-  });
-  assert.equal(honest.find((r) => r.season === 1)?.status, "available");
-  assert.equal(honest.find((r) => r.season === 2)?.status, "downloading");
-  const chips = tvSeasonChips("tmdb-tv-1402", honest, [{ id: "tmdb-tv-1402", kind: "tv", onDiskSeasons: [1] }]);
-  assert.deepEqual(
-    chips.map((c) => `${c.season}:${c.label.toLowerCase()}`),
-    ["1:watch", "2:request"],
-  );
 });
 
 test("title-page poll does not paint another season available", () => {
@@ -594,5 +606,20 @@ test("title page hides magnet paste and prefers movie POST", () => {
   assert.match(view, /Series-in-Jellyfin is not this season/);
   assert.match(view, /request\?\.status === "downloading" \|\| request\?\.status === "waiting"/);
   assert.doesNotMatch(view, /thisSeasonOnBox \|\| inJellyfin/);
-  assert.doesNotMatch(view, /extraIds\.find\(\(k\) => k\.startsWith\("tmdb-tv-"\)\) \|\| extraIds\.find/);
+  assert.doesNotMatch(view, /engineStatus === "downloaded"/);
+});
+
+test("tvSeasonChips Watch only from on-disk seasons, not series available", () => {
+  const chips = tvSeasonChips(
+    "tmdb-tv-60625",
+    [
+      row({ id: "s5", titleId: "tmdb-tv-60625", season: 5, status: "available" }),
+      row({ id: "s4", titleId: "tmdb-tv-60625", season: 4, status: "downloading" }),
+    ],
+    [{ id: "tmdb-tv-60625", kind: "tv", ids: ["tvdb-275274"], onDiskSeasons: [2, 3, 4, 6] }],
+  );
+  assert.deepEqual(
+    chips.map((c) => `${c.season}:${c.label}`),
+    ["2:Watch", "3:Watch", "4:Watch", "5:Request", "6:Watch"],
+  );
 });

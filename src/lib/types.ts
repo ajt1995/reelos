@@ -72,6 +72,8 @@ export interface Title {
   poster: string;
   jellyfinId?: string;
   ids?: string[];
+  path?: string;
+  fromHashDump?: boolean;
   maxQuality: "1080p" | "4k";
   popularity: number;
 }
@@ -84,6 +86,7 @@ export interface MediaRequest {
   progress: number;
   reason?: string;
   season?: number;
+  requestedSeasons?: number[];
   createdAt: number;
   updatedAt: number;
   requester: string;
