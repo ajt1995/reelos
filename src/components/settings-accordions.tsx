@@ -6,6 +6,7 @@ import {
   qualityLabel,
   useReelStore,
 } from "@/lib/store";
+import { GOOGLE_TV_COPY, TRAKT_FREE_COPY, useHouseholdProfile } from "@/lib/profiles";
 import { cn } from "@/lib/utils";
 import { Toggle, persistUi } from "@/components/settings-ui";
 import { DisksPanel } from "@/components/settings-panels";
@@ -132,42 +133,89 @@ export function UsersPanel() {
   const patchSettings = useReelStore((s) => s.patchSettings);
   const addUser = useReelStore((s) => s.addUser);
   const removeUser = useReelStore((s) => s.removeUser);
+  const { profiles, profile, picker, refresh, select, kids } = useHouseholdProfile();
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<"adult" | "kids">("adult");
+  const list = profiles.length ? profiles : users.map((u) => ({ ...u, kind: "adult" as const }));
   return (
     <>
-      <ul className="space-y-2">
-        {users.map((u) => (
+      <p className="text-sm text-muted">
+        One box, several people. Continue and likes stay on the profile you tap. A single admin does not
+        need a picker.
+      </p>
+      <ul className="mt-3 space-y-2">
+        {list.map((u) => (
           <li key={u.id} className="flex items-center justify-between text-sm">
-            <span>
+            <button type="button" className="text-left" onClick={() => void select(u.id)}>
               {u.name}{" "}
-              <span className="text-faint">{u.role === "admin" ? "admin" : "member"}</span>
-            </span>
-            {u.role !== "admin" ? (
-              <button type="button" className="text-xs text-danger" onClick={() => removeUser(u.id)}>
+              <span className="text-faint">
+                {u.role === "admin" ? "admin" : u.kind === "kids" ? "kids" : "member"}
+                {profile?.id === u.id ? " · this device" : ""}
+              </span>
+            </button>
+            {u.role !== "admin" && !kids ? (
+              <button
+                type="button"
+                className="text-xs text-danger"
+                onClick={() => {
+                  void fetch("/api/profiles", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "remove", id: u.id }),
+                  }).then(() => {
+                    removeUser(u.id);
+                    refresh();
+                  });
+                }}
+              >
                 Remove
               </button>
             ) : null}
           </li>
         ))}
       </ul>
-      <form
-        className="mt-3 flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          addUser(name);
-          setName("");
-        }}
-      >
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Invite name"
-          className="h-10 flex-1 rounded-xl bg-card-2 px-3 text-sm"
-        />
-        <Button size="sm" type="submit">
-          Add
-        </Button>
-      </form>
+      {kids ? (
+        <p className="mt-3 text-sm text-muted">Kids profile cannot add people or open the rest of Settings.</p>
+      ) : (
+        <form
+          className="mt-3 flex flex-wrap gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = name.trim();
+            if (!n) return;
+            addUser(n);
+            void fetch("/api/profiles", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "add", name: n, kind }),
+            }).then(() => refresh());
+            setName("");
+          }}
+        >
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="h-10 min-w-0 flex-1 rounded-xl bg-card-2 px-3 text-sm"
+          />
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value === "kids" ? "kids" : "adult")}
+            className="h-10 rounded-xl bg-card-2 px-3 text-sm"
+          >
+            <option value="adult">Adult</option>
+            <option value="kids">Kids</option>
+          </select>
+          <Button size="sm" type="submit">
+            Add
+          </Button>
+        </form>
+      )}
+      <p className="mt-3 text-xs text-faint">
+        {picker
+          ? "Kids hide adult titles and cannot Request or open Settings. Existing admin stays."
+          : "Still one person — add a name when someone else uses this box."}
+      </p>
       <label className="mt-4 flex items-center justify-between text-sm">
         Auto-approve requests
         <Toggle
@@ -178,6 +226,122 @@ export function UsersPanel() {
           }}
         />
       </label>
+    </>
+  );
+}
+
+export function TastePanel() {
+  const { trakt, traktCopy, traktConfigured, refresh, kids } = useHouseholdProfile();
+  const [clientId, setClientId] = useState("");
+  const [busy, setBusy] = useState("");
+  if (kids) {
+    return <p className="text-sm text-muted">Kids profile cannot change taste accounts.</p>;
+  }
+  return (
+    <>
+      <p className="text-sm font-medium">Google TV</p>
+      <p className="mt-1 text-sm text-muted">{GOOGLE_TV_COPY}</p>
+      <p className="mt-4 text-sm font-medium">Trakt</p>
+      <p className="mt-1 text-sm text-muted">{traktCopy || TRAKT_FREE_COPY}</p>
+      {trakt.connected ? (
+        <p className="mt-2 text-sm">
+          Connected{trakt.username ? ` as ${trakt.username}` : ""}. Local thumbs still win if Trakt is down.
+        </p>
+      ) : trakt.pending ? (
+        <p className="mt-2 text-sm">
+          On your phone open {trakt.pending.verificationUrl} and enter{" "}
+          <span className="font-mono">{trakt.pending.userCode}</span>.
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-faint">
+          Optional. Create a free app at trakt.tv/oauth/applications. Local like/dislike does not need this.
+        </p>
+      )}
+      <form
+        className="mt-3 flex flex-wrap gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void fetch("/api/trakt", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "app", clientId }),
+          }).then(() => refresh());
+        }}
+      >
+        <input
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          placeholder={traktConfigured ? "Client ID saved" : "Trakt Client ID (optional)"}
+          className="h-10 min-w-0 flex-1 rounded-xl bg-card-2 px-3 font-mono text-sm"
+        />
+        <Button size="sm" type="submit">
+          Save
+        </Button>
+      </form>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            setBusy("start");
+            void fetch("/api/trakt", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "start" }),
+            })
+              .then(() => refresh())
+              .finally(() => setBusy(""));
+          }}
+        >
+          {busy === "start" ? "Starting…" : "Connect Trakt"}
+        </Button>
+        {trakt.pending ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setBusy("poll");
+              void fetch("/api/trakt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "poll" }),
+              })
+                .then(() => refresh())
+                .finally(() => setBusy(""));
+            }}
+          >
+            {busy === "poll" ? "Checking…" : "I entered the code"}
+          </Button>
+        ) : null}
+        {trakt.connected ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              void fetch("/api/trakt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "disconnect" }),
+              }).then(() => refresh());
+            }}
+          >
+            Disconnect
+          </Button>
+        ) : null}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            void fetch("/api/curator", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reset: true }),
+            }).then(() => refresh());
+          }}
+        >
+          Reset my curator
+        </Button>
+      </div>
     </>
   );
 }

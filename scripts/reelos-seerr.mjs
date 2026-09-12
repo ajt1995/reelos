@@ -1214,6 +1214,7 @@ export function seerrSearchHit(h, mediaTypeHint) {
     overview: String(h.overview || ""),
     poster: tmdbPoster(h.posterPath || h.remotePoster),
     rating: Number(h.voteAverage || 0),
+    adult: h.adult === true,
     genres: Array.isArray(h.genres)
       ? h.genres.map((g) => (typeof g === "string" ? g : g?.name || "")).filter(Boolean)
       : [],

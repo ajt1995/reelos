@@ -11,8 +11,10 @@ import {
 import { ApplyingBar } from "@/components/applying-bar";
 import { CircuitFloor } from "@/components/circuit-floor";
 import { LibraryCatchupBar } from "@/components/library-catchup-bar";
+import { ProfileSwitcher } from "@/components/profile-switcher";
 import { ReelMark } from "@/components/logo";
 import { HOSTNAME } from "@/lib/catalog";
+import { useHouseholdProfile } from "@/lib/profiles";
 import { frontendLabel, useReelStore } from "@/lib/store";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { inFlightRequests, transferringChipCount } from "@/lib/sync-requests";
@@ -60,10 +62,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const transferring = useReelStore((s) =>
     transferringChipCount(inFlightRequests(s.requests, { titles: s.shelf })),
   );
+  const { kids } = useHouseholdProfile();
   const hostname = typeof window !== "undefined" ? window.location.hostname : "";
   const watchHref = jellyfinWatchHref({ ipv4, tailscaleIp, watch, hostname });
-  const desktopNav = arena ? ARENA_DESKTOP_NAV : STABLE_NAV;
-  const phoneNav = arena ? ARENA_PHONE_NAV : STABLE_NAV.filter((n) => n.to !== "/activity");
+  const desktopNav = (arena ? ARENA_DESKTOP_NAV : STABLE_NAV).filter((n) => {
+    if (kids && (n.to === "/settings" || n.to === "/requests")) return false;
+    return true;
+  });
+  const phoneNav = (arena ? ARENA_PHONE_NAV : STABLE_NAV.filter((n) => n.to !== "/activity")).filter((n) => {
+    if (kids && (n.to === "/settings" || n.to === "/requests")) return false;
+    return true;
+  });
   const brand = arena ? "Arena" : "ReelOS";
 
   return (
@@ -144,6 +153,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
               {jfLive ? " live" : ""}
             </p>
           </div>
+          <div className="px-3 pb-2">
+            <ProfileSwitcher />
+          </div>
         </div>
       </aside>
 
@@ -173,7 +185,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           ) : (
             <span className="ml-auto" />
           )}
-          {arena ? (
+          {arena && !kids ? (
             <Link
               to="/settings"
               className="flex size-8 items-center justify-center rounded-lg text-muted"
@@ -183,6 +195,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </Link>
           ) : null}
         </header>
+        <div className="px-4 pt-2 md:hidden">
+          <ProfileSwitcher compact />
+        </div>
         <main className="min-w-0 flex-1">{children}</main>
       </div>
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TitleCard } from "@/components/title-card";
 import { RemoveFromBox } from "@/components/remove-from-box";
 import { useReelStore } from "@/lib/store";
+import { useHouseholdProfile } from "@/lib/profiles";
 import type { Kind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +22,7 @@ export function LibraryView() {
   const err = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
   const intent = useReelStore((s) => s.answers.intent);
+  const { kids } = useHouseholdProfile();
   const booksOn = useReelStore((s) => s.settings.betaChannel);
   const [books, setBooks] = useState<{ title: string; author: string; rel: string }[]>([]);
 
@@ -39,8 +41,13 @@ export function LibraryView() {
   }, [booksOn]);
 
   const shown = useMemo(
-    () => items.filter((t) => (tab === "all" ? true : t.kind === tab)),
-    [items, tab],
+    () =>
+      items.filter((t) => {
+        if (tab !== "all" && t.kind !== tab) return false;
+        if (kids && (t.adult || (t.genres || []).some((g) => /adult|erotic|nc-17/i.test(g)))) return false;
+        return true;
+      }),
+    [items, tab, kids],
   );
 
   const tabs = TABS.filter((t) => {
@@ -91,7 +98,7 @@ export function LibraryView() {
           {shown.map((t) => (
             <div key={t.id}>
               <TitleCard title={t} className="w-auto" />
-              <RemoveFromBox title={t} compact />
+              {kids ? null : <RemoveFromBox title={t} compact />}
             </div>
           ))}
         </div>
