@@ -668,23 +668,52 @@ function seriesSeasonFiles(hit, season) {
   return Number(hit.statistics?.episodeFileCount || 0);
 }
 
-function sonarrDumpNamed(dumps, title) {
+function linkedNameList(dumps, torrents) {
+  const fromDumps = [...(dumps?.sonarr || []), ...(dumps?.radarr || [])];
+  const fromTorrents = (torrents || []).map((t) => t?.name || t?.title).filter(Boolean);
+  return [...fromDumps, ...fromTorrents];
+}
+
+function dumpSeasonNumber(name) {
+  const s = String(name || "");
+  const m =
+    s.match(/(?:^|[\s._-])S(\d{1,2})(?:E\d{2}|[\s._-]|$)/i) ||
+    s.match(/Season[\s._-]*(\d{1,2})\b/i);
+  return m ? Number(m[1]) : null;
+}
+
+function dumpNameMatchesTitle(name, title) {
   const want = String(title || "").toLowerCase().trim();
-  if (!want) return false;
+  const got = String(name || "").toLowerCase().trim();
+  if (!want || !got) return false;
+  if (got === want) return true;
   const stem = want.replace(/[^a-z0-9]+/g, " ").trim();
-  return (dumps?.sonarr || []).some((n) => {
-    const got = String(n || "").toLowerCase().trim();
-    if (got === want) return true;
-    const gotStem = got.replace(/\.[0-9]{4}.*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
-    if (stem && gotStem === stem) return true;
-    const gotCompact = got.replace(/[^a-z0-9]+/g, "");
-    const wantCompact = want.replace(/[^a-z0-9]+/g, "");
-    return Boolean(wantCompact) && gotCompact.startsWith(wantCompact);
+  const gotStem = got.replace(/\.[0-9]{4}.*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  if (stem && gotStem === stem) return true;
+  const gotCompact = got.replace(/[^a-z0-9]+/g, "");
+  const wantCompact = want.replace(/[^a-z0-9]+/g, "");
+  return Boolean(wantCompact) && gotCompact.startsWith(wantCompact);
+}
+
+function sonarrDumpNamed(dumps, title, torrents = [], season, seriesFileCount = 0) {
+  const matching = linkedNameList(dumps, torrents).filter((n) => dumpNameMatchesTitle(n, title));
+  if (!matching.length) return false;
+  const seasonNum = season == null ? null : Number(season);
+  const seasonPack = matching.some((n) => dumpSeasonNumber(n) === seasonNum);
+  if (seasonNum != null && seasonPack) return true;
+  const otherSeasonPack = matching.some((n) => {
+    const ds = dumpSeasonNumber(n);
+    return ds != null && seasonNum != null && ds !== seasonNum;
   });
+  if (otherSeasonPack && !seasonPack) return false;
+  const generic = matching.some((n) => dumpSeasonNumber(n) == null);
+  // Series folder after another season imported is the library root, not a pending pack.
+  if (generic && Number(seriesFileCount) > 0) return false;
+  return generic || matching.length > 0;
 }
 
 /** Seerr requested a show, Sonarr has 0 files. Keep downloading@0, say why. */
-export function tvRequestReason(row, { series, arrSeriesReady, dumps } = {}) {
+export function tvRequestReason(row, { series, arrSeriesReady, dumps, torrents } = {}) {
   if (!row?.titleId) return undefined;
   const parsed = parseTitleId(row.titleId);
   if (parsed?.mediaType !== "tv") return undefined;
@@ -700,7 +729,9 @@ export function tvRequestReason(row, { series, arrSeriesReady, dumps } = {}) {
   if (hit.monitored === false) return "Unmonitored in Sonarr — search will not run";
   const seasonRow = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === Number(row.season));
   if (seasonRow && seasonRow.monitored === false) return "Season unmonitored in Sonarr — search will not run";
-  if (sonarrDumpNamed(dumps, hit.title)) return "Files linked — waiting for Sonarr import";
+  if (sonarrDumpNamed(dumps, hit.title, torrents, row.season, hit.statistics?.episodeFileCount)) {
+    return "Files linked — waiting for Sonarr import";
+  }
   return "Searching — no file yet";
 }
 
@@ -1046,11 +1077,18 @@ export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
   const honest = honestifyRequests([...(seerrRows || []), ...(extras || [])], facts);
   // Do not invent a Requests row for a title that is already on the shelf when Seerr dropped it.
   // When Seerr has rows, do not invent a grabbing row for every 0-file *arr title.
-  return honest.filter((r) => {
+  const kept = honest.filter((r) => {
     if (seerrKeys.has(requestMatchKey(r))) return true;
     if (seerrPresent && (r.source === "radarr-missing" || r.source === "sonarr-missing")) return false;
     return r.status !== "available" && r.engine !== "downloaded";
   });
+  const tvWithSeason = new Set(
+    kept
+      .filter((r) => String(r.titleId || "").startsWith("tmdb-tv-") && r.season != null)
+      .map((r) => r.titleId),
+  );
+  // Seerr media ghosts with no season duplicate S01/S03 cards (Expanse ×2).
+  return kept.filter((r) => !tvWithSeason.has(r.titleId) || r.season != null);
 }
 
 /** True when the row would paint as tmdb-2059 instead of National Treasure. */

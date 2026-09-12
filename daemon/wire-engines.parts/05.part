@@ -57,7 +57,7 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                     existing["enable"] = True
                     iid = existing.get("id")
                     call(
-                        f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
+                        f"http://127.0.0.1:9696/api/v1/indexer/{iid}?forceSave=true",
                         prow_key,
                         method="PUT",
                         body=existing,
@@ -77,9 +77,8 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                 log_wire(f"provider indexer exists {name}")
                 clear_releases_error()
                 return
-            set_releases_error(terr)
-            time.sleep(4)
-            continue
+            log_wire(f"provider indexer attached {name} — live test failed, keep for house/LAN")
+            return
         hit = None
         try:
             hit = _find_schema(prow_key, src)
@@ -140,7 +139,8 @@ def _ensure_provider_indexer(prow_key: str) -> None:
                 if ok_t:
                     clear_releases_error()
                     return
-                set_releases_error(terr)
+                log_wire(f"provider indexer attached {name} — live test failed, keep for house/LAN")
+                return
         if src == "torbox" and not torznab_tried:
             torznab_tried = True
             add_torbox_torznab(prow_key, name, key)

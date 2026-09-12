@@ -183,6 +183,11 @@ export function collapseHomeRequestCards(rows: MediaRequest[]): MediaRequest[] {
   return out;
 }
 
+/** Transferring chip matches the collapsed Home cards, not every season row. */
+export function transferringChipCount(rows: MediaRequest[]): number {
+  return collapseHomeRequestCards(rows).length;
+}
+
 function markAvailable(row: MediaRequest): MediaRequest {
   return { ...row, status: "available", progress: 100, reason: undefined };
 }

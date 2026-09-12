@@ -7,8 +7,9 @@
  * Not a Go rewrite. Not vite --host on the house when prebuilt exists.
  * Leftover Vite is `vite preview` only if nitro+api cannot bind.
  */
-import { spawn } from "node:child_process";
-import { createReadStream, existsSync, realpathSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { createReadStream, existsSync, readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { parseListenerInodes } from "./preview.mjs";
 import http from "node:http";
 import { extname, join, normalize, relative, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -290,11 +291,104 @@ function armSelfHeal() {
   setInterval(() => void kickSelfHeal(), 120_000).unref();
 }
 
+export function killOrphanPortPids(pids, { kill = process.kill, selfPid = process.pid } = {}) {
+  const targets = [...new Set((pids || []).map(Number).filter((n) => n > 1 && n !== selfPid))];
+  for (const pid of targets) {
+    try {
+      kill(pid, "SIGTERM");
+    } catch {
+      /* already gone */
+    }
+  }
+  return targets;
+}
+
+export function orphanPidsOnPort(
+  port = PORT,
+  {
+    readFile = readFileSync,
+    readdir = readdirSync,
+    readlink = readlinkSync,
+    selfPid = process.pid,
+  } = {},
+) {
+  const inodes = new Set();
+  for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    let dump = "";
+    try {
+      dump = readFile(file, "utf8");
+    } catch {
+      continue;
+    }
+    for (const inode of parseListenerInodes(dump, Number(port))) inodes.add(inode);
+  }
+  if (!inodes.size) return [];
+  const targets = new Set([...inodes].map((inode) => `socket:[${inode}]`));
+  const pids = [];
+  let entries = [];
+  try {
+    entries = readdir("/proc");
+  } catch {
+    return [];
+  }
+  for (const entry of entries) {
+    const pid = Number(entry);
+    if (!Number.isInteger(pid) || pid <= 1 || pid === selfPid) continue;
+    let fds;
+    try {
+      fds = readdir(`/proc/${pid}/fd`);
+    } catch {
+      continue;
+    }
+    for (const fd of fds) {
+      try {
+        if (targets.has(readlink(`/proc/${pid}/fd/${fd}`))) {
+          pids.push(pid);
+          break;
+        }
+      } catch {
+        /* fd closed */
+      }
+    }
+  }
+  return pids;
+}
+
+/** One Node on :8080. Kill leftover vite/nitro from a previous start. */
+export function killOrphan8080({ port = PORT, kill = process.kill, selfPid = process.pid, ...scan } = {}) {
+  const pids = orphanPidsOnPort(port, { ...scan, selfPid });
+  return killOrphanPortPids(pids, { kill, selfPid });
+}
+
+export function ensureHardwareProfile(root = ROOT) {
+  const py = existsSync(join(root, "bin/reelos_hardware.py"))
+    ? join(root, "bin/reelos_hardware.py")
+    : join(root, "daemon/reelos_hardware.py");
+  if (!existsSync(py)) return { ran: false };
+  const state = process.env.REELOS_STATE || "/var/lib/reelos";
+  const saved = join(state, "hardware-profile.json");
+  if (existsSync(saved)) {
+    spawn("python3", [py, "--ensure"], { detached: true, stdio: "ignore" }).unref();
+    return { ran: true, skippedSync: true };
+  }
+  const r = spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000 });
+  return { ran: true, skippedSync: false, status: r.status };
+}
+
+function idleOffBooks() {
+  void import("./reelos-beta-sidecar.mjs")
+    .then((m) => m.idleOffBooksIfNeeded())
+    .catch(() => {});
+}
+
 export async function startBox({ root = ROOT } = {}) {
+  ensureHardwareProfile(root);
+  killOrphan8080();
   const client = findClientRoot(root);
   if (client) {
     const server = await startStatic(client, root);
     armSelfHeal();
+    idleOffBooks();
     return { mode: "static", client, server };
   }
   const nitro = findNitroOutput(root);
@@ -302,6 +396,7 @@ export async function startBox({ root = ROOT } = {}) {
     try {
       const server = await startNitroPlusApi(nitro, root);
       armSelfHeal();
+      idleOffBooks();
       return { mode: "nitro+api", client: nitro, server };
     } catch (e) {
       console.log(`[reelos-box] nitro+api failed (${e}) — production preview`);

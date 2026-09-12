@@ -10,7 +10,7 @@ export function LibraryCatchupBar() {
   const text =
     catchup.message ||
     (catchup.status === "backoff"
-      ? "Library catching up — backing off (ffprobe busy)"
+      ? "TorBox filesystem busy — not copying to disk"
       : "Library catching up");
   return (
     <div className="relative z-20 border-b border-border bg-raised px-3 py-2">

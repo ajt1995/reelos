@@ -4,12 +4,13 @@
 }
 :80 {
 	encode gzip
-	handle /play* {
-		reverse_proxy 127.0.0.1:8096
-	}
+	# Jellyfin Watch is :8096. /play/$id is the ReelOS shell player — do not steal it.
 	handle /advanced/downloads* {
 		uri strip_prefix /advanced/downloads
 		reverse_proxy 127.0.0.1:8282
+	}
+	handle /kavita* {
+		reverse_proxy 127.0.0.1:5000
 	}
 	handle /seerr* {
 		reverse_proxy 127.0.0.1:5055

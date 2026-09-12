@@ -29,3 +29,14 @@ test("Watch uses LAN or Tailscale IP, never hostname:8096", () => {
     "http://192.168.1.234:8096",
   );
 });
+
+test("Watch does not treat loopback as the box Jellyfin door", () => {
+  assert.equal(jellyfinWatchOrigin({ hostname: "127.0.0.1" }), "");
+  assert.equal(jellyfinWatchOrigin({ hostname: "localhost" }), "");
+  assert.equal(jellyfinWatchOrigin({ ipv4: "127.0.0.1", hostname: "reelos.local" }), "");
+  assert.equal(jellyfinWatchOrigin({ watch: "http://127.0.0.1:8096", hostname: "house" }), "");
+  assert.equal(
+    jellyfinWatchOrigin({ ipv4: "192.168.1.234", hostname: "127.0.0.1" }),
+    "http://192.168.1.234:8096",
+  );
+});

@@ -12,12 +12,12 @@ function read(rel) {
   return readFileSync(join(root, rel), "utf8");
 }
 
-test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
+test("sidecar: VERSION is 1.2.50.50; Arena+Books are in-tree behind betaChannel default off", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
-  assert.equal(ver, "1.2.50.48");
-  assert.equal(chan.version, "1.2.50.48");
+  assert.equal(ver, "1.2.50.50");
+  assert.equal(chan.version, "1.2.50.50");
   assert.equal(chan.channel, "stable");
   assert.match(chan.tarball, /main\.tar\.gz/);
   assert.doesNotMatch(JSON.stringify(chan), /beta-arena-books/);
@@ -25,15 +25,17 @@ test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
   assert.equal(beta.channel, "beta");
   assert.match(beta.tarball, /cursor\/beta-arena-books-5ba6\.tar\.gz/);
   assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
-  assert.doesNotMatch(read("src/styles.css"), /\.arena-page/);
-  assert.doesNotMatch(read("src/lib/store.ts"), /LATEST_VERSION = "2\./);
+  assert.match(read("src/lib/store.ts"), /LATEST_VERSION = "1\.2\.50\.50"/);
+  assert.match(read("src/lib/store.ts"), /betaChannel: false/);
+  assert.match(read("src/styles.css"), /\.arena-page/);
+  assert.match(read("scripts/reelos-beta-sidecar.mjs"), /applyBetaSidecar/);
   assert.doesNotMatch(read("src/components/settings-updates.tsx"), /stub today/);
 });
 
-test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 48", () => {
-  assert.ok(cmpVer("2.0.0", "1.2.50.48") > 0);
-  assert.equal(isRollback("2.0.0", "1.2.50.48", false), true);
-  assert.equal(isRollback("2.0.0", "1.2.50.48", true), false);
+test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50", () => {
+  assert.ok(cmpVer("2.0.0", "1.2.50.50") > 0);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", false), true);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", true), false);
 });
 
 test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
@@ -44,6 +46,8 @@ test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
   assert.match(updater, /beta channel from ui-settings.json/);
   assert.match(updater, /channel-beta stub — keep looking/);
   assert.match(updater, /leave beta for last stable/);
+  assert.match(updater, /do not Apply 2.0.0/);
+  assert.match(updater, /in_tree_arena/);
   const mainIdx = updater.indexOf("contents/channel-beta.json?ref=main");
   const branchIdx = updater.indexOf("contents/channel-beta.json?ref=cursor/beta-arena-books-5ba6");
   assert.ok(mainIdx > 0 && branchIdx > mainIdx, "main channel-beta must be fetched before the beta branch");
@@ -53,8 +57,8 @@ test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
   assert.match(read("src/components/settings-updates.tsx"), /Beta channel/);
 });
 
-test("sidecar: check-ota stays green without Arena CSS", () => {
+test("sidecar: check-ota stays green on 1.2.50.50 with gated Arena CSS", () => {
   const r = spawnSync("python3", ["scripts/check-ota.py", "."], { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr || r.stdout);
-  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.48/);
+  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.50/);
 });

@@ -118,6 +118,19 @@ var Bell = createLucideIcon("bell", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var BookOpen = createLucideIcon("book-open", [["path", {
+	d: "M12 7v14",
+	key: "1akyts"
+}], ["path", {
+	d: "M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z",
+	key: "ruj8y"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Captions = createLucideIcon("captions", [["rect", {
 	width: "18",
 	height: "14",
@@ -751,6 +764,29 @@ var TriangleAlert = createLucideIcon("triangle-alert", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Upload = createLucideIcon("upload", [
+	["path", {
+		d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4",
+		key: "ih7n3h"
+	}],
+	["polyline", {
+		points: "17 8 12 3 7 8",
+		key: "t8dd8p"
+	}],
+	["line", {
+		x1: "12",
+		x2: "12",
+		y1: "3",
+		y2: "15",
+		key: "widbto"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Users = createLucideIcon("users", [
 	["path", {
 		d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
@@ -781,5 +817,18 @@ var Wrench = createLucideIcon("wrench", [["path", {
 	d: "M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z",
 	key: "cbrjhi"
 }]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var X = createLucideIcon("x", [["path", {
+	d: "M18 6 6 18",
+	key: "1bl5f8"
+}], ["path", {
+	d: "m6 6 12 12",
+	key: "d8bk6v"
+}]]);
 //#endregion
-export { Check as A, Cpu as C, ChevronRight as D, Clapperboard as E, Bell as M, ArrowLeft as N, ChevronLeft as O, Activity as P, Download as S, Cloud as T, Layers as _, SlidersHorizontal as a, HardDrive as b, Search as c, Plus as d, Play as f, Library as g, ListFilter as h, SquareTerminal as i, Captions as j, ChevronDown as k, ScrollText as l, LoaderCircle as m, Users as n, Shield as o, Music as p, TriangleAlert as r, Settings as s, Wrench as t, RefreshCw as u, KeyRound as v, Compass as w, Film as x, House as y };
+export { ChevronLeft as A, Film as C, Cloud as D, Compass as E, Bell as F, ArrowLeft as I, Activity as L, Check as M, Captions as N, Clapperboard as O, BookOpen as P, HardDrive as S, Cpu as T, ListFilter as _, TriangleAlert as a, KeyRound as b, Shield as c, ScrollText as d, RefreshCw as f, LoaderCircle as g, Music as h, Upload as i, ChevronDown as j, ChevronRight as k, Settings as l, Play as m, Wrench as n, SquareTerminal as o, Plus as p, Users as r, SlidersHorizontal as s, X as t, Search as u, Library as v, Download as w, House as x, Layers as y };

@@ -106,24 +106,42 @@ apply_caddy() {
 CADDY
   fi
   if systemd_live; then
-    systemctl enable --now caddy >/dev/null 2>&1 || true
-    systemctl reload caddy 2>/dev/null || systemctl restart caddy || true
+    systemctl enable caddy >/dev/null 2>&1 || true
+    if systemctl is-active --quiet caddy; then
+      systemctl reload caddy >/dev/null 2>&1 || true
+    else
+      systemctl start caddy >/dev/null 2>&1 || true
+    fi
   fi
 }
 apply_caddy
+
+# Nested Docker (cloud/CI): overlay2 whiteouts fail with "operation not permitted".
+# USB / bare metal keeps the default overlay2 driver. Never vfs on a real box.
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ]; then
+  mkdir -p /etc/docker
+  if [ ! -f /etc/docker/daemon.json ]; then
+    printf '%s\n' '{"storage-driver":"vfs"}' >/etc/docker/daemon.json
+    echo "Nested container: Docker storage-driver vfs (overlay whiteouts are blocked here)."
+  fi
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh || true
 fi
 enable_unit docker
 
-# apt nodejs+npm first (fixes ExecStart 127). Nodesource only if still missing.
-if ! command -v npm >/dev/null 2>&1; then
-  apt-get install -y nodejs npm || true
-fi
-if ! command -v npm >/dev/null 2>&1; then
+# Node 22 — Ubuntu 24.04 apt is Node 18; start:box / Vite 8 need 20+.
+# Do not settle for distro nodejs if it is too old (that left ExecStart on 18).
+node_major() {
+  node -p "parseInt(process.versions.node,10)||0" 2>/dev/null || echo 0
+}
+if ! command -v node >/dev/null 2>&1 || [ "$(node_major)" -lt 20 ]; then
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash - || true
   apt-get install -y nodejs || true
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  apt-get install -y nodejs npm || true
 fi
 
 hostnamectl set-hostname reelos 2>/dev/null || hostname reelos
@@ -156,6 +174,10 @@ if [ -d "$ROOT/bin" ]; then
   chmod 755 "$ROOT/bin/"* || true
 fi
 
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --ensure || true
+fi
+
 if [ -d "$HERE/avahi" ]; then
   cp -a "$HERE/avahi/reelos.service" /etc/avahi/services/reelos.service
 fi
@@ -163,6 +185,14 @@ enable_unit avahi-daemon
 
 if [ -f "$HERE/systemd/reelos.service" ]; then
   cp "$HERE/systemd/reelos.service" /etc/systemd/system/reelos.service
+fi
+if [ -f "$HERE/systemd/reelos-hw-probe.service" ]; then
+  cp "$HERE/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$HERE/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$HERE/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
 fi
 if [ -f "$HERE/systemd/reelos-firstboot.service" ]; then
   cp "$HERE/systemd/reelos-firstboot.service" /etc/systemd/system/reelos-firstboot.service
@@ -194,6 +224,15 @@ if [ -f package.json ] && command -v npm >/dev/null 2>&1; then
 fi
 chown -R 1000:1000 "$MEDIA" /mnt/debrid /mnt/symlinks || true
 
+# Detect hardware. zram on rotational disk. Do not reserve 512M kdump on ≤4.5Gi.
+# Never wipe /media. Never delete ota.lock.
+if [ -f "$ROOT/bin/reelos_os_tune.py" ]; then
+  python3 "$ROOT/bin/reelos_os_tune.py" --apply || echo "os tune non-fatal"
+fi
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --apply || echo "hardware profile non-fatal"
+fi
+
 ufw allow 80/tcp || true
 ufw allow 443/tcp || true
 ufw allow 22/tcp || true
@@ -212,9 +251,15 @@ else
   echo "npm or node_modules missing — reelos.service not started."
   enable_unit reelos
 fi
-systemctl enable --now caddy 2>/dev/null || enable_unit caddy
 if systemd_live; then
-  systemctl reload caddy || systemctl restart caddy || true
+  systemctl enable caddy >/dev/null 2>&1 || true
+  if systemctl is-active --quiet caddy; then
+    systemctl reload caddy >/dev/null 2>&1 || true
+  else
+    systemctl start caddy >/dev/null 2>&1 || enable_unit caddy
+  fi
+else
+  enable_unit caddy
 fi
 
 chmod 700 "$STATE"
@@ -244,6 +289,6 @@ systemctl disable getty@tty1.service >/dev/null 2>&1 || true
 echo
 echo "ReelOS is up."
 echo "From another device on this network, open http://reelos.local"
-echo "First boot is the seven-question wizard. Paste a Real-Debrid key to ping the live account."
+echo "First boot is the seven-question wizard. Paste a TorBox key to ping the live account."
 echo "This installer does not seed indexers and does not fetch copyrighted media."
 

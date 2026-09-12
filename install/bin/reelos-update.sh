@@ -150,10 +150,20 @@ LOCAL=$(cat "$ROOT/VERSION" 2>/dev/null || echo "0")
 MODE="${1:-check}"
 echo "---- $(date -Is) $MODE local=$LOCAL ----" >>"$LOG"
 
+# Arena/Books already live in this stamp (1.2.50.50). Toggle is in-place.
+# Do not Apply the 2.0.0 sidecar tarball over movies/TV.
+in_tree_arena() {
+  [ -f "$ROOT/app/scripts/reelos-beta-sidecar.mjs" ] \
+    || [ -f "$ROOT/scripts/reelos-beta-sidecar.mjs" ] \
+    || [ -f /opt/reelos/app/scripts/reelos-beta-sidecar.mjs ]
+}
+
 CHANNEL_FILE=channel.json
-if [ "$(ui_wants_beta)" = "1" ]; then
+if [ "$(ui_wants_beta)" = "1" ] && ! in_tree_arena; then
   CHANNEL_FILE=channel-beta.json
   log "beta channel from ui-settings.json"
+elif [ "$(ui_wants_beta)" = "1" ]; then
+  log "beta toggle in-tree — stay on stable 1.2.50.x (do not Apply 2.0.0)"
 fi
 fetch_channel "$CHANNEL_FILE" || { log "channel unreachable"; [ "$MODE" = "check" ] && echo '{"local":"'"$LOCAL"'","remote":"'"$LOCAL"'","available":false}'; exit 1; }
 REMOTE=$(python3 -c 'import json; print(json.load(open("/tmp/reelos-ota/channel.json"))["version"])')
@@ -407,6 +417,24 @@ need scripts/reelos-lookup-plugin.mjs '/api/intent'
 need scripts/reelos-lookup-plugin.mjs 'applyIsRunning'
 need scripts/reelos-ota-status.mjs 'lockIsHeld'
 need src/components/applying-bar.tsx 'engines are still configuring'
+need src/components/applying-bar.tsx 'Updating ReelOS'
+need src/components/splash.tsx 'Updating ReelOS'
+need src/components/splash.tsx 'Not a percent'
+need src/components/splash.tsx '/api/hardware'
+need src/components/splash.tsx 'Update failed, still on previous'
+need src/components/settings-panels.tsx 'This is what I detected'
+need src/components/settings-panels.tsx '/api/hardware'
+need src/components/settings-view.tsx 'HardwareDetectedCard'
+need src/components/gate.tsx 'Splash updating'
+need src/components/gate.tsx 'Splash failed'
+need daemon/reelos-update.sh 'Updating ReelOS'
+need daemon/reelos-update.sh 'OTA cleaner — leftover nonsense'
+need daemon/reelos_os_tune.py 'zram on rotational'
+need daemon/reelos_os_tune.py 'crashkernel=no'
+need daemon/wire-engines.parts/09.part 'ota-clean bounded heal'
+need daemon/reelos-ota-clean.sh 'Never /media'
+need daemon/reelos-ota-clean.sh 'Never ota.lock'
+need scripts/reelos-box.mjs 'killOrphan8080'
 need src/routes/__root.tsx 'syncUpdateFromBox'
 need src/components/player-view.tsx ':8096'
 need scripts/reelos-lookup-plugin.mjs '/api/terminal'
@@ -440,6 +468,10 @@ need scripts/reelos-lookup-plugin.mjs 'kickArrRecover'
 need daemon/wire-engines.parts/09.part 'seerr_needs_search_enable'
 need daemon/public_indexers.py 'ReelOS-eztv'
 need daemon/public_indexers.py 'ReelOS-showrss'
+need daemon/public_indexers.py 'ReelOS-knaben'
+need daemon/public_indexers.py 'ReelOS-torrentcsv'
+need daemon/public_indexers.py 'prowlarr_indexer_write_url'
+need daemon/public_indexers.py 'required_tv_search_names'
 need daemon/public_indexers.py 'TorrentRssIndexer'
 need daemon/public_indexers.py 'doctor_releases_detail'
 need daemon/public_indexers.py 'apply_public_indexers'
@@ -447,6 +479,9 @@ need daemon/wire-engines.parts/04.part 'OTA: public indexer add pass complete'
 need daemon/wire-engines.parts/04.part 'rss fallback'
 need daemon/wire-engines.parts/04.part 'apply_public_indexers'
 need daemon/wire-engines.parts/04.part 'schema {e} — RSS fallback'
+need daemon/wire-engines.parts/04.part 'forceSave=true'
+need daemon/wire-engines.parts/03.part 'forceSave=true'
+need daemon/wire-engines.parts/05.part 'keep for house/LAN'
 need daemon/wire-engines.parts/02.part 'fullSync'
 need daemon/wire-engines.parts/09.part 'widen_sonarr_hybrid'
 need daemon/wire-engines.parts/09.part 'research-missing'
@@ -517,6 +552,13 @@ need daemon/reelos_hardware.py 'disk_kind'
 need daemon/reelos_hardware.py 'catchup_memory_max'
 need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
+need daemon/reelos_hardware.py 'probe_version'
+need daemon/reelos_hardware.py 'root-on-internal'
+need install/udev/99-reelos-hw-probe.rules 'reelos-hw-probe.service'
+need install/systemd/reelos-hw-probe.service '--ensure'
+need daemon/reelos_os_tune.py 'zram on rotational disk'
+need daemon/reelos_os_tune.py 'do not reserve 512M kdump'
+need daemon/reelos-library-catchup.sh 'TorBox filesystem busy'
 need daemon/reelos-update.sh 'hardware profile'
 need daemon/reelos-library-catchup.sh 'do not remount if listed'
 need daemon/reelos-library-catchup.sh 'ffprobe D-state'
@@ -625,7 +667,7 @@ fi
 
 NEXT="$ROOT.next"
 rm -rf "$NEXT"
-mkdir -p "$NEXT/app" "$NEXT/bin" "$NEXT/systemd" "$NEXT/compose"
+mkdir -p "$NEXT/app" "$NEXT/bin" "$NEXT/systemd" "$NEXT/compose" "$NEXT/udev"
 cp -a "$WORK/src/install/." "$NEXT/" 2>/dev/null || true
 if [ -d "$WORK/src/src" ]; then
   rm -rf "$NEXT/app"
@@ -814,14 +856,18 @@ caddy_updating() {
   if [ -f /etc/caddy/Caddyfile ]; then
     cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
   fi
-  cat >/etc/caddy/Caddyfile <<'EOF'
+  hw_tune=""
+  if [ -f /var/lib/reelos/hardware-profile.json ]; then
+    hw_tune=$(python3 -c 'import json; p=json.load(open("/var/lib/reelos/hardware-profile.json")); print(p.get("splash_tune") or p.get("knobs",{}).get("splash_tune") or "")' 2>/dev/null || true)
+  fi
+  cat >/etc/caddy/Caddyfile <<EOF
 {
 	auto_https off
 	admin off
 }
 :80 {
 	header Content-Type "text/html; charset=utf-8"
-	respond "ReelOS is updating. The shell comes back first; engines may still be configuring." 200
+	respond "Updating ReelOS… ${hw_tune} Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
 }
 EOF
   caddy_dropin
@@ -961,11 +1007,21 @@ trap restore ERR
 caddy_updating
 log "stopping shell for mv (seconds, not minutes)"
 systemctl stop reelos 2>/dev/null || true
+if [ -f "$NEXT/bin/reelos_ota_clean.py" ]; then
+  python3 "$NEXT/bin/reelos_ota_clean.py" --door || log "orphan :8080 cleaner non-fatal"
+elif [ -f "$WORK/src/daemon/reelos_ota_clean.py" ]; then
+  python3 "$WORK/src/daemon/reelos_ota_clean.py" --door || log "orphan :8080 cleaner non-fatal"
+fi
 mv "$ROOT/app" "$ROOT.prev/app"
 mv "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
 cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
+if [ -d "$NEXT/udev" ]; then
+  mkdir -p "$ROOT/udev" /etc/udev/rules.d
+  cp -a "$NEXT/udev/." "$ROOT/udev/"
+  cp "$NEXT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules 2>/dev/null || true
+fi
 cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
 seed_arr_debrid_json "$ROOT"
@@ -1007,6 +1063,18 @@ if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
   cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
   chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
 fi
+if [ -f "$ROOT/systemd/reelos-hw-probe.service" ]; then
+  cp "$ROOT/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$ROOT/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$ROOT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+elif [ -f "$WORK/src/install/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$WORK/src/install/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+fi
 if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"
   python3 "$ROOT/bin/reelos_hardware.py" --log 2>/dev/null | while read -r line; do
@@ -1014,6 +1082,12 @@ if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   done || true
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
+log "OTA cleaner — leftover nonsense from previous builds"
+if [ -f "$ROOT/bin/reelos-ota-clean.sh" ]; then
+  bash "$ROOT/bin/reelos-ota-clean.sh" --keep-work-src || log "OTA cleaner non-fatal"
+elif [ -f "$WORK/src/daemon/reelos-ota-clean.sh" ]; then
+  bash "$WORK/src/daemon/reelos-ota-clean.sh" --keep-work-src || log "OTA cleaner non-fatal"
+fi
 start_shell
 
 probe_home() {
@@ -1060,7 +1134,7 @@ probe_port80() {
       sleep 1
       continue
     fi
-    if echo "$page" | grep -qi 'ReelOS is updating'; then
+    if echo "$page" | grep -qiE 'Updating ReelOS|ReelOS is updating'; then
       log ":80 still updating page — restart caddy (reload is a no-op with admin off)"
       caddy_reelos
       sleep 2
@@ -1530,13 +1604,16 @@ if [ -n "${HEAD_SHA:-}" ]; then
 fi
 log "$NOTES"
 log "ReelOS $REMOTE applied."
+if [ -f "$ROOT/bin/reelos-ota-clean.sh" ]; then
+  bash "$ROOT/bin/reelos-ota-clean.sh" --tmp || log "OTA tmp cleaner non-fatal"
+fi
 # Dump import/heal after stamp so Check is "applied" without waiting on the
 # whole library. Persistent reelos-library-catchup oneshot outlives selfheal 90s.
 # Do not await kick_imports. Do not let a later import/heal red un-stamp this.
 # python3 "$ROOT/bin/wire-engines.py" indexers then import --catch-up (library worker).
-# Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; YTS is movies-only).
+# Public TV indexers + Prowlarr→Sonarr sync (EZTV/ShowRSS RSS fallback; Knaben/TorrentsCSV/1337x/TPB search; YTS is movies-only).
 # wire.log: heal red|torznab |search indexers  (library worker, never un-stamp)
-log "library catch-up in background"
+log "library catch-up in background — engines may still be configuring"
 mkdir -p "$STATE"
 echo 1 >"$STATE/library-catchup" 2>/dev/null || true
 if [ -f /etc/systemd/system/reelos-library-catchup.service ] || [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then

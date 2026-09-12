@@ -1,0 +1,13 @@
+[Unit]
+Description=ReelOS cheap hardware re-probe
+Documentation=file:///var/lib/reelos/hardware-profile.json
+After=local-fs.target
+ConditionPathExists=/opt/reelos/bin/reelos_hardware.py
+
+[Service]
+Type=oneshot
+Nice=10
+IOSchedulingClass=idle
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/usr/bin/python3 /opt/reelos/bin/reelos_hardware.py --ensure
+# Skip retune when the fingerprint is unchanged. Never /media. Never ota.lock.

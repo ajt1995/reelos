@@ -71,6 +71,8 @@ CONTRACTS = (
     ("daemon/reelos_hardware.py", "catchup_memory_max"),
     ("daemon/reelos_hardware.py", "not a Pi"),
     ("daemon/reelos_hardware.py", "cgroup_hiding"),
+    ("daemon/reelos_hardware.py", "probe_version"),
+    ("daemon/reelos_hardware.py", "root-on-internal"),
     ("daemon/reelos-selfheal.sh", "library catch-up deferred"),
     ("daemon/reelos-update.sh", "hardware profile"),
     ("daemon/sonarr_manual_import.py", "concurrency 0"),
@@ -110,8 +112,29 @@ CONTRACTS = (
     ("src/components/applying-bar.tsx", "Applying"),
     ("scripts/reelos-ota-status.mjs", "applyProductRunning"),
     ("scripts/reelos-ota-status.mjs", "shouldSplashLock"),
+    ("src/components/applying-bar.tsx", "Updating ReelOS"),
+    ("src/components/splash.tsx", "Updating ReelOS"),
+    ("src/components/splash.tsx", "Not a percent"),
+    ("src/components/splash.tsx", "/api/hardware"),
+    ("src/components/splash.tsx", "Update failed, still on previous"),
+    ("src/components/settings-panels.tsx", "This is what I detected"),
+    ("src/components/settings-panels.tsx", "/api/hardware"),
+    ("src/components/settings-view.tsx", "HardwareDetectedCard"),
+    ("scripts/reelos-lookup-plugin.mjs", "/api/hardware"),
+    ("scripts/reelos-box-scale.mjs", "hardwareProfilePath"),
+    ("install/udev/99-reelos-hw-probe.rules", "reelos-hw-probe.service"),
+    ("install/systemd/reelos-hw-probe.service", "--ensure"),
     ("src/lib/library-catchup.ts", "catchupLocksHome"),
-    ("src/components/gate.tsx", "catchupLocksHome"),
+    ("src/lib/library-catchup.ts", "updateLocksUi"),
+    ("src/components/gate.tsx", "updateLocksUi"),
+    ("src/components/gate.tsx", "Splash updating"),
+    ("src/components/gate.tsx", "Splash failed"),
+    ("daemon/reelos-ota-clean.sh", "Never /media"),
+    ("daemon/reelos-ota-clean.sh", "Never ota.lock"),
+    ("daemon/reelos-ota-clean.sh", "OTA cleaner done"),
+    ("daemon/reelos_os_tune.py", "crashkernel=no"),
+    ("daemon/wire-engines.parts/09.part", "ota-clean bounded heal"),
+    ("scripts/reelos-box.mjs", "killOrphan8080"),
     ("scripts/reelos-ota-status.mjs", "productSwapDone"),
     ("scripts/reelos-lookup-plugin.mjs", "libraryCatchup"),
     ("install/systemd/reelos-library-catchup.service", "TimeoutStartSec=infinity"),
@@ -144,7 +167,8 @@ def main() -> int:
     args = [a for a in sys.argv[1:] if a != "--apply"]
     root = Path(args[0] if args else ".").resolve()
     ver = (root / "VERSION").read_text().strip()
-    chan = json.loads((root / "channel.json").read_text()).get("version")
+    chan_doc = json.loads((root / "channel.json").read_text())
+    chan = chan_doc.get("version")
     stamp_path = root / "src/lib/version-stamp.ts"
     store_path = root / "src/lib/store.ts"
     text = stamp_path.read_text() if stamp_path.is_file() else store_path.read_text()
@@ -154,11 +178,37 @@ def main() -> int:
     l = latest.group(1) if latest else ""
     if "1.2.51" in ver or ver.startswith("1.2.51"):
         return fail("1.2.51 is parked; do not stamp it")
-    if ver != chan or ver != s or ver != l:
+    beta_tree = ver.startswith("2.") or "-beta" in ver
+    if beta_tree:
+        if ver != s or ver != l:
+            return fail(f"VERSION skew VERSION={ver} shipped={s} latest={l}")
+        if not str(chan).startswith("1.2.50."):
+            return fail(f"stable channel.json must stay 1.2.50.x on a beta tree, got {chan}")
+        if chan_doc.get("channel") != "stable" or "main.tar.gz" not in str(chan_doc.get("tarball") or ""):
+            return fail("stable channel.json must stay channel=stable tarball=main.tar.gz")
+        beta_path = root / "channel-beta.json"
+        if not beta_path.is_file():
+            return fail("beta tree missing channel-beta.json")
+        beta_doc = json.loads(beta_path.read_text())
+        if beta_doc.get("version") != ver or beta_doc.get("channel") != "beta":
+            return fail(
+                f"channel-beta.json must match VERSION={ver} channel=beta, got {beta_doc.get('version')} {beta_doc.get('channel')}"
+            )
+        tar = str(beta_doc.get("tarball") or "")
+        if "main.tar.gz" in tar:
+            return fail("beta tarball must not be main.tar.gz")
+        if "beta-arena-books" not in tar:
+            return fail("beta tarball must be the beta-arena-books branch")
+        sidecar = (root / "scripts/reelos-beta-sidecar.mjs").read_text() if (root / "scripts/reelos-beta-sidecar.mjs").is_file() else ""
+        if "applyBetaSidecar" not in sidecar or "stopBooks" not in sidecar:
+            return fail("beta tree must ship applyBetaSidecar/stopBooks")
+        if "betaChannel: false" not in (root / "src/lib/store.ts").read_text():
+            return fail("beta toggle must default off")
+    elif ver != chan or ver != s or ver != l:
         return fail(f"VERSION skew VERSION={ver} channel={chan} shipped={s} latest={l}")
 
     beta_path = root / "channel-beta.json"
-    if beta_path.is_file():
+    if beta_path.is_file() and not beta_tree:
         beta_doc = json.loads(beta_path.read_text())
         bver = str(beta_doc.get("version") or "")
         tar = str(beta_doc.get("tarball") or "")
@@ -172,7 +222,14 @@ def main() -> int:
             return fail("sidecar beta tarball must be the beta-arena-books branch")
         styles = (root / "src/styles.css").read_text() if (root / "src/styles.css").is_file() else ""
         if ".arena-page" in styles:
-            return fail("stable sidecar must not ship Arena CSS onto main.tar.gz")
+            store = (root / "src/lib/store.ts").read_text() if (root / "src/lib/store.ts").is_file() else ""
+            sidecar = (root / "scripts/reelos-beta-sidecar.mjs").read_text() if (root / "scripts/reelos-beta-sidecar.mjs").is_file() else ""
+            if "betaChannel: false" not in store:
+                return fail("Arena CSS on a stable stamp requires betaChannel default off")
+            if "applyBetaSidecar" not in sidecar or "stopBooks" not in sidecar:
+                return fail("Arena CSS on a stable stamp requires in-tree applyBetaSidecar/stopBooks")
+            if "idleOffBooksIfNeeded" not in sidecar:
+                return fail("Arena CSS on a stable stamp requires idleOffBooksIfNeeded so toggle-off does not leave Kavita")
 
     updater = (root / "daemon/reelos-update.sh").read_text()
     for rel, needle in CONTRACTS:
@@ -256,6 +313,23 @@ def main() -> int:
     install_up = root / "install/bin/reelos-update.sh"
     if install_up.is_file() and install_up.read_text() != updater:
         return fail("OTA contract: install/bin/reelos-update.sh must match daemon/")
+    for rel_a, rel_b in (
+        ("daemon/reelos-ota-clean.sh", "install/bin/reelos-ota-clean.sh"),
+        ("daemon/reelos_ota_clean.py", "install/bin/reelos_ota_clean.py"),
+        ("daemon/reelos_os_tune.py", "install/bin/reelos_os_tune.py"),
+    ):
+        a, b = root / rel_a, root / rel_b
+        if a.is_file() and b.is_file() and a.read_text() != b.read_text():
+            return fail(f"OTA contract: {rel_b} must match {rel_a}")
+
+    cleaner = updater.find("OTA cleaner — leftover nonsense")
+    if cleaner < 0 or not (cleaner < applied):
+        return fail("OTA contract: cleaner must run before applied.")
+    tmp_clean = updater.find('reelos-ota-clean.sh" --tmp')
+    if tmp_clean < 0 or tmp_clean < applied:
+        return fail("OTA contract: tmp leftover cleaner must come after applied.")
+    if "Home can open" in updater:
+        return fail("OTA contract: mailman must not say Home can open during Apply")
 
     fatal = 0
     warns = 0

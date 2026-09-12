@@ -3,7 +3,7 @@ import { Search } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
-import { inFlightRequests, titleForRequest } from "@/lib/sync-requests";
+import { collapseHomeRequestCards, inFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useSyncRequests } from "@/lib/use-sync-requests";
 import type { Kind, MediaRequest, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
@@ -23,6 +23,10 @@ export function DiscoverView() {
   const [browseTv, setBrowseTv] = useState<Title[]>([]);
   const [browseErr, setBrowseErr] = useState<string | null>(null);
   const [browseReady, setBrowseReady] = useState(false);
+  const booksOn = useReelStore((s) => s.settings.betaChannel);
+  const [bookFeatured, setBookFeatured] = useState<
+    { id: string; title: string; author: string; year?: number | null; source: string; downloadUrl: string }[]
+  >([]);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
   const shelf = useReelStore((s) => s.shelf);
@@ -71,6 +75,26 @@ export function DiscoverView() {
     };
   }, [rememberTitles]);
 
+  useEffect(() => {
+    if (!booksOn) {
+      setBookFeatured([]);
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/books/discover", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ featured?: typeof bookFeatured }>)
+      .then((j) => {
+        if (cancelled) return;
+        setBookFeatured(Array.isArray(j.featured) ? j.featured : []);
+      })
+      .catch(() => {
+        if (!cancelled) setBookFeatured([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [booksOn]);
+
   const hits = useMemo(() => {
     const seen = new Set<string>();
     const out: Title[] = [];
@@ -85,13 +109,9 @@ export function DiscoverView() {
   const movieShelf = useMemo(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
   const tvShelf = useMemo(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
   const finishing = useMemo(() => {
-    const rows: { r: MediaRequest; t: Title }[] = [];
-    for (const r of inflight) {
-      const t = titleForRequest(r, catalog);
-      if (!t?.id) continue;
-      rows.push({ r, t });
-    }
-    return rows;
+    return collapseHomeRequestCards(inflight)
+      .map((r) => ({ r, t: titleForRequest(r, catalog) }))
+      .filter((x) => x.t?.id);
   }, [inflight, catalog]);
   const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
   const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);
@@ -173,6 +193,25 @@ export function DiscoverView() {
             pick={browseMovies}
           />
           <DiscoverKind heading="Shows" onBox={tvShelf} finishing={finishingTv} pick={browseTv} />
+          {booksOn && bookFeatured.length > 0 ? (
+            <section className="mt-10">
+              <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
+              <p className="mt-1 text-xs text-muted">Open catalogs. Download is a real DRM-free file — not Seerr.</p>
+              <ul className="mt-3 divide-y divide-border">
+                {bookFeatured.slice(0, 8).map((b) => (
+                  <li key={b.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                    <span className="truncate">
+                      {b.title}
+                      <span className="ml-2 text-muted">{b.author}</span>
+                    </span>
+                    <a href="/books" className="text-xs text-circuit">
+                      Open
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
           {browseMovies.length === 0 &&
           browseTv.length === 0 &&
           movieShelf.length === 0 &&

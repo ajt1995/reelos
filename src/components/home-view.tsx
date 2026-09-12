@@ -11,6 +11,7 @@ import {
   inFlightRequests,
   isGhostRequestLabel,
   titleForRequest,
+  transferringChipCount,
 } from "@/lib/sync-requests";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { Title } from "@/lib/types";
@@ -33,15 +34,27 @@ export function HomeView() {
   const frontend = useReelStore((s) => s.answers.frontend);
   const source = useReelStore((s) => s.answers.source);
   const adapter = useReelStore((s) => s.adapter);
+  const booksOn = useReelStore((s) => s.settings.betaChannel);
+  const [bookShelf, setBookShelf] = useState<{ title: string; author: string; rel: string }[]>([]);
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
   const inflight = inFlightRequests(requests, { titles: shelf });
-  const transferring = inflight.length;
+  const transferring = transferringChipCount(inflight);
   useSyncRequests();
   useResolveGhostRequestTitles(inflight, catalog);
   useEffect(() => {
     hydrateShelf({ limit: 24 });
   }, [hydrateShelf]);
+  useEffect(() => {
+    if (!booksOn) {
+      setBookShelf([]);
+      return;
+    }
+    void fetch("/api/books/library", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ books?: { title: string; author: string; rel: string }[] }>)
+      .then((j) => setBookShelf(Array.isArray(j.books) ? j.books : []))
+      .catch(() => setBookShelf([]));
+  }, [booksOn]);
 
   const catalogHits: Title[] = [];
   const hits = useMemo(() => {
@@ -153,6 +166,33 @@ export function HomeView() {
         <Chip>{HOSTNAME}</Chip>
         {transferring > 0 ? <Chip gold>{transferring} transferring</Chip> : <Chip>Library idle</Chip>}
       </div>
+
+      {booksOn && bookShelf.length > 0 ? (
+        <section className="mt-5">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-display text-sm font-medium">Books</h2>
+            <Link to="/books" className="text-xs text-circuit">
+              Catalog
+            </Link>
+          </div>
+          <ul className="space-y-1 text-sm">
+            {bookShelf.slice(0, 6).map((b) => (
+              <li key={b.rel} className="flex items-center justify-between gap-2">
+                <span className="truncate">
+                  {b.title}
+                  <span className="ml-2 text-muted">{b.author}</span>
+                </span>
+                <a
+                  href={`/books?read=${encodeURIComponent(b.rel)}`}
+                  className="inline-flex h-7 items-center rounded-full bg-gold px-2.5 text-[11px] font-medium text-gold-fg"
+                >
+                  Read
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {continueWatch.length > 0 ? (
         <Row label="Continue">

@@ -11,6 +11,15 @@ export function catchupLocksHome(c?: Partial<LibraryCatchupState> | null): boole
   return Boolean(c.needsImport);
 }
 
+export const WAIT_FUSE_BUSY = "TorBox filesystem busy — not copying to disk";
+export const WAIT_APPLY = "swapping the app";
+export const WAIT_SMALL_BOX = "4GB + HDD, small-box limits";
+
+/** Full-screen Updating ReelOS splash until the door is actually accepting browse/request. */
+export function updateLocksUi(status?: string | null): boolean {
+  return String(status || "").toLowerCase() === "applying";
+}
+
 export function honestCatchupMessage(c: Partial<LibraryCatchupState>, splashLock: boolean): string {
   const status = String(c.status || "idle").toLowerCase();
   const raw = String(c.message || "");

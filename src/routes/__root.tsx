@@ -64,16 +64,34 @@ function RootDocument() {
 }
 
 function Runtime({ children }: { children: React.ReactNode }) {
+  const arena = useReelStore((s) => s.settings.betaChannel);
+  useEffect(() => {
+    document.documentElement.classList.toggle("arena-on", arena);
+    document.body.classList.toggle("arena-on", arena);
+  }, [arena]);
   useEffect(() => {
     void Promise.resolve(useReelStore.persist.rehydrate())
       .catch(() => {})
-      .then(() => {
+      .then(async () => {
         const s = useReelStore.getState();
         s.setBootStep("local", "ok");
         s.setBootStep("house", "running");
         s.setBootStep("library", "running");
         s.setBootStep("requests", "running");
         s.syncUpdateFromBox();
+        // Box truth for Arena/Books — do not let localStorage keep a stale off
+        // if /api/ready is slow or times out (Seerr fan-out).
+        try {
+          const ui = await fetch("/api/settings", {
+            cache: "no-store",
+            signal: AbortSignal.timeout(2500),
+          }).then((r) => r.json() as Promise<{ betaChannel?: boolean }>);
+          if (typeof ui?.betaChannel === "boolean") {
+            useReelStore.getState().patchSettings({ betaChannel: ui.betaChannel });
+          }
+        } catch {
+          /* ready still applies betaChannel when it lands */
+        }
         return fetch("/api/ready?limit=24", { cache: "no-store", signal: AbortSignal.timeout(4000) })
           .then(async (r) => {
             const ready = (await r.json()) as Parameters<typeof s.applyReadyPayload>[0];

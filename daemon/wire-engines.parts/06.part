@@ -252,7 +252,10 @@ def hardware_profile() -> dict:
     if mod is None:
         n = mem_total_kb()
         return {"ram_kb": n, "ram_gb": round(n / 1024 / 1024, 2), "cpus": 1, "disk_kind": "unknown", "tiny": 0 < n <= SMALL_MEM_KB, "box_is_small": 0 < n <= SMALL_MEM_KB}
-    return mod.measure()
+    if hasattr(mod, "current_profile"):
+        return mod.current_profile()
+    saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+    return saved if saved else mod.measure()
 
 
 def mem_total_kb(text: str | None = None) -> int:
@@ -288,11 +291,16 @@ def loadavg_1(text: str | None = None) -> float:
 
 
 def box_is_small(mem_kb: int | None = None) -> bool:
-    """Tiny (≤4.5Gi) fixture. Laptops use hardware_profile() limits, not this gate."""
+    """Tiny (≤4.5Gi) fixture. Saved hardware profile wins; MemTotal is fallback."""
     if mem_kb is not None:
         return 0 < mem_kb <= SMALL_MEM_KB
     mod = hw()
     if mod is not None:
+        if hasattr(mod, "current_profile"):
+            return bool(mod.current_profile().get("tiny"))
+        saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+        if saved:
+            return bool(saved.get("tiny"))
         return bool(mod.measure().get("tiny"))
     n = mem_total_kb()
     return 0 < n <= SMALL_MEM_KB

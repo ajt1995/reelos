@@ -469,6 +469,11 @@ def _hw():
 def hardware_profile() -> dict:
     mod = _hw()
     if mod is not None:
+        if hasattr(mod, "current_profile"):
+            return mod.current_profile()
+        saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+        if saved:
+            return saved
         return mod.measure()
     try:
         ram_kb = 0
@@ -552,8 +557,10 @@ def catchup_chunk_size(*, catch_up: bool, d_state: int = 0, profile: dict | None
     return 40
 
 
-def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0, timeouts: int = 0, status: str = "running") -> str:
-    if status in ("backoff", "idle"):
+def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0, timeouts: int = 0, status: str = "running", fuse_busy: bool = False, tiny_hdd: bool = False) -> str:
+    if status in ("backoff",) or fuse_busy:
+        return "TorBox filesystem busy — not copying to disk"
+    if status == "idle":
         return ""
     if status == "stopped":
         status = "done"
@@ -574,6 +581,8 @@ def format_catchup_message(*, folder: int = 0, total: int = 0, skipped: int = 0,
     detail = ", ".join(bits)
     if detail:
         return f"Library catching up — {detail}"
+    if tiny_hdd:
+        return "Library catching up — 4GB + HDD, small-box limits"
     return "Library catching up"
 
 
@@ -1124,8 +1133,9 @@ def _self_test() -> int:
             self.assertIn("1 timeouts", msg)
             self.assertTrue(msg.startswith("Library catching up"))
             back = format_catchup_message(status="backoff")
-            self.assertEqual(back, "")
+            self.assertEqual(back, "TorBox filesystem busy — not copying to disk")
             self.assertEqual(format_catchup_message(status="idle"), "")
+            self.assertIn("4GB + HDD", format_catchup_message(status="running", tiny_hdd=True))
             done = format_catchup_message(folder=1, total=1, skipped=14, timeouts=0, status="done")
             self.assertEqual(done, "Library catch-up done — 14 skipped")
             self.assertNotIn("catching up", done.lower())

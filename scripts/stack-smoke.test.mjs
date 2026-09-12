@@ -52,25 +52,27 @@ test("stack: compose uses Docker embedded DNS (no per-container 1.1.1.1) and OTA
   assert.equal(read("install/bin/wire-engines.parts/03.part"), read("daemon/wire-engines.parts/03.part"));
 });
 
-test("stack: VERSION / channel / stamps agree (1.2.50.48)", () => {
+test("stack: VERSION / channel / stamps agree (1.2.50.50)", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const stamp = read("src/lib/version-stamp.ts");
   const store = read("src/lib/store.ts");
-  assert.equal(ver, "1.2.50.48");
-  assert.equal(chan.version, "1.2.50.48");
+  assert.equal(ver, "1.2.50.50");
+  assert.equal(chan.version, "1.2.50.50");
   assert.equal(chan.channel, "stable");
   assert.equal(beta.channel, "beta");
   assert.equal(beta.version, "2.0.0");
   assert.doesNotMatch(beta.tarball, /main\.tar\.gz/);
   assert.match(beta.tarball, /beta-arena-books-5ba6/);
   assert.match(beta.notes[0], /Arena chrome and Books/);
-  assert.match(beta.notes[0], /separate beta tarball|Not inside main/);
-  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.48"/);
-  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.48"/);
-  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.48"/);
-  assert.match(store, /LATEST_VERSION = "1\.2\.50\.48"/);
+  assert.match(beta.notes[0], /in place|Not inside main|not inside main/);
+  assert.match(stamp, /SHIPPED_VERSION = "1\.2\.50\.50"/);
+  assert.match(stamp, /LATEST_VERSION = "1\.2\.50\.50"/);
+  assert.match(store, /SHIPPED_VERSION = "1\.2\.50\.50"/);
+  assert.match(store, /LATEST_VERSION = "1\.2\.50\.50"/);
+  assert.match(store, /betaChannel: false/);
+  assert.match(read("STATUS.md"), /1\.2\.50\.50/);
   assert.match(read("STATUS.md"), /1\.2\.50\.48/);
   assert.match(read("STATUS.md"), /1\.2\.50\.46/);
   assert.match(read("STATUS.md"), /1\.2\.50\.45/);
@@ -92,22 +94,29 @@ test("stack: VERSION / channel / stamps agree (1.2.50.48)", () => {
   assert.match(read("scripts/wizard-honesty.mjs"), /Use TorBox/);
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(store, /source: "torbox"/);
-  assert.match(chan.notes[0], /Hands-off home|on this box|pick tonight|Watch|National Treasure/i);
-  assert.match(chan.notes[1], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);
-  assert.match(chan.notes[2], /hash|jf-|Unknown on this box|infohash|Rick and Morty/i);
-  assert.match(chan.notes[3], /tvdb|Watch|Expanse|title page/i);
-  assert.match(chan.notes[4], /Splash-lock|skip-only|catching up/);
-  assert.match(chan.notes[5], /tmdb-2059|National Treasure|transferring|Expanse/);
-  assert.match(chan.notes[6], /ffprobe|stub|FUSE dumps|concurrency/);
-  assert.match(chan.notes[7], /hardware|MemoryMax|concurrency/);
-  assert.match(chan.notes[8], /own phone clock|Library catching up|product/);
-  assert.match(chan.notes[9], /library catch-up|import after hops/);
-  assert.match(chan.notes[10], /TorBox/);
-  assert.match(chan.notes[10], /DirectPlay/);
-  assert.match(chan.notes[10], /prebuilt hashed UI/);
+  assert.match(chan.notes[0], /OTA|cleaner|Updating ReelOS|splash/i);
+  assert.match(chan.notes[1], /Hands-off home|on this box|pick tonight|Watch|National Treasure/i);
+  assert.match(chan.notes[2], /request honesty|movie pages POST|hash paste|National Treasure|Request Sxx/i);
+  assert.match(chan.notes[3], /hash|jf-|Unknown on this box|infohash|Rick and Morty/i);
+  assert.match(chan.notes[4], /tvdb|Watch|Expanse|title page/i);
+  assert.match(chan.notes[5], /Splash-lock|skip-only|catching up/);
+  assert.match(chan.notes[6], /tmdb-2059|National Treasure|transferring|Expanse/);
+  assert.match(chan.notes[7], /ffprobe|stub|FUSE dumps|concurrency/);
+  assert.match(chan.notes[8], /hardware|MemoryMax|concurrency/);
+  assert.match(chan.notes[9], /own phone clock|Library catching up|product/);
+  assert.match(chan.notes[10], /library catch-up|import after hops/);
+  assert.match(chan.notes[11], /TorBox/);
+  assert.match(chan.notes[11], /DirectPlay/);
+  assert.match(chan.notes[11], /prebuilt hashed UI/);
   assert.match(read("src/components/requests-view.tsx"), /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(read("src/components/remove-from-box.tsx"), /Remove from this box/);
   assert.match(read("scripts/reelos-library-remove.mjs"), /deleteFilesAllowed/);
+});
+
+test("stack: pack-prebuilt never ships USB ISOs from public/install", () => {
+  const pack = read("scripts/pack-prebuilt.mjs");
+  assert.match(pack, /name === "install"/);
+  assert.match(pack, /4GB box never compiles/);
 });
 
 test("stack: package-lock stays npm-ci-able and mailman gates SKIP_NPM on it", () => {

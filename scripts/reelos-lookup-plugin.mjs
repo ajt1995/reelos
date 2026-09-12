@@ -1,5 +1,11 @@
 import { readFileSync, existsSync, appendFileSync, writeFileSync, openSync, mkdirSync, unlinkSync } from "node:fs";
-import { hasVaapiDri } from "./reelos-box-scale.mjs";
+import {
+  hasVaapiDri,
+  hardwareProfilePath,
+  loadSavedHardware,
+  publicHardware,
+  readHostMemKb,
+} from "./reelos-box-scale.mjs";
 import { spawn, spawnSync } from "node:child_process";
 import os from "node:os";
 import {
@@ -43,6 +49,8 @@ import {
   rememberRemovedTitleIds,
   removeLibraryTitle,
 } from "./reelos-library-remove.mjs";
+import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
+import { dispatchBooksApi } from "./reelos-books.mjs";
 import {
   createLibraryCache,
   createTokenCache,
@@ -91,12 +99,9 @@ async function refreshLibraryFull(host) {
     const a = answers();
     const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     if (!auth?.token) return;
-    const r = await fetch(libraryItemsUrl(), {
-      headers: jellyfinAuthedHeaders(auth.token),
-      signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
-    });
-    if (!r.ok) return;
-    const data = await r.json();
+    const pulled = await jellyfinFetchItems(auth);
+    if (!pulled.ok) return;
+    const data = pulled.json;
     const items = Array.isArray(data.Items) ? data.Items : [];
     libraryCache.write(dedupeLibraryTitles(mapJellyfinItems(items, host)), { complete: true });
     persistLibraryCache();
@@ -490,8 +495,9 @@ async function probeJson(url, ms = 3000) {
   }
 }
 
+// Unique DeviceId: doctor + selfheal used to share "reelos" and revoke the box token (401 / red chip).
 const JF_AUTH =
-  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.33"';
+  'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos-box", Version="1.2.50.33"';
 
 function jellyfinAuthedHeaders(token) {
   const auth = token ? `${JF_AUTH}, Token="${token}"` : JF_AUTH;
@@ -626,7 +632,7 @@ async function jellyfinToken(user, password) {
         "X-Emby-Authorization": JF_AUTH,
       },
       body: JSON.stringify({ Username: user, Pw: password }),
-      signal: AbortSignal.timeout(1500),
+      signal: AbortSignal.timeout(4000),
     });
     if (!r.ok) return null;
     const j = await r.json();
@@ -637,6 +643,27 @@ async function jellyfinToken(user, password) {
   } catch {
     return null;
   }
+}
+
+async function jellyfinFetchItems(auth, { limit, timeout = JELLYFIN_ITEMS_TIMEOUT_MS } = {}) {
+  const pull = (token) =>
+    fetch(libraryItemsUrl({ limit }), {
+      headers: jellyfinAuthedHeaders(token),
+      signal: AbortSignal.timeout(timeout),
+    });
+  let token = auth?.token;
+  if (!token) return { ok: false, status: 0, json: null };
+  let r = await pull(token);
+  if (r.status === 401 || r.status === 403) {
+    jellyfinTokens.clear();
+    const a = answers();
+    const next = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    if (!next?.token) return { ok: false, status: r.status, json: null };
+    token = next.token;
+    r = await pull(token);
+  }
+  if (!r.ok) return { ok: false, status: r.status, json: null };
+  return { ok: true, status: r.status, json: await r.json() };
 }
 
 async function jellyfinState(ip) {
@@ -651,11 +678,16 @@ async function jellyfinState(ip) {
     }
     // Loopback is the playback path; a miss on the LAN/Tailscale IP is not a red box.
   }
-  const auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+  let auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
   if (!auth?.token) {
     return { state: "red", detail: "Jellyfin has no matching user/PIN", libraries: [] };
   }
-  const folders = await readJellyfinVirtualFolders(auth.token);
+  let folders = await readJellyfinVirtualFolders(auth.token);
+  if (!folders) {
+    jellyfinTokens.clear();
+    auth = await jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
+    folders = auth?.token ? await readJellyfinVirtualFolders(auth.token) : null;
+  }
   if (!folders) {
     return { state: "red", detail: "Cannot read virtual folders", libraries: [] };
   }
@@ -680,8 +712,9 @@ async function readJellyfinVirtualFolders(token) {
     try {
       const r = await fetch(url, {
         headers: jellyfinAuthedHeaders(token),
-        signal: AbortSignal.timeout(1500),
+        signal: AbortSignal.timeout(4000),
       });
+      if (r.status === 401 || r.status === 403) continue;
       if (!r.ok) continue;
       const folders = await r.json();
       if (Array.isArray(folders)) return folders;
@@ -781,6 +814,7 @@ function boxSyncSlice() {
     tailscaleDns: ts.dns,
     tailscaleState: ts.state,
     tailnet: ts.tailnet,
+    hardware: publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
   };
 }
 
@@ -1031,7 +1065,8 @@ function otaNote(msg) {
 async function handleUpdateCheck(_req, res) {
   const local = localVersion();
   const beta = readUiSettings().betaChannel === true;
-  const channel = beta ? "beta" : "stable";
+  const inTreeArena = existsSync(new URL("./reelos-beta-sidecar.mjs", import.meta.url));
+  const channel = beta && !inTreeArena ? "beta" : "stable";
   const best = await loadChannel(channel);
   if (!best) {
     send(res, 200, {
@@ -1941,7 +1976,15 @@ async function handleSettings(req, res) {
     if (next.stackImages) writeFileSync(flag, "1\n");
     else spawnSync("rm", ["-f", flag], { encoding: "utf8" });
   }
-  send(res, 200, { ok: true, ...next });
+  let beta = undefined;
+  if ("betaChannel" in body) {
+    try {
+      beta = applyBetaSidecar(Boolean(next.betaChannel));
+    } catch (e) {
+      beta = { ok: false, error: String(e) };
+    }
+  }
+  send(res, 200, { ok: true, ...next, beta });
 }
 
 async function handlePorts(_req, res) {
@@ -2095,12 +2138,9 @@ async function handleLibrary(req, res) {
       return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
     },
     fetchItems: async (auth, limit) => {
-      const r = await fetch(libraryItemsUrl({ limit }), {
-        headers: jellyfinAuthedHeaders(auth.token),
-        signal: AbortSignal.timeout(JELLYFIN_ITEMS_TIMEOUT_MS),
-      });
-      if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
-      return r.json();
+      const pulled = await jellyfinFetchItems(auth, { limit });
+      if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
+      return pulled.json;
     },
     refresh: () => refreshLibraryFull(host),
   });
@@ -2251,12 +2291,12 @@ async function handleReady(req, res) {
           return jellyfinToken(a.adminName || "reelos", a.adminPassword || "reelos");
         },
         fetchItems: async (auth, lim) => {
-          const r = await fetch(libraryItemsUrl({ limit: lim }), {
-            headers: jellyfinAuthedHeaders(auth.token),
-            signal: AbortSignal.timeout(Math.min(JELLYFIN_ITEMS_TIMEOUT_MS, 2500)),
+          const pulled = await jellyfinFetchItems(auth, {
+            limit: lim,
+            timeout: Math.min(JELLYFIN_ITEMS_TIMEOUT_MS, 2500),
           });
-          if (!r.ok) throw new Error(`Jellyfin ${r.status}`);
-          return r.json();
+          if (!pulled.ok) throw new Error(`Jellyfin ${pulled.status}`);
+          return pulled.json;
         },
         refresh: () => refreshLibraryFull(host),
       });
@@ -2301,6 +2341,8 @@ async function handleReady(req, res) {
     titles: Array.isArray(library?.titles) ? library.titles : [],
     requests: Array.isArray(requests?.requests) ? requests.requests : [],
     pipeline: requests?.pipeline || null,
+    hardware: slice.hardware || publicHardware(loadSavedHardware({ path: hardwareProfilePath() }), readHostMemKb()),
+    betaChannel: betaEnabled(),
     timings: { ...timings, total: Date.now() - started },
   });
 }
@@ -2373,6 +2415,7 @@ function composeProfiles(a) {
   if (intent.movies) p.push("movies");
   if (intent.tv || intent.anime) p.push("tv");
   if (intent.music) p.push("music");
+  if (betaEnabled()) p.push("books");
   if (intent.movies || intent.tv || intent.anime) p.push("subtitles");
   if (a.frontend === "jellyfin" || a.frontend === "both") {
     p.push("jellyfin");
@@ -2526,34 +2569,20 @@ function applyPerformance() {
 }
 
 async function handlePerformance(req, res) {
-  const { boxIsSmall, readHostMemKb, hardwareProfile, hardwareLimits } = await import("./reelos-box-scale.mjs");
-  mkdirSync("/var/lib/reelos", { recursive: true, mode: 0o700 });
+  const { boxIsSmall } = await import("./reelos-box-scale.mjs");
+  const path = hardwareProfilePath();
+  mkdirSync(path.replace(/\/hardware-profile\.json$/, "") || "/var/lib/reelos", { recursive: true, mode: 0o700 });
   const method = (req.method || "GET").toUpperCase();
   const memKb = readHostMemKb();
-  const small = boxIsSmall(memKb);
-  let profile = hardwareProfile({ ramKb: memKb, cpus: 1, diskKind: "unknown", diskFreeGb: 0 });
-  try {
-    const persisted = JSON.parse(readFileSync("/var/lib/reelos/hardware-profile.json", "utf8"));
-    if (persisted && (persisted.ram_kb || persisted.ramKb)) {
-      profile = hardwareProfile({
-        ramKb: persisted.ram_kb || persisted.ramKb || memKb,
-        cpus: persisted.cpus || 1,
-        diskKind: persisted.disk_kind || persisted.diskKind || "unknown",
-        diskFreeGb: persisted.disk_free_gb || persisted.diskFreeGb || 0,
-      });
-    }
-  } catch {
-    try {
-      const { cpus } = await import("node:os");
-      profile = hardwareProfile({ ramKb: memKb, cpus: cpus().length || 1, diskKind: "unknown", diskFreeGb: 0 });
-    } catch {
-      /* measured RAM only */
-    }
+  let saved = loadSavedHardware({ path });
+  if (!saved) {
+    runHardwareEnsure();
+    saved = loadSavedHardware({ path });
   }
-  const limits = hardwareLimits(profile);
+  const small = Boolean(saved?.tiny) || boxIsSmall(Number(saved?.ram_kb || saved?.ramKb || 0) || memKb);
   const dri = hasVaapiDri();
   const mode = dri ? "vaapi" : "direct";
-  const hardware = { ...profile, ...limits };
+  const hardware = publicHardware(saved, memKb);
   if (method === "GET") {
     const cur = readPerformance();
     if (!existsSync(performancePath())) {
@@ -2573,9 +2602,52 @@ async function handlePerformance(req, res) {
   send(res, 200, { ok: true, low, detectedSmall: small, dri, mode, hardware });
 }
 
+function hardwarePy() {
+  const root = process.env.REELOS_ROOT || "/opt/reelos";
+  const cwd = process.cwd();
+  for (const p of [
+    `${root}/bin/reelos_hardware.py`,
+    `${cwd}/daemon/reelos_hardware.py`,
+    `${cwd}/install/bin/reelos_hardware.py`,
+    "/opt/reelos/bin/reelos_hardware.py",
+  ]) {
+    if (existsSync(p)) return p;
+  }
+  return "";
+}
+
+function runHardwareEnsure() {
+  const py = hardwarePy();
+  if (!py) return;
+  spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000, env: process.env });
+}
+
+async function handleHardware(req, res) {
+  const method = (req.method || "GET").toUpperCase();
+  const path = hardwareProfilePath();
+  const state = path.replace(/\/hardware-profile\.json$/, "") || "/var/lib/reelos";
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  if (method !== "GET" && method !== "POST") {
+    send(res, 405, { ok: false });
+    return;
+  }
+  if (method === "POST" || !loadSavedHardware({ path })) {
+    runHardwareEnsure();
+  }
+  const view = publicHardware(loadSavedHardware({ path }), readHostMemKb());
+  send(res, 200, { ok: true, detected: "this is what I detected", ...view, path });
+}
+
 export async function dispatchReelOsApi(req, res) {
   const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
   const method = (req.method || "GET").toUpperCase();
+  if (pathOnly.startsWith("/api/books")) {
+    if (!betaEnabled()) {
+      send(res, 404, { ok: false, error: "Books is off. Settings → Updates → Beta channel." });
+      return true;
+    }
+    if (await dispatchBooksApi(req, res)) return true;
+  }
   if (pathOnly === "/api/lookup") {
     await handleLookup(req, res);
     return true;
@@ -2702,6 +2774,10 @@ export async function dispatchReelOsApi(req, res) {
     await handlePerformance(req, res);
     return true;
   }
+  if (pathOnly === "/api/hardware") {
+    await handleHardware(req, res);
+    return true;
+  }
   if (pathOnly === "/api/terminal") {
     await handleTerminal(req, res);
     return true;
@@ -2718,6 +2794,9 @@ export async function dispatchReelOsApi(req, res) {
 }
 
 function attachLookupApi(server) {
+  void import("./reelos-beta-sidecar.mjs")
+    .then((m) => m.idleOffBooksIfNeeded())
+    .catch(() => {});
   server.middlewares.use(async (req, res, next) => {
     try {
       if (await dispatchReelOsApi(req, res)) return;

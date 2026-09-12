@@ -1,6 +1,6 @@
 /** Load Jellyfin shelf + *arr hasFile facts for honest GET /api/request. */
 import { existsSync, readFileSync } from "node:fs";
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import { arrHasFile, buildArrIndex, parseTitleId, seerrApiKey, seerrFetch, tmdbPoster } from "./reelos-seerr.mjs";
 
@@ -171,9 +171,9 @@ export function listSeerrOrphanMovieTargets({ seerrRows = [], movies = [] } = {}
   const out = [];
   const seen = new Set();
   for (const row of seerrRows || []) {
-    // Only stuck rows. A row Seerr already calls available is in the library; re-adding
-    // it to Radarr and searching would re-grab the whole back catalogue on one recover.
-    if (row?.status === "available" || row?.engine === "downloaded") continue;
+    // Seerr often marks National Treasure available while Radarr still has no row.
+    // Skip only when Radarr already has that tmdb (have.has). Re-adding the
+    // catalogue cannot happen: those ids are already in `movies`.
     const mediaType =
       row?.mediaType === "tv" || String(row?.titleId || "").startsWith("tmdb-tv-") ? "tv" : "movie";
     const tmdb = requestRowTmdb(row);
@@ -844,25 +844,14 @@ export async function loadPresenceFacts({
       movies: movieRows,
       series: seriesRows,
     }),
-    dumps: {
-      sonarr: listDirNames("/mnt/symlinks/sonarr"),
-      radarr: listDirNames("/mnt/symlinks/radarr"),
-    },
+    dumps: { sonarr: [], radarr: [] },
     catalog: [],
   };
   cache = { at: now, facts };
   return facts;
 }
 
-export function listDirNames(dir) {
-  try {
-    const out = spawnSync("ls", ["-1", dir], { encoding: "utf8", timeout: 800 });
-    if (out.status !== 0) return [];
-    return String(out.stdout || "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((n) => n && !n.startsWith("."));
-  } catch {
-    return [];
-  }
+/** Request registers Seerr/*arr/TorBox ids. Never `ls` dump trees on FUSE. */
+export function listDirNames(_dir) {
+  return [];
 }

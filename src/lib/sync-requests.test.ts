@@ -5,6 +5,7 @@ import {
   applyTitleRequestPoll,
   collapseDuplicateRequests,
   collapseHomeRequestCards,
+  transferringChipCount,
   dropLibraryOverlay,
   inFlightRequests,
   isGhostRequestLabel,
@@ -128,7 +129,8 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
   assert.match(home, /collapseHomeRequestCards\(inflight\)/);
-  assert.match(home, /transferring = inflight\.length/);
+  assert.match(home, /transferringChipCount\(inflight\)/);
+  assert.match(shell, /transferringChipCount\(inFlightRequests/);
   assert.doesNotMatch(home, /Watch in this browser/);
   assert.doesNotMatch(home, /requests\.filter\(isInFlightRequest\)/);
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
@@ -480,6 +482,15 @@ test("Home collapses two Expanse season rows to one card", () => {
   ]);
   assert.equal(cards.length, 1);
   assert.equal(cards[0]?.titleId, "tmdb-tv-63639");
+  assert.equal(
+    transferringChipCount([
+      row({ id: "s1", titleId: "tmdb-tv-63639", title: "The Expanse", status: "downloading", season: 1 }),
+      row({ id: "s3", titleId: "tmdb-tv-63639", title: "The Expanse", status: "downloading", season: 3 }),
+      row({ id: "wire", titleId: "tmdb-tv-1438", title: "The Wire", status: "downloading", season: 2 }),
+      row({ id: "bb", titleId: "tmdb-tv-1396", title: "Breaking Bad", status: "downloading", season: 1 }),
+    ]),
+    3,
+  );
 });
 
 test("phone chrome keeps one Watch and the tab bar", () => {
@@ -561,5 +572,8 @@ test("title page hides magnet paste and prefers movie POST", () => {
   assert.match(view, /requestMediaTypeForPage/);
   assert.match(view, /showHashAdapter/);
   assert.match(view, /thisSeasonOnBox/);
+  assert.match(view, /Series-in-Jellyfin is not this season/);
+  assert.match(view, /request\?\.status === "downloading" \|\| request\?\.status === "waiting"/);
+  assert.doesNotMatch(view, /thisSeasonOnBox \|\| inJellyfin/);
   assert.doesNotMatch(view, /extraIds\.find\(\(k\) => k\.startsWith\("tmdb-tv-"\)\) \|\| extraIds\.find/);
 });

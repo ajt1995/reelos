@@ -11,7 +11,7 @@ function read(rel) {
   return readFileSync(join(root, rel), "utf8");
 }
 
-test("public indexer roster: YTS movies-only; EZTV+ShowRSS for TV sitcoms", () => {
+test("public indexer roster: YTS movies-only; EZTV+ShowRSS RSS; Knaben/CSV/1337x/TPB search", () => {
   const r = spawnSync("python3", [join(root, "daemon/public_indexers.py"), "--self-test"], {
     encoding: "utf8",
   });
@@ -20,6 +20,10 @@ test("public indexer roster: YTS movies-only; EZTV+ShowRSS for TV sitcoms", () =
   assert.match(roster, /strip_compose_dns_text/);
   assert.match(roster, /COMPOSE_DNS_BLOCK/);
   assert.match(roster, /ReelOS-showrss/);
+  assert.match(roster, /ReelOS-knaben/);
+  assert.match(roster, /ReelOS-torrentcsv/);
+  assert.match(roster, /prowlarr_indexer_write_url/);
+  assert.match(roster, /required_tv_search_names/);
   assert.match(roster, /"movie"\),/);
   assert.doesNotMatch(roster, /passkey|apikey.*=.*[a-zA-Z0-9]{16}/);
   assert.equal(read("install/bin/public_indexers.py"), roster);
@@ -36,6 +40,7 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(add, /rss fallback/);
   assert.match(add, /apply_public_indexers/);
   assert.match(add, /schema \{e\} — RSS fallback/);
+  assert.match(add, /forceSave=true/);
   assert.match(add, /"indexers" in sys\.argv/);
   assert.doesNotMatch(
     add,
@@ -72,9 +77,16 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(main, /research-missing skipped/);
   assert.match(main, /prow_host = "prowlarr"/);
   assert.match(main, /--quick/);
+  const provider = read("daemon/wire-engines.parts/05.part");
+  assert.match(provider, /keep for house\/LAN/);
+  assert.match(provider, /forceSave=true/);
+  const schemaAdd = read("daemon/wire-engines.parts/03.part");
+  assert.match(schemaAdd, /indexer\?forceSave=true/);
   const updater = read("daemon/reelos-update.sh");
   assert.match(updater, /wire-engines\.py" indexers/);
   assert.match(updater, /EZTV\/ShowRSS/);
+  assert.match(updater, /ReelOS-knaben/);
+  assert.match(updater, /ReelOS-torrentcsv/);
 });
 
 test("Sonarr fullSync includes TorrentRss 8000/Other and preserves TV categories", () => {
@@ -130,6 +142,11 @@ test("house with only TPB/YTS still POSTs EZTV+ShowRSS via TorrentRss", () => {
   assert.match(out, /test_radarr_rss_only_is_not_a_search_path/);
   assert.match(out, /test_doctor_lists_all_and_fails_when_tv_publics_missing/);
   assert.match(out, /test_hybrid_profile_allows_eztv_720p/);
+  assert.match(out, /test_torbox_and_knaben_match_tv_role/);
+  assert.match(out, /test_prowlarr_force_save_skips_live_test/);
+  assert.match(out, /test_knaben_and_torrentcsv_schema_posts_as_search/);
+  assert.match(out, /test_torbox_attaches_to_sonarr_as_tv_search/);
+  assert.match(out, /test_cardigann_eztv_is_search_not_rss/);
 });
 
 test("doctor lists every enabled indexer and fails closed without EZTV/ShowRSS", () => {
