@@ -16,6 +16,7 @@
   --color-gold-bright: #e8b84a;
   --color-gold-fg: #1a1406;
   --color-live: #3ec6d8;
+  --color-circuit: #3ec6d8;
   --color-success: #3ddc97;
   --color-danger: #e25c5c;
   --color-border: rgb(243 244 246 / 0.08);
@@ -191,4 +192,36 @@
 img.poster {
   outline: 1px solid rgb(255 255 255 / 0.1);
   outline-offset: -1px;
+}
+
+.arena-on {
+  --color-background: #000000;
+  --color-raised: #07090c;
+  --color-card: #0c1014;
+  --color-card-2: #12171c;
+  --color-live: #3ee7f0;
+  --color-circuit: #3ee7f0;
+  --shadow-circuit: 0 0 0 1px rgb(62 231 240 / 0.55), 0 0 18px rgb(62 231 240 / 0.12);
+}
+
+.arena-page {
+  padding: 0.5rem 0.75rem 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .arena-page {
+    padding: 1.5rem 2.5rem 2.5rem;
+  }
+}
+
+.arena-gold-press:active:not(:disabled) {
+  transform: scale(0.98);
+  transition-duration: 120ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arena-packet,
+  .arena-circuit .arena-packet {
+    display: none;
+  }
 }

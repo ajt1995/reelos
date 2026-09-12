@@ -63,9 +63,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       </p>
       <p className="mt-2 text-sm text-muted">
         {update.status === "applying"
-          ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
+          ? "An Apply is running — phone, CLI, or both. Full-screen splash stays until browse and request work. Do not tap Apply again."
           : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
-            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply."
+            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply. Request still works."
             : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
       {catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? (
@@ -155,13 +155,13 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
         />
       </label>
       <p className="mt-2 text-xs text-muted">
-        Off by default. Check then reads channel-beta. Arena chrome and Books ship on 2.0.0 as a separate tarball — not
-        inside main.tar.gz. Leave beta and Check to roll back to last stable 1.2.50.x (40 once this house has it).
-        Stable Check stays 1.2.50.40 on main.tar.gz.
+        Off by default. On this sidecar tarball, Beta turns on Arena chrome and Books in place — no second Apply.
+        Off rolls those back (Kavita stops, Books routes 404) without wiping movies/TV. Check still reads
+        channel-beta when on. Do not house Apply this PR. Stable Check stays 1.2.50.x on main.tar.gz.
       </p>
       {update.rollback && update.status === "available" ? (
         <p className="mt-2 text-xs text-muted">
-          Roll back returns this box to {update.target}. Libraries stay. Arena chrome and Books leave with 2.0.
+          Roll back returns this box to {update.target}. Libraries stay. Arena chrome and Books leave when Beta is off.
         </p>
       ) : null}
     </Row>

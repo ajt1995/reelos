@@ -21,10 +21,22 @@ export function LibraryView() {
   const err = useReelStore((s) => s.shelfError);
   const shelfReady = useReelStore((s) => s.shelfReady);
   const intent = useReelStore((s) => s.answers.intent);
+  const booksOn = useReelStore((s) => s.settings.betaChannel);
+  const [books, setBooks] = useState<{ title: string; author: string; rel: string }[]>([]);
 
   useEffect(() => {
     hydrateShelf();
   }, [hydrateShelf]);
+  useEffect(() => {
+    if (!booksOn) {
+      setBooks([]);
+      return;
+    }
+    void fetch("/api/books/library", { cache: "no-store" })
+      .then((r) => r.json() as Promise<{ books?: { title: string; author: string; rel: string }[] }>)
+      .then((j) => setBooks(Array.isArray(j.books) ? j.books : []))
+      .catch(() => setBooks([]));
+  }, [booksOn]);
 
   const shown = useMemo(
     () => items.filter((t) => (tab === "all" ? true : t.kind === tab)),
@@ -61,6 +73,11 @@ export function LibraryView() {
             {t.label}
           </button>
         ))}
+        {booksOn ? (
+          <a href="/books" className="ml-1 self-center text-xs text-circuit">
+            Books catalog{books.length ? ` · ${books.length}` : ""}
+          </a>
+        ) : null}
       </div>
       {shown.length === 0 ? (
         <p className="mt-12 text-sm text-muted">

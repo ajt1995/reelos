@@ -64,6 +64,11 @@ function RootDocument() {
 }
 
 function Runtime({ children }: { children: React.ReactNode }) {
+  const arena = useReelStore((s) => s.settings.betaChannel);
+  useEffect(() => {
+    document.documentElement.classList.toggle("arena-on", arena);
+    document.body.classList.toggle("arena-on", arena);
+  }, [arena]);
   useEffect(() => {
     void Promise.resolve(useReelStore.persist.rehydrate())
       .catch(() => {})
