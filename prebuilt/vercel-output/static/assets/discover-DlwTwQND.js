@@ -1,1 +1,0 @@
-import{Z as e}from"./store-CB8EsSR8.js";import{n as t}from"./gate-CF75IRh-.js";import{l as n}from"./index-Bnn76fkq.js";var r=e();function i(){return(0,r.jsx)(t,{children:(0,r.jsx)(n,{})})}export{i as component};
