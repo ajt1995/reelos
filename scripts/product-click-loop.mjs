@@ -233,19 +233,39 @@ async function searchAndOpen(page, query, { title, kind } = {}) {
   await box.click();
   await box.fill("");
   await box.fill(query);
-  await page.waitForTimeout(700);
-  const hit = title
-    ? page.locator("form ul a", { hasText: title }).first()
-    : page.locator("form ul a").first();
-  await hit.waitFor({ timeout: 15000 });
+  await page.waitForTimeout(1100);
   if (kind === "person") {
+    await page.locator("form ul a", { hasText: "Actor" }).first().waitFor({ timeout: 15000 });
     await page.locator("form ul a", { hasText: "Actor" }).first().click();
     return;
   }
   if (kind === "collection") {
+    await page.locator("form ul a", { hasText: "Collection" }).first().waitFor({ timeout: 15000 });
     await page.locator("form ul a", { hasText: "Collection" }).first().click();
     return;
   }
+  if (kind === "tv") {
+    const tvHit = title
+      ? page.locator("form ul a[href*='tmdb-tv-']").filter({ hasText: title }).first()
+      : page.locator("form ul a[href*='tmdb-tv-']").first();
+    await tvHit.waitFor({ timeout: 15000 });
+    await tvHit.click();
+    await page.waitForURL(/\/title\/tmdb-tv-/, { timeout: 15000 });
+    return;
+  }
+  if (kind === "movie") {
+    const movieHit = title
+      ? page.locator("form ul a[href*='/title/tmdb-']:not([href*='tmdb-tv-'])").filter({ hasText: title }).first()
+      : page.locator("form ul a[href*='/title/tmdb-']:not([href*='tmdb-tv-'])").first();
+    await movieHit.waitFor({ timeout: 15000 });
+    await movieHit.click();
+    await page.waitForURL(/\/title\/tmdb-\d+/, { timeout: 15000 });
+    return;
+  }
+  const hit = title
+    ? page.locator("form ul a", { hasText: title }).first()
+    : page.locator("form ul a").first();
+  await hit.waitFor({ timeout: 15000 });
   await hit.click();
   await page.waitForURL(/\/(title|person|collection)\//, { timeout: 15000 });
 }
@@ -255,7 +275,7 @@ async function searchRequestTitle(page, queries, { tv = false } = {}) {
     await nav(page, "Home");
     await waitHome(page);
     try {
-      await searchAndOpen(page, q, { title: q });
+      await searchAndOpen(page, q, { title: q, kind: tv ? "tv" : "movie" });
       await page.getByRole("heading", { name: q }).waitFor({ timeout: 15000 });
     } catch {
       continue;
@@ -272,9 +292,11 @@ async function searchRequestTitle(page, queries, { tv = false } = {}) {
 }
 
 async function clickRequestIfPresent(page) {
-  const btn = page.getByRole("button", { name: /^(Request( S\d+)?)$/ }).first();
+  const btn = page.getByRole("button", {
+    name: /^(Request( S\d+)?|Season \d+ · Request|Request this season)$/,
+  }).first();
   try {
-    await btn.waitFor({ state: "attached", timeout: 12000 });
+    await btn.waitFor({ state: "attached", timeout: 15000 });
   } catch {
     return false;
   }
@@ -360,27 +382,28 @@ try {
   const moonUrl = page.url();
   assert.match(moonUrl, /\/title\/tmdb-\d+/);
   assert.doesNotMatch(moonUrl, /tmdb-tv-/);
+  await page.getByRole("link", { name: /Collection/i }).first().waitFor({ timeout: 8000 }).catch(() => {});
   const moonRequested = await clickRequestIfPresent(page);
   await shot(page, "clickloop_02b_moon_request.png");
   verdict.steps.movieSearch = true;
   verdict.steps.movieRequest = moonRequested;
-  if (!moonRequested) {
-    const altMovie = await searchRequestTitle(page, ["Ex Machina", "Arrival", "Coherence"], { tv: false });
+  if (/\/title\//.test(page.url()) && (await page.getByRole("link", { name: /Collection/i }).count())) {
+    await page.getByRole("link", { name: /Collection/i }).first().scrollIntoViewIfNeeded();
+    await page.getByRole("link", { name: /Collection/i }).first().click();
+    await page.waitForURL(/\/collection\//, { timeout: 15000 });
+    await shot(page, "clickloop_13_collection.png");
+    verdict.steps.collectionSearch = true;
+    await nav(page, "Home");
+    await waitHome(page);
+  }
+  if (!verdict.steps.movieRequest) {
+    const altMovie = await searchRequestTitle(page, ["Arrival", "Coherence", "Primer"], { tv: false });
     verdict.steps.movieRequest = altMovie.requested;
     await shot(page, "clickloop_02b_moon_request.png");
   }
-  const moonCollection = page.getByRole("link", { name: /Collection/i }).first();
-  if (await moonCollection.count()) {
-    await moonCollection.scrollIntoViewIfNeeded();
-    await moonCollection.click();
-    await page.waitForURL(/\/collection\//, { timeout: 15000 });
-    await page.getByRole("heading", { name: /Moon/i }).waitFor({ timeout: 15000 }).catch(() => {});
-    await shot(page, "clickloop_13_collection.png");
-    verdict.steps.collectionSearch = true;
-  }
   await nav(page, "Home");
   await waitHome(page);
-  const tv = await searchRequestTitle(page, ["Slow Horses", "Reservation Dogs", "What We Do in the Shadows"], { tv: true });
+  const tv = await searchRequestTitle(page, ["Reservation Dogs", "The Pitt", "Fallout", "Slow Horses"], { tv: true });
   await shot(page, "clickloop_03_title_tv.png");
   await shot(page, "clickloop_03b_tv_request.png");
   verdict.steps.tvSearch = true;
