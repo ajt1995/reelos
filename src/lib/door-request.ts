@@ -1,4 +1,4 @@
-import { requestMediaTypeForPage, requestTitleIdForPage, titlePresenceKeys } from "@/lib/sync-requests";
+import { requestMediaTypeForPage, requestTitleIdForPage, titlePresenceKeys } from "./sync-requests";
 import type { Title } from "@/lib/types";
 
 /** POST /api/request for a collection/filmography row. Person and collection ids never go here. */
