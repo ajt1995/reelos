@@ -270,7 +270,7 @@ async function searchAndOpen(page, query, { title, kind } = {}) {
   await page.waitForURL(/\/(title|person|collection)\//, { timeout: 15000 });
 }
 
-async function searchRequestTitle(page, queries, { tv = false } = {}) {
+async function searchRequestTitle(page, posts, queries, { tv = false } = {}) {
   for (const q of queries) {
     await nav(page, "Home");
     await waitHome(page);
@@ -285,27 +285,43 @@ async function searchRequestTitle(page, queries, { tv = false } = {}) {
     } else {
       if (!/\/title\/tmdb-\d+/.test(page.url()) || /tmdb-tv-/.test(page.url())) continue;
     }
-    const ok = await clickRequestIfPresent(page);
+    const ok = await clickRequestIfPresent(page, posts);
     if (ok) return { query: q, requested: true };
   }
   return { query: queries[0], requested: false };
 }
 
-async function clickRequestIfPresent(page) {
-  const btn = page.getByRole("button", {
-    name: /^(Request( S\d+)?|Season \d+ · Request|Request this season)$/,
-  }).first();
-  try {
-    await btn.waitFor({ state: "attached", timeout: 15000 });
-  } catch {
-    return false;
+async function clickRequestIfPresent(page, posts) {
+  const before = posts?.requests?.length || 0;
+  const primary = page.getByRole("button", { name: /^(Request( S\d+)?|Request this season)$/ });
+  const chip = page.getByRole("button", { name: /Season \d+ · Request/ });
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    if (await primary.count()) {
+      const btn = primary.first();
+      if (!(await btn.isDisabled())) {
+        await btn.scrollIntoViewIfNeeded();
+        await btn.click();
+        break;
+      }
+    }
+    if (await chip.count()) {
+      await chip.first().scrollIntoViewIfNeeded();
+      await chip.first().click();
+      await page.waitForTimeout(400);
+      const inner = page.getByRole("button", { name: "Request this season" });
+      if (await inner.count() && !(await inner.first().isDisabled())) {
+        await inner.first().click();
+        break;
+      }
+    }
+    await page.waitForTimeout(250);
   }
-  if (await btn.isDisabled()) return false;
-  await btn.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(200);
-  await btn.click();
-  await page.waitForTimeout(900);
-  return true;
+  const until = Date.now() + 2500;
+  while (Date.now() < until && (posts?.requests?.length || 0) === before) {
+    await page.waitForTimeout(150);
+  }
+  return (posts?.requests?.length || 0) > before;
 }
 
 const verdict = {
@@ -383,7 +399,7 @@ try {
   assert.match(moonUrl, /\/title\/tmdb-\d+/);
   assert.doesNotMatch(moonUrl, /tmdb-tv-/);
   await page.getByRole("link", { name: /Collection/i }).first().waitFor({ timeout: 8000 }).catch(() => {});
-  const moonRequested = await clickRequestIfPresent(page);
+  const moonRequested = await clickRequestIfPresent(page, posts);
   await shot(page, "clickloop_02b_moon_request.png");
   verdict.steps.movieSearch = true;
   verdict.steps.movieRequest = moonRequested;
@@ -397,13 +413,13 @@ try {
     await waitHome(page);
   }
   if (!verdict.steps.movieRequest) {
-    const altMovie = await searchRequestTitle(page, ["Arrival", "Coherence", "Primer"], { tv: false });
+    const altMovie = await searchRequestTitle(page, posts, ["Arrival", "Coherence", "Primer"], { tv: false });
     verdict.steps.movieRequest = altMovie.requested;
     await shot(page, "clickloop_02b_moon_request.png");
   }
   await nav(page, "Home");
   await waitHome(page);
-  const tv = await searchRequestTitle(page, ["Reservation Dogs", "The Pitt", "Fallout", "Slow Horses"], { tv: true });
+  const tv = await searchRequestTitle(page, posts, ["Reservation Dogs", "The Pitt", "Fallout", "Slow Horses"], { tv: true });
   await shot(page, "clickloop_03_title_tv.png");
   await shot(page, "clickloop_03b_tv_request.png");
   verdict.steps.tvSearch = true;
@@ -524,7 +540,9 @@ try {
   await page.waitForTimeout(800);
   await shot(page, "clickloop_12_search_wick.png");
   const collection = page.locator("form ul a", { hasText: "Collection" }).first();
-  if (await collection.count()) {
+  if (verdict.steps.collectionSearch === true) {
+    /* Moon Collection already opened */
+  } else if (await collection.count()) {
     await collection.click();
     await page.waitForURL(/\/collection\//, { timeout: 15000 });
     await page.getByRole("heading", { name: /John Wick/i }).waitFor({ timeout: 15000 }).catch(() => {});
@@ -554,6 +572,8 @@ try {
   const likeBtn = page.getByRole("button", { name: /^Like$/i });
   verdict.steps.like = (await likeBtn.count()) ? "present" : "no-like-control";
 
+  const moviePosts = posts.requests.filter((b) => String(b.mediaType || "").toLowerCase() === "movie");
+  const tvPosts = posts.requests.filter((b) => String(b.mediaType || "").toLowerCase() === "tv");
   verdict.ok =
     Boolean(verdict.steps.hashedUi) &&
     Boolean(verdict.steps.homeNamed) &&
@@ -567,7 +587,8 @@ try {
     Boolean(verdict.steps.rookieHonest) &&
     Boolean(verdict.steps.noDumpTwin) &&
     Boolean(verdict.steps.noPersonPost) &&
-    posts.requests.length >= 2 &&
+    moviePosts.length >= 1 &&
+    tvPosts.length >= 1 &&
     !posts.requests.some((b) => String(b.mediaType || "").toLowerCase() === "person");
 
   writeFileSync(join(OUT, "clickloop_verdict.json"), JSON.stringify(verdict, null, 2));
