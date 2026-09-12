@@ -13,6 +13,7 @@ import {
   dropLibraryOverlay,
   expandDropKeys,
   forgetRemovedIds,
+  forgetRemovedKeys,
   forgetRemovedTitleIds,
   fuseWholesalePath,
   jellyfinItemDeleteAllowed,
@@ -25,6 +26,7 @@ import {
   planSeerrDeletes,
   rememberRemovedTitleIds,
   removeLibraryTitle,
+  removedIdsStillOnShelf,
   resolveRemoveTarget,
   titleInDropSet,
   unmonitorArrBody,
@@ -233,6 +235,26 @@ test("removed-id overlay persists across serve filter and forgets on re-request"
   });
   assert.equal(left.includes("tmdb-1593"), false);
   assert.ok(existsSync(file));
+});
+
+test("live JF rows forget a failed Remove hide", () => {
+  const still = removedIdsStillOnShelf(
+    [{ id: "tvdb-275274", ids: ["tvdb-275274", "tmdb-tv-60625", "jf-3d32"], jellyfinId: "3d32" }],
+    ["tvdb-275274", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+  );
+  assert.ok(still.includes("tvdb-275274"));
+  assert.ok(still.includes("jf-3d32"));
+  const dir = join(tmpdir(), `reelos-removed-live-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, "library-removed.json");
+  rememberRemovedTitleIds(["tvdb-275274", "tmdb-1593"], { file, write: { mkdirSync, writeFileSync } });
+  const left = forgetRemovedKeys(still, {
+    file,
+    read: { readFileSync, existsSync },
+    write: { mkdirSync, writeFileSync },
+  });
+  assert.equal(left.includes("tvdb-275274"), false);
+  assert.ok(left.includes("tmdb-1593"));
 });
 
 test("plugin, phone UI, and mailman wire DELETE /api/library", () => {

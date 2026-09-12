@@ -47,6 +47,7 @@ import {
   libraryHasTitle,
   findLibraryTitle,
   lookupPayloadForId,
+  overlayLookupWithLibrary,
   pickSeerrSearchForLibrary,
   onDiskSeasonsFor,
 } from "./reelos-seerr.mjs";
@@ -1383,6 +1384,7 @@ test("Discover has on this box / finishing / pick tonight; POST never sends seas
   assert.match(discover, /Looking up movies and shows/);
   assert.match(discover, /lookupErr/);
   assert.match(discover, /\/api\/discover/);
+  assert.match(lookup, /overlayLookupWithLibrary/);
   assert.match(lookup, /mapSeerrSearchResults/);
   assert.match(lookup, /mapSeerrDiscoverResults/);
   assert.match(lookup, /\/api\/discover/);
@@ -1393,6 +1395,41 @@ test("Discover has on this box / finishing / pick tonight; POST never sends seas
   assert.match(lookup, /ms: 45000/);
   assert.doesNotMatch(lookup, /seasons = .*["']all["']/);
   assert.match(title, /season: series \? season/);
+});
+
+test("search overlay attaches JF Watch and keeps a JF-only name", () => {
+  const passengers = {
+    id: "tmdb-274870",
+    kind: "movie",
+    title: "Passengers",
+    year: 2016,
+    ids: ["tmdb-274870"],
+  };
+  const jfPassengers = {
+    id: "tmdb-274870",
+    kind: "movie",
+    title: "Passengers",
+    year: 2016,
+    ids: ["tmdb-274870", "jf-de7507144367"],
+    jellyfinId: "de7507144367fccb43412273ba23ab8a",
+  };
+  const jfOnly = {
+    id: "jf-abc",
+    kind: "movie",
+    title: "House Cut",
+    year: 1999,
+    ids: ["jf-abc"],
+    jellyfinId: "abc",
+  };
+  const overlaid = overlayLookupWithLibrary([passengers], [jfPassengers, jfOnly], "Passengers");
+  assert.equal(overlaid[0].id, "tmdb-274870");
+  assert.equal(overlaid[0].jellyfinId, "de7507144367fccb43412273ba23ab8a");
+  assert.equal(overlaid[0].inLibrary, true);
+  const only = overlayLookupWithLibrary([], [jfOnly], "house cut");
+  assert.equal(only.length, 1);
+  assert.equal(only[0].id, "jf-abc");
+  const empty = overlayLookupWithLibrary([], [jfOnly], "passengers");
+  assert.deepEqual(empty, []);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {

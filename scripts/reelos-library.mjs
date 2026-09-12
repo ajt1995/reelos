@@ -542,6 +542,7 @@ export async function serveLibrary({
   getAuth,
   fetchItems,
   refresh,
+  onLiveTitles,
   removedIds = [],
 }) {
   const u = new URL(url, "http://reelos.local");
@@ -556,14 +557,17 @@ export async function serveLibrary({
     });
   };
 
-  const serve = (titles, extra = {}) => ({
-    titles: withPosterHost(
-      applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(withoutRemoved(titles))), limit),
-      host,
-    ),
-    error: extra.error ?? null,
-    fromCache: Boolean(extra.fromCache),
-  });
+  const serve = (titles, extra = {}) => {
+    const rows = extra.fromCache ? withoutRemoved(titles) : titles || [];
+    return {
+      titles: withPosterHost(
+        applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(rows)), limit),
+        host,
+      ),
+      error: extra.error ?? null,
+      fromCache: Boolean(extra.fromCache),
+    };
+  };
 
   const staleCoversRequest = canServeStale(stale);
   if (!wantFresh && staleCoversRequest) {
@@ -586,6 +590,7 @@ export async function serveLibrary({
     const items = Array.isArray(data?.Items) ? data.Items : [];
     const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
     cache.write(titles, { now, complete: !limit });
+    if (!limit && typeof onLiveTitles === "function") onLiveTitles(titles);
     if (limit && typeof refresh === "function") void refresh();
     return serve(titles);
   } catch (e) {

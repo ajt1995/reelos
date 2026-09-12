@@ -25,7 +25,7 @@ export function LibraryView() {
   const [books, setBooks] = useState<{ title: string; author: string; rel: string }[]>([]);
 
   useEffect(() => {
-    hydrateShelf();
+    hydrateShelf({ force: true });
   }, [hydrateShelf]);
   useEffect(() => {
     if (!booksOn) {

@@ -117,6 +117,25 @@ export function forgetRemovedIds(prev, dropKeys) {
   return (prev || []).filter((id) => !keys.has(String(id)));
 }
 
+/** Live JF rows that a failed Remove still hides — forget those keys so On this box matches Jellyfin. */
+export function removedIdsStillOnShelf(titles, removedIds) {
+  const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
+  if (!hide.size) return [];
+  const still = [];
+  for (const t of titles || []) {
+    if (!titleInDropSet(t, hide)) continue;
+    still.push(...libraryDropKeys(t.id, [...(t.ids || []), t.jellyfinId, t.jellyfinId ? `jf-${t.jellyfinId}` : ""]));
+  }
+  return [...new Set(still.filter(Boolean))];
+}
+
+export function forgetRemovedKeys(keys, { file = LIBRARY_REMOVED_FILE, read, write } = {}) {
+  const prev = readRemovedTitleIds(file, read ? { readFileSync: read.readFileSync, existsSync: read.existsSync } : {});
+  const ids = forgetRemovedIds(prev, keys);
+  writeRemovedTitleIds(ids, file, write);
+  return ids;
+}
+
 export function readRemovedTitleIds(file = LIBRARY_REMOVED_FILE, { readFileSync: read = readFileSync, existsSync: exists = existsSync } = {}) {
   try {
     if (!exists(file)) return [];
