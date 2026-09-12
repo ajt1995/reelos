@@ -215,17 +215,17 @@ async function nav(page, label) {
 }
 
 async function waitHome(page) {
+  const splash = /Updating ReelOS|Downloading update|Applying 1\.2/i;
   try {
-    await page.waitForFunction(() => {
-      const t = document.body?.innerText || "";
-      if (/Updating ReelOS|Downloading update|Applying 1\.2/i.test(t)) return false;
-      return /Search movies, shows, people/i.test(t);
-    }, { timeout: 25000 });
+    await page.getByPlaceholder(/Search movies, shows, people/i).waitFor({ timeout: 25000 });
   } catch (err) {
     const body = await page.locator("body").innerText().catch(() => "");
-    throw new Error(`hashed Home never left splash: ${body.slice(0, 400)}\n${err}`);
+    throw new Error(`hashed Home missing search: ${body.slice(0, 400)}\n${err}`);
   }
-  await page.getByPlaceholder(/Search movies, shows, people/i).waitFor({ timeout: 8000 });
+  const body = await page.locator("body").innerText();
+  if (splash.test(body) && !/On this box/i.test(body)) {
+    throw new Error(`splash-locked hashed Home: ${body.slice(0, 240)}`);
+  }
 }
 
 async function searchAndOpen(page, query, { title, kind } = {}) {
