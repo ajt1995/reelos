@@ -1,4 +1,4 @@
-//#region node_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-xnmVrUfs.js
+//#region node_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-DzzJgECh.js
 var tsrStartManifest = () => ({ routes: {
 	__root__: {
 		filePath: "/workspace/src/routes/__root.tsx",
@@ -15,74 +15,74 @@ var tsrStartManifest = () => ({ routes: {
 			"/title/$id"
 		],
 		preloads: [
-			"/assets/index-DnRS6LWN.js",
-			"/assets/store-BMB9_LsQ.js",
-			"/assets/preload-helper-RiyfBr4a.js"
+			"/assets/index-9ZKAZ1xs.js",
+			"/assets/store-Df9kizRi.js",
+			"/assets/preload-helper-ClhE4tnO.js"
 		],
 		scripts: [{ attrs: {
 			type: "module",
 			async: !0,
-			src: "/assets/index-DnRS6LWN.js"
+			src: "/assets/index-9ZKAZ1xs.js"
 		} }]
 	},
 	"/": {
 		filePath: "/workspace/src/routes/index.tsx",
 		children: void 0,
-		preloads: ["/assets/routes-CZeb9ACL.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/routes-d_3BcFYN.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/activity": {
 		filePath: "/workspace/src/routes/activity.tsx",
 		children: void 0,
-		preloads: ["/assets/activity-B2x-hOq3.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/activity-Bj4_rkHY.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/connect": {
 		filePath: "/workspace/src/routes/connect.tsx",
 		children: void 0,
-		preloads: ["/assets/connect-BzZkmyDS.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/connect-T2RRVYrF.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/discover": {
 		filePath: "/workspace/src/routes/discover.tsx",
 		children: void 0,
-		preloads: ["/assets/discover-C9YKEOVJ.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/discover-DhnIFwNQ.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/library": {
 		filePath: "/workspace/src/routes/library.tsx",
 		children: void 0,
-		preloads: ["/assets/library-DBvhsAnz.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/library-ke7O8lsP.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/requests": {
 		filePath: "/workspace/src/routes/requests.tsx",
 		children: void 0,
-		preloads: ["/assets/requests-CMSmhr_u.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/requests-Bar3zzgX.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/settings": {
 		filePath: "/workspace/src/routes/settings.tsx",
 		children: ["/settings/advanced"],
 		preloads: [
-			"/assets/settings-9kv4m_aB.js",
-			"/assets/gate-By_Mulop.js",
-			"/assets/settings-terminal-CoxgRlpQ.js"
+			"/assets/settings-DoBq3myZ.js",
+			"/assets/gate-HM9Wls3_.js",
+			"/assets/settings-terminal-BmCrk8T_.js"
 		]
 	},
 	"/engine/$id": {
 		filePath: "/workspace/src/routes/engine.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/engine._id-ZWofYzMK.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/engine._id-DngDD_cZ.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/play/$id": {
 		filePath: "/workspace/src/routes/play.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/play._id-YMVNL9_U.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/play._id-BSUk5lIh.js", "/assets/gate-HM9Wls3_.js"]
 	},
 	"/settings/advanced": {
 		filePath: "/workspace/src/routes/settings.advanced.tsx",
 		children: void 0,
-		preloads: ["/assets/settings.advanced-C6CDynkk.js"]
+		preloads: ["/assets/settings.advanced-DFzkH94h.js"]
 	},
 	"/title/$id": {
 		filePath: "/workspace/src/routes/title.$id.tsx",
 		children: void 0,
-		preloads: ["/assets/title._id-BCReqSgr.js", "/assets/gate-By_Mulop.js"]
+		preloads: ["/assets/title._id-C0tCNiDq.js", "/assets/gate-HM9Wls3_.js"]
 	}
 } });
 //#endregion

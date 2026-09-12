@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { C as titleMatchesId, b as requestShowsRetry, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as titlePresenceKeys, x as showRequestQueueControls } from "./router-CdV-N9NO.mjs";
-import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-D3_05tZx.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/title._id-BhPbsYDF.js
+import { C as titleMatchesId, b as requestShowsRetry, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as titlePresenceKeys, x as showRequestQueueControls } from "./router-CnJP4qFl.mjs";
+import { a as Poster, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-RHWa-VSK.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/title._id-nYrPMRA0.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {
@@ -79,6 +79,9 @@ function useEngineRequest(id, season) {
 		extraIds
 	};
 }
+function looksLikeHashTitle(name) {
+	return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
+}
 function seasonNumbersOf(title, extra = []) {
 	const listed = title?.seasonList?.filter((n) => n > 0) ?? [];
 	if (listed.length) return listed;
@@ -96,7 +99,11 @@ function TitleView({ id }) {
 	const [seasonErr, setSeasonErr] = (0, import_react.useState)(null);
 	const [seasonsLoading, setSeasonsLoading] = (0, import_react.useState)(true);
 	const [lookupKey, setLookupKey] = (0, import_react.useState)(0);
-	const resolved = detail ?? title;
+	const raw = detail ?? title;
+	const resolved = looksLikeHashTitle(raw?.title) ? detail && !looksLikeHashTitle(detail.title) ? detail : seasonsLoading && !detail ? null : raw ? {
+		...raw,
+		title: "Unknown on this box"
+	} : null : raw;
 	const extraIds = titlePresenceKeys(id, resolved?.ids || []);
 	const [season, setSeason] = (0, import_react.useState)(1);
 	const [hash, setHash] = (0, import_react.useState)("");
@@ -198,7 +205,8 @@ function TitleView({ id }) {
 	const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
 	const series = resolved.kind === "tv" || resolved.kind === "anime";
 	const seasonReady = request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
-	const available = inJellyfin || inLibrary || seasonReady;
+	const onBox = inJellyfin || inLibrary || seasonReady;
+	const available = onBox;
 	const requestTitleId = extraIds.find((k) => k.startsWith("tmdb-tv-")) || extraIds.find((k) => k.startsWith("tmdb-")) || resolved.id;
 	const blocked = resolved.kind === "music" && !intent.music || resolved.kind === "anime" && !intent.anime || resolved.kind === "kids" && !intent.kids || resolved.kind === "movie" && !intent.movies || resolved.kind === "tv" && !intent.tv;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
@@ -229,7 +237,7 @@ function TitleView({ id }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 						className: "mt-2 text-sm text-muted",
 						children: [
-							resolved.year,
+							resolved.year || null,
 							resolved.runtime ? ` · ${formatRuntime(resolved.runtime)}` : null,
 							seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null,
 							resolved.tracks ? ` · ${resolved.tracks} tracks` : null,
@@ -249,7 +257,7 @@ function TitleView({ id }) {
 						className: "mt-4 text-sm text-gold",
 						children: cacheCopy(resolved, source)
 					}) : null,
-					series ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					series && !onBox ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "mt-5 flex flex-wrap gap-2",
 						children: seasonNumbers.length === 0 && seasonsLoading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 							className: "text-sm text-muted",
@@ -266,6 +274,14 @@ function TitleView({ id }) {
 								children: "Retry"
 							})]
 						}) : seasonNumbers.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							onClick: () => setSeason(n),
+							className: season === n ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg" : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",
+							children: ["Season ", n]
+						}, n))
+					}) : series && seasonNumbers.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "mt-5 flex flex-wrap gap-2",
+						children: seasonNumbers.map((n) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
 							onClick: () => setSeason(n),
 							className: season === n ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg" : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",

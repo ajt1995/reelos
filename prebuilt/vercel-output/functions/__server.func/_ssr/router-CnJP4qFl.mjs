@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-CdV-N9NO.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-CnJP4qFl.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -353,6 +353,7 @@ function isGhostRequestLabel(title, titleId) {
 	const id = String(titleId || "").trim();
 	if (!name) return true;
 	if (id && name === id) return true;
+	if (/^[0-9a-f]{32,64}$/i.test(name)) return true;
 	return /^tmdb(-tv)?-\d+$/i.test(name);
 }
 function isOptimisticLocal(row, now = Date.now()) {
@@ -648,7 +649,7 @@ var defaultAnswers = {
 	tunnelToken: ""
 };
 var CHANNEL = "stable";
-var SHIPPED_VERSION = "1.2.50.45";
+var SHIPPED_VERSION = "1.2.50.46";
 function idleBootSteps() {
 	return {
 		local: "pending",
@@ -658,6 +659,7 @@ function idleBootSteps() {
 	};
 }
 var UPDATE_NOTES = [
+	"1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff… /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it — Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.45: Title page honesty — /title/tvdb-* is the same Expanse as library tmdb-tv / Jellyfin. Watch when it is on the box, not TorBox-will-transfer + Available after request. Seerr season load fails with Retry instead of infinite Loading seasons from Seerr. Complete pack dumps collapse onto the series. Gold chrome, prebuilt hashed UI. Complements #128. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.44: Splash-lock Home only while library catch-up is actually running and dumps still need import. Status done / idle / stopped and skip-only (14 skipped) do not freeze the phone on catching up. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
 	"1.2.50.43: Home names the ghost tmdb-2059 card (National Treasure) with a poster. Stale phone persist is dropped so transferring matches live Seerr in-flight, not 24 Waitings. One Expanse card, not two. Header Watch stays; Watch in this browser is gone. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -1691,27 +1693,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-BKle5oq3.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-b0Hq2ayH.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BzOmBaq8.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-C5EHdgdw.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-CzNI2urE.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-BAb_uKqX.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-CUeHDVn5.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-DGK3spbk.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-Dby1sFYw.mjs");
+var $$splitComponentImporter$6 = () => import("./library-2NzL_41U.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-CkwZqz6L.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-BRezYqqO.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-DVMjF0k-.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-C1lXFMYd.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-DUJMADHE.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-Dkoyc4uB.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-BxOvcbPC.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-BTdWXa2I.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-BUo-jH-n.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-Bigf5AR8.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-BhPbsYDF.mjs");
+var $$splitComponentImporter = () => import("./title._id-nYrPMRA0.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
