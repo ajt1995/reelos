@@ -30,10 +30,7 @@ export function Poster({
           onError={() => setOk(false)}
         />
       ) : (
-        <div className="absolute inset-0 flex flex-col justify-end bg-linear-to-br from-card-2 to-background p-4">
-          <p className="font-display text-lg font-medium tracking-tight">{title.title}</p>
-          <p className="text-xs text-muted">{title.year}</p>
-        </div>
+        <div className="absolute inset-0 bg-linear-to-br from-card-2 to-background" />
       )}
     </div>
   );

@@ -18,7 +18,7 @@ export function libraryItemsUrl({ limit } = {}) {
   const q = new URLSearchParams({
     Recursive: "true",
     IncludeItemTypes: "Movie,Series",
-    Fields: "Path,ProviderIds",
+    Fields: "Path,ProviderIds,ImageTags",
     ImageTypeLimit: "1",
     EnableImages: "false",
     EnableUserData: "false",
@@ -28,6 +28,38 @@ export function libraryItemsUrl({ limit } = {}) {
   });
   if (limit) q.set("Limit", String(limit));
   return `http://127.0.0.1:8096/Items?${q}`;
+}
+
+export function jellyfinHasPrimaryImage(it) {
+  const tags = it?.ImageTags;
+  if (tags && typeof tags === "object") return Boolean(tags.Primary);
+  if (it?.ImageTag) return true;
+  return tags == null;
+}
+
+export function hashDumpIds(name, path) {
+  const ids = [];
+  const add = (raw) => {
+    const s = String(raw || "").trim();
+    if (looksLikeHashTitle(s)) ids.push(s.toLowerCase());
+  };
+  add(name);
+  const base = String(path || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .pop();
+  add(base);
+  return [...new Set(ids)];
+}
+
+export function seasonsFromDumpNames(files = []) {
+  const out = new Set();
+  for (const f of files || []) {
+    const m = /(?:^|[^a-z0-9])[Ss](\d{1,2})[Ee]\d{1,3}(?:[^a-z0-9]|$)/.exec(String(f));
+    if (m) out.add(Number(m[1]));
+  }
+  return [...out].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
 }
 
 export function jellyfinPosterUrl(_host, jellyfinId, { maxWidth = 240 } = {}) {
@@ -152,20 +184,43 @@ export function repairHashTitles(titles, { listFiles } = {}) {
     if (!t || !looksLikeHashTitle(t.title)) return t;
     const files = list(t) || [];
     const ided = identifyLibraryTitle({ name: t.title, path: t.path, files });
-    return { ...t, title: ided.title, year: t.year || ided.year || 0, fromHashDump: true };
+    const hashes = hashDumpIds(t.title, t.path);
+    const disk = seasonsFromDumpNames(files);
+    return {
+      ...t,
+      title: ided.title,
+      year: t.year || ided.year || 0,
+      fromHashDump: true,
+      ids: [...new Set([...(t.ids || []), ...hashes])],
+      onDiskSeasons: [...new Set([...(t.onDiskSeasons || []), ...disk])].sort((a, b) => a - b),
+    };
   });
 }
 
 export function mapJellyfinItems(items, host, { listFiles } = {}) {
   return (items || []).map((it) => {
     const t = mapJellyfinItem(it, host);
-    if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title)) return t;
     const files =
       typeof listFiles === "function"
         ? listFiles(it) || []
-        : dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p));
+        : looksLikeHashTitle(it?.Name) || looksLikeHashTitle(t.title)
+          ? dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p))
+          : [];
+    const hashes = hashDumpIds(it?.Name, it?.Path);
+    const disk = seasonsFromDumpNames(files);
+    if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title) && !hashes.length) {
+      return disk.length ? { ...t, onDiskSeasons: disk } : t;
+    }
     const ided = identifyLibraryTitle({ name: it?.Name, path: it?.Path, files });
-    return { ...t, title: ided.title, year: t.year || ided.year || 0, fromHashDump: true };
+    return {
+      ...t,
+      title: ided.title,
+      year: t.year || ided.year || 0,
+      fromHashDump: true,
+      ids: [...new Set([...(t.ids || []), ...hashes])],
+      path: it?.Path || t.path,
+      onDiskSeasons: disk,
+    };
   });
 }
 
@@ -173,15 +228,18 @@ export function mapJellyfinItem(it, host) {
   const tmdb = it.ProviderIds?.Tmdb;
   const tvdb = it.ProviderIds?.Tvdb;
   const kind = it.Type === "Series" ? "tv" : "movie";
+  const hashes = hashDumpIds(it.Name, it.Path);
   const ids = [
     tmdb ? `tmdb-${tmdb}` : "",
     tmdb && kind === "tv" ? `tmdb-tv-${tmdb}` : "",
     tvdb ? `tvdb-${tvdb}` : "",
     it.Id ? `jf-${it.Id}` : "",
+    ...hashes,
   ].filter(Boolean);
   const id =
     kind === "tv" ? (tvdb ? `tvdb-${tvdb}` : ids[0]) : tmdb ? `tmdb-${tmdb}` : ids[0];
   const year = Number(it.ProductionYear) || 0;
+  const poster = jellyfinHasPrimaryImage(it) ? jellyfinPosterUrl(host, it.Id) : "";
   return {
     id,
     ids,
@@ -189,7 +247,8 @@ export function mapJellyfinItem(it, host) {
     title: stripMatchingYear(it.Name || "Untitled", year),
     year,
     overview: "",
-    poster: jellyfinPosterUrl(host, it.Id),
+    poster,
+    path: it.Path || "",
     jellyfinId: it.Id,
     maxQuality: "4k",
     popularity: 50,
@@ -352,14 +411,26 @@ export function dedupeLibraryTitles(titles) {
             .map(String),
         ),
       ];
-      return { ...keep, ids };
+      return {
+        ...keep,
+        ids,
+        onDiskSeasons: [...new Set([...(keep.onDiskSeasons || []), ...(drop.onDiskSeasons || [])])].sort(
+          (a, b) => a - b,
+        ),
+        poster: keep.poster || drop.poster,
+      };
     };
     const mergeAliases = Boolean(t.fromHashDump || slot.best.fromHashDump);
+    const mergeDisk = (keep, drop) => ({
+      ...keep,
+      onDiskSeasons: [...new Set([...(keep.onDiskSeasons || []), ...(drop.onDiskSeasons || [])])].sort((a, b) => a - b),
+      poster: keep.poster || drop.poster,
+    });
     if (betterScore || preferSeriesName) {
-      slot.best = mergeAliases ? mergeRow(t, slot.best) : t;
+      slot.best = mergeDisk(mergeAliases ? mergeRow(t, slot.best) : t, slot.best);
       if (year) slot.year = year;
     } else {
-      slot.best = mergeAliases ? mergeRow(slot.best, t) : slot.best;
+      slot.best = mergeDisk(mergeAliases ? mergeRow(slot.best, t) : slot.best, t);
       slot.year = slot.year || year;
     }
   }
@@ -371,7 +442,7 @@ export function dedupeLibraryTitles(titles) {
 export function withPosterHost(titles, host) {
   return (titles || []).map((t) => ({
     ...t,
-    poster: t.jellyfinId ? jellyfinPosterUrl(host, t.jellyfinId) : t.poster,
+    poster: t.poster && t.jellyfinId ? jellyfinPosterUrl(host, t.jellyfinId) : t.poster || "",
   }));
 }
 

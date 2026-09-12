@@ -31,6 +31,9 @@ import {
   hostPathFromJellyfin,
   dumpSearchPaths,
   repairHashTitles,
+  seasonsFromDumpNames,
+  hashDumpIds,
+  jellyfinHasPrimaryImage,
   UNKNOWN_ON_BOX,
   libraryRowHidden,
 } from "./reelos-library.mjs";
@@ -577,7 +580,9 @@ test("plugin and Home wire the lean /api/library path", () => {
   assert.match(plugin, /\/api\/jf\/Items\//);
   assert.doesNotMatch(plugin, /Fields=Overview,ProviderIds/);
   assert.match(home, /hydrateShelf\(\{ limit: 24 \}\)/);
-  assert.match(home, /inFlightRequests\(requests, \{ titles: catalog \}\)/);
+  assert.match(home, /jfLive/);
+  assert.match(home, /jellyfinHop/);
+  assert.match(home, /inFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.doesNotMatch(home, /\/api\/box/);
   assert.match(store, /shelf: s\.shelf/);
   const rootFile = readFileSync(join(root, "src/routes/__root.tsx"), "utf8");
@@ -726,9 +731,31 @@ test("stale cache hash rows repair from dump filenames then collapse", () => {
   assert.equal(out.length, 1);
   assert.equal(out[0].title, "Rick and Morty");
   assert.ok(out[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
+  assert.ok(out[0].ids.includes("73ceff573dc30bebc3fcf26f61de07b25f927a74"));
+  assert.deepEqual(out[0].onDiskSeasons, [4]);
+});
+
+test("dump filenames yield on-disk seasons; empty ImageTags skip the JF poster", () => {
+  assert.deepEqual(
+    seasonsFromDumpNames(["Rick And Morty S04E01 Edge Of Tomorty.mkv", "Rick And Morty S04E10.mkv"]),
+    [4],
+  );
+  assert.deepEqual(hashDumpIds("73ceff573dc30bebc3fcf26f61de07b25f927a74", "/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74"), [
+    "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+  ]);
+  assert.equal(jellyfinHasPrimaryImage({ ImageTags: {} }), false);
+  assert.equal(jellyfinHasPrimaryImage({ ImageTags: { Primary: "abc" } }), true);
+  const bare = titleFrom({
+    Id: "jf-hash",
+    Name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    Type: "Series",
+    ImageTags: {},
+    ProviderIds: {},
+  });
+  assert.equal(bare.poster, "");
 });
 
 test("Jellyfin Items URL asks for Path so hash dumps can be named from files", () => {
-  assert.match(libraryItemsUrl(), /Fields=Path%2CProviderIds|Fields=Path,ProviderIds/);
+  assert.match(libraryItemsUrl(), /Fields=Path%2CProviderIds%2CImageTags|Fields=Path,ProviderIds,ImageTags/);
   assert.doesNotMatch(libraryItemsUrl(), /Overview/);
 });

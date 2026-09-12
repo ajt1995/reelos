@@ -12,6 +12,7 @@ export function useEngineRequest(id: string, season?: number) {
   const [inJellyfin, setInJellyfin] = useState(false);
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
   const [seasonList, setSeasonList] = useState<number[]>([]);
+  const [onDiskSeasons, setOnDiskSeasons] = useState<number[]>([]);
   const [extraIds, setExtraIds] = useState<string[]>(() => titlePresenceKeys(id));
 
   useEffect(() => {
@@ -49,6 +50,7 @@ export function useEngineRequest(id: string, season?: number) {
           reason?: string;
           titleId?: string;
           seasonList?: number[];
+          onDiskSeasons?: number[];
           seasons?: number;
         }>)
         .then((j) => {
@@ -56,6 +58,8 @@ export function useEngineRequest(id: string, season?: number) {
           setEngineStatus(j.status || null);
           const fromApi = seasonNumbersFrom(j.seasonList);
           if (fromApi.length) setSeasonList(fromApi);
+          const disk = seasonNumbersFrom(j.onDiskSeasons);
+          if (disk.length) setOnDiskSeasons(disk);
           const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
           const apiProg =
             typeof j.progress === "number"
@@ -85,5 +89,5 @@ export function useEngineRequest(id: string, season?: number) {
     };
   }, [id, season]);
 
-  return { inJellyfin, engineStatus, seasonList, extraIds };
+  return { inJellyfin, engineStatus, seasonList, onDiskSeasons, extraIds };
 }

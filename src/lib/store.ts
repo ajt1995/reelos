@@ -61,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.46";
-export const SHIPPED_VERSION = "1.2.50.46";
+export const LATEST_VERSION = "1.2.50.47";
+export const SHIPPED_VERSION = "1.2.50.47";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -83,7 +83,7 @@ export function idleBootSteps(): Record<BootStepId, BootStepStatus> {
 export type ReadyPayload = {
   provisioned?: boolean;
   answers?: Partial<WizardAnswers>;
-  jellyfin?: unknown;
+  jellyfin?: { state?: string; detail?: string };
   update?: { running?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState };
   libraryCatchup?: LibraryCatchupState;
   titles?: Title[];
@@ -93,6 +93,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff\u2026 /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it \u2014 Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
   "1.2.50.45: Title page honesty — /title/tvdb-* is the same Expanse as library tmdb-tv / Jellyfin. Watch when it is on the box, not TorBox-will-transfer + Available after request. Seerr season load fails with Retry instead of infinite Loading seasons from Seerr. Complete pack dumps collapse onto the series. Gold chrome, prebuilt hashed UI. Complements #128. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
   "1.2.50.44: Splash-lock Home only while library catch-up is actually running and dumps still need import. Status done / idle / stopped and skip-only (14 skipped) do not freeze the phone on catching up. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
@@ -203,6 +204,7 @@ export interface ReelState {
   shelf: Title[];
   shelfError: string | null;
   shelfReady: boolean;
+  jellyfinHop: { state: string; detail?: string };
   watchProgress: Record<string, number>;
   activity: ActivityEvent[];
   users: HouseholdUser[];
@@ -458,6 +460,7 @@ const initial = {
   shelf: [] as Title[],
   shelfError: null as string | null,
   shelfReady: false,
+  jellyfinHop: { state: "amber", detail: "Still starting" } as { state: string; detail?: string },
   watchProgress: {} as Record<string, number>,
   activity: [] as ActivityEvent[],
   users: [] as HouseholdUser[],
@@ -520,6 +523,9 @@ export const useReelStore = create<ReelState>()(
               library: libraryOk ? ("ok" as const) : ("fail" as const),
               requests: requestsOk ? ("ok" as const) : ("fail" as const),
             },
+            jellyfinHop: ready?.jellyfin?.state
+              ? { state: String(ready.jellyfin.state), detail: ready.jellyfin.detail }
+              : s.jellyfinHop,
           };
         });
         const s = get();

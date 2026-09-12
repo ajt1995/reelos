@@ -6,7 +6,7 @@
 
 - **Tron chrome is scrapped.** Cyan/gold Tron-night phone redesign is not shipping. They were going for **Arena** instead. Arena is a later **named** pass. Do not implement Arena UI on this line. Do not merge [#52](https://github.com/ajt1995/reelos/pull/52) / [#70](https://github.com/ajt1995/reelos/pull/70) / [#59](https://github.com/ajt1995/reelos/pull/59) onto the 1.2.50.x repair line. Do not house Apply those tarballs.
 - **1.2.51 stays parked / unused.** It was reserved for Tron. Tron chrome is **not shipping**. Do **not** silently reassign 1.2.51 to Arena, Books, or a drive-by stamp. Leave the number unused until the owner names a stamp. Future 1.2.50.x channel notes: `1.2.51 parked (was Tron chrome; scrapped — do not reuse).` Do not write `Not 1.2.51 (Tron)` as if Tron were still the next ship.
-- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.46**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
+- **Books / Kavita still wanted.** Must not die with Tron. Do not glue Books to #70 as 1.2.51. Product lands on **current 1.2.50.x gold chrome** (now **1.2.50.47**). See [#74](https://github.com/ajt1995/reelos/pull/74). Salvage Books from #70 / #52 / #42 / #40 / #17 **without** Tron tokens, CSS, or magenta. Arena chrome is a separate named stamp later. **Beta toggle on Settings is real: ON Check fetches 2.0.0 Arena+Books from `cursor/beta-arena-books-5ba6.tar.gz`. OFF stays 1.2.50.x. Arena CSS stays off this stamp.**
 
 ### Books path (write it; do not code Kavita on a STATUS pass)
 
@@ -21,18 +21,22 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.46 is the ship.*** Hash dump folders (`73ceff…` / `/title/jf-*`) are named from the files on the box (Rick and Morty S04) or **Unknown on this box** — never a 40-char infohash as H1. Watch / In library when Jellyfin has it; Seerr miss is not the headline. 45 title-page honesty, 44 splash skip-only, 43 Home honesty, and 42 ffprobe stub stay. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House was **1.2.50.45**. **One house Apply of 46 after merge.** Never twice.
+***1.2.50.47 is the ship.*** Loop-1 request honesty: Moon POSTs as a movie, hash paste is hidden on named titles, National Treasure stays on Requests while Radarr is still grabbing, Request Sxx hides when that season is on disk, `/title/73ceff…` is Rick S04, JF posters skip empty ImageTags, Home chip is live only when virtual folders are green. 46 hash-dump titles, 45 title-page honesty, 44 splash skip-only stay. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House was **1.2.50.46**. **One house Apply of 47 after merge.** Never twice.
 
 ## Stamp
 
-- **VERSION / channel:** `1.2.50.46`
+- **VERSION / channel:** `1.2.50.47`
 - **channel tarball:** `main.tar.gz` (gold hashed UI, no Arena)
 - **channel-beta:** `2.0.0` / `cursor/beta-arena-books-5ba6.tar.gz` (pointer only; Arena stays off this tarball)
-- **Base:** `main` at 1.2.50.45 ([#129](https://github.com/ajt1995/reelos/pull/129)); hash-title honesty. 1.2.50.45 tvdb/tmdb title page, 1.2.50.43 Home honesty, 1.2.50.42 ffprobe stub, 1.2.50.41 hardware profile, 1.2.50.40 Apply/library split, 1.2.50.38 wizard honesty + DirectPlay, and 1.2.50.37 4GB detect stay.
-- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.45** installed; catch-up oneshot inactive
+- **Base:** `main` at 1.2.50.46; request honesty + leftover dump hide-fix. 1.2.50.46 hash titles, 1.2.50.45 tvdb/tmdb title page, 1.2.50.43 Home honesty, 1.2.50.42 ffprobe stub stay. 1.2.50.41 hardware, 1.2.50.40 catch-up clock, 1.2.50.38 DirectPlay, 1.2.50.37 prebuilt.
+- **House snapshot:** HP Laptop 15-bs0xx, 3.2Gi MemTotal, 4× Pentium N3710, WD5000LPCX HDD; **1.2.50.46** installed
 - **1.2.51** remains unused/parked (was Tron; not reassigned to Arena)
 
 ## Changelog
+
+### Request honesty (Moon TV POST, magnet, Requests empty)
+
+Tester loop 1: Moon `/title/tmdb-17431` POSTed `tmdb-tv-17431` (The Great Escape) because `titlePresenceKeys` aliased movie ids to TV and Request preferred `tmdb-tv-*`. After Request the page stayed Available-after-request + **HAND A HASH TO THE ADAPTER**. National Treasure sat at 0% / Radarr has no movie, then the Requests tab emptied because lookup memory was treated as the JF shelf. Rick/Expanse/B99 offered Request Sxx for seasons already on disk. `/title/73ceff…` was a dead lookup. Home JF posters 404'd and painted the title twice; Jellyfin live chip stayed green while virtual folders were red. Interstellar fell through to magnet-ask. 47 POSTs movies as movies, hides hash paste on named titles, keeps stuck Radarr rows in-flight, hides Request Sxx when that season is on disk, resolves hash URLs onto Rick S04, skips empty ImageTags, and only paints Jellyfin live when `/api/ready` says green.
 
 ### Hash dump titles (73ceff / jf-*)
 
@@ -64,7 +68,7 @@ Check → Apply stamps after hops and the door. Indexers, dump import, heal, hyb
 
 ### Beta sidecar (Check+beta fetches 2.0.0)
 
-Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.46` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 46 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
+Settings → Updates **Beta channel** is a real toggle, not a stub. Off: Check reads `channel.json` / `1.2.50.47` / `main.tar.gz`. On: Check reads main `channel-beta.json` first (skips a `main.tar.gz` stub) and can fetch **2.0.0** from `cursor/beta-arena-books-5ba6.tar.gz`. Arena CSS stays off this 47 tarball. Leave Beta and Check to roll back to last stable 1.2.50.x. Folded from [#123](https://github.com/ajt1995/reelos/pull/123). Do not merge [#119](https://github.com/ajt1995/reelos/pull/119).
 
 ### Stamp first, library catch-up in the background
 
@@ -105,7 +109,7 @@ Seven-step wizard is unchanged. Default source is TorBox. Continue on the source
 ## Proof
 
 ```
-python3 scripts/check-ota.py .   # ok version=1.2.50.46
+python3 scripts/check-ota.py .   # ok version=1.2.50.47
 node --test scripts/stack-smoke.test.mjs scripts/apply-stamp-first-39.test.mjs scripts/apply-library-split-40.test.mjs scripts/scale-hardware-41.test.mjs scripts/fuse-no-ffprobe-42.test.mjs scripts/wizard-honesty.test.mjs scripts/reelos-selfheal.test.mjs scripts/reelos-update.test.mjs scripts/reelos-repair.test.mjs scripts/update-notes.test.mjs scripts/fuse-ffprobe-36.test.mjs scripts/scale-prod-37.test.mjs scripts/jf-directplay-38.test.mjs scripts/jellyfin-seed.test.mjs scripts/sonarr-manual-import.test.mjs scripts/relink-dumps.test.mjs
 node --experimental-strip-types --test src/lib/sync-requests.test.ts
 NODE_ENV=production npm run start:box
@@ -115,14 +119,14 @@ NODE_ENV=production npm run start:box
 
 ## Owner / house Apply
 
-House is **1.2.50.44**. **One Apply of 45 after merge.** Never twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Do not `docker restart reelos-sonarr-1` while ffprobe is D-state. Jellyfin images off. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
+House is **1.2.50.46**. **One Apply of 47 after merge.** Never twice. Do not re-enable `reelos-firstboot`. Do not delete `ota.lock`. Do not wipe `/media`. Do not `docker restart reelos-sonarr-1` while ffprobe is D-state. Jellyfin images off. Beta ON is a **second** Check/Apply of **2.0.0** only if Austin wants Arena/Books.
 
 ## Do not
 
 - Merge #52 / #70 / #59 onto the 1.2.50.x repair line
 - Merge [#119](https://github.com/ajt1995/reelos/pull/119) Arena+Books onto main (SHA-drift onto `main.tar.gz`)
 - Stamp **1.2.51** (parked; was Tron; chrome scrapped; not Arena)
-- Implement Arena UI on this 1.2.50.46 tarball
+- Implement Arena UI on this 1.2.50.47 tarball
 - Glue Books/Kavita to Tron chrome or burn it as 1.2.51
 - Ship Arena CSS onto `main.tar.gz`
 - Tap Apply 39 again

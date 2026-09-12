@@ -8,7 +8,15 @@ import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
-import { showRequestQueueControls, requestShowsRetry, titleMatchesId, titlePresenceKeys } from "@/lib/sync-requests";
+import {
+  showHashAdapter,
+  showRequestQueueControls,
+  requestShowsRetry,
+  requestMediaTypeForPage,
+  requestTitleIdForPage,
+  titleMatchesId,
+  titlePresenceKeys,
+} from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { RemoveFromBox } from "@/components/remove-from-box";
 
@@ -54,8 +62,10 @@ export function TitleView({ id }: { id: string }) {
   const [reqErr, setReqErr] = useState<string | null>(null);
   const request = useReelStore((s) => {
     const keys = new Set(extraIds);
+    const moviePage = resolved?.kind === "movie" || (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-") && !id.startsWith("tvdb-"));
     return s.requests.find((r) => {
       if (r.status === "failed") return false;
+      if (moviePage && String(r.titleId).startsWith("tmdb-tv-")) return false;
       if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) return false;
       return r.season == null || r.season === season;
     });
@@ -73,7 +83,7 @@ export function TitleView({ id }: { id: string }) {
   const requestTitle = useReelStore((s) => s.requestTitle);
   const retryRequest = useReelStore((s) => s.retryRequest);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
-  const { inJellyfin, engineStatus, seasonList } = useEngineRequest(id, season);
+  const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
@@ -115,12 +125,15 @@ export function TitleView({ id }: { id: string }) {
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
     setReqErr(null);
     const titleId = payload.titleId;
-    const mediaType = titleId.startsWith("tmdb-tv-") || titleId.startsWith("tvdb-") || resolved?.kind === "tv" || resolved?.kind === "anime" ? "tv" : "movie";
-    const tmdb = titleId.startsWith("tmdb-tv-")
-      ? titleId.slice(8)
-      : titleId.startsWith("tmdb-")
-        ? titleId.slice(5)
-        : extraIds.find((k) => k.startsWith("tmdb-tv-"))?.slice(8) || extraIds.find((k) => /^tmdb-\d/.test(k))?.slice(5);
+    const mediaType = requestMediaTypeForPage(id, resolved?.kind);
+    const tmdb =
+      mediaType === "tv"
+        ? titleId.startsWith("tmdb-tv-")
+          ? titleId.slice(8)
+          : extraIds.find((k) => k.startsWith("tmdb-tv-"))?.slice(8) || extraIds.find((k) => /^tmdb-\d/.test(k))?.slice(5)
+        : titleId.startsWith("tmdb-") && !titleId.startsWith("tmdb-tv-")
+          ? titleId.slice(5)
+          : extraIds.find((k) => /^tmdb-\d/.test(k) && !k.startsWith("tmdb-tv-"))?.slice(5);
     void fetch("/api/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -153,11 +166,18 @@ export function TitleView({ id }: { id: string }) {
 
   const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const series = resolved.kind === "tv" || resolved.kind === "anime";
-  const seasonReady = request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
+  const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
+  const thisSeasonOnBox =
+    !series ||
+    diskSeasons.includes(season) ||
+    request?.status === "available" ||
+    engineStatus === "downloaded" ||
+    engineStatus === "available";
+  const seasonReady = thisSeasonOnBox && series;
   const onBox = inJellyfin || inLibrary || seasonReady;
-  const available = onBox;
-  const requestTitleId =
-    extraIds.find((k) => k.startsWith("tmdb-tv-")) || extraIds.find((k) => k.startsWith("tmdb-")) || resolved.id;
+  const available = series ? thisSeasonOnBox || inJellyfin || inLibrary : onBox;
+  const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
+  const hashPaste = showHashAdapter({ pageId: id, title: resolved.title });
   const blocked =
     (resolved.kind === "music" && !intent.music) ||
     (resolved.kind === "anime" && !intent.anime) ||
@@ -268,8 +288,8 @@ export function TitleView({ id }: { id: string }) {
               </p>
             ) : showRequestQueueControls({
                 kind: resolved.kind,
-                available,
-                requestStatus: request?.status,
+                available: series ? thisSeasonOnBox : available,
+                requestStatus: thisSeasonOnBox && series ? "available" : request?.status,
               }) ? (
               request?.status === "downloading" ? (
                 <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-gold">
@@ -323,7 +343,7 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {!available && !blocked ? (
+          {!available && !blocked && hashPaste ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {

@@ -63,6 +63,7 @@ export interface Title {
   runtime?: number;
   seasons?: number;
   seasonList?: number[];
+  onDiskSeasons?: number[];
   tracks?: number;
   rating: number;
   genres: string[];

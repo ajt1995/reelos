@@ -23,7 +23,7 @@ export function useSyncRequests() {
         const live = Array.isArray(j.requests) ? j.requests : [];
         useReelStore.setState((s) => {
           const requests = overlayLibraryPresence(mergeServerRequests(s.requests, live), {
-            titles: [...s.shelf, ...s.remoteTitles],
+            titles: s.shelf,
           });
           return { requests };
         });
