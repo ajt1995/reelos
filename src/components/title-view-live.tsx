@@ -64,6 +64,7 @@ export function TitleView({ id }: { id: string }) {
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
   const [removedHere, setRemovedHere] = useState(false);
+  const [lookupKey, setLookupKey] = useState(0);
   const request = useReelStore((s) => {
     const keys = new Set(extraIds);
     const moviePage = resolved?.kind === "movie" || (id.startsWith("tmdb-") && !id.startsWith("tmdb-tv-") && !id.startsWith("tvdb-"));

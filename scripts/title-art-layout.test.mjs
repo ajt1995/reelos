@@ -15,6 +15,12 @@ const layoutCss = css.slice(
   css.indexOf("/* /title-page-layout */") + "/* /title-page-layout */".length,
 );
 
+test("title page lookupKey is a useState so Retry cannot ReferenceError", () => {
+  assert.match(view, /const \[lookupKey, setLookupKey\] = useState\(0\)/);
+  assert.match(view, /\[id, rememberTitles, lookupKey\]/);
+  assert.match(view, /onRetrySeasons=\{\(\) => setLookupKey\(\(n\) => n \+ 1\)\}/);
+});
+
 test("title page art is clipped and never uses intrinsic-width auto", () => {
   assert.match(view, /className="title-page pb-16"/);
   assert.match(view, /className="title-hero"/);
