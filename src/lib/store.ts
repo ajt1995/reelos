@@ -61,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.44";
-export const SHIPPED_VERSION = "1.2.50.44";
+export const LATEST_VERSION = "1.2.50.45";
+export const SHIPPED_VERSION = "1.2.50.45";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -93,6 +93,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.45: Title page honesty — /title/tvdb-* is the same Expanse as library tmdb-tv / Jellyfin. Watch when it is on the box, not TorBox-will-transfer + Available after request. Seerr season load fails with Retry instead of infinite Loading seasons from Seerr. Complete pack dumps collapse onto the series. Gold chrome, prebuilt hashed UI. Complements #128. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
   "1.2.50.44: Splash-lock Home only while library catch-up is actually running and dumps still need import. Status done / idle / stopped and skip-only (14 skipped) do not freeze the phone on catching up. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
   "1.2.50.43: Home names the ghost tmdb-2059 card (National Treasure) with a poster. Stale phone persist is dropped so transferring matches live Seerr in-flight, not 24 Waitings. One Expanse card, not two. Header Watch stays; Watch in this browser is gone. Gold chrome, prebuilt hashed UI. Complements #127. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.42: enableMediaInfo was already false; Sonarr still spawned ffprobe on FUSE dumps. no-ffprobe stubs *arr/Jellyfin ffprobe (rename busy ELF). Extra fuse.decypharr rows were rshared /mnt self-binds of one device — peel extras without lazy-umounting the live FUSE or /media. Catch-up imports skip-existing dumps; D-state concurrency 0; splash idle unless actually importing. Complements #124. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",

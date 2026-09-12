@@ -496,3 +496,16 @@ test("player matches tmdb-tv to a JF series whose id is tvdb / tmdb", () => {
   assert.equal(titleMatchesId(series, "tmdb-63639"), true);
   assert.equal(titleMatchesId(series, "tvdb-280619"), true);
 });
+
+test("title-page poll matches a tvdb URL onto the tmdb-tv request row", () => {
+  const requests = [row({ id: "exp", titleId: "tmdb-tv-63639", status: "waiting", season: 1 })];
+  const next = applyTitleRequestPoll(requests, {
+    titleId: "tvdb-280619",
+    extraIds: ["tmdb-tv-63639", "tmdb-63639", "tvdb-280619"],
+    season: 1,
+    status: "downloaded",
+    progress: 100,
+  });
+  assert.equal(next[0]?.status, "available");
+  assert.equal(next[0]?.progress, 100);
+});

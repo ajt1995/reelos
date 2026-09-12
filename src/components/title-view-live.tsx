@@ -8,79 +8,110 @@ import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { formatRuntime } from "@/lib/utils";
-import { showRequestQueueControls, requestShowsRetry } from "@/lib/sync-requests";
+import { showRequestQueueControls, requestShowsRetry, titleMatchesId, titlePresenceKeys } from "@/lib/sync-requests";
 import { useEngineRequest } from "@/lib/use-engine-request";
 import { RemoveFromBox } from "@/components/remove-from-box";
 
+function seasonNumbersOf(title?: Title | null, extra: number[] = []) {
+  const listed = title?.seasonList?.filter((n) => n > 0) ?? [];
+  if (listed.length) return listed;
+  if (extra.length) return extra;
+  if (title?.seasons && title.seasons > 0) {
+    return Array.from({ length: title.seasons }, (_, i) => i + 1);
+  }
+  return [];
+}
+
 export function TitleView({ id }: { id: string }) {
   const catalog = getTitle(id);
-  const remote = useReelStore((s) => s.remoteTitles.find((t) => t.id === id));
+  const remote = useReelStore((s) => s.remoteTitles.find((t) => titleMatchesId(t, id) || t.id === id));
+  const shelf = useReelStore((s) => s.shelf.find((t) => titleMatchesId(t, id) || t.id === id));
   const rememberTitles = useReelStore((s) => s.rememberTitles);
-  const title = catalog ?? remote;
+  const title = catalog ?? remote ?? shelf;
   const [detail, setDetail] = useState<Title | null>(null);
+  const [seasonErr, setSeasonErr] = useState<string | null>(null);
+  const [seasonsLoading, setSeasonsLoading] = useState(true);
+  const [lookupKey, setLookupKey] = useState(0);
   const resolved = detail ?? title;
-  const seasonNumbers =
-    resolved?.seasonList?.filter((n) => n > 0) ??
-    (resolved?.seasons && resolved.seasons > 0
-      ? Array.from({ length: resolved.seasons }, (_, i) => i + 1)
-      : []);
-  const [season, setSeason] = useState(seasonNumbers[0] ?? 1);
+  const extraIds = titlePresenceKeys(id, resolved?.ids || []);
+  const [season, setSeason] = useState(1);
   const [hash, setHash] = useState("");
   const [hashErr, setHashErr] = useState(false);
   const [reqErr, setReqErr] = useState<string | null>(null);
-  const request = useReelStore((s) =>
-    s.requests.find(
-      (r) =>
-        r.titleId === id &&
-        r.status !== "failed" &&
-        (r.season == null || r.season === season),
-    ),
-  );
-  const failed = useReelStore((s) =>
-    s.requests.find((r) => r.titleId === id && r.status === "failed"),
-  );
-  const inLibrary = useReelStore((s) => s.library.includes(id));
+  const request = useReelStore((s) => {
+    const keys = new Set(extraIds);
+    return s.requests.find((r) => {
+      if (r.status === "failed") return false;
+      if (!titlePresenceKeys(r.titleId).some((k) => keys.has(k))) return false;
+      return r.season == null || r.season === season;
+    });
+  });
+  const failed = useReelStore((s) => {
+    const keys = new Set(extraIds);
+    return s.requests.find((r) => r.status === "failed" && titlePresenceKeys(r.titleId).some((k) => keys.has(k)));
+  });
+  const inLibrary = useReelStore((s) => {
+    if (s.library.includes(id)) return true;
+    return [...s.shelf, ...s.remoteTitles].some((t) => titleMatchesId(t, id) && s.library.some((lib) => titleMatchesId(t, lib)));
+  });
   const intent = useReelStore((s) => s.answers.intent);
   const source = useReelStore((s) => s.answers.source);
   const requestTitle = useReelStore((s) => s.requestTitle);
   const retryRequest = useReelStore((s) => s.retryRequest);
   const pasteRelease = useReelStore((s) => s.pasteRelease);
-  const { inJellyfin, engineStatus } = useEngineRequest(id, season);
+  const { inJellyfin, engineStatus, seasonList } = useEngineRequest(id, season);
+  const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
     let stop = false;
-    void fetch(`/api/lookup?id=${encodeURIComponent(id)}`, { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ titles?: Title[] }>)
+    const ac = new AbortController();
+    const timer = window.setTimeout(() => ac.abort(), 20000);
+    setSeasonErr(null);
+    setSeasonsLoading(true);
+    void fetch(`/api/lookup?id=${encodeURIComponent(id)}`, { cache: "no-store", signal: ac.signal })
+      .then((r) => r.json() as Promise<{ titles?: Title[]; error?: string }>)
       .then((j) => {
         const t = j.titles?.[0];
-        if (stop || !t) return;
+        if (stop) return;
+        if (!t) {
+          setSeasonErr(j.error || "Seerr did not return seasons.");
+          setSeasonsLoading(false);
+          return;
+        }
         rememberCatalogTitles([t]);
         rememberTitles?.([t]);
         setDetail(t);
-        const nums =
-          t.seasonList?.filter((n) => n > 0) ??
-          (t.seasons && t.seasons > 0 ? Array.from({ length: t.seasons }, (_, i) => i + 1) : []);
+        const nums = seasonNumbersOf(t);
         if (nums.length) setSeason((cur) => (nums.includes(cur) ? cur : (nums[0] ?? 1)));
+        setSeasonsLoading(false);
       })
-      .catch(() => {});
+      .catch((e) => {
+        if (stop) return;
+        const aborted = String(e?.name || "") === "AbortError";
+        setSeasonErr(aborted ? "Seerr lookup timed out. Try again." : String(e?.message || e));
+        setSeasonsLoading(false);
+      });
     return () => {
       stop = true;
+      ac.abort();
+      window.clearTimeout(timer);
     };
-  }, [id, rememberTitles]);
+  }, [id, rememberTitles, lookupKey]);
 
   const sendRequest = (payload: { titleId: string; season?: number; hash?: string }) => {
     setReqErr(null);
-    const mediaType = payload.titleId.startsWith("tmdb-tv-") ? "tv" : "movie";
-    const tmdb = payload.titleId.startsWith("tmdb-tv-")
-      ? payload.titleId.slice(8)
-      : payload.titleId.startsWith("tmdb-")
-        ? payload.titleId.slice(5)
-        : undefined;
+    const titleId = payload.titleId;
+    const mediaType = titleId.startsWith("tmdb-tv-") || titleId.startsWith("tvdb-") || resolved?.kind === "tv" || resolved?.kind === "anime" ? "tv" : "movie";
+    const tmdb = titleId.startsWith("tmdb-tv-")
+      ? titleId.slice(8)
+      : titleId.startsWith("tmdb-")
+        ? titleId.slice(5)
+        : extraIds.find((k) => k.startsWith("tmdb-tv-"))?.slice(8) || extraIds.find((k) => /^tmdb-\d/.test(k))?.slice(5);
     void fetch("/api/request", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        titleId: payload.titleId,
+        titleId,
         title: resolved?.title,
         mediaType,
         tmdb,
@@ -108,10 +139,11 @@ export function TitleView({ id }: { id: string }) {
 
   const jellyfin = typeof window !== "undefined" ? `http://${window.location.hostname}:8096` : "";
   const series = resolved.kind === "tv" || resolved.kind === "anime";
-  const seasonReady = request?.status === "available" || engineStatus === "downloaded";
-  const available = series
-    ? seasonReady
-    : inJellyfin || inLibrary || seasonReady;
+  const seasonReady = request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
+  const onBox = inJellyfin || inLibrary || seasonReady;
+  const available = onBox;
+  const requestTitleId =
+    extraIds.find((k) => k.startsWith("tmdb-tv-")) || extraIds.find((k) => k.startsWith("tmdb-")) || resolved.id;
   const blocked =
     (resolved.kind === "music" && !intent.music) ||
     (resolved.kind === "anime" && !intent.anime) ||
@@ -148,10 +180,17 @@ export function TitleView({ id }: { id: string }) {
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}
 
-          {resolved.kind === "tv" || resolved.kind === "anime" ? (
+          {series ? (
             <div className="mt-5 flex flex-wrap gap-2">
-              {seasonNumbers.length === 0 ? (
+              {seasonNumbers.length === 0 && seasonsLoading ? (
                 <p className="text-sm text-muted">Loading seasons from Seerr…</p>
+              ) : seasonNumbers.length === 0 ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <p className="text-sm text-danger">{seasonErr || "Could not load seasons from Seerr."}</p>
+                  <Button variant="ghost" size="lg" onClick={() => setLookupKey((n) => n + 1)}>
+                    Retry
+                  </Button>
+                </div>
               ) : (
                 seasonNumbers.map((n) => (
                   <button
@@ -176,7 +215,7 @@ export function TitleView({ id }: { id: string }) {
               <a href={jellyfin} target="_blank" rel="noreferrer">
                 <Button size="lg">
                   <Play className="size-4" fill="currentColor" />
-                  Play in Jellyfin
+                  Watch
                 </Button>
               </a>
             ) : (
@@ -223,17 +262,15 @@ export function TitleView({ id }: { id: string }) {
                 <Button
                   variant="ghost"
                   size="lg"
-                  disabled={
-                    (resolved.kind === "tv" || resolved.kind === "anime") && seasonNumbers.length === 0
-                  }
+                  disabled={series && seasonNumbers.length === 0 && !available}
                   onClick={() => {
                     requestTitle(
-                      resolved.id,
-                      resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                      requestTitleId,
+                      series ? season : undefined,
                     );
                     sendRequest({
-                      titleId: resolved.id,
-                      season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                      titleId: requestTitleId,
+                      season: series ? season : undefined,
                     });
                   }}
                 >
@@ -255,7 +292,7 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {(!available || resolved.kind === "tv" || resolved.kind === "anime") && !blocked ? (
+          {!available && !blocked ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {
@@ -265,9 +302,9 @@ export function TitleView({ id }: { id: string }) {
                 if (ok) {
                   setHash("");
                   sendRequest({
-                    titleId: resolved.id,
+                    titleId: requestTitleId,
                     hash,
-                    season: resolved.kind === "tv" || resolved.kind === "anime" ? season : undefined,
+                    season: series ? season : undefined,
                   });
                 }
               }}

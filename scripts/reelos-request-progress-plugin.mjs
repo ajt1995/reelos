@@ -10,7 +10,11 @@ import {
   assembleRequestPayload,
   attachSeerrDetailTitles,
   seerrMediaGhostRows,
+  resolveParsedTitle,
+  attachTitleAliases,
+  libraryHasTitle,
 } from "./reelos-seerr.mjs";
+import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
 import {
   kickArrRecover,
   listRecoverTargets,
@@ -151,8 +155,26 @@ async function handleGet(req, res) {
     send(res, 200, { status: "unknown", engine: "seerr", error: "Seerr has no API key yet" });
     return;
   }
-  const parsed = parseTitleId(id);
+  const fileTitles = readLibraryCacheFile(LIBRARY_CACHE_FILE)?.titles || [];
+  let parsed = resolveParsedTitle(parseTitleId(id), { titles: fileTitles });
+  let facts = null;
   if (!parsed?.tmdb) {
+    facts = await loadPresenceFacts();
+    parsed = resolveParsedTitle(parsed, { titles: facts.libraryTitles, series: facts.series, movies: facts.movies });
+  }
+  if (!parsed?.tmdb) {
+    const titles = facts?.libraryTitles || fileTitles;
+    if (libraryHasTitle(titles, id)) {
+      send(res, 200, {
+        status: "downloaded",
+        engine: "seerr",
+        titleId: id,
+        progress: 100,
+        requestStatus: "available",
+        reason: "On this box",
+      });
+      return;
+    }
     send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
     return;
   }
@@ -173,10 +195,13 @@ async function handleGet(req, res) {
       type: parsed.mediaType,
       media: { ...media, tmdbId: Number(parsed.tmdb), ...(last.media || {}) },
     });
-    const facts = await loadPresenceFacts();
+    facts = facts || (await loadPresenceFacts());
     const seerrMediaByTitleId = new Map([[mapped.titleId, media]]);
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId })[0] || mapped;
-    const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+    const title = attachTitleAliases(
+      seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
+      parsed,
+    );
     maybeImportAvailable({
       status: honest.status,
       engine: honest.engine,

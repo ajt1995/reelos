@@ -41,6 +41,9 @@ import {
   tvRequestReason,
   qualityFloorRejectsHd,
   pipelineMovieGaps,
+  resolveParsedTitle,
+  attachTitleAliases,
+  libraryHasTitle,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -50,6 +53,31 @@ test("TV ids stay distinct from movie tmdb ids", () => {
   assert.deepEqual(parseTitleId("tmdb-550"), { mediaType: "movie", tmdb: "550", titleId: "tmdb-550" });
   assert.equal(titleIdFor("tv", 80566), "tmdb-tv-80566");
   assert.equal(titleIdFor("movie", 550), "tmdb-550");
+});
+
+test("tvdb shelf rows resolve to the same TMDB show as tmdb-tv", () => {
+  const expanse = {
+    id: "tvdb-280619",
+    kind: "tv",
+    ids: ["tmdb-63639", "tmdb-tv-63639", "tvdb-280619"],
+    jellyfinId: "jf-expanse",
+  };
+  const parsed = parseTitleId("tvdb-280619");
+  assert.equal(parsed.tmdb, undefined);
+  const resolved = resolveParsedTitle(parsed, { titles: [expanse] });
+  assert.equal(resolved.tmdb, "63639");
+  assert.equal(resolved.mediaType, "tv");
+  assert.equal(resolved.titleId, "tmdb-tv-63639");
+  assert.equal(resolved.tvdb, "280619");
+  const fromSonarr = resolveParsedTitle(parseTitleId("tvdb-280619"), {
+    series: [{ tvdbId: 280619, tmdbId: 63639, title: "The Expanse" }],
+  });
+  assert.equal(fromSonarr.tmdb, "63639");
+  assert.equal(libraryHasTitle([expanse], "tvdb-280619"), true);
+  assert.equal(libraryHasTitle([expanse], "tmdb-tv-63639"), true);
+  const aliased = attachTitleAliases({ id: "tmdb-tv-63639", kind: "tv", title: "The Expanse" }, resolved);
+  assert.ok(aliased.ids.includes("tvdb-280619"));
+  assert.ok(aliased.ids.includes("tmdb-tv-63639"));
 });
 
 test("season selectors skip specials and fake uncapped counts", () => {
@@ -892,6 +920,15 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(progress, /pickSeerrRequestForTitle/);
   assert.match(lookup, /pickSeerrRequestForTitle/);
   assert.match(progress, /searchParams.get\("season"\)/);
+  assert.match(progress, /resolveParsedTitle/);
+  assert.match(lookup, /resolveParsedTitle/);
+  assert.match(lookup, /Could not map that title to TMDB/);
+  const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
+  assert.match(titleView, />\s*Watch\s*</);
+  assert.match(titleView, /Could not load seasons from Seerr/);
+  assert.match(titleView, /titleMatchesId/);
+  assert.match(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
+  assert.doesNotMatch(titleView, /Play in Jellyfin/);
 });
 
 test("GET /api/request plugins honestify Seerr rows against library and *arr", () => {
@@ -1136,7 +1173,7 @@ test("Discover stays free of In progress; POST never sends seasons=all", () => {
   assert.match(lookup, /lookupFailureMessage/);
   assert.match(lookup, /ms: 45000/);
   assert.doesNotMatch(lookup, /seasons = .*["']all["']/);
-  assert.match(title, /season: resolved\.kind === "tv" \|\| resolved\.kind === "anime" \? season/);
+  assert.match(title, /season: series \? season/);
 });
 
 test("compose and Caddy name the service seerr on 5055", () => {

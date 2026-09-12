@@ -303,13 +303,15 @@ function mapEnginePollStatus(status?: string | null): RequestStatus | null {
 /** Title-page GET /api/request poll: only the matching title+season row. */
 export function applyTitleRequestPoll(
   requests: MediaRequest[],
-  opts: { titleId: string; season?: number; status?: string | null; progress?: number; reason?: string },
+  opts: { titleId: string; extraIds?: string[]; season?: number; status?: string | null; progress?: number; reason?: string },
 ): MediaRequest[] {
   const mapped = mapEnginePollStatus(opts.status);
   const apiProg = typeof opts.progress === "number" ? opts.progress : undefined;
   if (!mapped && apiProg == null && opts.reason == null) return requests;
+  const pageKeys = new Set(titlePresenceKeys(opts.titleId, opts.extraIds || []));
   return requests.map((x) => {
-    if (x.titleId !== opts.titleId || x.status === "failed") return x;
+    if (x.status === "failed") return x;
+    if (!titlePresenceKeys(x.titleId).some((k) => pageKeys.has(k))) return x;
     if (opts.season != null) {
       if (x.season !== opts.season) return x;
     } else if (x.season != null) {

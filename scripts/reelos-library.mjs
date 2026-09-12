@@ -89,9 +89,23 @@ export function stripSeasonFolderSuffix(title) {
   return stripped.replace(/\s+\((?:19|20)\d{2}\)\s*$/, "").trim() || stripped;
 }
 
+/** Hash dumps named "The EXPANSE Complete" / "Complete 2020" are the series, not a remake. */
+export function stripCompletePackSuffix(title) {
+  const raw = String(title || "").trim();
+  const stripped = raw
+    .replace(/[\s._:-]+complete(?:[\s._:-]+(?:series|collection|pack|set))?(?:[\s._:-]+\(?\d{4}\)?)?$/i, "")
+    .trim();
+  return stripped || raw;
+}
+
 export function looksLikeSeasonFolderTitle(title) {
   const raw = String(title || "").trim();
   return Boolean(raw) && stripSeasonFolderSuffix(raw) !== raw;
+}
+
+export function looksLikeCompletePackTitle(title) {
+  const raw = String(title || "").trim();
+  return Boolean(raw) && stripCompletePackSuffix(raw) !== raw;
 }
 
 function normalizeTitle(title) {
@@ -101,7 +115,11 @@ function normalizeTitle(title) {
 }
 
 export function shelfTitleKey(t) {
-  return `${t?.kind || "movie"}:${normalizeTitle(stripSeasonFolderSuffix(t?.title))}`;
+  const name =
+    t?.kind === "tv" || t?.kind === "anime"
+      ? stripCompletePackSuffix(stripSeasonFolderSuffix(t?.title))
+      : stripSeasonFolderSuffix(t?.title);
+  return `${t?.kind || "movie"}:${normalizeTitle(name)}`;
 }
 
 /** The name as Jellyfin has it, season suffix intact. */
@@ -122,7 +140,12 @@ export function titleYear(t) {
 export function isSeasonFolderAlias(a, b) {
   if (!a || !b) return false;
   if (shelfLiteralKey(a) === shelfLiteralKey(b)) return false;
-  return looksLikeSeasonFolderTitle(a.title) || looksLikeSeasonFolderTitle(b.title);
+  return (
+    looksLikeSeasonFolderTitle(a.title) ||
+    looksLikeSeasonFolderTitle(b.title) ||
+    looksLikeCompletePackTitle(a.title) ||
+    looksLikeCompletePackTitle(b.title)
+  );
 }
 
 export function yearsCompatible(slotYear, year, best, incoming) {
@@ -171,8 +194,9 @@ export function dedupeLibraryTitles(titles) {
     const betterScore = score(t) > score(slot.best);
     const preferSeriesName =
       score(t) === score(slot.best) &&
-      looksLikeSeasonFolderTitle(slot.best?.title) &&
-      !looksLikeSeasonFolderTitle(t?.title);
+      (looksLikeSeasonFolderTitle(slot.best?.title) || looksLikeCompletePackTitle(slot.best?.title)) &&
+      !looksLikeSeasonFolderTitle(t?.title) &&
+      !looksLikeCompletePackTitle(t?.title);
     if (betterScore || preferSeriesName) {
       slot.best = t;
       if (year) slot.year = year;

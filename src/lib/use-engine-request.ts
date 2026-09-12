@@ -1,23 +1,33 @@
 import { useEffect, useState } from "react";
-import { applyTitleRequestPoll } from "@/lib/sync-requests";
+import { applyTitleRequestPoll, titleMatchesId, titlePresenceKeys } from "@/lib/sync-requests";
 import { useReelStore } from "@/lib/store";
+
+function seasonNumbersFrom(raw?: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0);
+}
 
 /** Poll GET /api/request; sync status + progress into the matching title+season row. */
 export function useEngineRequest(id: string, season?: number) {
   const [inJellyfin, setInJellyfin] = useState(false);
   const [engineStatus, setEngineStatus] = useState<string | null>(null);
+  const [seasonList, setSeasonList] = useState<number[]>([]);
+  const [extraIds, setExtraIds] = useState<string[]>(() => titlePresenceKeys(id));
 
   useEffect(() => {
-    void fetch("/api/library", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[] }[] }>)
+    let aliases = titlePresenceKeys(id);
+    let stop = false;
+    const ac = new AbortController();
+    void fetch("/api/library", { cache: "no-store", signal: ac.signal })
+      .then((r) => r.json() as Promise<{ titles?: { id: string; ids?: string[]; jellyfinId?: string }[] }>)
       .then((j) => {
-        const hit = (j.titles || []).some((t) => {
-          const ids = [t.id, ...(t.ids || [])];
-          if (ids.includes(id)) return true;
-          if (id.startsWith("tmdb-tv-")) return ids.includes(`tmdb-${id.slice(8)}`);
-          return false;
-        });
-        setInJellyfin(hit);
+        if (stop) return;
+        const hit = (j.titles || []).find((t) => titleMatchesId(t, id));
+        setInJellyfin(Boolean(hit));
+        if (hit) {
+          aliases = [...new Set([...aliases, ...titlePresenceKeys(hit.id, hit.ids || [])])];
+          setExtraIds(aliases);
+        }
         if (!hit || id.startsWith("tmdb-tv-")) return;
         useReelStore.setState((s) => ({
           requests: s.requests.map((x) =>
@@ -30,13 +40,23 @@ export function useEngineRequest(id: string, season?: number) {
       .catch(() => {});
     const q = new URLSearchParams({ id });
     if (season != null) q.set("season", String(season));
-    let stop = false;
     const poll = () => {
-      void fetch(`/api/request?${q}`, { cache: "no-store" })
-        .then((r) => r.json() as Promise<{ status?: string; progress?: number; percent?: number; reason?: string }>)
+      void fetch(`/api/request?${q}`, { cache: "no-store", signal: ac.signal })
+        .then((r) => r.json() as Promise<{
+          status?: string;
+          progress?: number;
+          percent?: number;
+          reason?: string;
+          titleId?: string;
+          seasonList?: number[];
+          seasons?: number;
+        }>)
         .then((j) => {
           if (stop) return;
           setEngineStatus(j.status || null);
+          const fromApi = seasonNumbersFrom(j.seasonList);
+          if (fromApi.length) setSeasonList(fromApi);
+          const pollIds = [...aliases, j.titleId || ""].filter(Boolean);
           const apiProg =
             typeof j.progress === "number"
               ? j.progress
@@ -46,6 +66,7 @@ export function useEngineRequest(id: string, season?: number) {
           useReelStore.setState((s) => ({
             requests: applyTitleRequestPoll(s.requests, {
               titleId: id,
+              extraIds: pollIds,
               season,
               status: j.status,
               progress: apiProg,
@@ -59,9 +80,10 @@ export function useEngineRequest(id: string, season?: number) {
     const timer = window.setInterval(poll, 8000);
     return () => {
       stop = true;
+      ac.abort();
       window.clearInterval(timer);
     };
   }, [id, season]);
 
-  return { inJellyfin, engineStatus };
+  return { inJellyfin, engineStatus, seasonList, extraIds };
 }

@@ -17,6 +17,9 @@ import {
   mapSeerrDiscoverResults,
   lookupFailureMessage,
   buildSeerrAddPayload,
+  resolveParsedTitle,
+  attachTitleAliases,
+  libraryHasTitle,
 } from "./reelos-seerr.mjs";
 import { kickArrRecover, loadPresenceFacts, arrJson, arrApiKey } from "./reelos-request-status.mjs";
 import { handleRepair } from "./reelos-repair.mjs";
@@ -296,14 +299,34 @@ async function readBody(req) {
   }
 }
 
+function titlesForResolve() {
+  const mem = libraryCache.read()?.titles || [];
+  if (mem.length) return mem;
+  return readLibraryCacheFile(LIBRARY_CACHE_FILE)?.titles || [];
+}
+
+async function resolveLiveParsed(parsed) {
+  let next = resolveParsedTitle(parsed, { titles: titlesForResolve() });
+  if (next?.tmdb) return next;
+  try {
+    const facts = await loadPresenceFacts();
+    next = resolveParsedTitle(next, { titles: facts.libraryTitles, series: facts.series, movies: facts.movies });
+  } catch {
+    /* library + *arr may be warming */
+  }
+  return next;
+}
+
 async function seerrTitleDetail(parsed) {
-  if (!parsed?.tmdb) return null;
+  const resolved = parsed?.tmdb ? parsed : await resolveLiveParsed(parsed);
+  if (!resolved?.tmdb) return { title: null, parsed: resolved, missingTmdb: true };
   const key = seerrApiKey();
-  if (!key) return null;
-  const path = parsed.mediaType === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+  if (!key) return { title: null, parsed: resolved };
+  const path = resolved.mediaType === "tv" ? `/api/v1/tv/${resolved.tmdb}` : `/api/v1/movie/${resolved.tmdb}`;
   const r = await seerrFetch(path, { key, ms: 20000 });
-  if (!r.ok || !r.json) return null;
-  return seerrSearchHit({ ...r.json, id: Number(parsed.tmdb) || r.json.id, mediaType: parsed.mediaType }, parsed.mediaType);
+  if (!r.ok || !r.json) return { title: null, parsed: resolved };
+  const hit = seerrSearchHit({ ...r.json, id: Number(resolved.tmdb) || r.json.id, mediaType: resolved.mediaType }, resolved.mediaType);
+  return { title: attachTitleAliases(hit, resolved), parsed: resolved };
 }
 
 async function handleLookup(req, res) {
@@ -323,8 +346,9 @@ async function handleLookup(req, res) {
   try {
     if (id) {
       const parsed = parseTitleId(id);
-      const t = parsed ? await seerrTitleDetail(parsed) : null;
-      if (t) titles.push(t);
+      const detail = parsed ? await seerrTitleDetail(parsed) : { title: null, parsed: null };
+      if (detail.title) titles.push(detail.title);
+      else if (detail.missingTmdb) error = "Could not map that title to TMDB. Retry, or open it from Library.";
       else error = "Seerr did not find that title";
       send(res, 200, { titles, error });
       return;
@@ -1290,8 +1314,19 @@ async function handleRequestStatus(req, res) {
     return;
   }
   try {
-    const parsed = parseTitleId(id);
+    const parsed = await resolveLiveParsed(parseTitleId(id));
     if (!parsed?.tmdb) {
+      if (libraryHasTitle(titlesForResolve(), id)) {
+        send(res, 200, {
+          status: "downloaded",
+          engine: "seerr",
+          titleId: id,
+          progress: 100,
+          requestStatus: "available",
+          reason: "On this box",
+        });
+        return;
+      }
       send(res, 400, { status: "unknown", error: "Need a TMDB id from Discover" });
       return;
     }
@@ -1311,14 +1346,19 @@ async function handleRequestStatus(req, res) {
     const honest = honestifyRequests([mapped], { ...facts, seerrMediaByTitleId: { [mapped.titleId]: media } })[0] || mapped;
     const status = honest.engine || "unknown";
     if (status === "downloaded") await jellyfinRefresh(id);
-    const title = seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType);
+    const title = attachTitleAliases(
+      seerrSearchHit({ ...r.json, id: Number(parsed.tmdb), mediaType: parsed.mediaType }, parsed.mediaType),
+      parsed,
+    );
     send(res, 200, {
       status,
       engine: "seerr",
       title: title?.title,
+      titleId: mapped.titleId,
       seasons: title?.seasons,
       seasonList: title?.seasonList,
       progress: honest.status === "available" ? 100 : honest.progress,
+      requestStatus: honest.status,
     });
   } catch (e) {
     send(res, 200, { status: "unknown", engine: "seerr", error: String(e) });
@@ -1340,8 +1380,9 @@ async function handleRequest(req, res) {
   if (!titleId && tmdb) titleId = String(body.mediaType || "").toLowerCase() === "tv" ? `tmdb-tv-${tmdb}` : `tmdb-${tmdb}`;
   if (!titleId && tvdb) titleId = `tvdb-${tvdb}`;
   const season = body.season ?? body.data?.season;
-  const parsed = parseTitleId(titleId);
-  note(`request ${titleId} title=${body.title || ""} season=${season ?? ""}`);
+  let parsed = parseTitleId(titleId);
+  parsed = await resolveLiveParsed(parsed);
+  note(`request ${titleId} title=${body.title || ""} season=${season ?? ""} tmdb=${parsed?.tmdb || ""}`);
   if (!titleId) {
     send(res, 400, { ok: false, error: "No title" });
     return;
