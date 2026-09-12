@@ -469,6 +469,11 @@ def _hw():
 def hardware_profile() -> dict:
     mod = _hw()
     if mod is not None:
+        if hasattr(mod, "current_profile"):
+            return mod.current_profile()
+        saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+        if saved:
+            return saved
         return mod.measure()
     try:
         ram_kb = 0

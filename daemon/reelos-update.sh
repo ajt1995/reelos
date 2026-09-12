@@ -228,6 +228,10 @@ fi
 
 if [ "$MODE" = "apply" ]; then
   mkdir -p "$STATE"
+  if [ "${REELOS_INHIBIT:-}" != "1" ] && command -v systemd-inhibit >/dev/null 2>&1; then
+    export REELOS_INHIBIT=1
+    exec systemd-inhibit --what=sleep:idle --who=ReelOS --why="Updating ReelOS" -- /bin/bash "$0" apply
+  fi
   exec 9>"$STATE/ota.lock"
   # flock is released when the holder exits. Deleting ota.lock while another
   # Apply still holds the old inode lets a second Apply lock a new file
@@ -293,11 +297,12 @@ Type=oneshot
 TimeoutStartSec=infinity
 KillMode=mixed
 Environment=REELOS_OTA_UNIT=1
+Environment=REELOS_INHIBIT=1
 Environment=REELOS_ROOT=/opt/reelos
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=append:/var/lib/reelos/ota.log
 StandardError=append:/var/lib/reelos/ota.log
-ExecStart=/bin/bash /var/lib/reelos/update-apply.sh apply
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --who=ReelOS --why=Updating ReelOS /bin/bash /var/lib/reelos/update-apply.sh apply
 EOF
   systemctl daemon-reload || true
   systemctl reset-failed reelos-ota 2>/dev/null || true
@@ -529,7 +534,22 @@ need daemon/reelos_hardware.py 'disk_kind'
 need daemon/reelos_hardware.py 'catchup_memory_max'
 need daemon/reelos_hardware.py 'not a Pi'
 need daemon/reelos_hardware.py 'cgroup_hiding'
+need daemon/reelos_hardware.py 'identity_unchanged'
+need daemon/reelos_hardware.py 'root_on_usb'
+need daemon/reelos_hardware.py 'probe_version'
 need daemon/reelos-update.sh 'hardware profile'
+need daemon/reelos-update.sh 'hardware-profile.json'
+need src/components/settings-panels.tsx 'This is what I detected'
+need src/components/splash.tsx '/api/hardware'
+need install/udev/99-reelos-hw-probe.rules 'reelos-hw-probe.service'
+need install/systemd/reelos-hw-probe.service '--ensure'
+need install/systemd/reelos.service 'reelos_hardware.py --ensure'
+need daemon/reelos-update.sh 'systemd-inhibit'
+need daemon/reelos-update.sh 'update failed, still on previous'
+need src/components/settings-panels.tsx 'This is what I detected'
+need src/components/splash.tsx 'Update failed, still on previous'
+need scripts/reelos-lookup-plugin.mjs '/api/hardware'
+need scripts/reelos-box.mjs '--ensure'
 need daemon/reelos-library-catchup.sh 'do not remount if listed'
 need daemon/reelos-library-catchup.sh 'ffprobe D-state'
 need daemon/reelos-library-catchup.sh 'import --catch-up'
@@ -826,14 +846,26 @@ caddy_updating() {
   if [ -f /etc/caddy/Caddyfile ]; then
     cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.reelos.bak
   fi
-  cat >/etc/caddy/Caddyfile <<'EOF'
+  tune=""
+  if [ -f /var/lib/reelos/hardware-profile.json ]; then
+    tune=$(python3 -c 'import json
+try:
+  d=json.load(open("/var/lib/reelos/hardware-profile.json"))
+  t=(d.get("splash_tune") or (d.get("knobs") or {}).get("splash_tune") or "").replace("\"","").replace("\n"," ")
+  print(t[:80])
+except Exception:
+  pass' 2>/dev/null || true)
+  fi
+  extra=""
+  [ -n "$tune" ] && extra=" ${tune}"
+  cat >/etc/caddy/Caddyfile <<EOF
 {
 	auto_https off
 	admin off
 }
 :80 {
 	header Content-Type "text/html; charset=utf-8"
-	respond "Updating ReelOS… Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating." 200
+	respond "Updating ReelOS… Download, extract, clean leftover builds, restart the door. Not a percent. ReelOS is updating.${extra}" 200
 }
 EOF
   caddy_dropin
@@ -924,6 +956,7 @@ caddy_reelos() {
 
 restore() {
   log "restore after failure"
+  log "update failed, still on previous"
   bug_snap "restore"
   trap - ERR
   systemctl stop reelos 2>/dev/null || true
@@ -983,6 +1016,11 @@ mv "$NEXT/app" "$ROOT/app"
 mkdir -p "$ROOT/bin" "$ROOT/compose" "$ROOT/systemd"
 cp -a "$NEXT/bin/." "$ROOT/bin/"
 cp -a "$NEXT/systemd/." "$ROOT/systemd/" 2>/dev/null || true
+if [ -d "$NEXT/udev" ]; then
+  mkdir -p "$ROOT/udev" /etc/udev/rules.d
+  cp -a "$NEXT/udev/." "$ROOT/udev/"
+  cp "$NEXT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules 2>/dev/null || true
+fi
 cp "$NEXT/compose/docker-compose.yml" "$ROOT/compose/docker-compose.yml" 2>/dev/null || true
 cp "$NEXT/compose/Caddyfile" "$ROOT/compose/Caddyfile" 2>/dev/null || true
 seed_arr_debrid_json "$ROOT"
@@ -1023,6 +1061,18 @@ fi
 if [ -f "$ROOT/systemd/reelos-library-catchup.service" ]; then
   cp "$ROOT/systemd/reelos-library-catchup.service" /etc/systemd/system/reelos-library-catchup.service
   chmod 755 "$ROOT/bin/reelos-library-catchup.sh" 2>/dev/null || true
+fi
+if [ -f "$ROOT/systemd/reelos-hw-probe.service" ]; then
+  cp "$ROOT/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$ROOT/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$ROOT/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+elif [ -f "$WORK/src/install/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$WORK/src/install/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
 fi
 if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   python3 "$ROOT/bin/reelos_hardware.py" --apply >/dev/null 2>&1 || log "hardware profile apply non-fatal"

@@ -14,6 +14,7 @@ Environment=REELOS_ROOT=/opt/reelos
 Environment=NODE_ENV=production
 Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStartPre=-/usr/bin/fuser -k 8080/tcp
+ExecStartPre=-/usr/bin/python3 /opt/reelos/bin/reelos_hardware.py --ensure
 ExecStart=/usr/bin/env npm run start:box
 Restart=always
 RestartSec=2

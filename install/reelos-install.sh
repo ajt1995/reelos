@@ -185,6 +185,14 @@ fi
 if [ -f "$HERE/systemd/reelos-mnt-rshared.service" ]; then
   cp "$HERE/systemd/reelos-mnt-rshared.service" /etc/systemd/system/reelos-mnt-rshared.service
 fi
+if [ -f "$HERE/systemd/reelos-hw-probe.service" ]; then
+  cp "$HERE/systemd/reelos-hw-probe.service" /etc/systemd/system/reelos-hw-probe.service
+fi
+if [ -f "$HERE/udev/99-reelos-hw-probe.rules" ]; then
+  mkdir -p /etc/udev/rules.d
+  cp "$HERE/udev/99-reelos-hw-probe.rules" /etc/udev/rules.d/99-reelos-hw-probe.rules
+  udevadm control --reload-rules >/dev/null 2>&1 || true
+fi
 
 apply_caddy
 
@@ -220,6 +228,11 @@ fi
 chmod 700 "$STATE"
 rm -f "$STATE/install-failed"
 echo 1 >"$STATE/stack-installed"
+if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
+  python3 "$ROOT/bin/reelos_hardware.py" --ensure || true
+elif [ -f "$HERE/../daemon/reelos_hardware.py" ]; then
+  python3 "$HERE/../daemon/reelos_hardware.py" --ensure || true
+fi
 if [ -f "$HERE/VERSION" ] && [ "$HERE" != "$ROOT" ]; then
   cp "$HERE/VERSION" "$ROOT/VERSION"
 fi

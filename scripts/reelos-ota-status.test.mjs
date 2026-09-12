@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyIsRunning, applyProductRunning, applyTargetFromLog, lockIsHeld, parseLibraryProgress, productSwapDone, shouldSplashLock } from "./reelos-ota-status.mjs";
+import { applyFailed, applyIsRunning, applyProductRunning, applyTargetFromLog, lockIsHeld, parseLibraryProgress, productSwapDone, shouldSplashLock } from "./reelos-ota-status.mjs";
 
 test("leftover ota.lock file is not running", () => {
   const dir = mkdtempSync(join(tmpdir(), "reelos-ota-"));
@@ -59,6 +59,12 @@ test("product swap done ends the Applying clock while lock/unit can still refuse
     applyProductRunning({ env: {}, lockPath: "/no/such/ota.lock", logText: log }),
     false,
   );
+});
+
+test("applyFailed after restore without an applied stamp", () => {
+  const fail = "ReelOS 1.2.50.48 → 1.2.50.50\nrestore after failure\nupdate failed, still on previous\n";
+  assert.equal(applyFailed(fail), true);
+  assert.equal(applyFailed("ReelOS 1.2.50.48 → 1.2.50.50\nReelOS 1.2.50.50 applied.\n"), false);
 });
 
 test("library progress splash-locks only when running and dumps need import", () => {

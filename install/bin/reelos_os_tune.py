@@ -114,6 +114,9 @@ def honest_wait_copy(
 
 def _measure() -> dict:
     if hw is not None:
+        saved = hw.load_saved() if hasattr(hw, "load_saved") else None
+        if saved:
+            return saved
         return hw.measure()
     return {"ram_kb": 0, "ram_gb": 0, "cpus": 1, "disk_kind": "unknown", "tiny": False}
 
@@ -124,11 +127,29 @@ def apply_tune(
     write_files: bool = True,
     install_packages: bool = False,
 ) -> dict:
-    """Write zram + kdump drop-ins. Never /media. Never ota.lock."""
+    """Write zram + kdump drop-ins. Never /media. Never ota.lock.
+
+    Skip rewriting when the plan from the saved profile is unchanged.
+    """
     prof = dict(profile or _measure())
     plan = os_tune_plan(prof)
-    out = {"ok": True, "plan": plan, "wrote": []}
+    out = {"ok": True, "plan": plan, "wrote": [], "skipped": False}
     if not write_files:
+        return out
+
+    stamp = _path("REELOS_OS_TUNE_STAMP", str(Path(os.environ.get("REELOS_STATE", "/var/lib/reelos")) / "os-tune-plan.json"))
+    try:
+        prev = json.loads(stamp.read_text()) if stamp.is_file() else None
+    except (OSError, json.JSONDecodeError):
+        prev = None
+    plan_key = {
+        "zram": plan["zram"],
+        "zram_size_mb": plan["zram_size_mb"],
+        "disable_kdump": plan["disable_kdump"],
+        "crashkernel": plan["crashkernel"],
+    }
+    if prev == plan_key:
+        out["skipped"] = True
         return out
 
     if plan["zram"]:
@@ -184,6 +205,12 @@ def apply_tune(
                 subprocess.run(["update-grub"], check=False, capture_output=True, timeout=60)
             except (OSError, subprocess.TimeoutExpired):
                 out["update_grub"] = "skipped"
+    if out.get("ok"):
+        try:
+            stamp.parent.mkdir(parents=True, exist_ok=True)
+            stamp.write_text(json.dumps(plan_key) + "\n")
+        except OSError:
+            pass
     return out
 
 
@@ -231,17 +258,23 @@ def _self_test() -> int:
             "REELOS_ZRAM_CONF": str(Path(td) / "zram.conf"),
             "REELOS_GRUB_DROPIN": str(Path(td) / "grub.d" / "reelos-nokdump.cfg"),
             "REELOS_KDUMP_DEFAULT": str(Path(td) / "kdump-tools"),
+            "REELOS_OS_TUNE_STAMP": str(Path(td) / "os-tune-plan.json"),
+            "REELOS_STATE": td,
         }
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
         try:
             out = apply_tune(tiny, write_files=True, install_packages=False)
             assert out["ok"] is True
+            assert out.get("skipped") is False
             assert Path(env["REELOS_ZRAM_CONF"]).is_file()
             assert "crashkernel=no" in Path(env["REELOS_GRUB_DROPIN"]).read_text()
             assert Path(env["REELOS_KDUMP_DEFAULT"]).read_text() == "USE_KDUMP=0\n"
+            again = apply_tune(tiny, write_files=True, install_packages=False)
+            assert again.get("skipped") is True
             skip = apply_tune(ssd, write_files=True, install_packages=False)
             assert skip["plan"]["zram"] is False
+            assert skip.get("skipped") is False
         finally:
             for k, v in old.items():
                 if v is None:

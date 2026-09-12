@@ -18,11 +18,13 @@ export function Gate({
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
   const applying = useReelStore((s) => updateLocksUi(s.update.status));
+  const failed = useReelStore((s) => s.update.status === "error");
 
   if (!hydrated) return <Splash warming />;
   if (!provisioned || phase === "wizard") return <Navigate to="/" />;
   if (phase === "building") return <Provision />;
   if (applying) return <Splash updating />;
+  if (failed) return <Splash failed />;
   if (!chrome) return children;
   return <Shell>{children}</Shell>;
 }
@@ -33,6 +35,7 @@ export function Boot() {
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
   const applying = useReelStore((s) => updateLocksUi(s.update.status));
+  const failed = useReelStore((s) => s.update.status === "error");
 
   if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;
@@ -40,6 +43,7 @@ export function Boot() {
   if (phase === "ready" && !provisioned) return <Provision />;
   if (provisioned) {
     if (applying) return <Splash updating />;
+    if (failed) return <Splash failed />;
     return (
       <Shell>
         <HomeView />

@@ -44,6 +44,15 @@ export function productSwapDone(text) {
   return new RegExp(`ReelOS\\s+${escaped}\\s+applied\\.`).test(raw);
 }
 
+/** Last Apply attempt restored the previous tree instead of stamping. */
+export function applyFailed(text) {
+  const raw = String(text || "");
+  if (productSwapDone(raw)) return false;
+  const last = Math.max(raw.lastIndexOf("ReelOS "), raw.lastIndexOf("---- "));
+  const slice = last >= 0 ? raw.slice(last) : raw;
+  return /update failed, still on previous|restore after failure|probe failed — restoring|home never returned/.test(slice);
+}
+
 /**
  * Phone Applying clock. Lock/unit still refuse a second Apply via applyIsRunning.
  * After stamp, compose pull / library worker must not look like a stuck Apply.

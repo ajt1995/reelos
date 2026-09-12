@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.50 is the ship.*** OTA cleaner + Updating ReelOS splash until browse/request work. Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.48**. **Do not house-Apply 50 until told.** Never twice.
+***1.2.50.50 is the ship.*** OTA cleaner + Updating ReelOS splash until browse/request work + hardware probe UI (“This is what I detected”). Library banner stays non-blocking. Skip 49 (cloud-only #136). 48 hands-off home stays. Prebuilt hashed UI, no Arena, no TV indexer seeds, no USB/ISO. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.48**. **Do not house-Apply 50 until Austin does after cleaner+splash+probe are ready.** Never twice.
 
 ## Stamp
 
@@ -34,9 +34,9 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Changelog
 
-### OTA cleaner + update splash (1.2.50.50)
+### OTA cleaner + update splash + hardware probe (1.2.50.50)
 
-Every Apply runs a bounded cleaner (orphan :8080, retired stacks not in current compose, ghost JF ids via existing heal, OS tune zram/kdump on ≤4.5Gi, tmp OTA leftovers). Never /media, never ota.lock, never firstboot, never docker restart Sonarr. Full-screen Updating ReelOS splash until the door accepts browse/request; library catch-up is a banner and POST /api/request still works. Post-OTA heal is faster (39 stamp-first, 42 no dump ffprobe, one FUSE, skip-nanosecond). Tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Skip 49. Do not house-Apply yet.
+Every Apply runs a bounded cleaner (orphan :8080, retired stacks not in current compose, ghost JF ids via existing heal, OS tune zram/kdump on ≤4.5Gi, tmp OTA leftovers). Never /media, never ota.lock, never firstboot, never docker restart Sonarr. Full-screen Updating ReelOS splash until the door accepts browse/request; library catch-up is a banner and POST /api/request still works. Cheap hardware probe writes `/var/lib/reelos/hardware-profile.json` (RAM/CPU/HDD vs SSD/USB-root/kdump) and that saved profile drives low-perf, one FUSE, skip dump ffprobe on HDD/4Gi, zram vs HDD swap, disable kdump on ≤4.5Gi, search/indexer parallelism, splash copy. 4.5Gi MemTotal is the fallback if probe has not run. Settings shows **This is what I detected**. Re-probes on install, OTA (before cleaner), door start, and USB disk change; skips retune if unchanged. Sleep-inhibit during Apply; fail splash if restore (“Update failed, still on previous”). Post-OTA heal is faster (39 stamp-first, 42 no dump ffprobe, one FUSE, skip-nanosecond). Tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Skip 49. Not Arena/Books, not TV indexer seeds, not USB/ISO. Do not house-Apply yet.
 
 
 ### Hands-off home (Discover, posters, Watch, Radarr heal)
