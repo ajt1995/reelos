@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-zh-O7tu9.mjs";
-import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-D_1U4NDe.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/title._id-blQeDOCk.js
+import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-C3sJDeuN.mjs";
+import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-Bv2lNjlB.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/title._id-BW4pdetx.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {
@@ -338,7 +338,7 @@ function TitleView({ id }) {
 									className: "size-4",
 									fill: "currentColor"
 								}), "Watch"]
-							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
+							}) : request?.status === "downloading" || request?.status === "waiting" ? null : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Button, {
 								size: "lg",
 								disabled: true,
 								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Play, { className: "size-4" }), "Available after request"]

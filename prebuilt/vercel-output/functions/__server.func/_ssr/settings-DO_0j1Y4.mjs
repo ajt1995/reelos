@@ -3,10 +3,10 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as adapterProfile, n as HOSTNAME } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, C as Cpu, D as ChevronRight, M as Bell, a as SlidersHorizontal, b as HardDrive, l as ScrollText, m as LoaderCircle, n as Users, o as Shield, r as TriangleAlert, t as Wrench, u as RefreshCw, v as KeyRound, y as House } from "../_libs/lucide-react.mjs";
-import { O as catchupLocksHome, a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-zh-O7tu9.mjs";
-import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-D_1U4NDe.mjs";
-import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-C99fyIUO.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/settings-h-_QII53.js
+import { a as CHANNEL, c as accessLabel, d as sourceLabel, f as storageLabel, k as catchupLocksHome, l as frontendLabel, o as SHIPPED_VERSION, p as useReelStore, s as UPDATE_NOTES, u as qualityLabel } from "./router-C3sJDeuN.mjs";
+import { d as formatWhen, i as Gate, l as cn, n as Button } from "./gate-Bv2lNjlB.mjs";
+import { a as persistUi, i as Toggle, n as Section, r as TerminalRow, t as Row } from "./settings-terminal-sH6F0q0J.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/settings-DO_0j1Y4.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function HouseCard() {
@@ -605,7 +605,7 @@ function UpdatesRow({ open, onClick }) {
 	const installed = displayVersion(update.current, SHIPPED_VERSION);
 	const thisNotes = notesForVersion(UPDATE_NOTES, installed);
 	const pending = update.status === "available" ? update.notes : [];
-	const hint = update.status === "applying" ? `Applying ${update.target ?? ""}` : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? libraryCatchup.message || "Library catching up" : update.status === "available" ? `${update.target} is ready` : update.status === "checking" ? betaChannel ? "Checking the beta channel" : "Checking the stable channel" : update.status === "current" ? `${installed} · up to date` : `${installed} · ${betaChannel ? "beta" : CHANNEL}`;
+	const hint = update.status === "applying" ? `Applying ${update.target ?? ""} — swapping the app` : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? libraryCatchup.message || "TorBox filesystem busy — not copying to disk" : update.status === "available" ? `${update.target} is ready` : update.status === "checking" ? betaChannel ? "Checking the beta channel" : "Checking the stable channel" : update.status === "current" ? `${installed} · up to date` : `${installed} · ${betaChannel ? "beta" : CHANNEL}`;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(Row, {
 		icon: RefreshCw,
 		title: "Updates",
@@ -629,11 +629,11 @@ function UpdatesRow({ open, onClick }) {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-sm text-muted",
-				children: update.status === "applying" ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again." : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply." : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."
+				children: update.status === "applying" ? "An Apply is running — phone, CLI, or both. Home can open. Swapping the app. Do not tap Apply again." : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? "The update is on this box. TorBox filesystem busy — not copying to disk, or library catch-up is still importing. Folder skips and timeouts are here, not a stuck Apply." : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."
 			}),
 			catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
 				className: "mt-2 text-sm",
-				children: [libraryCatchup.message || "Library catching up", libraryCatchup.folder && libraryCatchup.total ? ` · folder ${libraryCatchup.folder} of ${libraryCatchup.total}` : null]
+				children: [libraryCatchup.message || "TorBox filesystem busy — not copying to disk", libraryCatchup.folder && libraryCatchup.total ? ` · folder ${libraryCatchup.folder} of ${libraryCatchup.total}` : null]
 			}) : null,
 			update.status === "error" && update.notes[0] ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-sm text-danger",

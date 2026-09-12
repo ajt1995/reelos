@@ -4,9 +4,9 @@ import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-ro
 import { n as TSS_SERVER_FUNCTION, r as getServerFnById, t as createServerFn } from "./ssr.mjs";
 import { d as viaLabel, i as adapterProfile, o as getTitle } from "./appliance-Dk74LcNF.mjs";
 import { N as ArrowLeft } from "../_libs/lucide-react.mjs";
-import { d as sourceLabel, i as Route$3, p as useReelStore } from "./router-zh-O7tu9.mjs";
-import { i as Gate, n as Button } from "./gate-D_1U4NDe.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/engine._id-Cb6XF3sp.js
+import { d as sourceLabel, i as Route$3, p as useReelStore } from "./router-C3sJDeuN.mjs";
+import { i as Gate, n as Button } from "./gate-Bv2lNjlB.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/engine._id-C_3htiHI.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var createSsrRpc = (functionId) => {

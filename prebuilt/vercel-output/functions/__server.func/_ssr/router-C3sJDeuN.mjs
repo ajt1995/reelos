@@ -5,7 +5,7 @@ import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease,
 import { r as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-zh-O7tu9.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-C3sJDeuN.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -299,7 +299,8 @@ function catchupLocksHome(c) {
 function honestCatchupMessage(c, splashLock) {
 	const status = String(c.status || "idle").toLowerCase();
 	const raw = String(c.message || "");
-	const catching = /^library catching up/i.test(raw) || /backing off/i.test(raw);
+	const catching = /^library catching up/i.test(raw) || /backing off/i.test(raw) || /torbox filesystem busy/i.test(raw);
+	if (status === "backoff") return raw || "TorBox filesystem busy — not copying to disk";
 	if (splashLock) return raw || "Library catching up";
 	const skipped = Number(c.skipped || 0) || 0;
 	const timeouts = Number(c.timeouts || 0) || 0;
@@ -308,15 +309,17 @@ function honestCatchupMessage(c, splashLock) {
 			if (skipped || timeouts) return `Library catch-up done — ${skipped} skipped, ${timeouts} timeouts`;
 			return status === "done" || status === "stopped" ? "Library catch-up done" : "";
 		}
-		if (status === "idle" || status === "backoff") return "";
+		if (status === "idle") {
+			if (/torbox filesystem busy/i.test(raw)) return raw || "TorBox filesystem busy — not copying to disk";
+			return "";
+		}
 		return catching ? "" : raw;
 	}
 	return raw;
 }
 function normalizeLibraryCatchup(lib) {
 	const src = lib && typeof lib === "object" ? lib : {};
-	let status = String(src.status || "idle");
-	if (status === "backoff") status = "idle";
+	const status = String(src.status || "idle");
 	const needsImport = Boolean(src.needsImport);
 	const skipped = Number(src.skipped || 0) || 0;
 	const timeouts = Number(src.timeouts || 0) || 0;
@@ -326,16 +329,15 @@ function normalizeLibraryCatchup(lib) {
 		status,
 		needsImport
 	});
-	const message = honestCatchupMessage({
-		status,
-		message: String(src.message || ""),
-		skipped,
-		timeouts,
-		needsImport
-	}, splashLock);
 	return {
 		status,
-		message,
+		message: honestCatchupMessage({
+			status,
+			message: String(src.message || ""),
+			skipped,
+			timeouts,
+			needsImport
+		}, splashLock),
 		folder,
 		total,
 		skipped,
@@ -476,6 +478,10 @@ function collapseHomeRequestCards(rows) {
 		return (row.updatedAt || 0) >= (best.updatedAt || 0) ? row : best;
 	}));
 	return out;
+}
+/** Transferring chip matches the collapsed Home cards, not every season row. */
+function transferringChipCount(rows) {
+	return collapseHomeRequestCards(rows).length;
 }
 function markAvailable(row) {
 	return {
@@ -1733,27 +1739,27 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$10 = () => import("./routes-BC0y6gQw.mjs");
+var $$splitComponentImporter$10 = () => import("./routes-Cxb-aiP3.mjs");
 var Route$10 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./activity-BUEGnFTm.mjs");
+var $$splitComponentImporter$9 = () => import("./activity-BBHsHKET.mjs");
 var Route$9 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-CMoQi1Yc.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-CNDPmhf2.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-C4fMSzid.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-YXsGoqCL.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-Cfb68Bfc.mjs");
+var $$splitComponentImporter$6 = () => import("./library-JJA6DAt8.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-BzAX5UBP.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-D3F7vjgr.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-h-_QII53.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-DO_0j1Y4.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-Cb6XF3sp.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-C_3htiHI.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-BgdAStPA.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-BRcRvEeg.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-DCK3pNDg.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-B772xSXp.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-blQeDOCk.mjs");
+var $$splitComponentImporter = () => import("./title._id-BW4pdetx.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$10.update({
 	id: "/",
@@ -1832,4 +1838,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { showHashAdapter as C, titlePresenceKeys as D, titleMatchesId as E, catchupLocksHome as O, requestTitleIdForPage as S, titleForRequest as T, isGhostRequestLabel as _, CHANNEL as a, requestMediaTypeForPage as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as w, requestShowsRetry as x, overlayLibraryPresence as y };
+export { showHashAdapter as C, titlePresenceKeys as D, titleMatchesId as E, transferringChipCount as O, requestTitleIdForPage as S, titleForRequest as T, isGhostRequestLabel as _, CHANNEL as a, requestMediaTypeForPage as b, accessLabel as c, sourceLabel as d, storageLabel as f, inFlightRequests as g, collapseHomeRequestCards as h, Route$3 as i, catchupLocksHome as k, frontendLabel as l, applyTitleRequestPoll as m, Route as n, SHIPPED_VERSION as o, useReelStore as p, Route$2 as r, UPDATE_NOTES as s, router_exports as t, qualityLabel as u, mergeServerRequests as v, showRequestQueueControls as w, requestShowsRetry as x, overlayLibraryPresence as y };

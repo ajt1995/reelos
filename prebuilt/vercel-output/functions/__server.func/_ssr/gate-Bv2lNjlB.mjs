@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { E as titleMatchesId, O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-zh-O7tu9.mjs";
+import { E as titleMatchesId, O as transferringChipCount, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, k as catchupLocksHome, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-C3sJDeuN.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/gate-D_1U4NDe.js
+//#region node_modules/.nitro/vite/services/ssr/assets/gate-Bv2lNjlB.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -356,7 +356,7 @@ function HomeView() {
 	const catalog = (0, import_react.useMemo)(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
 	const jfLive = useReelStore((s) => s.jellyfinHop?.state === "green");
 	const inflight = inFlightRequests(requests, { titles: shelf });
-	const transferring = inflight.length;
+	const transferring = transferringChipCount(inflight);
 	useSyncRequests();
 	useResolveGhostRequestTitles(inflight, catalog);
 	(0, import_react.useEffect)(() => {
@@ -1075,7 +1075,7 @@ function ApplyingBar() {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoaderCircle, { className: "size-3.5 shrink-0 animate-spin" }),
 					"Applying ",
 					name,
-					". Home can open — engines are still configuring."
+					" — swapping the app. Home can open."
 				]
 			}),
 			log ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
@@ -1094,7 +1094,7 @@ function LibraryCatchupBar() {
 	const catchup = useReelStore((s) => s.libraryCatchup);
 	if (useReelStore((s) => s.update.status === "applying")) return null;
 	if (!catchup || !catchupLocksHome(catchup) && catchup.status !== "backoff") return null;
-	const text = catchup.message || (catchup.status === "backoff" ? "Library catching up — backing off (ffprobe busy)" : "Library catching up");
+	const text = catchup.message || (catchup.status === "backoff" ? "TorBox filesystem busy — not copying to disk" : "Library catching up");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "relative z-20 border-b border-border bg-raised px-3 py-2",
 		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
@@ -1180,7 +1180,7 @@ function Shell({ children }) {
 	const ipv4 = useReelStore((s) => s.ipv4);
 	const tailscaleIp = useReelStore((s) => s.tailscaleIp);
 	const watch = useReelStore((s) => s.watch);
-	const transferring = useReelStore((s) => inFlightRequests(s.requests, { titles: s.shelf }).length);
+	const transferring = useReelStore((s) => transferringChipCount(inFlightRequests(s.requests, { titles: s.shelf })));
 	const watchHref = jellyfinWatchHref({
 		ipv4,
 		tailscaleIp,

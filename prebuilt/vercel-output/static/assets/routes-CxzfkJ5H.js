@@ -1,1 +1,0 @@
-import{J as e}from"./store-BsVdaCMa.js";import{t}from"./gate-BbIrHemK.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};
