@@ -71,7 +71,8 @@ test("catch-up is idle unless actually importing; stubbed ffprobe continues skip
   const sh = read("daemon/reelos-library-catchup.sh");
   const heal = read("daemon/reelos-selfheal.sh");
   assert.match(sh, /ffprobe_stubbed/);
-  assert.match(sh, /write_progress idle/);
+  assert.match(sh, /write_progress backoff "TorBox filesystem busy/);
+  assert.match(sh, /write_progress running/);
   assert.doesNotMatch(sh, /backing off \(ffprobe busy\)/);
   assert.doesNotMatch(read("daemon/sonarr_manual_import.py"), /backing off \(ffprobe busy\)/);
   assert.match(heal, /library catch-up deferred/);

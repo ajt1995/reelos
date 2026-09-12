@@ -66,7 +66,8 @@ test("installer and USB seed bake OS tune; wizard stays 7 steps", () => {
   assert.match(install, /reelos_os_tune\.py/);
   assert.match(install, /reelos_hardware\.py/);
   assert.doesNotMatch(install, /rm -rf \/media/);
-  assert.doesNotMatch(install, /ota\.lock/);
+  assert.doesNotMatch(install, /rm .*ota\.lock/);
+  assert.match(install, /Never delete ota.lock/);
   const seed = read("scripts/install-reelos.sh");
   assert.match(seed, /zram on rotational/);
   assert.match(seed, /512M kdump/);

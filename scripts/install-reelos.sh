@@ -208,9 +208,10 @@ ZRAM
   fi
   if [ "${mem_kb:-0}" -gt 0 ] && [ "$mem_kb" -le 4718592 ]; then
     mkdir -p /etc/default/grub.d
-    printf '%s\n' '# ReelOS — do not reserve 512M kdump on ≤4.5Gi RAM.' \
-      'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} crashkernel=no"' \
-      >/etc/default/grub.d/reelos-nokdump.cfg
+    cat >/etc/default/grub.d/reelos-nokdump.cfg <<'GRUB'
+# ReelOS — do not reserve 512M kdump on ≤4.5Gi RAM.
+GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} crashkernel=no"
+GRUB
     printf 'USE_KDUMP=0\n' >/etc/default/kdump-tools 2>/dev/null || true
     update-grub >/dev/null 2>&1 || true
     systemctl disable --now kdump-tools >/dev/null 2>&1 || true
