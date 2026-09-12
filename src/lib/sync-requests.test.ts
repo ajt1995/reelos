@@ -561,5 +561,7 @@ test("title page hides magnet paste and prefers movie POST", () => {
   assert.match(view, /requestMediaTypeForPage/);
   assert.match(view, /showHashAdapter/);
   assert.match(view, /thisSeasonOnBox/);
+  assert.match(view, /Series-in-Jellyfin is not this season/);
+  assert.doesNotMatch(view, /thisSeasonOnBox \|\| inJellyfin/);
   assert.doesNotMatch(view, /extraIds\.find\(\(k\) => k\.startsWith\("tmdb-tv-"\)\) \|\| extraIds\.find/);
 });

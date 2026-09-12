@@ -3,11 +3,11 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, b as useNavigate, d as useRouterState, v as Link, y as Navigate } from "../_libs/@tanstack/react-router+[...].mjs";
 import { c as rememberCatalogTitles, n as HOSTNAME, o as getTitle, r as SOURCES, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, D as ChevronRight, E as Clapperboard, O as ChevronLeft, P as Activity, T as Cloud, _ as Layers, b as HardDrive, c as Search, g as Library, k as ChevronDown, m as LoaderCircle, r as TriangleAlert, s as Settings, w as Compass, y as House } from "../_libs/lucide-react.mjs";
-import { E as titleMatchesId, O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-DBLDJZqG.mjs";
+import { E as titleMatchesId, O as catchupLocksHome, T as titleForRequest, _ as isGhostRequestLabel, d as sourceLabel, g as inFlightRequests, h as collapseHomeRequestCards, l as frontendLabel, p as useReelStore, v as mergeServerRequests, y as overlayLibraryPresence } from "./router-2YMnuui2.mjs";
 import { n as clsx, t as cva } from "../_libs/class-variance-authority+clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
 import { t as Slot } from "../_libs/radix-ui__react-slot.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/gate-3oBxy5qy.js
+//#region node_modules/.nitro/vite/services/ssr/assets/gate-4q4-7_5m.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function cn(...inputs) {
@@ -1115,16 +1115,23 @@ function LibraryCatchupBar() {
 }
 /** Working Jellyfin door: LAN or Tailscale IP:8096, never hostname:8096 (that 302s). */
 var V4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+var LOOPBACK = /^(127\.0\.0\.1|localhost|::1)$/i;
+function lanV4(raw) {
+	const s = String(raw || "").trim();
+	if (!V4.test(s) || LOOPBACK.test(s)) return "";
+	return s;
+}
 function jellyfinWatchOrigin(opts = {}) {
 	const host = String(opts.hostname || "").trim().replace(/^\[|\]$/g, "");
-	if (V4.test(host)) return `http://${host}:8096`;
-	const ts = String(opts.tailscaleIp || "").trim();
-	const lan = String(opts.ipv4 || "").trim();
+	if (lanV4(host)) return `http://${host}:8096`;
+	const ts = lanV4(opts.tailscaleIp);
+	const lan = lanV4(opts.ipv4);
 	const fromWatch = String(opts.watch || "").trim().replace(/\/$/, "");
-	if ((/\.ts\.net$/i.test(host) || host.startsWith("100.")) && V4.test(ts)) return `http://${ts}:8096`;
-	if (V4.test(lan)) return `http://${lan}:8096`;
-	if (/^https?:\/\/\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?$/i.test(fromWatch)) return fromWatch;
-	if (V4.test(ts)) return `http://${ts}:8096`;
+	if ((/\.ts\.net$/i.test(host) || host.startsWith("100.")) && ts) return `http://${ts}:8096`;
+	if (lan) return `http://${lan}:8096`;
+	const watchHost = fromWatch.replace(/^https?:\/\//i, "").split("/")[0]?.split(":")[0] || "";
+	if (/^https?:\/\/\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?$/i.test(fromWatch) && lanV4(watchHost)) return fromWatch;
+	if (ts) return `http://${ts}:8096`;
 	return "";
 }
 function jellyfinWatchHref(opts = {}) {

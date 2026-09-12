@@ -919,6 +919,45 @@ test("Seerr media ghost (request list empty, media still processing) becomes a r
   assert.equal(ghosts[0].status, "downloading");
 });
 
+test("season-null TV ghost is dropped when a season request already exists", () => {
+  const seerr = [
+    {
+      titleId: "tmdb-tv-63639",
+      mediaType: "tv",
+      season: 1,
+      status: "downloading",
+      engine: "grabbing",
+      tmdb: 63639,
+    },
+    {
+      titleId: "tmdb-tv-63639",
+      mediaType: "tv",
+      season: 3,
+      status: "downloading",
+      engine: "grabbing",
+      tmdb: 63639,
+    },
+  ];
+  const extras = seerrMediaGhostRows([
+    {
+      id: 2,
+      mediaType: "tv",
+      tmdbId: 63639,
+      status: 3,
+      seasons: [],
+      createdAt: "2026-09-12T00:00:00.000Z",
+      updatedAt: "2026-09-12T00:00:00.000Z",
+    },
+  ]);
+  assert.ok(extras.some((r) => r.titleId === "tmdb-tv-63639" && r.season == null));
+  const merged = mergeUnfinishedRows(seerr, extras, {});
+  const expanse = merged.filter((r) => r.titleId === "tmdb-tv-63639");
+  assert.deepEqual(
+    expanse.map((r) => r.season).sort((a, b) => a - b),
+    [1, 3],
+  );
+});
+
 test("assembleRequestPayload exposes pipeline counts for HTTP house hops", () => {
   const assembled = assembleRequestPayload(
     [],
@@ -1013,7 +1052,9 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(titleView, />\s*Watch\s*</);
   assert.match(titleView, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
-  assert.match(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
+  assert.match(titleView, /Series-in-Jellyfin is not this season/);
+  assert.match(titleView, /series \? thisSeasonOnBox : inJellyfin \|\| inLibrary/);
+  assert.doesNotMatch(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
   assert.doesNotMatch(titleView, /Play in Jellyfin/);
   assert.match(titleView, /Unknown on this box/);
   assert.match(titleView, /series && !onBox/);

@@ -762,6 +762,15 @@ test("/api/box requires Movies/Shows unless intent turns them off", () => {
   assert.match(chunk, /no matching user\/PIN/);
   assert.match(chunk, /Cannot read virtual folders/);
   assert.match(chunk, /readJellyfinVirtualFolders/);
+  assert.match(chunk, /jellyfinTokens.clear/);
+  assert.match(src, /jellyfinFetchItems/);
+  assert.match(src, /DeviceId="reelos-box"/);
+  const heal = read("scripts/reelos-selfheal.mjs");
+  assert.match(heal, /DeviceId="reelos-selfheal"/);
+  const doctor = read("daemon/reelos-doctor.py");
+  assert.match(doctor, /DeviceId="reelos-doctor"/);
+  assert.doesNotMatch(src, /DeviceId="reelos"(?!-)/);
+  assert.doesNotMatch(heal, /DeviceId="reelos"(?!-)/);
   const box = src.slice(src.indexOf("function boxSyncSlice"), src.indexOf("async function handleTailscaleLogin"));
   assert.match(box, /scheduleBoxProbe/);
   assert.doesNotMatch(box, /await jellyfinState/);

@@ -3,9 +3,9 @@ import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as cacheCopy, c as rememberCatalogTitles, o as getTitle, s as kindLabel } from "./appliance-Dk74LcNF.mjs";
 import { A as Check, d as Plus, f as Play } from "../_libs/lucide-react.mjs";
-import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-DBLDJZqG.mjs";
-import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-3oBxy5qy.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/title._id-D71jVB3B.js
+import { C as showHashAdapter, D as titlePresenceKeys, E as titleMatchesId, S as requestTitleIdForPage, b as requestMediaTypeForPage, m as applyTitleRequestPoll, n as Route, p as useReelStore, w as showRequestQueueControls, x as requestShowsRetry } from "./router-2YMnuui2.mjs";
+import { a as Poster, f as jellyfinWatchHref, i as Gate, n as Button, o as RemoveFromBox, u as formatRuntime } from "./gate-4q4-7_5m.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/title._id-Iin__PXx.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function seasonNumbersFrom(raw) {
@@ -222,8 +222,8 @@ function TitleView({ id }) {
 	const series = resolved.kind === "tv" || resolved.kind === "anime";
 	const diskSeasons = [.../* @__PURE__ */ new Set([...onDiskSeasons || [], ...resolved.onDiskSeasons || []])];
 	const thisSeasonOnBox = !series || diskSeasons.includes(season) || request?.status === "available" || engineStatus === "downloaded" || engineStatus === "available";
-	const onBox = inJellyfin || inLibrary || thisSeasonOnBox && series;
-	const available = series ? thisSeasonOnBox || inJellyfin || inLibrary : onBox;
+	const onBox = series ? thisSeasonOnBox : inJellyfin || inLibrary;
+	const available = onBox;
 	const requestTitleId = requestTitleIdForPage(id, resolved.kind, extraIds);
 	const hashPaste = showHashAdapter({
 		pageId: id,
@@ -298,7 +298,11 @@ function TitleView({ id }) {
 							type: "button",
 							onClick: () => setSeason(n),
 							className: season === n ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg" : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",
-							children: ["Season ", n]
+							children: [
+								"Season ",
+								n,
+								diskSeasons.includes(n) ? " · in" : ""
+							]
 						}, n))
 					}) : series && seasonNumbers.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 						className: "mt-5 flex flex-wrap gap-2",
@@ -306,7 +310,11 @@ function TitleView({ id }) {
 							type: "button",
 							onClick: () => setSeason(n),
 							className: season === n ? "h-9 rounded-full bg-gold px-3 text-xs text-gold-fg" : "h-9 rounded-full bg-card px-3 text-xs text-muted shadow-[var(--shadow-border)]",
-							children: ["Season ", n]
+							children: [
+								"Season ",
+								n,
+								diskSeasons.includes(n) ? " · in" : ""
+							]
 						}, n))
 					}) : null,
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {

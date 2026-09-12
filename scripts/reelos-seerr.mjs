@@ -1046,11 +1046,18 @@ export function mergeUnfinishedRows(seerrRows, extras, facts = {}) {
   const honest = honestifyRequests([...(seerrRows || []), ...(extras || [])], facts);
   // Do not invent a Requests row for a title that is already on the shelf when Seerr dropped it.
   // When Seerr has rows, do not invent a grabbing row for every 0-file *arr title.
-  return honest.filter((r) => {
+  const kept = honest.filter((r) => {
     if (seerrKeys.has(requestMatchKey(r))) return true;
     if (seerrPresent && (r.source === "radarr-missing" || r.source === "sonarr-missing")) return false;
     return r.status !== "available" && r.engine !== "downloaded";
   });
+  const tvWithSeason = new Set(
+    kept
+      .filter((r) => String(r.titleId || "").startsWith("tmdb-tv-") && r.season != null)
+      .map((r) => r.titleId),
+  );
+  // Seerr media ghosts with no season duplicate S01/S03 cards (Expanse ×2).
+  return kept.filter((r) => !tvWithSeason.has(r.titleId) || r.season != null);
 }
 
 /** True when the row would paint as tmdb-2059 instead of National Treasure. */
