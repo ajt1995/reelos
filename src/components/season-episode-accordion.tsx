@@ -3,7 +3,9 @@ import { ChevronDown, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   EPISODE_STATUS_LABEL,
+  UNRELEASED_SEASON_COPY,
   episodeRequestAction,
+  seasonChipLabel,
   type EpisodeStatus,
   type SeasonEpisodeRow,
 } from "@/lib/episode-status";
@@ -21,6 +23,7 @@ export function SeasonEpisodeAccordion({
   selectedSeason,
   onSelectSeason,
   diskSeasons,
+  unreleasedSeasons,
   titleId,
   seasonsLoading,
   seasonErr,
@@ -34,6 +37,7 @@ export function SeasonEpisodeAccordion({
   selectedSeason: number;
   onSelectSeason: (n: number) => void;
   diskSeasons: number[];
+  unreleasedSeasons?: number[];
   titleId: string;
   seasonsLoading?: boolean;
   seasonErr?: string | null;
@@ -45,6 +49,7 @@ export function SeasonEpisodeAccordion({
 }) {
   const [open, setOpen] = useState(false);
   const [episodes, setEpisodes] = useState<SeasonEpisodeRow[]>([]);
+  const [unreleasedOpen, setUnreleasedOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
@@ -55,11 +60,13 @@ export function SeasonEpisodeAccordion({
     const ac = new AbortController();
     setLoading(true);
     setErr(null);
+    setUnreleasedOpen(false);
     const q = new URLSearchParams({ id: titleId, season: String(selectedSeason) });
     void fetch(`/api/episodes?${q}`, { cache: "no-store", signal: ac.signal })
-      .then((r) => r.json() as Promise<{ episodes?: SeasonEpisodeRow[]; error?: string }>)
+      .then((r) => r.json() as Promise<{ episodes?: SeasonEpisodeRow[]; error?: string; unreleased?: boolean }>)
       .then((j) => {
         if (stop) return;
+        setUnreleasedOpen(Boolean(j.unreleased));
         setEpisodes(Array.isArray(j.episodes) ? j.episodes : []);
         setErr(j.error || null);
         setLoading(false);
@@ -95,7 +102,9 @@ export function SeasonEpisodeAccordion({
   };
 
   const missing = episodes.filter((e) => e.status === "missing" || (removedHere && e.status === "requested"));
-  const showSeasonRequest = !blocked && (removedHere || missing.length > 0 || (open && !loading && episodes.length === 0));
+  const thisUnreleased = Boolean(unreleasedSeasons?.includes(selectedSeason) || unreleasedOpen);
+  const showSeasonRequest =
+    !blocked && !thisUnreleased && (removedHere || missing.length > 0 || (open && !loading && episodes.length === 0));
 
   if (seasonNumbers.length === 0 && seasonsLoading) {
     return <p className="text-sm text-muted">Loading seasons from Seerr…</p>;
@@ -120,6 +129,8 @@ export function SeasonEpisodeAccordion({
           const selected = selectedSeason === n;
           const expanded = selected && open;
           const onDisk = diskSeasons.includes(n) && !removedHere;
+          const unreleased = Boolean(unreleasedSeasons?.includes(n));
+          const chip = seasonChipLabel({ onDisk, unreleased, removedHere });
           return (
             <button
               key={n}
@@ -133,7 +144,7 @@ export function SeasonEpisodeAccordion({
               )}
             >
               Season {n}
-              {onDisk ? " · Watch" : " · Request"}
+              {` · ${chip}`}
               <ChevronDown className={cn("size-3.5 opacity-80 transition-transform", expanded ? "rotate-180" : "")} />
             </button>
           );
@@ -166,7 +177,12 @@ export function SeasonEpisodeAccordion({
           </div>
           {loading ? <p className="py-3 text-sm text-muted">Loading episodes from Sonarr…</p> : null}
           {err && !episodes.length ? <p className="py-2 text-sm text-danger">{err}</p> : null}
-          {!loading && !episodes.length && !err ? (
+          {!loading && thisUnreleased ? (
+            <p className="py-3 text-sm text-muted">
+              {UNRELEASED_SEASON_COPY}. Request cannot grab files that do not exist.
+            </p>
+          ) : null}
+          {!loading && !episodes.length && !err && !thisUnreleased ? (
             <p className="py-3 text-sm text-muted">
               Episode names land once Sonarr or Seerr has this season. Request this season without hunting.
             </p>

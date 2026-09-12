@@ -134,6 +134,36 @@ test("loadSeasonEpisodeList uses Sonarr + Seerr and does not invent files", asyn
   assert.equal(payload.vocab["missing"], "Missing");
 });
 
+test("loadSeasonEpisodeList hides TBA announced seasons as Coming, not Request rows", async () => {
+  const payload = await loadSeasonEpisodeList({
+    titleId: "tmdb-tv-125988",
+    season: 4,
+    seerrKey: "k",
+    sonarrKey: "s",
+    factsLoader: async () => ({
+      libraryTitles: [],
+      series: [
+        {
+          id: 10,
+          tmdbId: 125988,
+          title: "Silo",
+          seasons: [{ seasonNumber: 4, statistics: { episodeFileCount: 0, episodeCount: 1, totalEpisodeCount: 1 } }],
+        },
+      ],
+      movies: [],
+    }),
+    fetchArr: async (url) => {
+      if (String(url).includes("/episode?")) return [{ episodeNumber: 1, title: "TBA", hasFile: false }];
+      if (String(url).includes("/queue")) return { records: [] };
+      return [];
+    },
+    fetchSeerr: async () => ({ json: { seasons: [{ seasonNumber: 4, episodeCount: 0, airDate: "2027-06-01" }] } }),
+  });
+  assert.equal(payload.unreleased, true);
+  assert.deepEqual(payload.episodes, []);
+  assert.match(String(payload.copy), /not released/i);
+});
+
 test("GET /api/episodes is its own plugin; POST can request an episode", () => {
   const plugin = readFileSync(join(root, "scripts/reelos-episodes-plugin.mjs"), "utf8");
   const lookup = readFileSync(join(root, "scripts/reelos-lookup-plugin.mjs"), "utf8");

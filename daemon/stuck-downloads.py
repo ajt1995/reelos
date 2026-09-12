@@ -16,6 +16,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(os.environ.get("REELOS_ROOT", "/opt/reelos"))
@@ -29,6 +30,55 @@ IMPORT_RETRY_SEC = int(os.environ.get("REELOS_IMPORT_RETRY_SEC", "90"))
 SEARCH_INTERVAL_SEC = int(os.environ.get("REELOS_MISSING_SEARCH_SEC", "900"))
 FUSE_RESTART_BACKOFF = 300
 MEDIA_EXT = {".mkv", ".mp4", ".m4v", ".avi", ".ts", ".m2ts", ".iso"}
+
+
+def _parse_air_ts(raw):
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    s = s.replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        try:
+            dt = datetime.strptime(s[:10], "%Y-%m-%d")
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def season_is_unreleased(season, now=None):
+    """Announced / future season with no aired episodes — do not SeasonSearch."""
+    if now is None:
+        now = time.time()
+    if not isinstance(season, dict):
+        return False
+    stats = season.get("statistics") if isinstance(season.get("statistics"), dict) else {}
+    try:
+        files = int(stats.get("episodeFileCount") or season.get("episodeFileCount") or 0)
+    except (TypeError, ValueError):
+        files = 0
+    if files > 0:
+        return False
+    prev = _parse_air_ts(stats.get("previousAiring"))
+    if prev is not None and prev <= now:
+        return False
+    has_count = any(k in stats or k in season for k in ("episodeCount", "totalEpisodeCount"))
+    try:
+        count = int(stats.get("episodeCount") or stats.get("totalEpisodeCount") or season.get("episodeCount") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    nxt = _parse_air_ts(stats.get("nextAiring") or season.get("airDate") or season.get("air_date"))
+    future = nxt is not None and nxt > now
+    if has_count and count == 0:
+        return True
+    if prev is None and future:
+        return True
+    if prev is None and nxt is None and has_count and count > 0:
+        return True
+    return False
 
 PRESENT_STATES = {
     "queued",
@@ -1339,6 +1389,8 @@ def recover_missing_series(app: dict, key: str, torrents: list, state: dict) -> 
                 files = 0
             if files > 0:
                 continue
+            if season_is_unreleased(season):
+                continue
             if season.get("monitored") is False or s.get("monitored") is False:
                 ensure_item_grab_path(app, key, s)
                 if season.get("monitored") is False:
@@ -2141,6 +2193,38 @@ def _self_test() -> int:
             self.assertIn("_sonarr_manual_import", src)
             self.assertIn("sonarr_manual_import.py", src)
             self.assertIn('elif app["name"] == "sonarr"', src)
+
+        def test_unreleased_season_is_not_searched(self):
+            now = datetime(2026, 9, 12, tzinfo=timezone.utc).timestamp()
+            silo_s04 = {
+                "seasonNumber": 4,
+                "monitored": True,
+                "statistics": {"episodeFileCount": 0, "episodeCount": 1, "totalEpisodeCount": 1},
+            }
+            announced = {
+                "seasonNumber": 4,
+                "episodeCount": 0,
+                "airDate": "2027-06-01",
+            }
+            released = {
+                "seasonNumber": 2,
+                "monitored": True,
+                "statistics": {
+                    "episodeFileCount": 0,
+                    "episodeCount": 10,
+                    "previousAiring": "2024-12-01T00:00:00Z",
+                },
+            }
+            on_disk = {
+                "seasonNumber": 1,
+                "statistics": {"episodeFileCount": 10, "episodeCount": 10, "previousAiring": "2023-05-05T00:00:00Z"},
+            }
+            self.assertTrue(season_is_unreleased(silo_s04, now=now))
+            self.assertTrue(season_is_unreleased(announced, now=now))
+            self.assertFalse(season_is_unreleased(released, now=now))
+            self.assertFalse(season_is_unreleased(on_disk, now=now))
+            src = Path(__file__).read_text()
+            self.assertIn("if season_is_unreleased(season):", src)
 
         def test_empty_symlink_recovery_is_wired(self):
             src = Path(__file__).read_text()

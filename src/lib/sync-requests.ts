@@ -20,9 +20,10 @@ function isOptimisticLocal(row: Pick<MediaRequest, "createdAt" | "updatedAt">, n
   return now - at < OPTIMISTIC_LOCAL_MS;
 }
 
-/** Searching / grabbing / linked waiting for import. Available, failed, and engine-downloaded are not. */
-export function isInFlightRequest(r: { status: string; engine?: string }): boolean {
+/** Searching / grabbing / linked waiting for import. Available, failed, announced, and engine-downloaded are not. */
+export function isInFlightRequest(r: { status: string; engine?: string; reason?: string }): boolean {
   if (r.engine === "downloaded") return false;
+  if (/announced|not released/i.test(r.reason || "")) return false;
   return IN_FLIGHT.has(r.status as RequestStatus);
 }
 
@@ -63,19 +64,23 @@ export function isTvRequestRow(row: Pick<MediaRequest, "titleId" | "season">): b
   return id.startsWith("tmdb-tv-") || id.startsWith("tvdb-") || row.season != null;
 }
 
-/** Per-season Watch vs Request from files on disk — series AVAILABLE is not S05 Watch. */
+/** Per-season Watch vs Request vs Coming from files on disk — series AVAILABLE is not S05 Watch. */
 export function tvSeasonChips(
   titleId: string,
   requests: MediaRequest[],
-  titles: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons">[] = [],
-): { season: number; label: "Watch" | "Request" }[] {
+  titles: Pick<Title, "id" | "ids" | "kind" | "jellyfinId" | "onDiskSeasons" | "unreleasedSeasons">[] = [],
+): { season: number; label: "Watch" | "Request" | "Coming" }[] {
   const keys = new Set(titlePresenceKeys(titleId));
-  const bySeason = new Map<number, "Watch" | "Request">();
+  const bySeason = new Map<number, "Watch" | "Request" | "Coming">();
   for (const t of titles) {
     if (!titleMatchesId(t, titleId)) continue;
     for (const n of t.onDiskSeasons || []) {
       const season = Number(n);
       if (Number.isFinite(season) && season > 0) bySeason.set(season, "Watch");
+    }
+    for (const n of t.unreleasedSeasons || []) {
+      const season = Number(n);
+      if (Number.isFinite(season) && season > 0 && bySeason.get(season) !== "Watch") bySeason.set(season, "Coming");
     }
   }
   for (const row of requests) {
@@ -83,7 +88,7 @@ export function tvSeasonChips(
     if (row.season == null) continue;
     const n = Number(row.season);
     if (!Number.isFinite(n) || n <= 0) continue;
-    if (bySeason.get(n) === "Watch") continue;
+    if (bySeason.get(n) === "Watch" || bySeason.get(n) === "Coming") continue;
     bySeason.set(n, "Request");
   }
   return [...bySeason.entries()]

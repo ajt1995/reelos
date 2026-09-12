@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { LIBRARY_CACHE_FILE, readLibraryCacheFile } from "./reelos-library.mjs";
-import { arrHasFile, buildArrIndex, parseTitleId, seerrApiKey, seerrFetch, tmdbPoster } from "./reelos-seerr.mjs";
+import { arrHasFile, buildArrIndex, parseTitleId, seerrApiKey, seerrFetch, tmdbPoster, seasonIsUnreleased } from "./reelos-seerr.mjs";
 
 export function xmlApiKey(file) {
   if (!existsSync(file)) return null;
@@ -55,8 +55,9 @@ function sleep(ms) {
 }
 
 /** After a TV POST: search if the season has no files. Always relink+ManualImport (dump may appear). */
-export function planTvPostRecover({ mediaType, season, arrHasSeasonFile = false } = {}) {
+export function planTvPostRecover({ mediaType, season, arrHasSeasonFile = false, unreleased = false } = {}) {
   if (mediaType !== "tv") return { search: false, import: false };
+  if (unreleased) return { search: false, import: false };
   return { search: !arrHasSeasonFile && season != null, import: true };
 }
 
@@ -75,9 +76,9 @@ export function recoverKickOk({ wantedSearch = false, searched = false, command 
   return true;
 }
 
-export function planArrPostRecover({ mediaType, season, arrHasFile = false } = {}) {
+export function planArrPostRecover({ mediaType, season, arrHasFile = false, unreleased = false } = {}) {
   if (mediaType === "movie") return { search: !arrHasFile, import: true };
-  return planTvPostRecover({ mediaType, season, arrHasSeasonFile: arrHasFile });
+  return planTvPostRecover({ mediaType, season, arrHasSeasonFile: arrHasFile, unreleased });
 }
 
 /** Searching/grabbing while the file is already on disk: import, never search. */
@@ -143,6 +144,7 @@ export function listMissingRecoverTargets({ series = [], movies = [], seerrRows 
       const files = Number(season?.statistics?.episodeFileCount || 0);
       if (!Number.isFinite(n) || n <= 0 || files > 0) continue;
       if (season?.monitored === false || s.monitored === false) continue;
+      if (seasonIsUnreleased(season)) continue;
       out.push({ mediaType: "tv", tmdb, season: n });
       break;
     }
@@ -732,12 +734,17 @@ export async function kickArrRecover({
             { titleId: `tmdb-tv-${tmdb}`, season: wantSeason },
             buildArrIndex({ series: [hit] }),
           );
+      const seasonRow = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === Number(wantSeason));
+      const unreleased = Boolean(seasonRow && seasonIsUnreleased(seasonRow));
       const plan = planArrPostRecover({
         mediaType: "tv",
         season: wantSeason,
         arrHasFile: hasFile,
+        unreleased,
       });
-      if (episodeN && episodeRow?.id && !episodeRow.hasFile) {
+      if (unreleased) {
+        wantedSearch = false;
+      } else if (episodeN && episodeRow?.id && !episodeRow.hasFile) {
         wantedSearch = true;
         grabPath = await ensureTvGrabPath({ fetchArr, sonarrKey, series: hit });
         grabPath.added = added;

@@ -5,6 +5,9 @@ import {
   episodeRequestAction,
   EPISODE_STATUS_LABEL,
   EPISODE_STATUSES,
+  seasonChipLabel,
+  seasonIsUnreleasedFact,
+  UNRELEASED_SEASON_COPY,
 } from "./episode-status.ts";
 
 test("client episode vocab matches Austin: in library / downloading / missing / requested", () => {
@@ -22,4 +25,16 @@ test("Request is on missing; Request again is on requested after Remove", () => 
   assert.equal(episodeRequestAction("in-library", true), null);
   assert.equal(episodeRequestAction("downloading"), null);
   assert.equal(classifyEpisodeStatus({ hasFile: true }), "in-library");
+});
+
+test("announced season fixture is Coming, not Request or Watch", () => {
+  const now = Date.parse("2026-09-12T00:00:00Z");
+  const fact = { episodeCount: 0, airDate: "2027-06-01" };
+  assert.equal(seasonIsUnreleasedFact(fact, now), true);
+  assert.equal(seasonChipLabel({ unreleased: seasonIsUnreleasedFact(fact, now) }), "Coming");
+  assert.notEqual(seasonChipLabel({ unreleased: true }), "Request");
+  assert.notEqual(seasonChipLabel({ unreleased: true }), "Watch");
+  assert.equal(seasonChipLabel({ onDisk: true }), "Watch");
+  assert.equal(seasonChipLabel({}), "Request");
+  assert.match(UNRELEASED_SEASON_COPY, /not released/i);
 });

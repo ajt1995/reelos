@@ -22,6 +22,7 @@ import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
 import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
+import { UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
 
 function looksLikeHashTitle(name?: string) {
   return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
@@ -91,7 +92,7 @@ export function TitleView({ id }: { id: string }) {
   const ipv4 = useReelStore((s) => s.ipv4);
   const tailscaleIp = useReelStore((s) => s.tailscaleIp);
   const watchDoor = useReelStore((s) => s.watch);
-  const { inJellyfin, engineStatus, seasonList, onDiskSeasons } = useEngineRequest(id, season);
+  const { inJellyfin, engineStatus, seasonList, onDiskSeasons, unreleasedSeasons } = useEngineRequest(id, season);
   const seasonNumbers = seasonNumbersOf(resolved, seasonList);
 
   useEffect(() => {
@@ -222,7 +223,19 @@ export function TitleView({ id }: { id: string }) {
   });
   const series = resolved.kind === "tv" || resolved.kind === "anime";
   const diskSeasons = [...new Set([...(onDiskSeasons || []), ...(resolved.onDiskSeasons || [])])];
+  const comingSeasons = [
+    ...new Set(
+      [
+        ...(unreleasedSeasons || []),
+        ...(resolved.unreleasedSeasons || []),
+        ...((resolved.seasonFacts || []).filter((s) => s.unreleased).map((s) => s.season)),
+      ]
+        .map(Number)
+        .filter((n) => n > 0),
+    ),
+  ];
   const thisSeasonOnBox = !removedHere && (!series || diskSeasons.includes(season));
+  const thisSeasonUnreleased = Boolean(series && comingSeasons.includes(season) && !thisSeasonOnBox);
   // Series-in-Jellyfin is not this season. Expanse S06 on the box must not Watch S01.
   // Seerr AVAILABLE / engine downloaded is not S05·in.
   // JF is truth — lookup overlay jellyfinId must Watch even if the limited Home shelf missed the id.
@@ -273,8 +286,11 @@ export function TitleView({ id }: { id: string }) {
             </Link>
           ) : null}
           <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
-          {(series && !onBox && !blocked && !request) || (!series && !available && !blocked && !request) ? (
+          {(series && !onBox && !blocked && !request && !thisSeasonUnreleased) || (!series && !available && !blocked && !request) ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
+          ) : null}
+          {thisSeasonUnreleased ? (
+            <p className="mt-4 text-sm text-muted">{UNRELEASED_SEASON_COPY}</p>
           ) : null}
 
           {series ? (
@@ -284,6 +300,7 @@ export function TitleView({ id }: { id: string }) {
                 selectedSeason={season}
                 onSelectSeason={setSeason}
                 diskSeasons={diskSeasons}
+                unreleasedSeasons={comingSeasons}
                 titleId={requestTitleId}
                 seasonsLoading={seasonsLoading}
                 seasonErr={seasonErr}
@@ -314,6 +331,10 @@ export function TitleView({ id }: { id: string }) {
                 <Play className="size-4" fill="currentColor" />
                 Watch
               </Button>
+            ) : thisSeasonUnreleased ? (
+              <span className="inline-flex h-12 items-center rounded-2xl bg-card px-4 text-sm text-muted">
+                {UNRELEASED_SEASON_CHIP}
+              </span>
             ) : request?.status === "downloading" || request?.status === "waiting" ? null : (
               <Button size="lg" disabled>
                 <Play className="size-4" />
@@ -331,7 +352,7 @@ export function TitleView({ id }: { id: string }) {
               <p className="self-center text-sm text-muted">
                 This collection is off. Enable it in Settings.
               </p>
-            ) : showRequestQueueControls({
+            ) : thisSeasonUnreleased ? null : showRequestQueueControls({
                 kind: resolved.kind,
                 available: series ? thisSeasonOnBox : available,
                 requestStatus: thisSeasonOnBox && series ? "available" : request?.status,
@@ -388,7 +409,7 @@ export function TitleView({ id }: { id: string }) {
           ) : null}
           {reqErr ? <p className="mt-4 text-sm text-danger">{reqErr}</p> : null}
 
-          {!available && !blocked && hashPaste ? (
+          {!available && !blocked && !thisSeasonUnreleased && hashPaste ? (
             <form
               className="mt-6 max-w-md"
               onSubmit={(e) => {

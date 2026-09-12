@@ -29,6 +29,39 @@ export function episodeRequestAction(status: EpisodeStatus, removedHere = false)
   return null;
 }
 
+export const UNRELEASED_SEASON_COPY = "Announced — not released yet";
+export const UNRELEASED_SEASON_CHIP = "Coming";
+
+export function seasonChipKind(opts: { onDisk?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "watch" | "coming" | "request" {
+  if (opts.onDisk && !opts.removedHere) return "watch";
+  if (opts.unreleased) return "coming";
+  return "request";
+}
+
+export function seasonChipLabel(opts: { onDisk?: boolean; unreleased?: boolean; removedHere?: boolean } = {}): "Watch" | "Coming" | "Request" {
+  const kind = seasonChipKind(opts);
+  if (kind === "watch") return "Watch";
+  if (kind === "coming") return UNRELEASED_SEASON_CHIP;
+  return "Request";
+}
+
+/** Fixture: announced, episodeCount 0, airDate future → Coming, not Request/Watch. */
+export function seasonIsUnreleasedFact(fact: {
+  episodeCount?: number;
+  airDate?: string;
+  unreleased?: boolean;
+  onDisk?: boolean;
+} | null | undefined, now = Date.now()): boolean {
+  if (!fact || fact.onDisk) return false;
+  if (fact.unreleased === true) return true;
+  if (fact.unreleased === false) return false;
+  const count = Number(fact.episodeCount);
+  const air = Date.parse(String(fact.airDate || ""));
+  if (Number.isFinite(count) && count === 0) return true;
+  if (Number.isFinite(air) && air > now) return true;
+  return false;
+}
+
 export type SeasonEpisodeRow = {
   episodeNumber: number;
   title: string;

@@ -720,10 +720,134 @@ export function tmdbPoster(path) {
 export function realSeasonNumbers(seasons) {
   if (!Array.isArray(seasons)) return [];
   return seasons
-    .map((s) => Number(s?.seasonNumber ?? s))
+    .map((s) => Number(s?.seasonNumber ?? s?.season_number ?? s))
     .filter((n) => Number.isFinite(n) && n > 0)
     .filter((n, i, all) => all.indexOf(n) === i)
     .sort((a, b) => a - b);
+}
+
+export const UNRELEASED_SEASON_COPY = "Announced — not released yet";
+export const UNRELEASED_SEASON_CHIP = "Coming";
+
+function seasonNumberOf(raw) {
+  const n = Number(raw?.seasonNumber ?? raw?.season_number ?? raw?.season);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function seasonEpisodeCount(raw) {
+  if (!raw || typeof raw !== "object") return 0;
+  const stats = raw.statistics && typeof raw.statistics === "object" ? raw.statistics : {};
+  const n = Number(raw.episodeCount ?? raw.episode_count ?? stats.episodeCount ?? stats.totalEpisodeCount);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
+
+export function seasonAirDate(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  const stats = raw.statistics && typeof raw.statistics === "object" ? raw.statistics : {};
+  return String(
+    raw.airDate ||
+      raw.air_date ||
+      stats.nextAiring ||
+      stats.previousAiring ||
+      "",
+  ).trim();
+}
+
+function parseAirMs(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return NaN;
+  const ms = Date.parse(s);
+  return Number.isFinite(ms) ? ms : NaN;
+}
+
+function titleLooksPlaceholder(name) {
+  const t = String(name || "").trim();
+  return !t || /^(TBA|TBD|TBC)$/i.test(t);
+}
+
+export function episodesLookUnreleased(episodes = [], now = Date.now()) {
+  const rows = Array.isArray(episodes) ? episodes : [];
+  if (!rows.length) return true;
+  let named = false;
+  let aired = false;
+  for (const ep of rows) {
+    const title = ep?.title || ep?.name;
+    if (!titleLooksPlaceholder(title)) named = true;
+    const ms = parseAirMs(ep?.airDateUtc || ep?.airDate || ep?.air_date || ep?.airDateUtc);
+    if (Number.isFinite(ms) && ms <= now) aired = true;
+  }
+  return !named && !aired;
+}
+
+/**
+ * TMDB/TVDB/Sonarr list future seasons with 0 (or TBA) episodes.
+ * Request would search forever; Watch would lie. Coming / announced instead.
+ */
+export function seasonIsUnreleased(raw, now = Date.now()) {
+  if (!raw || typeof raw !== "object") return false;
+  if (!seasonNumberOf(raw)) return false;
+  const stats = raw.statistics && typeof raw.statistics === "object" ? raw.statistics : {};
+  const files = Number(stats.episodeFileCount || raw.episodeFileCount || 0);
+  if (Number.isFinite(files) && files > 0) return false;
+  if (raw.hasFile === true) return false;
+
+  const prevMs = parseAirMs(stats.previousAiring);
+  if (Number.isFinite(prevMs) && prevMs <= now) return false;
+
+  const count = seasonEpisodeCount(raw);
+  const nextMs = parseAirMs(stats.nextAiring || raw.airDate || raw.air_date);
+  const future = Number.isFinite(nextMs) && nextMs > now;
+  const hasCountField =
+    raw.episodeCount != null ||
+    raw.episode_count != null ||
+    stats.episodeCount != null ||
+    stats.totalEpisodeCount != null;
+
+  if (Array.isArray(raw.episodes) && raw.episodes.length) {
+    return episodesLookUnreleased(raw.episodes, now);
+  }
+
+  if (hasCountField && count === 0) return true;
+  if (!Number.isFinite(prevMs) && future) return true;
+  if (!Number.isFinite(prevMs) && !Number.isFinite(nextMs) && hasCountField && count > 0) return true;
+  return false;
+}
+
+export function seasonChipKind({ onDisk = false, unreleased = false, removedHere = false } = {}) {
+  if (onDisk && !removedHere) return "watch";
+  if (unreleased) return "coming";
+  return "request";
+}
+
+export function seasonChipLabel(opts = {}) {
+  const kind = seasonChipKind(opts);
+  if (kind === "watch") return "Watch";
+  if (kind === "coming") return UNRELEASED_SEASON_CHIP;
+  return "Request";
+}
+
+export function seasonFactsFrom(seasons, now = Date.now()) {
+  const list = Array.isArray(seasons) ? seasons : [];
+  return realSeasonNumbers(list).map((n) => {
+    const raw =
+      list.find((s) => Number(s?.seasonNumber ?? s?.season_number ?? s) === n) || { seasonNumber: n };
+    const episodeCount = seasonEpisodeCount(raw);
+    const airDate = seasonAirDate(raw) || undefined;
+    const unreleased = seasonIsUnreleased(typeof raw === "object" ? raw : { seasonNumber: n }, now);
+    return { season: n, episodeCount, airDate: airDate || undefined, unreleased };
+  });
+}
+
+export function unreleasedSeasonNumbers(seasons, now = Date.now()) {
+  const list = Array.isArray(seasons) ? seasons : [];
+  if (list.some((s) => s && typeof s === "object" && "unreleased" in s && s.season != null)) {
+    return [
+      ...new Set(list.filter((s) => s.unreleased).map((s) => Number(s.season)).filter((n) => n > 0)),
+    ].sort((a, b) => a - b);
+  }
+  return seasonFactsFrom(list, now)
+    .filter((s) => s.unreleased)
+    .map((s) => s.season);
 }
 
 export function seasonCount(seasons) {
@@ -955,20 +1079,39 @@ export function titleRequestSeasonPayload({
   ].sort((a, b) => a - b);
   const seasonN = season != null && season !== "" && Number.isFinite(Number(season)) ? Number(season) : undefined;
   const seasonOnDisk = seasonN != null && disk.includes(seasonN);
+  const seriesRow = (facts?.series || []).find(
+    (s) =>
+      (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
+      (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
+  );
+  const unreleased = [
+    ...new Set(
+      [
+        ...(title?.unreleasedSeasons || []),
+        ...unreleasedSeasonNumbers(title?.seasonFacts),
+        ...unreleasedSeasonNumbers(seriesRow?.seasons),
+      ]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
+    ),
+  ].sort((a, b) => a - b);
+  const thisUnreleased = seasonN != null && unreleased.includes(seasonN);
   const honestEngine = honest?.engine || honest?.status || "unknown";
   const seriesAvailable = honest?.status === "available" || honestEngine === "downloaded";
   const status = seasonN != null ? (seasonOnDisk ? "downloaded" : seriesAvailable ? "unknown" : honestEngine) : honestEngine;
   return {
-    status,
+    status: thisUnreleased ? "unknown" : status,
     engine: "seerr",
     title: title?.title,
     titleId: honest?.titleId || parsed?.titleId || id,
     seasons: title?.seasons,
     seasonList: listed.length ? listed : title?.seasonList,
     onDiskSeasons: disk,
+    unreleasedSeasons: unreleased,
+    seasonFacts: title?.seasonFacts,
     progress: seasonOnDisk ? 100 : seasonN != null && seriesAvailable ? 0 : honest?.progress,
-    reason: seasonOnDisk ? undefined : honest?.reason,
-    requestStatus: seasonOnDisk ? "available" : seasonN != null && seriesAvailable ? undefined : honest?.status,
+    reason: seasonOnDisk ? undefined : thisUnreleased ? UNRELEASED_SEASON_COPY : honest?.reason,
+    requestStatus: seasonOnDisk ? "available" : thisUnreleased || (seasonN != null && seriesAvailable) ? undefined : honest?.status,
   };
 }
 
@@ -1109,6 +1252,7 @@ export function tvRequestReason(row, { series, arrSeriesReady, dumps, torrents }
   if (hit.monitored === false) return "Unmonitored in Sonarr — search will not run";
   const seasonRow = (hit.seasons || []).find((s) => Number(s?.seasonNumber) === Number(row.season));
   if (seasonRow && seasonRow.monitored === false) return "Season unmonitored in Sonarr — search will not run";
+  if (seasonRow && seasonIsUnreleased(seasonRow)) return UNRELEASED_SEASON_COPY;
   if (sonarrDumpNamed(dumps, hit.title, torrents, row.season, hit.statistics?.episodeFileCount)) {
     return "Files linked — waiting for Sonarr import";
   }
@@ -1282,6 +1426,7 @@ export function missingArrRequests(series = [], movies = []) {
       const files = Number(season?.statistics?.episodeFileCount || 0);
       const monitored = season?.monitored !== false && s.monitored !== false;
       if (files > 0 || !monitored) continue;
+      if (seasonIsUnreleased(season)) continue;
       candidates.push(n);
     }
     const totalFiles = Number(s.statistics?.episodeFileCount || 0);
@@ -1631,11 +1776,13 @@ export function seerrSearchHit(h, mediaTypeHint) {
   const date = String(h.releaseDate || h.release_date || h.firstAirDate || h.first_air_date || "");
   const year = Number((date.match(/^(\d{4})/) || [])[1] || h.year || 0);
   const listed = realSeasonNumbers(h.mediaInfo?.seasons || h.seasons);
+  const facts = mediaType === "tv" ? seasonFactsFrom(h.mediaInfo?.seasons || h.seasons) : [];
   const fromCount = Number(h.numberOfSeasons || 0);
   const seasons = mediaType === "tv" ? listed.length || (Number.isFinite(fromCount) && fromCount > 0 ? fromCount : undefined) : undefined;
   const id = titleIdFor(mediaType, tmdb);
   const tvdb = h.tvdbId ?? h.externalIds?.tvdbId ?? h.mediaInfo?.tvdbId;
   const ids = [id, mediaType === "tv" ? `tmdb-${tmdb}` : null, tvdb ? `tvdb-${tvdb}` : null].filter(Boolean);
+  const unreleasedSeasons = facts.filter((s) => s.unreleased).map((s) => s.season);
   return {
     id,
     ids,
@@ -1652,6 +1799,8 @@ export function seerrSearchHit(h, mediaTypeHint) {
     popularity: Number(h.popularity || 50),
     seasons,
     seasonList: mediaType === "tv" && listed.length ? listed : undefined,
+    seasonFacts: mediaType === "tv" && facts.length ? facts : undefined,
+    unreleasedSeasons: mediaType === "tv" && unreleasedSeasons.length ? unreleasedSeasons : undefined,
   };
 }
 

@@ -1,5 +1,5 @@
 /** Honest TV episode status from Sonarr/Jellyfin/Seerr for the season accordion. */
-import { parseTitleId, seerrApiKey, seerrFetch, seerrSeasonStatus, resolveParsedTitle } from "./reelos-seerr.mjs";
+import { parseTitleId, seerrApiKey, seerrFetch, seerrSeasonStatus, resolveParsedTitle, seasonIsUnreleased, UNRELEASED_SEASON_COPY } from "./reelos-seerr.mjs";
 import { arrApiKey, arrJson, loadPresenceFacts } from "./reelos-request-status.mjs";
 
 /** Austin: in library / downloading / missing / requested — no invented percents. */
@@ -243,6 +243,27 @@ export async function loadSeasonEpisodeList({
     jellyfinEpisodes: Array.isArray(jellyfinEpisodes) ? jellyfinEpisodes : [],
     seasonRequested,
   });
+  const sonarrSeason = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === seasonNumber);
+  const unreleased = Boolean(
+    (sonarrSeason &&
+      seasonIsUnreleased({
+        ...sonarrSeason,
+        episodes: sonarrEpisodes.length ? sonarrEpisodes : undefined,
+      })) ||
+      (seerrEpisodes.length > 0 && seasonIsUnreleased({ seasonNumber, episodes: seerrEpisodes })),
+  );
+  if (unreleased) {
+    return {
+      ok: true,
+      season: seasonNumber,
+      titleId: parsed.titleId || titleId,
+      episodes: [],
+      unreleased: true,
+      copy: UNRELEASED_SEASON_COPY,
+      source: sonarrEpisodes.length ? "sonarr" : seerrEpisodes.length ? "seerr" : "none",
+      vocab: EPISODE_STATUS_LABEL,
+    };
+  }
   return {
     ok: true,
     season: seasonNumber,
