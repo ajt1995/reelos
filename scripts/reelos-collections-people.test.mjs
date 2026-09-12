@@ -179,6 +179,11 @@ test("door wires collection/person APIs and search entry points; wizard stays 7"
   assert.match(personView, /\/api\/person\?id=/);
   assert.doesNotMatch(personView, /absolute inset-0 size-full object-cover/);
 
+  const door = read("src/lib/door-request.ts");
+  assert.match(door, /startsWith\("person-"\)/);
+  assert.match(door, /startsWith\("collection-"\)/);
+  assert.match(door, /fetch\("\/api\/request"/);
+
   assert.match(read("src/components/wizard.tsx"), /const TOTAL = 7/);
   assert.match(read("src/lib/store.ts"), /betaChannel: false/);
 });
