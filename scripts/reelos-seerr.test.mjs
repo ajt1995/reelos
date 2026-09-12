@@ -44,6 +44,9 @@ import {
   resolveParsedTitle,
   attachTitleAliases,
   libraryHasTitle,
+  findLibraryTitle,
+  lookupPayloadForId,
+  pickSeerrSearchForLibrary,
 } from "./reelos-seerr.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,6 +54,10 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 test("TV ids stay distinct from movie tmdb ids", () => {
   assert.deepEqual(parseTitleId("tmdb-tv-80566"), { mediaType: "tv", tmdb: "80566", titleId: "tmdb-tv-80566" });
   assert.deepEqual(parseTitleId("tmdb-550"), { mediaType: "movie", tmdb: "550", titleId: "tmdb-550" });
+  assert.deepEqual(parseTitleId("jf-103ae87fbbbd9bb920ee3803dcffc570"), {
+    jellyfinId: "103ae87fbbbd9bb920ee3803dcffc570",
+    titleId: "jf-103ae87fbbbd9bb920ee3803dcffc570",
+  });
   assert.equal(titleIdFor("tv", 80566), "tmdb-tv-80566");
   assert.equal(titleIdFor("movie", 550), "tmdb-550");
 });
@@ -78,6 +85,50 @@ test("tvdb shelf rows resolve to the same TMDB show as tmdb-tv", () => {
   const aliased = attachTitleAliases({ id: "tmdb-tv-63639", kind: "tv", title: "The Expanse" }, resolved);
   assert.ok(aliased.ids.includes("tvdb-280619"));
   assert.ok(aliased.ids.includes("tmdb-tv-63639"));
+});
+
+test("jf-* lookup uses the library row, not a Seerr miss", () => {
+  const rick = {
+    id: "tvdb-275274",
+    kind: "tv",
+    title: "Rick and Morty",
+    year: 2013,
+    ids: ["tvdb-275274", "tmdb-tv-60625", "jf-103ae87fbbbd9bb920ee3803dcffc570"],
+    jellyfinId: "2e58b382fb6f70f674e1e7273b2d05f8",
+  };
+  const parsed = parseTitleId("jf-103ae87fbbbd9bb920ee3803dcffc570");
+  const resolved = resolveParsedTitle(parsed, { titles: [rick] });
+  assert.equal(resolved.tmdb, "60625");
+  assert.equal(resolved.mediaType, "tv");
+  assert.equal(findLibraryTitle([rick], "jf-103ae87fbbbd9bb920ee3803dcffc570")?.title, "Rick and Morty");
+  const onBox = lookupPayloadForId({
+    seerrTitle: null,
+    libraryTitle: { ...rick, title: "Rick and Morty" },
+    missingTmdb: true,
+  });
+  assert.equal(onBox.titles[0].title, "Rick and Morty");
+  assert.equal(onBox.error, null);
+  const named = lookupPayloadForId({
+    seerrTitle: { id: "tmdb-tv-60625", kind: "tv", title: "Rick and Morty", ids: ["tmdb-tv-60625"] },
+    libraryTitle: rick,
+  });
+  assert.ok(named.titles[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
+  const unknown = lookupPayloadForId({
+    libraryTitle: { id: "jf-abc", kind: "tv", title: "Unknown on this box" },
+    missingTmdb: true,
+  });
+  assert.equal(unknown.titles[0].title, "Unknown on this box");
+  assert.equal(unknown.error, null);
+  const miss = lookupPayloadForId({ missingTmdb: false });
+  assert.equal(miss.error, "Seerr did not find that title");
+  const hit = pickSeerrSearchForLibrary(
+    { kind: "tv", title: "Rick and Morty" },
+    [
+      { kind: "movie", title: "Rick and Morty" },
+      { kind: "tv", title: "Rick and Morty" },
+    ],
+  );
+  assert.equal(hit.kind, "tv");
 });
 
 test("season selectors skip specials and fake uncapped counts", () => {
@@ -922,13 +973,18 @@ test("by-id request pick is season-scoped, not reqs[0]", () => {
   assert.match(progress, /searchParams.get\("season"\)/);
   assert.match(progress, /resolveParsedTitle/);
   assert.match(lookup, /resolveParsedTitle/);
-  assert.match(lookup, /Could not map that title to TMDB/);
+  assert.match(readFileSync(join(root, "scripts/reelos-seerr.mjs"), "utf8"), /Could not map that title to TMDB/);
   const titleView = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
   assert.match(titleView, />\s*Watch\s*</);
   assert.match(titleView, /Could not load seasons from Seerr/);
   assert.match(titleView, /titleMatchesId/);
   assert.match(titleView, /inJellyfin \|\| inLibrary \|\| seasonReady/);
   assert.doesNotMatch(titleView, /Play in Jellyfin/);
+  assert.match(titleView, /Unknown on this box/);
+  assert.match(titleView, /series && !onBox/);
+  assert.match(lookup, /lookupPayloadForId/);
+  assert.match(lookup, /findLibraryTitle/);
+  assert.match(lookup, /repairHashTitles/);
 });
 
 test("GET /api/request plugins honestify Seerr rows against library and *arr", () => {

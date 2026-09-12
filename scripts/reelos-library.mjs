@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 export const HOME_SHELF_LIMIT = 24;
@@ -18,7 +18,7 @@ export function libraryItemsUrl({ limit } = {}) {
   const q = new URLSearchParams({
     Recursive: "true",
     IncludeItemTypes: "Movie,Series",
-    Fields: "ProviderIds",
+    Fields: "Path,ProviderIds",
     ImageTypeLimit: "1",
     EnableImages: "false",
     EnableUserData: "false",
@@ -43,6 +43,130 @@ export function stripMatchingYear(name, year) {
   if (!y) return raw;
   const stripped = raw.replace(new RegExp(`\\s+\\(${y}\\)\\s*$`), "").trim();
   return stripped || raw;
+}
+
+/** Infohash / dump-folder names Jellyfin copies when a pack has no title. */
+export const UNKNOWN_ON_BOX = "Unknown on this box";
+
+export function looksLikeHashTitle(name) {
+  return /^[0-9a-f]{32,64}$/i.test(String(name || "").trim());
+}
+
+const QUALITY_CUT = /[\s._-]+(?:\d{3,4}p|2160p|1080p|720p|480p|4k|uhd|web-?dl|webrip|bluray|b[dr]rip|hdtv|hdrip|hdr10|dolby|vision|ddp?5\.?1|atmos|truehd|dts|x26[45]|h\.?26[45]|hevc|avc|aac|proper|repack|internal|multi|complete|h264|h265)\b/i;
+
+/** "Rick And Morty S04E01 … 720p BluRay.mp4" → Rick And Morty. Never ffprobe. */
+export function humanTitleFromSceneName(raw) {
+  let s = String(raw || "").trim();
+  s = s.replace(/\.[a-z0-9]{2,4}$/i, "");
+  while (true) {
+    const stripped = s.replace(/^\[+[^\]]+\]+\s*/, "").trim();
+    if (stripped === s) break;
+    s = stripped;
+  }
+  s = s.replace(/[._]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!s || looksLikeHashTitle(s)) return { title: "", year: 0 };
+  const yearHit = s.match(/\b((?:19|20)\d{2})\b/);
+  const year = yearHit ? Number(yearHit[1]) : 0;
+  s = s.split(QUALITY_CUT)[0].trim();
+  s = s.replace(/\s*[Ss]\d{1,2}\s*[.\-_ ]?\s*[Ee]\d{1,3}\b.*$/, "").trim();
+  s = s.replace(/\s+season\s+\d{1,2}\b.*$/i, "").trim();
+  s = s.replace(/\s+[Ss]\d{1,2}(?!\d)(?![eE]\d).*$/, "").trim();
+  s = s.replace(/\s+\(?((?:19|20)\d{2})\)?\s*$/, "").trim();
+  s = s.replace(/^[-_\s]+|[-_\s]+$/g, "").trim();
+  if (!s || looksLikeHashTitle(s) || /^s\d{1,2}e\d{1,3}$/i.test(s)) return { title: "", year: 0 };
+  return { title: s, year };
+}
+
+export function identifyLibraryTitle({ name, path, files = [] } = {}) {
+  const jfName = String(name || "").trim();
+  const tryParse = (raw) => {
+    const parsed = humanTitleFromSceneName(raw);
+    if (parsed.title && !looksLikeHashTitle(parsed.title)) return parsed;
+    return null;
+  };
+  if (!looksLikeHashTitle(jfName)) {
+    const fromName = tryParse(jfName);
+    if (fromName) return fromName;
+    if (jfName && jfName !== "Untitled") return { title: stripMatchingYear(jfName, 0), year: 0 };
+  }
+  const base = String(path || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)
+    .pop() || "";
+  const fromPath = tryParse(base);
+  if (fromPath) return fromPath;
+  for (const f of files || []) {
+    const fromFile = tryParse(f);
+    if (fromFile) return fromFile;
+  }
+  if (looksLikeHashTitle(jfName) || looksLikeHashTitle(base) || !jfName) {
+    return { title: UNKNOWN_ON_BOX, year: 0 };
+  }
+  return { title: jfName, year: 0 };
+}
+
+/** Container `/symlinks/…` is host `/mnt/symlinks/…`. Never list FUSE `/mnt/debrid`. */
+export function hostPathFromJellyfin(path) {
+  const p = String(path || "")
+    .replace(/\\/g, "/")
+    .trim();
+  if (!p) return "";
+  if (p === "/mnt/debrid" || p.startsWith("/mnt/debrid/")) return "";
+  if (p.startsWith("/symlinks/")) return `/mnt${p}`;
+  return p;
+}
+
+export function dumpSearchPaths(jfPath, name) {
+  const out = [];
+  const host = hostPathFromJellyfin(jfPath);
+  if (host) out.push(host);
+  if (looksLikeHashTitle(name)) {
+    out.push(`/mnt/symlinks/sonarr/${name}`, `/mnt/symlinks/radarr/${name}`);
+  }
+  return [...new Set(out)];
+}
+
+export function listDumpNames(hostPath, { readdirSync: readDir = readdirSync } = {}) {
+  const p = String(hostPath || "");
+  if (!p || p === "/mnt/debrid" || p.startsWith("/mnt/debrid/")) return [];
+  try {
+    const names = readDir(p);
+    return Array.isArray(names) ? names.map(String).slice(0, 48) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function repairHashTitles(titles, { listFiles } = {}) {
+  const list =
+    listFiles ||
+    ((t) => {
+      for (const p of dumpSearchPaths(t?.path, t?.title)) {
+        const names = listDumpNames(p);
+        if (names.length) return names;
+      }
+      return [];
+    });
+  return (titles || []).map((t) => {
+    if (!t || !looksLikeHashTitle(t.title)) return t;
+    const files = list(t) || [];
+    const ided = identifyLibraryTitle({ name: t.title, path: t.path, files });
+    return { ...t, title: ided.title, year: t.year || ided.year || 0 };
+  });
+}
+
+export function mapJellyfinItems(items, host, { listFiles } = {}) {
+  return (items || []).map((it) => {
+    const t = mapJellyfinItem(it, host);
+    if (!looksLikeHashTitle(it?.Name) && !looksLikeHashTitle(t.title)) return t;
+    const files =
+      typeof listFiles === "function"
+        ? listFiles(it) || []
+        : dumpSearchPaths(it?.Path, it?.Name).flatMap((p) => listDumpNames(p));
+    const ided = identifyLibraryTitle({ name: it?.Name, path: it?.Path, files });
+    return { ...t, title: ided.title, year: t.year || ided.year || 0 };
+  });
 }
 
 export function mapJellyfinItem(it, host) {
@@ -197,10 +321,30 @@ export function dedupeLibraryTitles(titles) {
       (looksLikeSeasonFolderTitle(slot.best?.title) || looksLikeCompletePackTitle(slot.best?.title)) &&
       !looksLikeSeasonFolderTitle(t?.title) &&
       !looksLikeCompletePackTitle(t?.title);
+    const mergeRow = (keep, drop) => {
+      const ids = [
+        ...new Set(
+          [
+            ...(keep.ids || []),
+            ...(drop.ids || []),
+            keep.id,
+            drop.id,
+            keep.jellyfinId,
+            drop.jellyfinId,
+            keep.jellyfinId ? `jf-${keep.jellyfinId}` : "",
+            drop.jellyfinId ? `jf-${drop.jellyfinId}` : "",
+          ]
+            .filter(Boolean)
+            .map(String),
+        ),
+      ];
+      return { ...keep, ids };
+    };
     if (betterScore || preferSeriesName) {
-      slot.best = t;
+      slot.best = mergeRow(t, slot.best);
       if (year) slot.year = year;
     } else {
+      slot.best = mergeRow(slot.best, t);
       slot.year = slot.year || year;
     }
   }
@@ -331,7 +475,10 @@ export async function serveLibrary({
   };
 
   const serve = (titles, extra = {}) => ({
-    titles: withPosterHost(applyLibraryLimit(dedupeLibraryTitles(withoutRemoved(titles)), limit), host),
+    titles: withPosterHost(
+      applyLibraryLimit(dedupeLibraryTitles(repairHashTitles(withoutRemoved(titles))), limit),
+      host,
+    ),
     error: extra.error ?? null,
     fromCache: Boolean(extra.fromCache),
   });
@@ -355,7 +502,7 @@ export async function serveLibrary({
   try {
     const data = await fetchItems(auth, limit);
     const items = Array.isArray(data?.Items) ? data.Items : [];
-    const titles = dedupeLibraryTitles(items.map((it) => mapJellyfinItem(it, host)));
+    const titles = dedupeLibraryTitles(mapJellyfinItems(items, host));
     cache.write(titles, { now, complete: !limit });
     if (limit && typeof refresh === "function") void refresh();
     return serve(titles);

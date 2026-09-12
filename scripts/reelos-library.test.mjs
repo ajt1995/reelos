@@ -15,6 +15,7 @@ import {
   looksLikeSeasonFolderTitle,
   looksLikeCompletePackTitle,
   mapJellyfinItem,
+  mapJellyfinItems,
   mergeShelf,
   parseLibraryLimit,
   serveLibrary,
@@ -24,6 +25,13 @@ import {
   stripSeasonFolderSuffix,
   titleYear,
   yearsCompatible,
+  looksLikeHashTitle,
+  humanTitleFromSceneName,
+  identifyLibraryTitle,
+  hostPathFromJellyfin,
+  dumpSearchPaths,
+  repairHashTitles,
+  UNKNOWN_ON_BOX,
 } from "./reelos-library.mjs";
 
 const sampleItem = {
@@ -49,7 +57,7 @@ test("Home shelf limit stays 24 and parser rejects junk", () => {
 
 test("Jellyfin Items URL is lean: no Overview, optional Limit", () => {
   const full = libraryItemsUrl();
-  assert.match(full, /Fields=ProviderIds/);
+  assert.match(full, /Fields=Path%2CProviderIds/);
   assert.match(full, /EnableImages=false/);
   assert.match(full, /EnableTotalRecordCount=false/);
   assert.doesNotMatch(full, /Overview/);
@@ -584,4 +592,119 @@ test("cache freshness helper", () => {
   assert.equal(canServeStale({ titles: [titleFrom(sampleItem)] }), true);
   assert.equal(cacheIsFresh({ titles: [1], at: 10 }, 20, 15), true);
   assert.equal(cacheIsFresh({ titles: [1], at: 10 }, 30, 15), false);
+});
+
+test("hash dump names are not human titles", () => {
+  assert.equal(looksLikeHashTitle("73ceff573dc30bebc3fcf26f61de07b25f927a74"), true);
+  assert.equal(looksLikeHashTitle("a".repeat(64)), true);
+  assert.equal(looksLikeHashTitle("Rick and Morty"), false);
+  assert.equal(looksLikeHashTitle("Unknown on this box"), false);
+});
+
+test("scene names parse a series from SxxExx files without ffprobe", () => {
+  const ep = humanTitleFromSceneName(
+    "Rick And Morty S04E01 Edge Of Tomorty Rick Die Rickpeat 720p BluRay H264 5.1 BONE.mp4",
+  );
+  assert.equal(ep.title, "Rick And Morty");
+  const dotted = humanTitleFromSceneName("Rick.And Morty S04E10 Star Mort Rickturn Of The Jerri 720p BluRay.mp4");
+  assert.equal(dotted.title, "Rick And Morty");
+  const movie = humanTitleFromSceneName("Interstellar.2014.2160p.PROPER.IMAX.REMUX.mkv");
+  assert.equal(movie.title, "Interstellar");
+  assert.equal(movie.year, 2014);
+  assert.equal(humanTitleFromSceneName("73ceff573dc30bebc3fcf26f61de07b25f927a74").title, "");
+});
+
+test("identifyLibraryTitle uses episode files when JF Name is an infohash", () => {
+  const ided = identifyLibraryTitle({
+    name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    path: "/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    files: [
+      "Rick And Morty S04E01 Edge Of Tomorty Rick Die Rickpeat 720p BluRay H264 5.1 BONE.mp4",
+      "Rick And Morty S04E02 The Old Man And The Seat 720p BluRay H264 5.1 BONE.mp4",
+    ],
+  });
+  assert.equal(ided.title, "Rick And Morty");
+  const unknown = identifyLibraryTitle({
+    name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    path: "/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    files: [],
+  });
+  assert.equal(unknown.title, UNKNOWN_ON_BOX);
+});
+
+test("host dump paths never list FUSE /mnt/debrid", () => {
+  assert.equal(hostPathFromJellyfin("/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74"), "/mnt/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74");
+  assert.equal(hostPathFromJellyfin("/mnt/debrid/__all__/73ceff"), "");
+  const paths = dumpSearchPaths("/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74", "73ceff573dc30bebc3fcf26f61de07b25f927a74");
+  assert.ok(paths.includes("/mnt/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74"));
+  assert.equal(paths.some((p) => p.startsWith("/mnt/debrid")), false);
+});
+
+test("hash dump of Rick and Morty S04 collapses onto the tvdb series and keeps jf-*", () => {
+  const series = titleFrom({
+    Id: "2e58b382fb6f70f674e1e7273b2d05f8",
+    Name: "Rick and Morty",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: { Tvdb: "275274", Tmdb: "60625" },
+  });
+  const hashDump = mapJellyfinItems(
+    [
+      {
+        Id: "103ae87fbbbd9bb920ee3803dcffc570",
+        Name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+        Type: "Series",
+        ProductionYear: null,
+        Path: "/symlinks/sonarr/73ceff573dc30bebc3fcf26f61de07b25f927a74",
+        ProviderIds: {},
+      },
+    ],
+    "10.0.0.5",
+    {
+      listFiles: () => [
+        "Rick And Morty S04E01 Edge Of Tomorty Rick Die Rickpeat 720p BluRay H264 5.1 BONE.mp4",
+      ],
+    },
+  )[0];
+  assert.equal(hashDump.title, "Rick And Morty");
+  assert.equal(hashDump.id, "jf-103ae87fbbbd9bb920ee3803dcffc570");
+  const out = dedupeLibraryTitles([hashDump, series]);
+  assert.equal(out.length, 1, JSON.stringify(out.map((t) => [t.title, t.id])));
+  assert.equal(out[0].title, "Rick and Morty");
+  assert.equal(out[0].year, 2013);
+  assert.equal(out[0].id, "tvdb-275274");
+  assert.ok(out[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
+  assert.ok(out[0].ids.includes("tvdb-275274"));
+});
+
+test("stale cache hash rows repair from dump filenames then collapse", () => {
+  const series = titleFrom({
+    Id: "jf-rm",
+    Name: "Rick and Morty",
+    Type: "Series",
+    ProductionYear: 2013,
+    ProviderIds: { Tvdb: "275274" },
+  });
+  const cached = titleFrom({
+    Id: "103ae87fbbbd9bb920ee3803dcffc570",
+    Name: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
+    Type: "Series",
+    ProviderIds: {},
+  });
+  const repaired = repairHashTitles([cached, series], {
+    listFiles: (t) =>
+      looksLikeHashTitle(t.title)
+        ? ["Rick And Morty S04E05 Rattlestar Ricklactica 720p BluRay H264 5.1 BONE.mp4"]
+        : [],
+  });
+  assert.equal(repaired.find((t) => t.jellyfinId === "103ae87fbbbd9bb920ee3803dcffc570").title, "Rick And Morty");
+  const out = dedupeLibraryTitles(repaired);
+  assert.equal(out.length, 1);
+  assert.equal(out[0].title, "Rick and Morty");
+  assert.ok(out[0].ids.includes("jf-103ae87fbbbd9bb920ee3803dcffc570"));
+});
+
+test("Jellyfin Items URL asks for Path so hash dumps can be named from files", () => {
+  assert.match(libraryItemsUrl(), /Fields=Path%2CProviderIds|Fields=Path,ProviderIds/);
+  assert.doesNotMatch(libraryItemsUrl(), /Overview/);
 });

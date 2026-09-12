@@ -11,6 +11,7 @@ export function isGhostRequestLabel(title?: string, titleId?: string): boolean {
   const id = String(titleId || "").trim();
   if (!name) return true;
   if (id && name === id) return true;
+  if (/^[0-9a-f]{32,64}$/i.test(name)) return true;
   return /^tmdb(-tv)?-\d+$/i.test(name);
 }
 
