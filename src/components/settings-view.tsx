@@ -26,7 +26,7 @@ import {
   QualityPanel,
   UsersPanel,
 } from "@/components/settings-accordions";
-import { PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panels";
+import { HardwareDetectedCard, PasswordRow, PerformanceRow, PwaRow } from "@/components/settings-panels";
 import { SourcePanel } from "@/components/settings-source";
 import { UpdatesRow } from "@/components/settings-updates";
 import { LogsRow } from "@/components/settings-logs";
@@ -179,6 +179,7 @@ export function SettingsView() {
       </Section>
 
       <Section title="Box" hint="Updates, changelog, performance, logs. Apply still lives here.">
+        <HardwareDetectedCard />
         <UpdatesRow
           open={panel === "updates"}
           onClick={() => setPanel(panel === "updates" ? null : "updates")}

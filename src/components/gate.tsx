@@ -4,7 +4,7 @@ import { Provision } from "@/components/provision";
 import { Shell } from "@/components/shell";
 import { Splash } from "@/components/splash";
 import { Wizard } from "@/components/wizard";
-import { catchupLocksHome } from "@/lib/library-catchup";
+import { updateLocksUi } from "@/lib/library-catchup";
 import { useReelStore } from "@/lib/store";
 
 export function Gate({
@@ -17,10 +17,14 @@ export function Gate({
   const hydrated = useReelStore((s) => s.hydrated);
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
+  const applying = useReelStore((s) => updateLocksUi(s.update.status));
+  const failed = useReelStore((s) => s.update.status === "error");
 
   if (!hydrated) return <Splash warming />;
   if (!provisioned || phase === "wizard") return <Navigate to="/" />;
   if (phase === "building") return <Provision />;
+  if (applying) return <Splash updating />;
+  if (failed) return <Splash failed />;
   if (!chrome) return children;
   return <Shell>{children}</Shell>;
 }
@@ -30,16 +34,16 @@ export function Boot() {
   const hydrated = useReelStore((s) => s.hydrated);
   const provisioned = useReelStore((s) => s.provisioned);
   const phase = useReelStore((s) => s.phase);
-  const catchup = useReelStore((s) => s.libraryCatchup);
-  const applying = useReelStore((s) => s.update.status === "applying");
-  const splashLock = catchupLocksHome(catchup);
+  const applying = useReelStore((s) => updateLocksUi(s.update.status));
+  const failed = useReelStore((s) => s.update.status === "error");
 
   if (!hydrated) return <Splash warming />;
   if (phase === "wizard") return <Wizard />;
   if (phase === "building") return <Provision />;
   if (phase === "ready" && !provisioned) return <Provision />;
   if (provisioned) {
-    if (splashLock && !applying) return <Splash warming />;
+    if (applying) return <Splash updating />;
+    if (failed) return <Splash failed />;
     return (
       <Shell>
         <HomeView />

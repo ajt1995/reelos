@@ -7,8 +7,17 @@
  * Not a Go rewrite. Not vite --host on the house when prebuilt exists.
  * Leftover Vite is `vite preview` only if nitro+api cannot bind.
  */
-import { spawn } from "node:child_process";
-import { createReadStream, existsSync, realpathSync, statSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import {
+  createReadStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { parseListenerInodes } from "./preview.mjs";
 import http from "node:http";
 import { extname, join, normalize, relative, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -290,7 +299,65 @@ function armSelfHeal() {
   setInterval(() => void kickSelfHeal(), 120_000).unref();
 }
 
+function orphanPidsOnPort(port, { selfPid = process.pid } = {}) {
+  const inodes = new Set();
+  for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    if (!existsSync(file)) continue;
+    for (const inode of parseListenerInodes(readFileSync(file, "utf8"), port)) inodes.add(inode);
+  }
+  if (inodes.size === 0) return [];
+  const targets = new Set([...inodes].map((inode) => `socket:[${inode}]`));
+  const pids = [];
+  for (const entry of readdirSync("/proc")) {
+    const pid = Number.parseInt(String(entry), 10);
+    if (!Number.isInteger(pid) || pid <= 1 || pid === selfPid) continue;
+    let fds;
+    try { fds = readdirSync(`/proc/${pid}/fd`); } catch { continue; }
+    for (const fd of fds) {
+      try {
+        if (targets.has(readlinkSync(`/proc/${pid}/fd/${fd}`))) { pids.push(pid); break; }
+      } catch { /* fd closed mid-scan */ }
+    }
+  }
+  return pids;
+}
+
+export function killOrphanPortPids(pids, { kill = process.kill, selfPid = process.pid } = {}) {
+  const seen = new Set();
+  const killed = [];
+  for (const raw of pids) {
+    const pid = Number(raw);
+    if (!Number.isInteger(pid) || pid <= 1 || pid === selfPid || seen.has(pid)) continue;
+    seen.add(pid);
+    try { kill(pid, "SIGTERM"); killed.push(pid); } catch { /* already gone */ }
+  }
+  return killed;
+}
+
+export function killOrphan8080() {
+  return killOrphanPortPids(orphanPidsOnPort(PORT));
+}
+
+export function ensureHardwareProfile(root = ROOT) {
+  const py = existsSync(join(root, "bin/reelos_hardware.py"))
+    ? join(root, "bin/reelos_hardware.py")
+    : existsSync("/opt/reelos/bin/reelos_hardware.py")
+      ? "/opt/reelos/bin/reelos_hardware.py"
+      : join(root, "daemon/reelos_hardware.py");
+  if (!existsSync(py)) return { ran: false };
+  const state = process.env.REELOS_STATE || "/var/lib/reelos";
+  const saved = join(state, "hardware-profile.json");
+  if (existsSync(saved)) {
+    spawn("python3", [py, "--ensure"], { detached: true, stdio: "ignore" }).unref();
+    return { ran: true, skippedSync: true };
+  }
+  const r = spawnSync("python3", [py, "--ensure"], { encoding: "utf8", timeout: 8000 });
+  return { ran: true, skippedSync: false, status: r.status };
+}
+
 export async function startBox({ root = ROOT } = {}) {
+  ensureHardwareProfile(root);
+  killOrphan8080();
   const client = findClientRoot(root);
   if (client) {
     const server = await startStatic(client, root);

@@ -73,19 +73,99 @@ export function ramGbFromKb(ramKb) {
   return Math.round(((Number(ramKb) || 0) / 1024 / 1024) * 100) / 100;
 }
 
-export function hardwareProfile({ ramKb = 0, cpus = 1, diskKind = "unknown", diskFreeGb = 0 } = {}) {
+export function cpuShort(model, cpus) {
+  const raw = String(model || "")
+    .replace(/\((?:R|TM)\)/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const m = raw.match(/(Pentium|Celeron|Xeon|Ryzen|Athlon|Core i[3579]|Apple M\d)(?:\s+CPU)?\s+([A-Z0-9-]+)/i);
+  const name = m ? `${m[1]} ${m[2]}` : (raw.split("@")[0].trim() || "CPU").slice(0, 28);
+  return `${Math.max(1, Number(cpus) || 1)}c ${name}`;
+}
+
+export function ramLabel(ramGb, ramKb = 0) {
+  let gb = Number(ramGb) || 0;
+  if (gb <= 0 && ramKb) gb = ramGbFromKb(ramKb);
+  let gi = 0;
+  if (gb > 0 && gb <= 4.5) gi = gb >= 2.5 ? 4 : Math.max(1, Math.round(gb));
+  else if (gb) gi = Math.max(1, Math.round(gb));
+  return gi ? `${gi}Gi RAM` : "RAM unknown";
+}
+
+export function summaryFromProfile(profile = {}) {
+  if (profile.summary) return String(profile.summary);
+  const ram = ramLabel(profile.ramGb ?? profile.ram_gb, profile.ramKb ?? profile.ram_kb);
+  const cpu = cpuShort(profile.cpuModel || profile.cpu_model || "", profile.cpus || 1);
+  const kind = String(profile.diskKind || profile.disk_kind || "unknown");
+  const disk = kind === "rotational" ? "HDD" : kind === "ssd" ? "SSD" : "disk";
+  const root = profile.rootOnUsb || profile.root_on_usb ? "root-on-usb" : "root-on-internal";
+  return `${ram} · ${cpu} · ${disk} · ${root}`;
+}
+
+export function splashTuneFromProfile(profile = {}) {
+  if (profile.splashTune || profile.splash_tune) return String(profile.splashTune || profile.splash_tune);
+  const tiny = Boolean(profile.tiny);
+  const kind = String(profile.diskKind || profile.disk_kind || "");
+  if (tiny && kind === "rotational") return "Tuning for 4GB HDD…";
+  if (tiny) return "Tuning for 4GB RAM…";
+  if (kind === "rotational") return "Tuning for HDD…";
+  return "";
+}
+
+export function hardwareProfilePath(state = process.env.REELOS_STATE || "/var/lib/reelos") {
+  return `${String(state || "/var/lib/reelos").replace(/\/$/, "")}/hardware-profile.json`;
+}
+
+export const HARDWARE_PROFILE_PATH = hardwareProfilePath();
+
+export function loadSavedHardware({ path = hardwareProfilePath(), readFile = readFileSync } = {}) {
+  try {
+    const doc = JSON.parse(readFile(path, "utf8"));
+    if (!doc || !(doc.ram_kb || doc.ramKb)) return null;
+    return doc;
+  } catch {
+    return null;
+  }
+}
+
+export function hardwareProfile({
+  ramKb = 0,
+  cpus = 1,
+  diskKind = "unknown",
+  diskFreeGb = 0,
+  cpuModel = "",
+  product = "",
+  rootOnUsb = false,
+  kdumpReservedKb = 0,
+} = {}) {
   const kb = Number(ramKb) || 0;
   const tiny = kb > 0 && kb <= SMALL_MEM_KB;
   const kind = ["ssd", "rotational", "unknown"].includes(diskKind) ? diskKind : "unknown";
-  return {
+  const prof = {
     ramKb: kb,
+    ram_kb: kb,
     ramGb: ramGbFromKb(kb),
+    ram_gb: ramGbFromKb(kb),
     cpus: Math.max(1, Number(cpus) || 1),
     diskKind: kind,
+    disk_kind: kind,
     diskFreeGb: Number(diskFreeGb) || 0,
+    disk_free_gb: Number(diskFreeGb) || 0,
     tiny,
     boxIsSmall: tiny,
+    box_is_small: tiny,
+    cpuModel: String(cpuModel || ""),
+    cpu_model: String(cpuModel || ""),
+    product: String(product || ""),
+    rootOnUsb: Boolean(rootOnUsb),
+    root_on_usb: Boolean(rootOnUsb),
+    kdumpReservedKb: Number(kdumpReservedKb) || 0,
+    kdump_reserved_kb: Number(kdumpReservedKb) || 0,
   };
+  prof.summary = summaryFromProfile(prof);
+  prof.splashTune = splashTuneFromProfile(prof);
+  prof.splash_tune = prof.splashTune;
+  return prof;
 }
 
 export function hardwareLimits(profile) {
@@ -146,8 +226,12 @@ export function hardwareLimits(profile) {
     catchupFolders = Math.max(4, Math.floor(catchupFolders / 2));
     provisionFolders = Math.max(6, Math.floor(provisionFolders / 2));
   }
+  const hdd = kind === "rotational";
+  const constrained = tiny || hdd;
+  const parallel = constrained ? 1 : Math.min(4, cpus);
   return {
     tiny,
+    lowPerf: tiny,
     catchupMemoryMax,
     jellyfinMem,
     sonarrMem,
@@ -159,10 +243,71 @@ export function hardwareLimits(profile) {
     dBackoffLimit: 1,
     nice,
     ioprio,
+    fuseCount: 1,
+    skipDumpFfprobe: constrained,
+    zram: hdd,
+    disableKdump: tiny,
+    searchParallelism: parallel,
+    indexerParallelism: parallel,
+    splashTune: splashTuneFromProfile({ tiny, diskKind: kind }),
   };
 }
 
-/** High D-state is I/O backpressure — concurrency 0 on any hardware. */
+export function publicHardware(saved, fallbackMemKb = 0) {
+  const memKb = Number(fallbackMemKb) || 0;
+  if (saved && (saved.summary || saved.ram_kb || saved.ramKb)) {
+    const tiny = Boolean(saved.tiny) || boxIsSmall(saved.ram_kb || saved.ramKb || memKb);
+    const knobs = saved.knobs || {};
+    return {
+      probed: Boolean(saved.probed_at || saved.probe_version),
+      probeVersion: saved.probe_version || 0,
+      probedAt: saved.probed_at || null,
+      summary: saved.summary || summaryFromProfile(saved),
+      splashTune: knobs.splash_tune || saved.splash_tune || splashTuneFromProfile(saved),
+      ramGb: saved.ram_gb ?? saved.ramGb ?? ramGbFromKb(saved.ram_kb || saved.ramKb || 0),
+      cpus: saved.cpus || 1,
+      cpuModel: saved.cpu_model || saved.cpuModel || "",
+      diskKind: saved.disk_kind || saved.diskKind || "unknown",
+      product: saved.product || "",
+      rootOnUsb: Boolean(saved.root_on_usb || saved.rootOnUsb),
+      tiny,
+      knobs: {
+        lowPerf: knobs.low_perf ?? tiny,
+        fuseCount: knobs.fuse_count ?? 1,
+        skipDumpFfprobe: knobs.skip_dump_ffprobe ?? (tiny || saved.disk_kind === "rotational"),
+        zram: knobs.zram ?? saved.disk_kind === "rotational",
+        disableKdump: knobs.disable_kdump ?? tiny,
+        searchParallelism: knobs.search_parallelism ?? 1,
+        indexerParallelism: knobs.indexer_parallelism ?? 1,
+      },
+    };
+  }
+  const tiny = boxIsSmall(memKb);
+  const fallback = hardwareProfile({ ramKb: memKb, cpus: 1, diskKind: "unknown" });
+  return {
+    probed: false,
+    probeVersion: 0,
+    probedAt: null,
+    summary: tiny ? "4Gi RAM · unknown CPU · disk unknown · root-on-internal" : summaryFromProfile(fallback),
+    splashTune: tiny ? "Tuning for 4GB RAM…" : "",
+    ramGb: ramGbFromKb(memKb),
+    cpus: 1,
+    cpuModel: "",
+    diskKind: "unknown",
+    product: "",
+    rootOnUsb: false,
+    tiny,
+    knobs: {
+      lowPerf: tiny,
+      fuseCount: 1,
+      skipDumpFfprobe: tiny,
+      zram: false,
+      disableKdump: tiny,
+      searchParallelism: 1,
+      indexerParallelism: 1,
+    },
+  };
+}
 export function importChunkSize(profile, { catchUp = false, dState = 0 } = {}) {
   if (Number(dState) > 0) return 0;
   const lim = hardwareLimits(profile);

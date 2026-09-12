@@ -61,8 +61,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.48";
-export const SHIPPED_VERSION = "1.2.50.48";
+export const LATEST_VERSION = "1.2.50.50";
+export const SHIPPED_VERSION = "1.2.50.50";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -96,6 +96,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.50: OTA cleaner + Updating ReelOS splash until browse/request work; library catch-up stays a banner. Hardware probe (RAM/CPU/HDD vs SSD/USB-root/kdump) persists a profile, drives knobs, and Settings shows this is what I detected. Re-probes on install/OTA/disk change; skips if unchanged. Sleep-inhibit during Apply; fail splash if restore. Post-OTA heal is faster (stamp-first + no dump ffprobe + one FUSE); tarball download/extract is still network+disk. OTA cannot move Ubuntu off the HDD. Never /media, never ota.lock. Skip 49 (cloud-only #136). Not Arena/Books, not TV indexer seeds, not USB/ISO. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.48: Hands-off home — Discover is on this box / finishing / pick tonight (not unreleased 2026 junk). Home posters skip empty ImageTags; 404 is a blank card not a duplicate title. One Watch to LAN/Tailscale IP:8096. Requests stay visible; recover adds National Treasure to Radarr without a magnet. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.47: Request honesty — movie pages POST tmdb-<n> (Moon is not The Great Escape). Named titles hide hash paste; Request goes to Seerr/Radarr first. National Treasure stays on Requests until Radarr has the movie. Request Sxx hides when that season is on disk. /title/73ceff\u2026 is Rick S04. JF posters skip empty ImageTags; Home chip is live only when virtual folders are green. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.46: Library never paints a 40-char infohash as the title. Hash dump folders (73ceff\u2026 /title/jf-*) are named from the files on the box (Rick and Morty S04) or Unknown on this box. Watch / In library when Jellyfin has it \u2014 Seerr did not find is not the headline. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped \u2014 do not reuse).",
@@ -683,7 +684,7 @@ export const useReelStore = create<ReelState>()(
       syncUpdateFromBox: () => {
         void fetch("/api/update/status", { cache: "no-store" })
           .then((r) => r.json())
-          .then((st: { running?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState }) => {
+          .then((st: { running?: boolean; failed?: boolean; local?: string; target?: string | null; log?: string; library?: LibraryCatchupState }) => {
             const cur = get();
             const last = (st.log || "").trim().split("\n").pop() || "";
             if (st.library && typeof st.library === "object") {
@@ -706,6 +707,21 @@ export const useReelStore = create<ReelState>()(
                   target: st.target || cur.update.target,
                   steps,
                   notes: [],
+                },
+              });
+              return;
+            }
+            if (
+              cur.update.status === "applying" &&
+              (st.failed || /update failed, still on previous|restore after failure/.test(st.log || ""))
+            ) {
+              set({
+                update: {
+                  ...cur.update,
+                  status: "error",
+                  current: st.local || cur.update.current,
+                  target: null,
+                  notes: ["Update failed, still on previous"],
                 },
               });
               return;

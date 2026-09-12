@@ -12,12 +12,12 @@ function read(rel) {
   return readFileSync(join(root, rel), "utf8");
 }
 
-test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
+test("sidecar: VERSION is 1.2.50.50; beta is a separate 2.0.0 tarball", () => {
   const ver = read("VERSION").trim();
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
-  assert.equal(ver, "1.2.50.48");
-  assert.equal(chan.version, "1.2.50.48");
+  assert.equal(ver, "1.2.50.50");
+  assert.equal(chan.version, "1.2.50.50");
   assert.equal(chan.channel, "stable");
   assert.match(chan.tarball, /main\.tar\.gz/);
   assert.doesNotMatch(JSON.stringify(chan), /beta-arena-books/);
@@ -30,10 +30,10 @@ test("sidecar: VERSION is 1.2.50.48; beta is a separate 2.0.0 tarball", () => {
   assert.doesNotMatch(read("src/components/settings-updates.tsx"), /stub today/);
 });
 
-test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 48", () => {
-  assert.ok(cmpVer("2.0.0", "1.2.50.48") > 0);
-  assert.equal(isRollback("2.0.0", "1.2.50.48", false), true);
-  assert.equal(isRollback("2.0.0", "1.2.50.48", true), false);
+test("sidecar: 2.0.0 is newer; leaving beta is a rollback to 50", () => {
+  assert.ok(cmpVer("2.0.0", "1.2.50.50") > 0);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", false), true);
+  assert.equal(isRollback("2.0.0", "1.2.50.50", true), false);
 });
 
 test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
@@ -56,5 +56,5 @@ test("sidecar: mailman prefers main channel-beta and skips the stub", () => {
 test("sidecar: check-ota stays green without Arena CSS", () => {
   const r = spawnSync("python3", ["scripts/check-ota.py", "."], { cwd: root, encoding: "utf8" });
   assert.equal(r.status, 0, r.stderr || r.stdout);
-  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.48/);
+  assert.match(r.stdout, /check-ota ok version=1\.2\.50\.50/);
 });

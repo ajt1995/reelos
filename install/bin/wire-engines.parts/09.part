@@ -1130,7 +1130,35 @@ def reset_jellyfin_config() -> None:
     seed_jellyfin_encoding_xml()
 
 
+def ota_clean_bounded_heal() -> None:
+    """API-only leftover JF rows. Not a dump walk. Not docker restart Sonarr."""
+    apply_jellyfin_performance()
+    apply_arr_debrid_media_info()
+    fuse_unstack_stale()
+    token = jellyfin_token()
+    if token:
+        try:
+            heal_season_folder_items(token)
+        except Exception as e:
+            log_wire(f"ota-clean season-folder {e}")
+        try:
+            heal_movie_dump_items(token)
+        except Exception as e:
+            log_wire(f"ota-clean movie dump {e}")
+        try:
+            want = jellyfin_want_libraries()
+            folders = jellyfin_folders(token)
+            if folders:
+                drop_extra_jellyfin_libraries(token, folders, want)
+        except Exception as e:
+            log_wire(f"ota-clean extra libraries {e}")
+    log_wire("ota-clean bounded heal")
+
+
 if __name__ == "__main__":
+    if "ota-clean" in sys.argv:
+        ota_clean_bounded_heal()
+        raise SystemExit(0)
     if "--performance" in sys.argv or "no-ffprobe" in sys.argv:
         apply_jellyfin_performance()
         apply_arr_debrid_media_info()

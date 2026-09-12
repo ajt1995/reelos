@@ -11,6 +11,11 @@ export function catchupLocksHome(c?: Partial<LibraryCatchupState> | null): boole
   return Boolean(c.needsImport);
 }
 
+/** Full-screen Updating ReelOS splash until the door is actually accepting browse/request. */
+export function updateLocksUi(status?: string | null): boolean {
+  return String(status || "").toLowerCase() === "applying";
+}
+
 export function honestCatchupMessage(c: Partial<LibraryCatchupState>, splashLock: boolean): string {
   const status = String(c.status || "idle").toLowerCase();
   const raw = String(c.message || "");

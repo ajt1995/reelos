@@ -95,7 +95,10 @@ def apply_arr_debrid_media_info() -> None:
             log_wire(f"{name} enableMediaInfo off — no ffprobe on FUSE")
         except NET_ERR as e:
             log_wire(f"{name} media-info put {e}")
-    stub_container_ffprobe()
+    if skip_dump_ffprobe():
+        stub_container_ffprobe()
+    else:
+        log_wire("no-ffprobe skip — saved profile allows dump ffprobe")
 
 
 FFPROBE_STUB_SCRIPT = r"""

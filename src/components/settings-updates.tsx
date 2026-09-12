@@ -63,9 +63,9 @@ export function UpdatesRow({ open, onClick }: { open: boolean; onClick: () => vo
       </p>
       <p className="mt-2 text-sm text-muted">
         {update.status === "applying"
-          ? "An Apply is running — phone, CLI, or both. Home can open. Engines are still configuring. Do not tap Apply again."
+          ? "An Apply is running — phone, CLI, or both. Full-screen splash stays until browse and request work. Do not tap Apply again."
           : catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff"
-            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply."
+            ? "The update is on this box. Library catch-up is still importing dumps — folder skips and timeouts are here, not a stuck Apply. Request still works."
             : "Host patches from Ubuntu, ReelOS from GitHub. Stack images stay frozen unless you flip the toggle. Libraries stay put."}
       </p>
       {catchupLocksHome(libraryCatchup) || libraryCatchup.status === "backoff" ? (

@@ -59,6 +59,62 @@ export function PwaRow() {
   );
 }
 
+export function HardwareDetectedCard() {
+  const [summary, setSummary] = useState("");
+  const [probed, setProbed] = useState(false);
+  const [detail, setDetail] = useState("");
+  useEffect(() => {
+    void fetch("/api/hardware", { cache: "no-store" })
+      .then(
+        (r) =>
+          r.json() as Promise<{
+            summary?: string;
+            probed?: boolean;
+            ramGb?: number;
+            cpus?: number;
+            cpuModel?: string;
+            diskKind?: string;
+            rootOnUsb?: boolean;
+            product?: string;
+          }>,
+      )
+      .then((j) => {
+        setSummary(j.summary || "");
+        setProbed(Boolean(j.probed));
+        const disk = j.diskKind === "rotational" ? "HDD" : j.diskKind === "ssd" ? "SSD" : "disk";
+        const bits = [
+          j.product || "",
+          j.ramGb ? `${j.ramGb} Gi visible RAM` : "",
+          j.cpus ? `${j.cpus} cores` : "",
+          j.cpuModel || "",
+          disk,
+          j.rootOnUsb ? "root on USB" : "root on internal disk",
+        ].filter(Boolean);
+        setDetail(bits.join(" · "));
+      })
+      .catch(() => {});
+  }, []);
+  return (
+    <div className="rounded-2xl bg-card px-5 py-4 shadow-[var(--shadow-border)]">
+      <div className="flex items-start gap-3">
+        <Cpu className="mt-0.5 size-5 text-muted" />
+        <div>
+          <p className="font-display font-medium">This is what I detected</p>
+          <p className="mt-1 text-sm text-foreground">
+            {summary || "Not measured yet — ReelOS will probe on the next update or door start."}
+          </p>
+          {detail ? <p className="mt-1 text-sm text-muted">{detail}</p> : null}
+          <p className="mt-1 text-sm text-muted">
+            {probed
+              ? "Cheap read of RAM, CPU, HDD vs SSD, USB-root, and kdump — not a speed test. Drive knobs follow this profile. Re-probes on install, OTA, or disk change; skips if unchanged."
+              : "A 4.5Gi RAM guess is used until the probe runs. This is not a speed test."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PerformanceRow() {
   const [low, setLow] = useState(true);
   const [busy, setBusy] = useState(false);
