@@ -69,7 +69,7 @@ apt-get install -y --no-install-recommends \
   ca-certificates curl gnupg avahi-daemon avahi-utils ufw \
   unzip tar python3 software-properties-common apt-transport-https \
   debian-keyring debian-archive-keyring \
-  wpasupplicant rfkill || true
+  wpasupplicant rfkill openssh-server || true
 
 if ! apt-get install -y --no-install-recommends caddy; then
   echo "Caddy not in distro repos — trying the official package."
@@ -116,6 +116,12 @@ if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh || true
 fi
 enable_unit docker
+if id reelos >/dev/null 2>&1; then
+  usermod -aG docker reelos 2>/dev/null || true
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  apt-get install -y docker-compose-plugin || apt-get install -y docker-compose || true
+fi
 
 # apt nodejs+npm first (fixes ExecStart 127). Nodesource only if still missing.
 if ! command -v npm >/dev/null 2>&1; then
@@ -197,6 +203,12 @@ chown -R 1000:1000 "$MEDIA" /mnt/debrid /mnt/symlinks || true
 ufw allow 80/tcp || true
 ufw allow 443/tcp || true
 ufw allow 22/tcp || true
+# SSH for user reelos (Ubuntu account). Not the wizard admin PIN.
+if systemd_live; then
+  systemctl enable --now ssh 2>/dev/null || systemctl enable --now sshd 2>/dev/null || true
+else
+  systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+fi
 # No BitTorrent on this box. *arrs talk to Decypharr only.
 ufw deny 6881:6889/tcp || true
 ufw deny 6881:6889/udp || true
@@ -244,6 +256,6 @@ systemctl disable getty@tty1.service >/dev/null 2>&1 || true
 echo
 echo "ReelOS is up."
 echo "From another device on this network, open http://reelos.local"
-echo "First boot is the seven-question wizard. Paste a Real-Debrid key to ping the live account."
+echo "First boot is the seven-step wizard. Paste a TorBox API key there — it is never on the disc."
 echo "This installer does not seed indexers and does not fetch copyrighted media."
 

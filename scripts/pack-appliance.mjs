@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import { chmodSync, cpSync, mkdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = "/workspace";
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const staging = "/tmp/reelos-pack";
 const dest = join(root, "public", "install");
 
@@ -88,12 +89,20 @@ const tar = spawnSync(
 if (tar.status !== 0) process.exit(1);
 cpSync(join(root, "install", "autoinstall", "user-data"), join(staging, "cidata", "user-data"));
 cpSync(join(root, "install", "autoinstall", "meta-data"), join(staging, "cidata", "meta-data"));
+for (const extra of ["live-wifi.sh", "seed-reelos.sh", "late.sh"]) {
+  const from = join(root, "install", "autoinstall", extra);
+  if (existsSync(from)) cpSync(from, join(staging, "cidata", extra));
+}
 
 const iso = join(dest, "reelos-cidata.iso");
 const py = spawnSync("python3", [join(root, "scripts", "cidata-iso.py"), join(staging, "cidata"), iso], {
   stdio: "inherit",
 });
-if (py.status !== 0) process.exit(1);
+if (py.status !== 0) {
+  console.warn("cidata iso skipped (pycdlib missing or cidata-iso.py failed)");
+}
 
-const st = spawnSync("bash", ["-lc", `ls -lh ${zip} ${iso}`], { stdio: "inherit" });
+const st = spawnSync("bash", ["-lc", `ls -lh ${zip} ${bundle} ${existsSync(iso) ? iso : ""}`], {
+  stdio: "inherit",
+});
 if (st.status !== 0) process.exit(1);
