@@ -195,8 +195,8 @@ export function TitleView({ id }: { id: string }) {
     (resolved.kind === "movie" && !intent.movies) ||
     (resolved.kind === "tv" && !intent.tv);
 
-  return (
-    <div className="pb-16">
+    return (
+    <div className="pb-28">
       <div className="relative min-h-[280px] overflow-hidden md:min-h-[360px]">
         <img
           src={resolved.poster}

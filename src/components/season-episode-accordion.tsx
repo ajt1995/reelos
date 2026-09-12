@@ -75,6 +75,16 @@ export function SeasonEpisodeAccordion({
     };
   }, [open, titleId, selectedSeason]);
 
+  useEffect(() => {
+    if (!open || loading) return;
+    const node = document.getElementById(`season-${selectedSeason}-episodes`);
+    if (!node) return;
+    const id = window.requestAnimationFrame(() => {
+      node.scrollIntoView({ block: "end", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open, selectedSeason, loading, episodes.length]);
+
   const tapSeason = (n: number) => {
     if (n === selectedSeason && open) {
       setOpen(false);
@@ -132,7 +142,7 @@ export function SeasonEpisodeAccordion({
       {open ? (
         <div
           id={`season-${selectedSeason}-episodes`}
-          className="relative z-20 mt-3 min-w-0 rounded-2xl bg-card px-3 py-2 shadow-[var(--shadow-border)]"
+          className="relative z-20 mt-3 min-w-0 scroll-mt-4 scroll-mb-24 rounded-2xl bg-card px-3 py-2 shadow-[var(--shadow-border)]"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 py-2">
             <p className="text-sm text-muted">
