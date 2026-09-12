@@ -1,13 +1,68 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
-import { c as rememberCatalogTitles, l as syntheticRelease, o as getTitle, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
+import { c as rememberCatalogTitles, l as syntheticRelease, o as getTitle, u as titleInCache } from "./appliance-CsV_BBL_.mjs";
 import { u as Search } from "../_libs/lucide-react.mjs";
-import { T as titleForRequest, g as inFlightRequests, h as collapseHomeRequestCards, p as useReelStore } from "./router-DddgKIQJ.mjs";
-import { c as TitleCard, i as Gate, m as useSyncRequests, s as Row } from "./gate-CSgJSbbK.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/discover-XC4cvcRz.js
+import { T as titleForRequest, g as inFlightRequests, h as collapseHomeRequestCards, p as useReelStore } from "./router-D9x7Rmhk.mjs";
+import { c as TitleCard, i as Gate, m as useSyncRequests, s as Row } from "./gate-CDpyfh-b.mjs";
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/discover-Zdcw6orA.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
+function discoverOwnedNameKey(t) {
+	const kind = t?.kind === "tv" || t?.kind === "anime" || t?.mediaType === "tv" ? "tv" : "movie";
+	const title = String(t?.title || t?.name || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+	const year = Number(t?.year) || Number(String(t?.releaseDate || t?.firstAirDate || "").slice(0, 4)) || 0;
+	if (!title) return "";
+	return `${kind}:${title}:${year || ""}`;
+}
+function discoverOwnedIndex(titles = []) {
+	const ids = /* @__PURE__ */ new Set();
+	const names = /* @__PURE__ */ new Set();
+	for (const t of titles) {
+		if (t?.id) ids.add(String(t.id));
+		for (const extra of t?.ids || []) if (extra) ids.add(String(extra));
+		if (t?.jellyfinId) {
+			ids.add(String(t.jellyfinId));
+			ids.add(`jf-${t.jellyfinId}`);
+		}
+		const key = discoverOwnedNameKey(t);
+		if (key) names.add(key);
+	}
+	return {
+		ids,
+		names
+	};
+}
+function asDiscoverOwned(exclude) {
+	if (!exclude) return {
+		ids: /* @__PURE__ */ new Set(),
+		names: /* @__PURE__ */ new Set()
+	};
+	if (exclude instanceof Set) return {
+		ids: exclude,
+		names: /* @__PURE__ */ new Set()
+	};
+	if (Array.isArray(exclude)) return discoverOwnedIndex(exclude);
+	return {
+		ids: exclude.ids instanceof Set ? exclude.ids : /* @__PURE__ */ new Set(),
+		names: exclude.names instanceof Set ? exclude.names : /* @__PURE__ */ new Set()
+	};
+}
+/** JF-available / in-library — not in-progress Requests. */
+function discoverTitleIsOwned(title, owned) {
+	if (!title) return false;
+	if (title.jellyfinId) return true;
+	const index = asDiscoverOwned(owned);
+	if (title.id && index.ids.has(String(title.id))) return true;
+	for (const extra of title.ids || []) if (index.ids.has(String(extra))) return true;
+	const key = discoverOwnedNameKey(title);
+	return Boolean(key && index.names.has(key));
+}
+function filterDiscoverCatalog(titles, library, extraSkipIds = []) {
+	const owned = discoverOwnedIndex(library);
+	for (const id of extraSkipIds) if (id) owned.ids.add(String(id));
+	return titles.filter((t) => !discoverTitleIsOwned(t, owned));
+}
 function uid(prefix) {
 	return `${prefix}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -128,26 +183,35 @@ function DiscoverView() {
 			cancelled = true;
 		};
 	}, [booksOn]);
-	const hits = (0, import_react.useMemo)(() => {
-		const seen = /* @__PURE__ */ new Set();
-		const out = [];
-		for (const t of remoteHits) {
-			if (seen.has(t.id)) continue;
-			seen.add(t.id);
-			out.push(t);
-		}
-		return out;
-	}, [remoteHits]);
-	const movieShelf = (0, import_react.useMemo)(() => shelf.filter((t) => isKind(t, "movie")).slice(0, 24), [shelf]);
-	const tvShelf = (0, import_react.useMemo)(() => shelf.filter((t) => isKind(t, "tv")).slice(0, 24), [shelf]);
 	const finishing = (0, import_react.useMemo)(() => {
 		return collapseHomeRequestCards(inflight).map((r) => ({
 			r,
 			t: titleForRequest(r, catalog)
 		})).filter((x) => x.t?.id);
 	}, [inflight, catalog]);
+	const finishingIds = (0, import_react.useMemo)(() => new Set(finishing.map((x) => x.t.id)), [finishing]);
 	const finishingMovies = finishing.filter((x) => isKind(x.t, "movie")).slice(0, 12);
 	const finishingTv = finishing.filter((x) => isKind(x.t, "tv")).slice(0, 12);
+	const pickMovies = (0, import_react.useMemo)(() => filterDiscoverCatalog(browseMovies, shelf, finishingIds), [
+		browseMovies,
+		shelf,
+		finishingIds
+	]);
+	const pickTv = (0, import_react.useMemo)(() => filterDiscoverCatalog(browseTv, shelf, finishingIds), [
+		browseTv,
+		shelf,
+		finishingIds
+	]);
+	const hits = (0, import_react.useMemo)(() => {
+		const seen = /* @__PURE__ */ new Set();
+		const out = [];
+		for (const t of filterDiscoverCatalog(remoteHits, shelf)) {
+			if (seen.has(t.id)) continue;
+			seen.add(t.id);
+			out.push(t);
+		}
+		return out;
+	}, [remoteHits, shelf]);
 	(0, import_react.useEffect)(() => {
 		const term = q.trim();
 		if (term.length < 2) {
@@ -161,7 +225,7 @@ function DiscoverView() {
 		let cancelled = false;
 		const ac = new AbortController();
 		const t = window.setTimeout(() => {
-			fetch(`/api/lookup?q=${encodeURIComponent(term)}`, {
+			fetch(`/api/lookup?q=${encodeURIComponent(term)}&scope=discover`, {
 				cache: "no-store",
 				signal: ac.signal
 			}).then(async (res) => {
@@ -197,7 +261,7 @@ function DiscoverView() {
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mt-2 text-sm text-muted",
-				children: "On this box, finishing, or pick tonight. Search to find something else."
+				children: "Pick tonight, finish a grab, or search. Titles on this box live on Home."
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "relative mt-6 max-w-xl",
@@ -220,15 +284,13 @@ function DiscoverView() {
 			}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiscoverKind, {
 					heading: "Movies",
-					onBox: movieShelf,
 					finishing: finishingMovies,
-					pick: browseMovies
+					pick: pickMovies
 				}),
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(DiscoverKind, {
 					heading: "Shows",
-					onBox: tvShelf,
 					finishing: finishingTv,
-					pick: browseTv
+					pick: pickTv
 				}),
 				booksOn && bookFeatured.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 					className: "mt-10",
@@ -260,7 +322,7 @@ function DiscoverView() {
 						})
 					]
 				}) : null,
-				browseMovies.length === 0 && browseTv.length === 0 && movieShelf.length === 0 && tvShelf.length === 0 && finishing.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				pickMovies.length === 0 && pickTv.length === 0 && finishing.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 					className: "mt-10 text-sm text-muted",
 					children: browseErr || (browseReady ? "Seerr has nothing new to show yet." : "Looking up movies and shows…")
 				}) : null
@@ -268,8 +330,8 @@ function DiscoverView() {
 		]
 	});
 }
-function DiscoverKind({ heading, onBox, finishing, pick }) {
-	if (!onBox.length && !finishing.length && !pick.length) return null;
+function DiscoverKind({ heading, finishing, pick }) {
+	if (!finishing.length && !pick.length) return null;
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 		className: "mt-10",
 		children: [
@@ -277,10 +339,6 @@ function DiscoverKind({ heading, onBox, finishing, pick }) {
 				className: "font-display text-xl font-semibold tracking-tight",
 				children: heading
 			}),
-			onBox.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, {
-				label: "On this box",
-				children: onBox.map((t) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TitleCard, { title: t }, t.id))
-			}) : null,
 			finishing.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Row, {
 				label: "Finishing",
 				children: finishing.map(({ r, t }) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TitleCard, {

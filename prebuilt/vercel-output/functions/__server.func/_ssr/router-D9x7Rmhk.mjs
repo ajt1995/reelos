@@ -1,11 +1,11 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime, _ as createRootRoute, g as createFileRoute, h as lazyRouteComponent, l as Scripts, m as Outlet, p as createRouter, u as HeadContent, x as useRouter } from "../_libs/@tanstack/react-router+[...].mjs";
-import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease, o as getTitle, t as __exportAll, u as titleInCache } from "./appliance-Dk74LcNF.mjs";
+import { c as rememberCatalogTitles, i as adapterProfile, l as syntheticRelease, o as getTitle, t as __exportAll, u as titleInCache } from "./appliance-CsV_BBL_.mjs";
 import { a as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { a as union, i as string, n as number, r as object, t as literal } from "../_libs/zod.mjs";
 import { n as persist, r as create, t as createJSONStorage } from "../_libs/zustand.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/router-DddgKIQJ.js
+//#region ../../workspace/node_modules/.nitro/vite/services/ssr/assets/router-D9x7Rmhk.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -1758,29 +1758,29 @@ function Runtime({ children }) {
 	}, []);
 	return children;
 }
-var $$splitComponentImporter$11 = () => import("./routes-D6DYBfyI.mjs");
+var $$splitComponentImporter$11 = () => import("./routes-CM6vPdoN.mjs");
 var Route$11 = createFileRoute("/")({ component: lazyRouteComponent($$splitComponentImporter$11, "component") });
-var $$splitComponentImporter$10 = () => import("./activity-BaqIXff4.mjs");
+var $$splitComponentImporter$10 = () => import("./activity-DuPMv60B.mjs");
 var Route$10 = createFileRoute("/activity")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./books-Lr-xD6DH.mjs");
+var $$splitComponentImporter$9 = () => import("./books-D788JUn9.mjs");
 var Route$9 = createFileRoute("/books")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./connect-DCCki-s8.mjs");
+var $$splitComponentImporter$8 = () => import("./connect-BjtHfl7J.mjs");
 var Route$8 = createFileRoute("/connect")({ component: lazyRouteComponent($$splitComponentImporter$8, "component") });
-var $$splitComponentImporter$7 = () => import("./discover-XC4cvcRz.mjs");
+var $$splitComponentImporter$7 = () => import("./discover-Zdcw6orA.mjs");
 var Route$7 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$7, "component") });
-var $$splitComponentImporter$6 = () => import("./library-Bu2cStvK.mjs");
+var $$splitComponentImporter$6 = () => import("./library-i-UbNz6N.mjs");
 var Route$6 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$6, "component") });
-var $$splitComponentImporter$5 = () => import("./requests-DRa2Vmfb.mjs");
+var $$splitComponentImporter$5 = () => import("./requests-Db9vx5i4.mjs");
 var Route$5 = createFileRoute("/requests")({ component: lazyRouteComponent($$splitComponentImporter$5, "component") });
-var $$splitComponentImporter$4 = () => import("./settings-VnL58R9M.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-CsvrR_B-.mjs");
 var Route$4 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./engine._id-D-6QSVDr.mjs");
+var $$splitComponentImporter$3 = () => import("./engine._id-C4m6et6G.mjs");
 var Route$3 = createFileRoute("/engine/$id")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
-var $$splitComponentImporter$2 = () => import("./play._id-CgO5FQYM.mjs");
+var $$splitComponentImporter$2 = () => import("./play._id-Bx7QhED5.mjs");
 var Route$2 = createFileRoute("/play/$id")({ component: lazyRouteComponent($$splitComponentImporter$2, "component") });
-var $$splitComponentImporter$1 = () => import("./settings.advanced-D__yHroQ.mjs");
+var $$splitComponentImporter$1 = () => import("./settings.advanced-kBIL8O02.mjs");
 var Route$1 = createFileRoute("/settings/advanced")({ component: lazyRouteComponent($$splitComponentImporter$1, "component") });
-var $$splitComponentImporter = () => import("./title._id-C0D3gYig.mjs");
+var $$splitComponentImporter = () => import("./title._id-B-icDRlW.mjs");
 var Route = createFileRoute("/title/$id")({ component: lazyRouteComponent($$splitComponentImporter, "component") });
 var IndexRoute = Route$11.update({
 	id: "/",
