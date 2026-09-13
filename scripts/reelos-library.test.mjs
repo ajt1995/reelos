@@ -177,6 +177,35 @@ test("serveLibrary includes Continue watching from Resume on the same fetch", as
   assert.equal(out.continueWatching[0].progress, 0.4);
 });
 
+test("serveLibrary hides unmatched year-0 dump leftovers", async () => {
+  const cache = createLibraryCache();
+  const out = await serveLibrary({
+    url: "/api/library",
+    host: "10.0.0.5",
+    now: 5,
+    cache,
+    getAuth: async () => ({ token: "tok", id: "user-1" }),
+    fetchItems: async () => ({
+      Items: [
+        sampleItem,
+        {
+          Id: "jf-tpb",
+          Name: "TPB",
+          Type: "Movie",
+          ProductionYear: 0,
+          Path: "/symlinks/radarr/TPB /Pulp.Fiction.1994.mkv",
+          ProviderIds: {},
+          ImageTags: {},
+        },
+      ],
+    }),
+  });
+  assert.deepEqual(
+    out.titles.map((t) => t.title),
+    ["Night Harbor"],
+  );
+});
+
 test("mapJellyfinItem drops Overview and keeps real ids", () => {
   const t = titleFrom(sampleItem);
   assert.equal(t.id, "tmdb-550");

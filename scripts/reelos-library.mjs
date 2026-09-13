@@ -921,12 +921,12 @@ export async function serveLibrary({
   const stale = cache.read();
   const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
   const withoutRemoved = (titles) => {
-    if (!hide.size) return titles || [];
-    return homeShelfRows((titles || []).filter((t) => !libraryRowHidden(t, hide)));
+    const kept = hide.size ? (titles || []).filter((t) => !libraryRowHidden(t, hide)) : titles || [];
+    return homeShelfRows(kept);
   };
 
   const serve = (titles, extra = {}) => {
-    const rows = extra.fromCache ? withoutRemoved(titles) : titles || [];
+    const rows = extra.fromCache ? withoutRemoved(titles) : homeShelfRows(titles || []);
     const resume = extra.continueWatching !== undefined
       ? extra.continueWatching
       : extra.fromCache
