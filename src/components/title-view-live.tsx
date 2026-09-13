@@ -284,13 +284,18 @@ export function TitleView({ id }: { id: string }) {
     (resolved.kind === "tv" && !intent.tv);
 
   return (
-    <div className="title-page pb-16">
+    <div className="title-page pb-28 md:pb-16">
       <div className="title-hero" aria-hidden="true">
-        <img
-          src={resolved.poster}
-          alt=""
-          className="title-hero-art kenburns"
-        />
+        {resolved.poster ? (
+          <img
+            src={resolved.poster}
+            alt=""
+            className="title-hero-art kenburns"
+            onError={(e) => {
+              e.currentTarget.style.opacity = "0";
+            }}
+          />
+        ) : null}
         <div className="title-hero-fade" />
       </div>
       <div className="title-body">
@@ -301,7 +306,7 @@ export function TitleView({ id }: { id: string }) {
           <p className="mt-2 text-sm text-muted">
             {resolved.year || null}
             {resolved.runtime ? ` · ${formatRuntime(resolved.runtime)}` : null}
-            {seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
+            {series && seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
             {resolved.tracks ? ` · ${resolved.tracks} tracks` : null}
             {resolved.rating != null && Number.isFinite(Number(resolved.rating)) ? ` · ${Number(resolved.rating).toFixed(1)}` : null}
             {resolved.director ? ` · ${resolved.director}` : null}
@@ -316,7 +321,7 @@ export function TitleView({ id }: { id: string }) {
               Collection · {resolved.collection.name}
             </Link>
           ) : null}
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
+          <p className="mt-5 max-w-xl line-clamp-4 text-[15px] leading-relaxed text-muted md:line-clamp-none">{resolved.overview}</p>
           {(series && !onBox && !blocked && !request && !thisSeasonUnreleased) || (!series && !available && !blocked && !request) ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}

@@ -41,6 +41,7 @@ import {
   seasonChipLabel,
   seasonFactsFrom,
   unreleasedSeasonNumbers,
+  mergeUnreleasedSeasons,
   UNRELEASED_SEASON_CHIP,
   UNRELEASED_SEASON_COPY,
   IMPORTING_SEASON_COPY,
@@ -61,6 +62,7 @@ import {
   attachTitleAliases,
   libraryHasTitle,
   findLibraryTitle,
+  sonarrSeriesForParsed,
   lookupPayloadForId,
   overlayLookupWithLibrary,
   seerrCatalogSeasons,
@@ -94,6 +96,37 @@ test("TV ids stay distinct from movie tmdb ids", () => {
   const thirdRock = applyRequestMediaType(parseTitleId("tmdb-tv-155"), "movie", "tmdb-tv-155");
   assert.equal(thirdRock.mediaType, "tv");
   assert.equal(thirdRock.titleId, "tmdb-tv-155");
+  const thirdRockSeries = {
+    tmdbId: 155,
+    title: "3rd Rock from the Sun",
+    seasons: [
+      { seasonNumber: 1, statistics: { episodeFileCount: 20, episodeCount: 20 } },
+      { seasonNumber: 6, statistics: { episodeFileCount: 0, episodeCount: 0 } },
+    ],
+  };
+  assert.equal(sonarrSeriesForParsed(parseTitleId("tmdb-155"), [thirdRockSeries]), null);
+  assert.equal(sonarrSeriesForParsed(parseTitleId("tmdb-tv-155"), [thirdRockSeries])?.title, "3rd Rock from the Sun");
+  const mixedShelf = [
+    { id: "tmdb-tv-155", kind: "tv", title: "3rd Rock from the Sun", ids: ["tmdb-tv-155", "tmdb-155"] },
+    { id: "tmdb-155", kind: "movie", title: "The Dark Knight", ids: ["tmdb-155"] },
+  ];
+  assert.equal(findLibraryTitle(mixedShelf, "tmdb-155")?.title, "The Dark Knight");
+  assert.equal(findLibraryTitle(mixedShelf, "tmdb-tv-155")?.title, "3rd Rock from the Sun");
+  const moviePayload = titleRequestSeasonPayload({
+    id: "tmdb-155",
+    parsed: parseTitleId("tmdb-155"),
+    facts: { series: [thirdRockSeries] },
+    title: { kind: "movie", title: "The Dark Knight" },
+    honest: { titleId: "tmdb-155", status: "available", engine: "downloaded" },
+  });
+  assert.deepEqual(moviePayload.unreleasedSeasons, []);
+  assert.equal(moviePayload.title, "The Dark Knight");
+  const decorated = decorateTitlesWithDiskSeasons(
+    [{ id: "tmdb-155", kind: "movie", title: "The Dark Knight", ids: ["tmdb-155"] }],
+    { series: [thirdRockSeries] },
+  );
+  assert.equal(decorated[0].kind, "movie");
+  assert.equal(decorated[0].seasonList == null || decorated[0].seasonList.length === 0, true);
   assert.deepEqual(parseTitleId("73ceff573dc30bebc3fcf26f61de07b25f927a74"), {
     hash: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
     titleId: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
@@ -235,6 +268,28 @@ test("announced season with 0 episodes and future airDate is Coming, not Request
     statistics: { episodeFileCount: 0, episodeCount: 0, totalEpisodeCount: 13 },
   };
   const seerrAired = { seasonNumber: 2, episodeCount: 13, airDate: "2009-03-08" };
+  const sonarrPlaceholderTba = { seasonNumber: 6, monitored: true, statistics: null };
+  assert.equal(seasonIsUnreleased(sonarrPlaceholderTba, now), true, "Sonarr S6 with no stats is Coming");
+  const stFacts = {
+    seasonFacts: [
+      { season: 1, unreleased: false },
+      { season: 5, unreleased: false },
+    ],
+  };
+  assert.deepEqual(
+    mergeUnreleasedSeasons({
+      title: stFacts,
+      series: {
+        seasons: [
+          { seasonNumber: 5, statistics: { episodeFileCount: 0, episodeCount: 8, previousAiring: "2025-11-26T00:00:00Z" } },
+          sonarrPlaceholderTba,
+        ],
+      },
+      now,
+    }),
+    [6],
+    "Seerr S1–S5 stay Request; Sonarr-only S6 is Coming",
+  );
   assert.equal(seasonIsUnreleased(sonarrEmptyReleased, now), true, "empty Sonarr S02 looks Coming");
   assert.equal(
     seasonUnreleasedForRequest({ sonarrSeason: sonarrEmptyReleased, seerrSeason: seerrAired }, now),
@@ -1862,6 +1917,26 @@ test("attachSeerrDetailTitles names National Treasure from Seerr movie detail", 
   const again = await attachSeerrDetailTitles(rows, { seerrFetch, key: "x", now: 2_000 });
   assert.equal(calls.length, 1);
   assert.equal(again.rows[0].title, "National Treasure");
+});
+
+test("attachSeerrDetailTitles fills a TMDB poster for a named grabbing row", async () => {
+  clearRequestTitleCache();
+  const seerrFetch = async () => ({
+    ok: true,
+    json: {
+      id: 66732,
+      name: "Stranger Things",
+      firstAirDate: "2016-07-15",
+      posterPath: "/st.jpg",
+      mediaType: "tv",
+    },
+  });
+  const { titles } = await attachSeerrDetailTitles(
+    [{ id: "seerr-st", titleId: "tmdb-tv-66732", title: "Stranger Things", status: "downloading", progress: 0 }],
+    { seerrFetch, key: "x", now: 1_000 },
+  );
+  assert.equal(titles[0].title, "Stranger Things");
+  assert.match(String(titles[0].poster), /image\.tmdb\.org.*\/st\.jpg/);
 });
 
 test("search maps people and collections without turning them into movies", () => {

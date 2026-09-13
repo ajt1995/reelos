@@ -177,6 +177,35 @@ test("serveLibrary includes Continue watching from Resume on the same fetch", as
   assert.equal(out.continueWatching[0].progress, 0.4);
 });
 
+test("serveLibrary hides unmatched year-0 dump leftovers", async () => {
+  const cache = createLibraryCache();
+  const out = await serveLibrary({
+    url: "/api/library",
+    host: "10.0.0.5",
+    now: 5,
+    cache,
+    getAuth: async () => ({ token: "tok", id: "user-1" }),
+    fetchItems: async () => ({
+      Items: [
+        sampleItem,
+        {
+          Id: "jf-tpb",
+          Name: "TPB",
+          Type: "Movie",
+          ProductionYear: 0,
+          Path: "/symlinks/radarr/TPB /Pulp.Fiction.1994.mkv",
+          ProviderIds: {},
+          ImageTags: {},
+        },
+      ],
+    }),
+  });
+  assert.deepEqual(
+    out.titles.map((t) => t.title),
+    ["Night Harbor"],
+  );
+});
+
 test("mapJellyfinItem drops Overview and keeps real ids", () => {
   const t = titleFrom(sampleItem);
   assert.equal(t.id, "tmdb-550");
@@ -1121,6 +1150,27 @@ test("house screenshot fixture: named titles win, dump files are Importing, TBA 
   assert.ok(reacherOut.importingSeasons.includes(2));
   assert.ok(reacherOut.importingSeasons.includes(4));
   assert.ok(!home.some((t) => /uindex|torrenting|ponte|org-silo/i.test(t.title)));
+  const leftovers = homeShelfRows([
+    {
+      id: "jf-tpb",
+      kind: "movie",
+      title: "TPB",
+      year: 0,
+      poster: "",
+      fromDump: true,
+      path: "/symlinks/radarr/TPB /Pulp.Fiction.1994.1080p.BrRip.x264.YIFY.mp4",
+    },
+    {
+      id: "jf-kaiju",
+      kind: "tv",
+      title: "Kaijuu 8-gou (Season 1) [BD",
+      year: 0,
+      poster: "",
+      fromDump: true,
+      path: "/symlinks/sonarr/[IceBlue] Kaijuu 8-gou (Season 1) [BD 1080p REMUX]",
+    },
+  ]);
+  assert.deepEqual(leftovers.map((t) => t.title), []);
   assert.deepEqual(siloOut.unreleasedSeasons, [4]);
   assert.deepEqual(rookieOut.unreleasedSeasons, [9]);
 });

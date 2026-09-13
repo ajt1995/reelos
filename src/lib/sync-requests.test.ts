@@ -19,7 +19,9 @@ import {
   requestTitleIdForPage,
   showHashAdapter,
   showRequestQueueControls,
+  mergeRemoteTitles,
   titleForRequest,
+  titleHasRemotePoster,
   titleMatchesId,
   titlePresenceKeys,
   requestProgressLabel,
@@ -156,6 +158,7 @@ test("25 mostly-available rows are not 25 transferring", () => {
 test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
+  const discover = readFileSync(new URL("../components/discover-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
   assert.match(home, /homeInFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
@@ -167,6 +170,9 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
   assert.doesNotMatch(shell, /aria-label="Search"/);
   assert.match(reqs, /inFlightRequests\(requests, \{ titles: \[\.\.\.shelf, \.\.\.remoteTitles\] \}\)/);
+  assert.match(home, /useResolveGhostRequestTitles\(inflight, catalog\)/);
+  assert.match(discover, /useResolveGhostRequestTitles\(inflight, catalog\)/);
+  assert.match(reqs, /useResolveGhostRequestTitles\(inflight, catalog\)/);
   assert.match(reqs, /tvSeasonChips/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
@@ -175,6 +181,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(reqs, />\s*Cancel\s*</);
   const sync = readFileSync(new URL("./use-sync-requests.ts", import.meta.url), "utf8");
   assert.match(sync, /requestNeedsLibraryHandoff/);
+  assert.match(sync, /titleHasRemotePoster/);
   assert.match(sync, /hydrateShelf\(\{ force: true, fresh: true \}\)/);
   assert.doesNotMatch(home, /setInterval/);
   assert.doesNotMatch(reqs, /setInterval/);
@@ -492,6 +499,37 @@ test("jf- library ids do not overlay a TMDB movie", () => {
   assert.equal(honest[0]?.status, "downloading");
 });
 
+test("mergeRemoteTitles upgrades an empty ghost poster with TMDB art", () => {
+  const ghost = {
+    id: "tmdb-274",
+    kind: "movie" as const,
+    title: "The Silence of the Lambs",
+    year: 1991,
+    poster: "",
+    rating: 0,
+    genres: [] as string[],
+    overview: "",
+    maxQuality: "1080p" as const,
+    popularity: 0,
+  };
+  const art = {
+    ...ghost,
+    poster: "https://image.tmdb.org/t/p/w500/uS9m8OBk1A8eM9I042bx8XXpqAq.jpg",
+  };
+  const merged = mergeRemoteTitles([ghost], [art]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].poster, art.poster);
+  const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+  assert.match(store, /mergeRemoteTitles\(get\(\)\.remoteTitles, titles\)/);
+  assert.doesNotMatch(store, /slice\(0, 80\)/);
+});
+
+test("titleHasRemotePoster ignores empty and Jellyfin 404 URLs", () => {
+  assert.equal(titleHasRemotePoster({ poster: "" }), false);
+  assert.equal(titleHasRemotePoster({ poster: "/api/jf/Items/x/Images/Primary" }), false);
+  assert.equal(titleHasRemotePoster({ poster: "https://image.tmdb.org/t/p/w342/x.jpg" }), true);
+});
+
 test("titleForRequest uses the request name when catalog is empty", () => {
   const t = titleForRequest(
     { titleId: "tmdb-324857", title: "Spider-Man: Into the Spider-Verse" },
@@ -587,6 +625,18 @@ test("player matches tmdb-tv to a JF series whose id is tvdb / tmdb", () => {
   assert.equal(titleMatchesId(series, "tmdb-tv-63639"), true);
   assert.equal(titleMatchesId(series, "tmdb-63639"), true);
   assert.equal(titleMatchesId(series, "tvdb-280619"), true);
+  assert.equal(
+    titleMatchesId(
+      { id: "tmdb-tv-155", kind: "tv", ids: ["tmdb-tv-155", "tmdb-155"] },
+      "tmdb-155",
+    ),
+    false,
+    "Dark Knight movie page is not 3rd Rock",
+  );
+  assert.equal(
+    titleMatchesId({ id: "tmdb-155", kind: "movie", ids: ["tmdb-155"] }, "tmdb-155"),
+    true,
+  );
 });
 
 test("title-page poll matches a tvdb URL onto the tmdb-tv request row", () => {

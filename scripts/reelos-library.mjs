@@ -691,7 +691,12 @@ export function homeShelfRows(titles) {
       const name = normalizeTitle(t.title);
       if (name && namedNames.has(name)) return false;
       if (named.some((n) => dumpMatchesNamed(t, n))) return false;
-      if (isHashDumpCard(t) && !(Number(t.year) > 0) && !t.poster) return false;
+      if (
+        (t.fromDump || isHashDumpCard(t) || looksLikeIndexerDump(t.title) || looksLikeIndexerDump(t.path)) &&
+        (!(Number(t.year) > 0) || !String(t.poster || "").trim())
+      ) {
+        return false;
+      }
     }
     return true;
   });
@@ -916,12 +921,12 @@ export async function serveLibrary({
   const stale = cache.read();
   const hide = new Set((removedIds || []).map((id) => String(id)).filter(Boolean));
   const withoutRemoved = (titles) => {
-    if (!hide.size) return titles || [];
-    return homeShelfRows((titles || []).filter((t) => !libraryRowHidden(t, hide)));
+    const kept = hide.size ? (titles || []).filter((t) => !libraryRowHidden(t, hide)) : titles || [];
+    return homeShelfRows(kept);
   };
 
   const serve = (titles, extra = {}) => {
-    const rows = extra.fromCache ? withoutRemoved(titles) : titles || [];
+    const rows = extra.fromCache ? withoutRemoved(titles) : homeShelfRows(titles || []);
     const resume = extra.continueWatching !== undefined
       ? extra.continueWatching
       : extra.fromCache

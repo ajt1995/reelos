@@ -260,6 +260,25 @@ img.poster {
   padding-top: 0.25rem;
 }
 
+/* Phone tab bar is fixed h-16. Keep every season chip on one tappable row. */
+.title-season-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.25rem;
+  scroll-margin-bottom: 6rem;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.title-season-chips::-webkit-scrollbar {
+  display: none;
+}
+.title-season-chips > * {
+  flex-shrink: 0;
+}
+
 @media (min-width: 768px) {
   .title-hero {
     height: min(38vh, 320px);
@@ -278,6 +297,11 @@ img.poster {
     width: 100%;
     max-width: 200px;
     justify-self: start;
+  }
+
+  .title-season-chips {
+    flex-wrap: wrap;
+    overflow: visible;
   }
 }
 

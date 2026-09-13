@@ -8,6 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const view = readFileSync(join(root, "src/components/title-view-live.tsx"), "utf8");
 const css = readFileSync(join(root, "src/styles.css"), "utf8");
 const poster = readFileSync(join(root, "src/components/poster.tsx"), "utf8");
+const accordion = readFileSync(join(root, "src/components/season-episode-accordion.tsx"), "utf8");
 const shell = readFileSync(join(root, "src/components/shell.tsx"), "utf8");
 
 const layoutCss = css.slice(
@@ -22,7 +23,7 @@ test("title page lookupKey is a useState so Retry cannot ReferenceError", () => 
 });
 
 test("title page art is clipped and never uses intrinsic-width auto", () => {
-  assert.match(view, /className="title-page pb-16"/);
+  assert.match(view, /className="title-page pb-28 md:pb-16"/);
   assert.match(view, /className="title-hero"/);
   assert.match(view, /className="title-body"/);
   assert.match(view, /className="title-poster rounded-2xl"/);
@@ -42,6 +43,12 @@ test("title page art is clipped and never uses intrinsic-width auto", () => {
   assert.match(layoutCss, /pointer-events:\s*none/);
   assert.match(layoutCss, /minmax\(0,\s*200px\)/);
   assert.match(layoutCss, /@media \(max-height: 500px\)/);
+  assert.match(view, /line-clamp-4/);
+  assert.match(view, /md:line-clamp-none/);
+  assert.match(accordion, /title-season-chips/);
+  assert.match(accordion, /shrink-0/);
+  assert.match(layoutCss, /flex-wrap:\s*nowrap/);
+  assert.match(layoutCss, /overflow-x:\s*auto/);
 });
 
 function rectsOverlap(a, b, pad = 1) {
@@ -75,7 +82,8 @@ nav.chrome-bottom a { flex: 1; height: 64px; display: flex; align-items: center;
 .title-poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .title-poster { position: relative; }
 h1 { font-size: 2.25rem; margin: 8px 0; }
-.chips button, .actions span, .actions a { display: inline-flex; align-items: center; height: 36px; margin: 4px 8px 0 0; padding: 0 12px; border-radius: 999px; background: var(--color-card); color: var(--color-muted); text-decoration: none; }
+.actions span, .actions a { display: inline-flex; align-items: center; height: 36px; margin: 4px 8px 0 0; padding: 0 12px; border-radius: 999px; background: var(--color-card); color: var(--color-muted); text-decoration: none; }
+.title-season-chips button { display: inline-flex; align-items: center; height: 44px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--color-card); color: var(--color-muted); }
 .actions .watch { height: 48px; border-radius: 16px; background: var(--color-gold); color: var(--color-gold-fg); }
 .actions .library { height: 48px; border-radius: 16px; background: rgb(61 220 151 / 0.12); color: var(--color-success); }
 ${layoutCss}
@@ -111,8 +119,8 @@ ${layoutCss}
             <p>TV</p>
             <h1 data-chrome="title">Rick and Morty</h1>
             <p>2013 · 8.7</p>
-            <div class="chips" data-chrome="seasons">
-              <button>Season 1</button><button>Season 2 · in</button><button>Season 3 · in</button>
+            <div class="title-season-chips" data-chrome="seasons">
+              <button>Season 1 · Watch</button><button>Season 2 · Request</button><button>Season 3 · Coming</button><button>Season 4 · Coming</button>
             </div>
             <div class="actions">
               <a class="watch" data-chrome="watch" href="#">Watch</a>
@@ -205,6 +213,11 @@ test("title artwork stays in its lane on phone, landscape, and tablet", async (t
         return {
           art: box("[data-page=tv] [data-art]"),
           movieArt: box("[data-page=movie] [data-art-movie]"),
+          nav: box("[data-chrome=bottom-nav]"),
+          chips: Array.from(document.querySelectorAll("[data-page=tv] [data-chrome=seasons] button")).map((el) => {
+            const r = el.getBoundingClientRect();
+            return { text: el.textContent, left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+          }),
           chrome: [
             box("[data-chrome=nav]"),
             box("[data-chrome=header]"),
@@ -235,6 +248,19 @@ test("title artwork stays in its lane on phone, landscape, and tablet", async (t
           false,
           `${vp.name}: tv poster overlaps ${chrome.sel} art=${JSON.stringify(measured.art)} chrome=${JSON.stringify(chrome)}`,
         );
+      }
+      if (vp.name === "phone-portrait") {
+        const coming = measured.chips.filter((c) => /Coming/.test(c.text || ""));
+        assert.equal(coming.length, 2, `${vp.name}: expected S3/S4 Coming chips`);
+        for (const chip of measured.chips) {
+          assert.equal(
+            rectsOverlap(chip, measured.nav),
+            false,
+            `${vp.name}: season chip under tab bar chip=${JSON.stringify(chip)} nav=${JSON.stringify(measured.nav)}`,
+          );
+        }
+        const tops = new Set(measured.chips.map((c) => Math.round(c.top)));
+        assert.equal(tops.size, 1, `${vp.name}: season chips must stay on one row, not wrap under the tab bar`);
       }
       await page.close();
     }

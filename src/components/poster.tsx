@@ -14,10 +14,12 @@ export function Poster({
   title,
   className,
   sizes = "poster",
+  placeholder = "letter",
 }: {
   title: Title;
   className?: string;
   sizes?: "poster" | "hero";
+  placeholder?: "letter" | "empty";
 }) {
   const src = String(title.poster || "").trim();
   const [ok, setOk] = useState(Boolean(src));
@@ -46,7 +48,9 @@ export function Poster({
           className="absolute inset-0 flex items-center justify-center bg-linear-to-br from-card-2 via-card to-background"
           aria-hidden
         >
-          <span className="font-display text-3xl font-medium text-muted/70">{posterInitial(title)}</span>
+          {placeholder === "letter" ? (
+            <span className="font-display text-3xl font-medium text-muted/70">{posterInitial(title)}</span>
+          ) : null}
         </div>
       )}
     </div>

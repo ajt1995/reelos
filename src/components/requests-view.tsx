@@ -88,7 +88,14 @@ export function RequestsView() {
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
                 {t?.poster ? (
-                  <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+                  <img
+                    src={t.poster}
+                    alt=""
+                    className="h-[72px] w-12 rounded-lg object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
                 ) : (
                   <div className="h-[72px] w-12 rounded-lg bg-card-2" />
                 )}
@@ -99,10 +106,10 @@ export function RequestsView() {
                   {seasonLabel}
                 </Link>
                 {chips.length > 1 ? (
-                  <p className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted">
+                  <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-xs text-muted">
                     {chips.map((c) => (
-                      <span key={c.season}>
-                        S{String(c.season).padStart(2, "0")} {c.label}
+                      <span key={c.season} className="shrink-0">
+                        S{String(c.season).padStart(2, "0")} · {c.label}
                       </span>
                     ))}
                   </p>

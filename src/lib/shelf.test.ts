@@ -177,3 +177,26 @@ test("homeShelfRows hides UIndex Rookie and Reacher episode dumps when named car
   );
 });
 
+test("homeShelfRows hides unmatched year-0 dump leftovers", () => {
+  const tpb: Title = {
+    ...title("jf-tpb"),
+    title: "TPB",
+    year: 0,
+    poster: "",
+    fromDump: true,
+    path: "/symlinks/radarr/TPB /Pulp.Fiction.1994.mkv",
+  };
+  const kaiju: Title = {
+    ...title("jf-kaiju"),
+    kind: "tv",
+    title: "Kaijuu 8-gou (Season 1) [BD",
+    year: 0,
+    poster: "",
+    fromDump: true,
+  };
+  assert.deepEqual(
+    homeShelfRows([tpb, kaiju]).map((t) => t.title),
+    [],
+  );
+});
+

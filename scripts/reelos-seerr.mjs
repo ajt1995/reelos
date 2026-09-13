@@ -168,6 +168,9 @@ export function findLibraryTitle(titles, id) {
   );
   return (
     (titles || []).find((t) => {
+      const kind = t?.kind === "tv" || t?.kind === "anime" ? "tv" : t?.kind === "movie" ? "movie" : null;
+      if (parsed?.mediaType === "movie" && kind === "tv") return false;
+      if (parsed?.mediaType === "tv" && kind === "movie") return false;
       const ids = collectTitleIds(t);
       if (ids.some((x) => keys.has(x) || (hash && String(x).toLowerCase() === hash))) return true;
       if (hash && String(t?.path || "").toLowerCase().includes(hash)) return true;
@@ -176,9 +179,25 @@ export function findLibraryTitle(titles, id) {
   );
 }
 
+/** tmdb-155 is Dark Knight in Radarr. tmdb-tv-155 is 3rd Rock in Sonarr. Numeric tmdb is not enough. */
+export function sonarrSeriesForParsed(parsed, series = []) {
+  if (!parsed || parsed.mediaType !== "tv") return null;
+  return (
+    (series || []).find(
+      (s) =>
+        (parsed.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
+        (parsed.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
+    ) || null
+  );
+}
+
 export function attachLibraryPresence(title, libraryTitle) {
   if (!title) return libraryTitle || title;
   if (!libraryTitle) return title;
+  const titleKind = title.kind === "tv" || title.kind === "anime" ? "tv" : title.kind === "movie" ? "movie" : null;
+  const libKind =
+    libraryTitle.kind === "tv" || libraryTitle.kind === "anime" ? "tv" : libraryTitle.kind === "movie" ? "movie" : null;
+  if (titleKind && libKind && titleKind !== libKind) return title;
   const ids = [
     ...new Set(
       [
@@ -256,9 +275,7 @@ export function lookupPayloadForId({ seerrTitle, libraryTitle, missingTmdb, onDi
           .filter((n) => Number.isFinite(n) && n > 0),
       ),
     ].sort((a, b) => a - b);
-    const unreleased = [
-      ...new Set((title.unreleasedSeasons || []).map(Number).filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n))),
-    ].sort((a, b) => a - b);
+    const unreleased = mergeUnreleasedSeasons({ title, disk });
     return {
       ...title,
       onDiskSeasons: disk.length ? disk : title.onDiskSeasons,
@@ -862,6 +879,11 @@ export function seasonIsUnreleased(raw, now = Date.now()) {
   if (hasCountField && count === 0) return true;
   if (!Number.isFinite(prevMs) && future) return true;
   if (!Number.isFinite(prevMs) && !Number.isFinite(nextMs) && hasCountField && count > 0) return true;
+  // Sonarr TBA placeholder: statistics is JSON null (Stranger Things S6). A season
+  // object with statistics: { episodeFileCount: 0 } is still a released gap.
+  if (raw.statistics == null && !hasCountField && files === 0 && !Number.isFinite(prevMs) && !Number.isFinite(nextMs)) {
+    return true;
+  }
   return false;
 }
 
@@ -925,6 +947,52 @@ export function unreleasedSeasonNumbers(seasons, now = Date.now()) {
   return seasonFactsFrom(list, now)
     .filter((s) => s.unreleased)
     .map((s) => s.season);
+}
+
+/** Seerr catalog wins for seasons it lists (BB S02 still Request). Sonarr-only TBA still Coming. */
+export function mergeUnreleasedSeasons({ title, series, disk = [], now = Date.now() } = {}) {
+  const fromTitle = [
+    ...(title?.unreleasedSeasons || []),
+    ...unreleasedSeasonNumbers(title?.seasonFacts, now),
+  ];
+  const fromSonarr = unreleasedSeasonNumbers(series?.seasons, now);
+  const seerrSeasonNums = new Set(
+    (title?.seasonFacts || [])
+      .map((s) => Number(s?.season ?? s?.seasonNumber))
+      .filter((n) => Number.isFinite(n) && n > 0),
+  );
+  const haveSeerrCatalog = seerrSeasonNums.size > 0;
+  const extraSonarrTba = fromSonarr.filter((n) => {
+    if (seerrSeasonNums.has(n)) return false;
+    const raw = (series?.seasons || []).find((s) => Number(s?.seasonNumber) === n);
+    return raw && raw.statistics == null;
+  });
+  const diskSet = new Set((disk || []).map(Number).filter((n) => Number.isFinite(n) && n > 0));
+  return [
+    ...new Set(
+      [...(haveSeerrCatalog ? fromTitle : fromSonarr), ...extraSonarrTba]
+        .map(Number)
+        .filter((n) => Number.isFinite(n) && n > 0 && !diskSet.has(n)),
+    ),
+  ].sort((a, b) => a - b);
+}
+
+export function arrRemotePoster(item) {
+  const imgs = Array.isArray(item?.images) ? item.images : [];
+  const poster =
+    imgs.find((i) => String(i?.coverType || "").toLowerCase() === "poster") ||
+    imgs.find((i) => String(i?.remoteUrl || "").startsWith("http"));
+  const url = String(poster?.remoteUrl || item?.remotePoster || "").trim();
+  return url.startsWith("http") ? url : "";
+}
+
+function preferTitlePoster(...urls) {
+  const tmdb = urls.find((p) => {
+    const s = String(p || "").trim();
+    return s && !s.includes("/api/jf/");
+  });
+  if (tmdb) return tmdb;
+  return String(urls.find((p) => String(p || "").trim()) || "");
 }
 
 export function seasonCount(seasons) {
@@ -1072,11 +1140,7 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
       movies: facts.movies,
     });
     const arrDisk = onDiskSeasonsFor(parsed, index);
-    const seriesHit = (facts.series || []).find(
-      (s) =>
-        (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-        (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-    );
+    const seriesHit = sonarrSeriesForParsed(parsed, facts.series);
     const importingRaw = [
       ...new Set(
         [
@@ -1101,20 +1165,16 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
       ),
     ].sort((a, b) => a - b);
     const importing = importingRaw.filter((n) => !disk.includes(n)).sort((a, b) => a - b);
-    const listed = realSeasonNumbers(
-      (facts.series || []).find(
-        (s) =>
-          (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-          (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-      )?.seasons,
-    );
+    const listed = parsed?.mediaType === "tv" ? realSeasonNumbers(seriesHit?.seasons) : [];
     const seasonList = [
       ...new Set([...(t.seasonList || []), ...listed].map(Number).filter((n) => Number.isFinite(n) && n > 0)),
     ].sort((a, b) => a - b);
+    const unreleased = parsed?.mediaType === "tv" ? mergeUnreleasedSeasons({ title: t, series: seriesHit, disk }) : [];
     return {
       ...t,
       onDiskSeasons: disk,
-      importingSeasons: importing,
+      importingSeasons: importing.filter((n) => !unreleased.includes(n)),
+      unreleasedSeasons: unreleased,
       seasonList: seasonList.length ? seasonList : t.seasonList,
     };
   });
@@ -1192,24 +1252,8 @@ export function titleRequestSeasonPayload({
   ].sort((a, b) => a - b);
   const seasonN = season != null && season !== "" && Number.isFinite(Number(season)) ? Number(season) : undefined;
   const seasonOnDisk = seasonN != null && disk.includes(seasonN);
-  const seriesRow = (facts?.series || []).find(
-    (s) =>
-      (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-      (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-  );
-  const fromTitle = [
-    ...(title?.unreleasedSeasons || []),
-    ...unreleasedSeasonNumbers(title?.seasonFacts),
-  ];
-  const fromSonarr = unreleasedSeasonNumbers(seriesRow?.seasons);
-  const haveSeerrCatalog = Array.isArray(title?.seasonFacts) && title.seasonFacts.length > 0;
-  const unreleased = [
-    ...new Set(
-      (haveSeerrCatalog ? fromTitle : fromSonarr)
-        .map(Number)
-        .filter((n) => Number.isFinite(n) && n > 0 && !disk.includes(n)),
-    ),
-  ].sort((a, b) => a - b);
+  const seriesRow = sonarrSeriesForParsed(parsed, facts?.series);
+  const unreleased = mergeUnreleasedSeasons({ title, series: seriesRow, disk });
   const importing = [
     ...new Set(
       [
@@ -1578,6 +1622,7 @@ export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
         id: parsed.titleId,
         kind: "tv",
         title: s.title || parsed.titleId,
+        poster: arrRemotePoster(s),
         ids: [parsed.titleId, `tmdb-${parsed.tmdb}`, parsed.tvdb ? `tvdb-${parsed.tvdb}` : ""].filter(Boolean),
         onDiskSeasons: disk,
       };
@@ -1599,6 +1644,7 @@ export function mergeRequestListTitles(seerrTitles = [], facts = {}) {
     merged.set(t.id, {
       ...prev,
       ...t,
+      poster: preferTitlePoster(t.poster, prev.poster),
       ids: [...new Set([...(prev.ids || []), ...(t.ids || [])])],
       onDiskSeasons,
       importingSeasons: [
@@ -1894,13 +1940,16 @@ export async function attachSeerrDetailTitles(rows, { seerrFetch, key, now = Dat
   const titles = [];
   const jobs = [];
   const seen = new Set();
-  for (const row of out) {
-    if (row.status !== "waiting" && row.status !== "downloading") continue;
-    if (!needsRequestTitle(row)) continue;
+  const inflight = out.filter((row) => row.status === "waiting" || row.status === "downloading");
+  const ordered = [
+    ...inflight.filter((row) => needsRequestTitle(row)),
+    ...inflight.filter((row) => !needsRequestTitle(row)),
+  ];
+  for (const row of ordered) {
     const cached = requestTitleCache.get(row.titleId);
     if (cached && now - cached.at < ttlMs) {
-      row.title = cached.title;
-      if (cached.hit) titles.push(cached.hit);
+      if (cached.title && needsRequestTitle(row)) row.title = cached.title;
+      if (cached.hit && !titles.some((t) => t.id === cached.hit.id)) titles.push(cached.hit);
       continue;
     }
     if (!row.titleId || seen.has(row.titleId) || jobs.length >= limit) continue;
@@ -1926,10 +1975,8 @@ export async function attachSeerrDetailTitles(rows, { seerrFetch, key, now = Dat
   }
   for (const row of out) {
     const cached = requestTitleCache.get(row.titleId);
-    if (cached?.title && needsRequestTitle(row)) {
-      row.title = cached.title;
-      if (cached.hit && !titles.some((t) => t.id === cached.hit.id)) titles.push(cached.hit);
-    }
+    if (cached?.title && needsRequestTitle(row)) row.title = cached.title;
+    if (cached?.hit && !titles.some((t) => t.id === cached.hit.id)) titles.push(cached.hit);
   }
   return { rows: out, titles };
 }

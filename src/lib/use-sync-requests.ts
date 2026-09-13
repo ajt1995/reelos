@@ -7,6 +7,7 @@ import {
   overlayLibraryPresence,
   requestNeedsLibraryHandoff,
   titleForRequest,
+  titleHasRemotePoster,
 } from "@/lib/sync-requests";
 import type { MediaRequest, Title } from "@/lib/types";
 
@@ -61,7 +62,7 @@ export function useResolveGhostRequestTitles(requests: MediaRequest[], titles: T
       requests
         .filter((r) => {
           const t = titleForRequest(r, titles);
-          return isGhostRequestLabel(t.title, t.id) || !t.poster;
+          return isGhostRequestLabel(t.title, t.id) || !titleHasRemotePoster(t);
         })
         .map((r) => r.titleId)
         .filter(Boolean),

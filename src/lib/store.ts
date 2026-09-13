@@ -23,7 +23,7 @@ import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
 import { normalizeLibraryCatchup } from "./library-catchup";
-import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+import { dropLibraryOverlay, mergeRemoteTitles, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 function watchProgressFromResume(rows: Array<{ id?: string; progress?: number }> | undefined | null) {
   if (!Array.isArray(rows)) return null;
@@ -73,8 +73,8 @@ export interface Settings {
 }
 
 export const CHANNEL = "stable";
-export const LATEST_VERSION = "1.2.50.57";
-export const SHIPPED_VERSION = "1.2.50.57";
+export const LATEST_VERSION = "1.2.50.58";
+export const SHIPPED_VERSION = "1.2.50.58";
 export const CHANNEL_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel.json";
 export const CHANNEL_BETA_URL = "https://raw.githubusercontent.com/ajt1995/reelos/main/channel-beta.json";
 
@@ -110,6 +110,7 @@ export type ReadyPayload = {
 };
 
 export const UPDATE_NOTES = [
+  "1.2.50.58: Cloud soak after 57. Selfheal loads (export filterRemovedRequests). Movie lookup has no TV season list (Dark Knight is not 3rd Rock). Sonarr TBA S6 is Coming, not SeasonSearch. Breaking Bad S02 still Request. Home/Library hide unmatched year-0 dump leftovers (TPB, Kaijuu (Season 1) [BD). Requests wrap S01 · Searching; inflight TMDB posters. 57 bounded dump heal stays — not docker restart. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.57: Bounded dump heal — map UIndex/Torrenting dumps to the named series/movie and ask Sonarr/Radarr to import those folders (API), not docker restart. Catch-up skip is per-season so Rookie S02–S08 Importing actually imports after S01 is in. Cloud 40×40: unmonitored released seasons still Request (Breaking Bad S02). Silo S04 / Rookie S09 stay Coming and do not SeasonSearch. Movie tmdb-<n> cannot POST as tmdb-tv-<n> (Dark Knight is not 3rd Rock). FUSE stale is rshared only — not restarting Sonarr or live Jellyfin. Nanosecond skip if dump folders unchanged. Passengers-class movies same path. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.56: Home On this box keeps named Silo / Reacher / The Rookie. UIndex, Torrenting, and Reacher Il Ponte dump cards fold into those titles. Dump files waiting for Sonarr import paint Importing, not Watch. Rookie does not lie 0% while files are linked. TBA seasons stay Coming. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
   "1.2.50.55: Unreleased TV seasons (Silo S04, Rookie S09) paint Coming / announced — not released, not Request or Watch, and do not SeasonSearch empty future seasons. Released missing seasons still Request. Skip 49. Do not house-Apply until told. Gold chrome, prebuilt hashed UI. 1.2.51 parked (was Tron chrome; scrapped — do not reuse).",
@@ -957,11 +958,8 @@ export const useReelStore = create<ReelState>()(
         return true;
       },
       rememberTitles: (titles) => {
-        const have = new Set(get().remoteTitles.map((t) => t.id));
-        const extra = titles.filter((t) => !have.has(t.id));
-        if (!extra.length) return;
-        rememberCatalogTitles(extra);
-        set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
+        rememberCatalogTitles(titles);
+        set({ remoteTitles: mergeRemoteTitles(get().remoteTitles, titles) });
       },
       dropLibraryTitle: (titleId, extraIds = []) => {
         const s = get();

@@ -376,9 +376,15 @@ export function showHashAdapter(opts: { pageId?: string; title?: string } = {}):
 }
 
 export function titleMatchesId(
-  t: Pick<Title, "id" | "ids" | "jellyfinId">,
+  t: Pick<Title, "id" | "ids" | "jellyfinId" | "kind">,
   id: string,
 ): boolean {
+  const pageId = String(id || "");
+  const pageMovie = /^tmdb-\d/.test(pageId) && !pageId.startsWith("tmdb-tv-");
+  const pageTv = pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-");
+  const kind = t.kind === "tv" || t.kind === "anime" ? "tv" : t.kind === "movie" ? "movie" : null;
+  if (pageMovie && kind === "tv") return false;
+  if (pageTv && kind === "movie") return false;
   const keys = new Set(titlePresenceKeys(t.id, t.ids || []));
   if (t.jellyfinId) {
     keys.add(String(t.jellyfinId));
@@ -387,12 +393,20 @@ export function titleMatchesId(
   return titlePresenceKeys(id).some((k) => keys.has(k));
 }
 
+/** TMDB/Seerr art — Jellyfin 404s must not count as a poster on first paint. */
+export function titleHasRemotePoster(t?: Pick<Title, "poster"> | null): boolean {
+  const p = String(t?.poster || "").trim();
+  return Boolean(p && !p.includes("/api/jf/"));
+}
+
 /** Home cards: shelf / remembered titles / the request's own name. Always a Title so chip and cards match. */
 export function titleForRequest(
   r: Pick<MediaRequest, "titleId" | "title">,
   titles: Pick<Title, "id" | "ids" | "kind" | "title" | "year" | "poster" | "jellyfinId">[] = [],
 ): Title {
-  const hit = titles.find((t) => titleMatchesId(t, r.titleId));
+  const hits = titles.filter((t) => titleMatchesId(t, r.titleId));
+  const withArt = hits.find((t) => titleHasRemotePoster(t));
+  const hit = withArt || hits[0];
   if (hit) return hit as Title;
   return {
     id: r.titleId,
@@ -406,6 +420,30 @@ export function titleForRequest(
     maxQuality: "1080p",
     popularity: 0,
   };
+}
+
+/** Persist/catalog must take TMDB art even when a ghost row already occupies that id. */
+export function mergeRemoteTitles(current: Title[] = [], incoming: Title[] = [], cap = 120): Title[] {
+  const byId = new Map<string, Title>();
+  for (const t of current) {
+    if (t?.id) byId.set(t.id, t);
+  }
+  for (const t of incoming) {
+    if (!t?.id) continue;
+    const cur = byId.get(t.id);
+    if (!cur) {
+      byId.set(t.id, t);
+      continue;
+    }
+    const poster = titleHasRemotePoster(t) ? t.poster : cur.poster;
+    const title = t.title && t.title !== t.id ? t.title : cur.title;
+    byId.set(t.id, { ...cur, ...t, title, poster });
+  }
+  const merged = [...byId.values()];
+  if (merged.length <= cap) return merged;
+  const keep = merged.filter((t) => titleHasRemotePoster(t));
+  const rest = merged.filter((t) => !titleHasRemotePoster(t));
+  return [...keep, ...rest].slice(0, cap);
 }
 
 function isHashDumpId(id: string) {
