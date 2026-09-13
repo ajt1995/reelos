@@ -21,7 +21,7 @@ Land on 1.2.50.x gold. Kind is a word or a 6px pip. Download stays gold. No mage
 
 ## Current ship
 
-***1.2.50.58 is the ship.*** Cloud soak after 57: selfheal loads, movie lookup has no TV seasons (Dark Knight ≠ 3rd Rock), Sonarr TBA S6 is Coming, Home/Library hide TPB / season-folder dumps, Requests wrap chips, inflight TMDB posters. 57 dump heal + 40×40 Coming ≠ Request stay. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.55**. **Do not house-Apply until told.** Never twice.
+***1.2.50.58 is the ship.*** Cloud soak after 57: selfheal loads, movie lookup has no TV seasons (Dark Knight ≠ 3rd Rock), Sonarr TBA S6 is Coming, Home/Library hide TPB / season-folder dumps, Discover Finishing TMDB art, phone season chips scroll above the tab bar. 57 dump heal + 40×40 Coming ≠ Request stay. Skip 49 (cloud-only #136). Prebuilt hashed UI, no Arena. Settings **Beta channel** still fetches **2.0.0** as a separate tarball. 1.2.51 parked. House is **1.2.50.55**. **Do not house-Apply until told.** Never twice.
 
 ## Stamp
 
