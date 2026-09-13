@@ -32,7 +32,10 @@ test("Home On this box cards wrap, placeholder empty art, and hide dump twins", 
   assert.match(card, /Number\(title\.year\) > 0/);
   assert.match(card, /overflow-hidden/);
   assert.match(poster, /posterInitial/);
+  assert.match(poster, /placeholder = "letter"/);
+  assert.match(poster, /placeholder === "letter"/);
   assert.match(poster, /w-full min-h-0 min-w-0 max-w-full overflow-hidden/);
+  assert.match(card, /placeholder=\{request && !titleHasRemotePoster\(painted\) \? "empty" : "letter"\}/);
   assert.match(library, /homeShelfRows/);
   assert.match(shelf, /isDumpTwinCard/);
   assert.match(shelf, /dumpMatchesNamed/);

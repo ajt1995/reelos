@@ -20,6 +20,7 @@ import {
   showHashAdapter,
   showRequestQueueControls,
   titleForRequest,
+  titleHasRemotePoster,
   titleMatchesId,
   titlePresenceKeys,
   requestProgressLabel,
@@ -156,6 +157,7 @@ test("25 mostly-available rows are not 25 transferring", () => {
 test("Home and Requests both overlay then keep in-flight only", () => {
   const home = readFileSync(new URL("../components/home-view.tsx", import.meta.url), "utf8");
   const reqs = readFileSync(new URL("../components/requests-view.tsx", import.meta.url), "utf8");
+  const discover = readFileSync(new URL("../components/discover-view.tsx", import.meta.url), "utf8");
   const shell = readFileSync(new URL("../components/shell.tsx", import.meta.url), "utf8");
   assert.match(home, /homeInFlightRequests\(requests, \{ titles: shelf \}\)/);
   assert.match(home, /titleForRequest\(r, catalog\)/);
@@ -167,6 +169,9 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(shell, /inFlightRequests\(s\.requests, \{ titles: s\.shelf \}\)/);
   assert.doesNotMatch(shell, /aria-label="Search"/);
   assert.match(reqs, /inFlightRequests\(requests, \{ titles: \[\.\.\.shelf, \.\.\.remoteTitles\] \}\)/);
+  assert.match(home, /useResolveGhostRequestTitles\(inflight, catalog\)/);
+  assert.match(discover, /useResolveGhostRequestTitles\(inflight, catalog\)/);
+  assert.match(reqs, /useResolveGhostRequestTitles\(inflight, catalog\)/);
   assert.match(reqs, /tvSeasonChips/);
   assert.doesNotMatch(reqs, /id: "available"/);
   assert.doesNotMatch(reqs, /id: "failed"/);
@@ -175,6 +180,7 @@ test("Home and Requests both overlay then keep in-flight only", () => {
   assert.match(reqs, />\s*Cancel\s*</);
   const sync = readFileSync(new URL("./use-sync-requests.ts", import.meta.url), "utf8");
   assert.match(sync, /requestNeedsLibraryHandoff/);
+  assert.match(sync, /titleHasRemotePoster/);
   assert.match(sync, /hydrateShelf\(\{ force: true, fresh: true \}\)/);
   assert.doesNotMatch(home, /setInterval/);
   assert.doesNotMatch(reqs, /setInterval/);
@@ -490,6 +496,12 @@ test("jf- library ids do not overlay a TMDB movie", () => {
   const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
   const honest = overlayLibraryPresence(requests, { libraryIds: ["jf-abc"], titles: [] });
   assert.equal(honest[0]?.status, "downloading");
+});
+
+test("titleHasRemotePoster ignores empty and Jellyfin 404 URLs", () => {
+  assert.equal(titleHasRemotePoster({ poster: "" }), false);
+  assert.equal(titleHasRemotePoster({ poster: "/api/jf/Items/x/Images/Primary" }), false);
+  assert.equal(titleHasRemotePoster({ poster: "https://image.tmdb.org/t/p/w342/x.jpg" }), true);
 });
 
 test("titleForRequest uses the request name when catalog is empty", () => {

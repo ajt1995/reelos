@@ -393,16 +393,19 @@ export function titleMatchesId(
   return titlePresenceKeys(id).some((k) => keys.has(k));
 }
 
+/** TMDB/Seerr art — Jellyfin 404s must not count as a poster on first paint. */
+export function titleHasRemotePoster(t?: Pick<Title, "poster"> | null): boolean {
+  const p = String(t?.poster || "").trim();
+  return Boolean(p && !p.includes("/api/jf/"));
+}
+
 /** Home cards: shelf / remembered titles / the request's own name. Always a Title so chip and cards match. */
 export function titleForRequest(
   r: Pick<MediaRequest, "titleId" | "title">,
   titles: Pick<Title, "id" | "ids" | "kind" | "title" | "year" | "poster" | "jellyfinId">[] = [],
 ): Title {
   const hits = titles.filter((t) => titleMatchesId(t, r.titleId));
-  const withArt = hits.find((t) => {
-    const p = String(t.poster || "").trim();
-    return p && !p.includes("/api/jf/");
-  });
+  const withArt = hits.find((t) => titleHasRemotePoster(t));
   const hit = withArt || hits[0];
   if (hit) return hit as Title;
   return {

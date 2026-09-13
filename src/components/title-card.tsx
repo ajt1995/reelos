@@ -3,7 +3,7 @@ import { ThumbsDown } from "lucide-react";
 import { Poster } from "@/components/poster";
 import { titleInCache } from "@/lib/adapter";
 import { useReelStore } from "@/lib/store";
-import { titleMatchesId, requestProgressLabel } from "@/lib/sync-requests";
+import { titleHasRemotePoster, titleMatchesId, requestProgressLabel } from "@/lib/sync-requests";
 import type { MediaRequest } from "@/lib/types";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,7 +48,11 @@ export function TitleCard({
       className={cn("group block w-[148px] min-w-0 max-w-full shrink-0 overflow-hidden sm:w-[168px]", className)}
     >
       <div className="relative overflow-hidden rounded-xl transition-transform duration-200 ease-out group-hover:-translate-y-0.5">
-        <Poster title={painted} className="rounded-xl" />
+        <Poster
+          title={painted}
+          className="rounded-xl"
+          placeholder={request && !titleHasRemotePoster(painted) ? "empty" : "letter"}
+        />
         {showCache ? (
           <span className="absolute left-2 top-2 rounded-full bg-gold px-2 py-0.5 text-[10px] font-medium tracking-wide text-gold-fg">
             Cached

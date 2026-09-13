@@ -284,7 +284,7 @@ export function TitleView({ id }: { id: string }) {
     (resolved.kind === "tv" && !intent.tv);
 
   return (
-    <div className="title-page pb-16">
+    <div className="title-page pb-28 md:pb-16">
       <div className="title-hero" aria-hidden="true">
         {resolved.poster ? (
           <img

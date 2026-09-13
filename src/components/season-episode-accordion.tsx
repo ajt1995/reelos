@@ -142,7 +142,7 @@ export function SeasonEpisodeAccordion({
 
   return (
     <div className="title-season-accordion relative z-20 w-full min-w-0">
-      <div className="flex flex-wrap gap-2">
+      <div className="title-season-chips no-scrollbar">
         {seasonNumbers.map((n) => {
           const selected = selectedSeason === n;
           const expanded = selected && open;
@@ -158,7 +158,7 @@ export function SeasonEpisodeAccordion({
               aria-controls={`season-${n}-episodes`}
               onClick={() => tapSeason(n)}
               className={cn(
-                "inline-flex h-11 min-h-11 items-center gap-1 rounded-full px-3 text-sm",
+                "inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-3 text-sm",
                 selected ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
               )}
             >

@@ -7,7 +7,7 @@ import { filterCuratorHidden } from "@/lib/discover-curator";
 import { filterDiscoverCatalog } from "@/lib/discover-owned";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, homeInFlightRequests, titleForRequest } from "@/lib/sync-requests";
-import { useSyncRequests } from "@/lib/use-sync-requests";
+import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
 import type { CollectionHit, Kind, MediaRequest, PersonHit, Title } from "@/lib/types";
 import { installHonestRequest } from "@/lib/honest-request";
 
@@ -49,6 +49,7 @@ export function DiscoverView() {
   const catalog = useMemo(() => [...shelf, ...remoteTitles], [shelf, remoteTitles]);
   const inflight = homeInFlightRequests(requests, { titles: shelf });
   useSyncRequests();
+  useResolveGhostRequestTitles(inflight, catalog);
 
   useEffect(() => {
     installHonestRequest();
