@@ -77,10 +77,12 @@ import { applyBetaSidecar, betaEnabled } from "./reelos-beta-sidecar.mjs";
 import { dispatchBooksApi } from "./reelos-books.mjs";
 import {
   curatorPublic,
-  hideCuratorTitle,
+  mergeLikedSimilar,
   readCurator,
+  recentLikedIds,
   resetCurator,
   titleIsCuratorHidden,
+  voteCuratorTitle,
 } from "./reelos-curator.mjs";
 import {
   createLibraryCache,
@@ -647,11 +649,13 @@ async function handleDiscoverBrowse(req, res, u) {
     const hits = Array.isArray(json) ? json : json.results || [];
     const excludeIds = await ownedDiscoverExclude();
     const excludeHidden = readCurator();
+    const boostIds = excludeHidden.liked || [];
     const titles = mapSeerrDiscoverResults(hits, {
       mediaType: kind,
       limit: 40,
       excludeIds,
       excludeHidden,
+      boostIds,
     });
     const totalPages = Math.max(1, Number(json.totalPages || json.total_pages || page) || page);
     send(res, 200, {
@@ -703,6 +707,7 @@ async function handleDiscover(req, res) {
     }
     const excludeIds = await ownedDiscoverExclude();
     const excludeHidden = readCurator();
+    const boostIds = excludeHidden.liked || [];
     const movieHits = [
       ...(Array.isArray(movieRes.json) ? movieRes.json : movieRes.json?.results || []),
       ...(movieRes2.ok ? (Array.isArray(movieRes2.json) ? movieRes2.json : movieRes2.json?.results || []) : []),
@@ -712,17 +717,40 @@ async function handleDiscover(req, res) {
       ...(tvRes2.ok ? (Array.isArray(tvRes2.json) ? tvRes2.json : tvRes2.json?.results || []) : []),
     ];
     if (movieRes.ok || movieRes2.ok) {
-      movies.push(...mapSeerrDiscoverResults(movieHits, { mediaType: "movie", limit: 16, excludeIds, excludeHidden }));
+      movies.push(
+        ...mapSeerrDiscoverResults(movieHits, {
+          mediaType: "movie",
+          limit: 16,
+          excludeIds,
+          excludeHidden,
+          boostIds,
+        }),
+      );
     } else {
       note(`seerr discover movies ${movieRes.status}`);
     }
     if (tvRes.ok || tvRes2.ok) {
-      tv.push(...mapSeerrDiscoverResults(tvHits, { mediaType: "tv", limit: 16, excludeIds, excludeHidden }));
+      tv.push(
+        ...mapSeerrDiscoverResults(tvHits, {
+          mediaType: "tv",
+          limit: 16,
+          excludeIds,
+          excludeHidden,
+          boostIds,
+        }),
+      );
     } else {
       note(`seerr discover tv ${tvRes.status}`);
     }
     if (!movies.length && !tv.length) {
       error = error || "Seerr has nothing new to show yet.";
+    }
+    const similarBoost = await likedSimilarTitles(excludeHidden, { key, excludeIds, excludeHidden });
+    if (similarBoost.movies.length) {
+      movies.splice(0, movies.length, ...mergeLikedSimilar(movies, similarBoost.movies, { limit: 16, excludeHidden }));
+    }
+    if (similarBoost.tv.length) {
+      tv.splice(0, tv.length, ...mergeLikedSimilar(tv, similarBoost.tv, { limit: 16, excludeHidden }));
     }
     note(`seerr discover movies=${movies.length} tv=${tv.length}`);
   } catch (e) {
@@ -737,6 +765,46 @@ function tmdbIdFromQuery(raw) {
   if (!s) return 0;
   const n = Number(s.replace(/^(person-|collection-|tmdb-tv-|tmdb-|tvdb-)/, ""));
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+async function likedSimilarTitles(curator, { key, excludeIds, excludeHidden }) {
+  const empty = { movies: [], tv: [] };
+  const liked = recentLikedIds(curator, 4);
+  if (!liked.length || !key) return empty;
+  try {
+    const jobs = liked.map((id) => {
+      const parsed = parseTitleId(id);
+      if (!parsed?.tmdb) return Promise.resolve(null);
+      const kind = parsed.mediaType === "tv" ? "tv" : "movie";
+      const base = kind === "tv" ? `/api/v1/tv/${parsed.tmdb}` : `/api/v1/movie/${parsed.tmdb}`;
+      return seerrFetch(`${base}/similar`, { key, ms: 8000 }).then((r) => ({ kind, json: r.json }));
+    });
+    const rows = await Promise.all(jobs);
+    const movieHits = [];
+    const tvHits = [];
+    for (const row of rows) {
+      if (!row) continue;
+      const hits = Array.isArray(row.json) ? row.json : row.json?.results || [];
+      if (row.kind === "tv") tvHits.push(...hits);
+      else movieHits.push(...hits);
+    }
+    return {
+      movies: mapSeerrDiscoverResults(movieHits, {
+        mediaType: "movie",
+        limit: 8,
+        excludeIds,
+        excludeHidden,
+      }),
+      tv: mapSeerrDiscoverResults(tvHits, {
+        mediaType: "tv",
+        limit: 8,
+        excludeIds,
+        excludeHidden,
+      }),
+    };
+  } catch {
+    return empty;
+  }
 }
 
 async function handleSimilar(req, res) {
@@ -796,13 +864,15 @@ async function handleCurator(req, res) {
     send(res, 400, { ok: false, error: "Need a title id" });
     return;
   }
-  const next = hideCuratorTitle(
+  const vote = String(body?.vote || body?.taste || "dislike").toLowerCase();
+  const next = voteCuratorTitle(
     {
       id,
       ids: Array.isArray(body?.ids) ? body.ids : [],
       jellyfinId: body?.jellyfinId,
       title: body?.title,
     },
+    vote,
     process.env.REELOS_STATE,
   );
   send(res, next.ok ? 200 : 400, curatorPublic(next));

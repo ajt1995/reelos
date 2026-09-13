@@ -80,18 +80,23 @@ function request(method, url, body) {
   });
 }
 
-const post = await request("POST", "/api/curator", { id: "tmdb-550", title: "Fight Club" });
+const postLike = await request("POST", "/api/curator", { id: "tmdb-949", title: "Heat", vote: "like" });
+assert.equal(postLike.status, 200);
+assert.ok(postLike.json.liked.includes("tmdb-949"));
+const post = await request("POST", "/api/curator", { id: "tmdb-550", title: "Fight Club", vote: "dislike" });
 assert.equal(post.status, 200);
 assert.ok(post.json.hidden.includes("tmdb-550"));
 assert.equal(post.json.count >= 1, true);
 const get = await request("GET", "/api/curator");
 assert.ok(get.json.hidden.includes("tmdb-550"));
+assert.ok(get.json.liked.includes("tmdb-949"));
 const reset = await request("POST", "/api/curator/reset");
 assert.equal(reset.status, 200);
 assert.equal(reset.json.count, 0);
 assert.deepEqual(reset.json.hidden, []);
+assert.deepEqual(reset.json.liked, []);
 const gone = await request("GET", "/api/curator");
 assert.equal(gone.json.count, 0);
 
 rmSync(state, { recursive: true, force: true });
-console.log("curator prove ok: downvote then reset; library unchanged; no Google");
+console.log("curator prove ok: like + downvote then reset; library unchanged; no Google");

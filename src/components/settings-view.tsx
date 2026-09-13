@@ -59,7 +59,7 @@ function CuratorResetRow() {
         return;
       }
       setCount(Number(j.count) || 0);
-      setMsg("Discover Not interested list cleared. Library on this box is unchanged.");
+      setMsg("Discover likes and Not interested cleared. Library on this box is unchanged.");
     } catch (e) {
       setMsg(String(e));
     }
@@ -72,8 +72,8 @@ function CuratorResetRow() {
         <div className="min-w-0 flex-1">
           <p className="font-display font-medium">Reset curator preferences</p>
           <p className="mt-1 text-sm text-muted">
-            Clears Not interested titles on Discover. Titles on this box stay on Home. No Google account.
-            {count ? ` ${count} hidden.` : ""}
+            Clears Likes and Not interested on Discover. Titles on this box stay on Home. No Google account.
+            {count ? ` ${count} saved.` : ""}
           </p>
           <Button className="mt-3" variant="ghost" size="sm" disabled={busy} onClick={() => void run()}>
             {busy ? "Resetting…" : "Reset curator preferences"}

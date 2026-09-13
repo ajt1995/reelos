@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, Play, Plus } from "lucide-react";
 import { Poster } from "@/components/poster";
-import { Row, TitleCard } from "@/components/title-card";
+import { CuratorVoteBar, Row, TitleCard } from "@/components/title-card";
 import { Button } from "@/components/ui/button";
 import { cacheCopy } from "@/lib/adapter";
 import { getTitle, kindLabel, rememberCatalogTitles } from "@/lib/catalog";
@@ -25,6 +25,8 @@ import { useEngineRequest } from "@/lib/use-engine-request";
 import { jellyfinWatchHref } from "@/lib/jellyfin-watch";
 import { RemoveFromBox } from "@/components/remove-from-box";
 import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
+import { titleIsCuratorHidden, titleIsCuratorLiked } from "@/lib/discover-curator";
+import { useCurator } from "@/lib/use-curator";
 import { IMPORTING_SEASON_CHIP, IMPORTING_SEASON_COPY, UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
 
 function uniqSeasons(nums: number[]) {
@@ -50,6 +52,7 @@ export function TitleView({ id }: { id: string }) {
   const remote = useReelStore((s) => s.remoteTitles.find((t) => titleMatchesId(t, id) || t.id === id));
   const shelf = useReelStore((s) => s.shelf.find((t) => titleMatchesId(t, id) || t.id === id));
   const rememberTitles = useReelStore((s) => s.rememberTitles);
+  const { hiddenIds, likedIds, voteTitle } = useCurator();
   const title = catalog ?? remote ?? shelf;
   const [detail, setDetail] = useState<Title | null>(null);
   const [seasonErr, setSeasonErr] = useState<string | null>(null);
@@ -445,6 +448,14 @@ export function TitleView({ id }: { id: string }) {
                 Retry
               </Button>
             ) : null}
+            {resolved ? (
+              <CuratorVoteBar
+                placement="inline"
+                liked={titleIsCuratorLiked(resolved, likedIds)}
+                hidden={titleIsCuratorHidden(resolved, hiddenIds)}
+                onVote={(vote) => voteTitle(resolved, vote)}
+              />
+            ) : null}
           </div>
           {failed ? (
             <p className="mt-4 text-sm text-danger">{failed.reason}</p>
@@ -495,7 +506,13 @@ export function TitleView({ id }: { id: string }) {
         <div className="mx-auto max-w-5xl px-5 md:px-10">
           <Row label="More like this">
             {similar.map((t) => (
-              <TitleCard key={t.id} title={t} />
+              <TitleCard
+                key={t.id}
+                title={t}
+                onVote={voteTitle}
+                liked={titleIsCuratorLiked(t, likedIds)}
+                hidden={titleIsCuratorHidden(t, hiddenIds)}
+              />
             ))}
           </Row>
         </div>

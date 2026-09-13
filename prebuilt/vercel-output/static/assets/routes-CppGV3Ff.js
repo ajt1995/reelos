@@ -1,0 +1,1 @@
+import{et as e}from"./store-CodGU1qh.js";import{t}from"./gate-CXWSgtBX.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};

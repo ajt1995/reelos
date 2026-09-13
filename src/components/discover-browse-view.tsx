@@ -3,8 +3,9 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft } from "lucide-react";
 import { TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
-import { filterCuratorHidden } from "@/lib/discover-curator";
+import { filterCuratorHidden, titleIsCuratorLiked } from "@/lib/discover-curator";
 import { filterDiscoverCatalog } from "@/lib/discover-owned";
+import { useCurator } from "@/lib/use-curator";
 import { useReelStore } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ export function DiscoverBrowseView({
   const shelf = useReelStore((s) => s.shelf);
   const rememberTitles = useReelStore((s) => s.rememberTitles);
   const hydrateShelf = useReelStore((s) => s.hydrateShelf);
-  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const { hiddenIds, likedIds, voteTitle } = useCurator();
   const [genres, setGenres] = useState<Genre[]>([]);
   const [titles, setTitles] = useState<Title[]>([]);
   const [page, setPage] = useState(1);
@@ -47,13 +48,6 @@ export function DiscoverBrowseView({
   useEffect(() => {
     hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
-
-  useEffect(() => {
-    void fetch("/api/curator", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
-      .then((j) => setHiddenIds(Array.isArray(j.hidden) ? j.hidden : []))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     seen.current = new Set();
@@ -124,19 +118,8 @@ export function DiscoverBrowseView({
     return () => io.disconnect();
   }, [loadPage, loading, page, totalPages]);
 
-  const hideTitle = (title: Title) => {
-    const extra = [title.id, ...(title.ids || [])].filter(Boolean);
-    setHiddenIds((cur) => [...new Set([...cur, ...extra])]);
-    void fetch("/api/curator", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: title.id, ids: title.ids, jellyfinId: title.jellyfinId, title: title.title }),
-    })
-      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
-      .then((j) => {
-        if (Array.isArray(j.hidden)) setHiddenIds(j.hidden);
-      })
-      .catch(() => {});
+  const voteDiscover = (title: Title, vote: "like" | "dislike" | "none") => {
+    voteTitle(title, vote);
   };
 
   const shown = useMemo(
@@ -197,7 +180,14 @@ export function DiscoverBrowseView({
       {shown.length ? (
         <div className="mt-8 grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
           {shown.map((t) => (
-            <TitleCard key={t.id} title={t} className="w-full max-w-full" onHide={hideTitle} />
+            <TitleCard
+              key={t.id}
+              title={t}
+              className="w-full max-w-full"
+              onVote={voteDiscover}
+              liked={titleIsCuratorLiked(t, likedIds)}
+              hidden={hiddenIds.includes(t.id)}
+            />
           ))}
         </div>
       ) : loading ? (

@@ -1759,6 +1759,22 @@ test("AbortError / timeout is a retryable lookup error, not an empty shelf", () 
   assert.deepEqual(mapSeerrSearchResults([], { q: "interstellar" }), []);
 });
 
+test("Discover like boosts similar titles ahead of the rest of pick tonight", () => {
+  const now = Date.parse("2026-09-13T00:00:00Z");
+  const hits = [
+    { id: 242582, mediaType: "movie", title: "Nightcrawler", releaseDate: "2014-10-31" },
+    { id: 273481, mediaType: "movie", title: "Sicario", releaseDate: "2015-09-17" },
+    { id: 198663, mediaType: "movie", title: "The Maze Runner", releaseDate: "2014-09-10" },
+  ];
+  const picks = mapSeerrDiscoverResults(hits, {
+    mediaType: "movie",
+    now,
+    boostIds: ["tmdb-273481"],
+  });
+  assert.equal(picks[0].id, "tmdb-273481");
+  assert.ok(picks.some((t) => t.id === "tmdb-242582"));
+});
+
 test("Discover pick tonight drops unreleased 2026 junk", () => {
   const now = Date.parse("2026-09-12T00:00:00Z");
   assert.equal(discoverHitReleased({ title: "Moon", releaseDate: "2009-07-17" }, now), true);
@@ -1798,9 +1814,11 @@ test("Discover is finishing / pick tonight — library stays on Home", () => {
   assert.match(discover, /\/api\/discover/);
   assert.match(home, /On this box/);
   assert.match(lookup, /overlayLookupWithLibrary/);
-  assert.match(discover, /onHide/);
-  assert.match(discover, /\/api\/curator/);
+  assert.match(discover, /onVote/);
+  assert.match(discover, /useCurator/);
+  assert.match(discover, /\/api\/discover/);
   assert.match(readFileSync(join(root, "src/components/title-card.tsx"), "utf8"), /Not interested/);
+  assert.match(readFileSync(join(root, "src/components/title-card.tsx"), "utf8"), /aria-label="Like"/);
   assert.match(discover, /People/);
   assert.match(discover, /Collections/);
   assert.match(title, /More like this/);

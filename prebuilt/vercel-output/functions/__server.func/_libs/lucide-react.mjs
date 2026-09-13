@@ -757,6 +757,19 @@ var ThumbsDown = createLucideIcon("thumbs-down", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var ThumbsUp = createLucideIcon("thumbs-up", [["path", {
+	d: "M7 10v12",
+	key: "1qc93n"
+}], ["path", {
+	d: "M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z",
+	key: "emmmcr"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var TriangleAlert = createLucideIcon("triangle-alert", [
 	["path", {
 		d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",
@@ -844,4 +857,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { ChevronRight as A, HardDrive as C, Compass as D, Cpu as E, BookOpen as F, Bell as I, ArrowLeft as L, ChevronDown as M, Check as N, Cloud as O, Captions as P, Activity as R, House as S, Download as T, LoaderCircle as _, TriangleAlert as a, Layers as b, SlidersHorizontal as c, Search as d, ScrollText as f, Music as g, Play as h, Upload as i, ChevronLeft as j, Clapperboard as k, Shield as l, Plus as m, Wrench as n, ThumbsDown as o, RefreshCw as p, Users as r, SquareTerminal as s, X as t, Settings as u, ListFilter as v, Film as w, KeyRound as x, Library as y };
+export { Clapperboard as A, House as C, Cpu as D, Download as E, Captions as F, BookOpen as I, Bell as L, ChevronLeft as M, ChevronDown as N, Compass as O, Check as P, ArrowLeft as R, KeyRound as S, Film as T, Music as _, TriangleAlert as a, Library as b, SquareTerminal as c, Settings as d, Search as f, Play as g, Plus as h, Upload as i, ChevronRight as j, Cloud as k, SlidersHorizontal as l, RefreshCw as m, Wrench as n, ThumbsUp as o, ScrollText as p, Users as r, ThumbsDown as s, X as t, Shield as u, LoaderCircle as v, HardDrive as w, Layers as x, ListFilter as y, Activity as z };

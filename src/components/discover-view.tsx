@@ -3,8 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { Search, ChevronRight } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { rememberCatalogTitles } from "@/lib/catalog";
-import { filterCuratorHidden } from "@/lib/discover-curator";
+import { filterCuratorHidden, titleIsCuratorLiked } from "@/lib/discover-curator";
 import { filterDiscoverCatalog } from "@/lib/discover-owned";
+import { useCurator } from "@/lib/use-curator";
 import { useReelStore } from "@/lib/store";
 import { collapseHomeRequestCards, homeInFlightRequests, titleForRequest } from "@/lib/sync-requests";
 import { useResolveGhostRequestTitles, useSyncRequests } from "@/lib/use-sync-requests";
@@ -36,7 +37,7 @@ export function DiscoverView() {
   const [browseTv, setBrowseTv] = useState<Title[]>([]);
   const [browseErr, setBrowseErr] = useState<string | null>(null);
   const [browseReady, setBrowseReady] = useState(false);
-  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const { hiddenIds, likedIds, voteTitle } = useCurator();
   const booksOn = useReelStore((s) => s.settings.betaChannel);
   const [bookFeatured, setBookFeatured] = useState<
     { id: string; title: string; author: string; year?: number | null; source: string; downloadUrl: string }[]
@@ -58,13 +59,6 @@ export function DiscoverView() {
   useEffect(() => {
     hydrateShelf({ limit: 24, force: true });
   }, [hydrateShelf]);
-
-  useEffect(() => {
-    void fetch("/api/curator", { cache: "no-store" })
-      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
-      .then((j) => setHiddenIds(Array.isArray(j.hidden) ? j.hidden : []))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,20 +111,22 @@ export function DiscoverView() {
     };
   }, [booksOn]);
 
-  const hideTitle = (title: Title) => {
-    // Discover Not interested — box-local /api/curator. Home/Library stay.
-    const extra = [title.id, ...(title.ids || [])].filter(Boolean);
-    setHiddenIds((cur) => [...new Set([...cur, ...extra])]);
-    void fetch("/api/curator", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: title.id, ids: title.ids, jellyfinId: title.jellyfinId, title: title.title }),
-    })
-      .then((r) => r.json() as Promise<{ hidden?: string[] }>)
-      .then((j) => {
-        if (Array.isArray(j.hidden)) setHiddenIds(j.hidden);
-      })
-      .catch(() => {});
+  const voteDiscover = (title: Title, vote: "like" | "dislike" | "none") => {
+    // Discover Like boosts similar; Not interested hides. Home/Library stay.
+    voteTitle(title, vote);
+    if (vote === "like") {
+      void fetch("/api/discover", { cache: "no-store" })
+        .then((res) => res.json() as Promise<{ movies?: Title[]; tv?: Title[] }>)
+        .then((r) => {
+          const movies = Array.isArray(r?.movies) ? r.movies : [];
+          const tv = Array.isArray(r?.tv) ? r.tv : [];
+          rememberCatalogTitles([...movies, ...tv]);
+          rememberTitles?.([...movies, ...tv]);
+          setBrowseMovies(movies);
+          setBrowseTv(tv);
+        })
+        .catch(() => {});
+    }
   };
 
   const finishing = useMemo(() => {
@@ -281,7 +277,13 @@ export function DiscoverView() {
             {hits.length ? (
               <Row label="Results">
                 {hits.map((t) => (
-                  <TitleCard key={t.id} title={t} onHide={hideTitle} />
+                  <TitleCard
+                    key={t.id}
+                    title={t}
+                    onVote={voteDiscover}
+                    liked={titleIsCuratorLiked(t, likedIds)}
+                    hidden={hiddenIds.includes(t.id)}
+                  />
                 ))}
               </Row>
             ) : null}
@@ -295,8 +297,24 @@ export function DiscoverView() {
         )
       ) : (
         <>
-          <DiscoverKind heading="Movies" to="/discover/movies" finishing={finishingMovies} pick={pickMovies} onHide={hideTitle} />
-          <DiscoverKind heading="Shows" to="/discover/shows" finishing={finishingTv} pick={pickTv} onHide={hideTitle} />
+          <DiscoverKind
+            heading="Movies"
+            to="/discover/movies"
+            finishing={finishingMovies}
+            pick={pickMovies}
+            likedIds={likedIds}
+            hiddenIds={hiddenIds}
+            onVote={voteDiscover}
+          />
+          <DiscoverKind
+            heading="Shows"
+            to="/discover/shows"
+            finishing={finishingTv}
+            pick={pickTv}
+            likedIds={likedIds}
+            hiddenIds={hiddenIds}
+            onVote={voteDiscover}
+          />
           {booksOn && bookFeatured.length > 0 ? (
             <section className="mt-10">
               <h2 className="font-display text-xl font-semibold tracking-tight">Books</h2>
@@ -333,13 +351,17 @@ function DiscoverKind({
   to,
   finishing,
   pick,
-  onHide,
+  likedIds,
+  hiddenIds,
+  onVote,
 }: {
   heading: string;
   to: "/discover/movies" | "/discover/shows";
   finishing: { r: MediaRequest; t: Title }[];
   pick: Title[];
-  onHide: (title: Title) => void;
+  likedIds: string[];
+  hiddenIds: string[];
+  onVote: (title: Title, vote: "like" | "dislike" | "none") => void;
 }) {
   return (
     <div className="mt-10">
@@ -357,7 +379,13 @@ function DiscoverKind({
       {pick.length ? (
         <Row label="Pick tonight">
           {pick.map((t) => (
-            <TitleCard key={t.id} title={t} onHide={onHide} />
+            <TitleCard
+              key={t.id}
+              title={t}
+              onVote={onVote}
+              liked={titleIsCuratorLiked(t, likedIds)}
+              hidden={hiddenIds.includes(t.id)}
+            />
           ))}
         </Row>
       ) : null}

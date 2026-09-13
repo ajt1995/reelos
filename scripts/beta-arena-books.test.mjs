@@ -14,7 +14,7 @@ test("beta: stable Check cannot be offered Arena via channel.json", () => {
   const chan = JSON.parse(read("channel.json"));
   const beta = JSON.parse(read("channel-beta.json"));
   const ver = read("VERSION").trim();
-  assert.equal(ver, "1.2.50.58");
+  assert.equal(ver, "1.2.50.59");
   assert.doesNotMatch(ver, /1\.2\.51/);
   assert.match(String(chan.version), /^1\.2\.50\./);
   assert.equal(chan.channel, "stable");

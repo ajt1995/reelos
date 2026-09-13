@@ -1,6 +1,6 @@
 /** Seerr/Jellyseerr helpers for /api/lookup and /api/request. */
 import { existsSync, readFileSync } from "node:fs";
-import { titleIsCuratorHidden } from "./reelos-curator.mjs";
+import { titleIsCuratorHidden, rankDiscoverByLikes } from "./reelos-curator.mjs";
 
 export const SEERR_ORIGIN = "http://127.0.0.1:5055";
 
@@ -558,8 +558,13 @@ export function discoverHitReleased(h, now = Date.now()) {
 }
 
 /** Popular/trending rows this box does not already have. Search stays on /api/lookup. */
-export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeIds, excludeHidden, now = Date.now() } = {}) {
+export function mapSeerrDiscoverResults(
+  hits,
+  { mediaType, limit = 16, excludeIds, excludeHidden, boostIds, now = Date.now() } = {},
+) {
   const owned = asDiscoverOwned(excludeIds);
+  const boost = boostIds instanceof Set ? boostIds : new Set([...(boostIds || [])].map(String));
+  const poolLimit = boost.size ? Math.max(limit * 4, 48) : limit;
   const titles = [];
   for (const h of hits || []) {
     if (seerrAlreadyHave(h)) continue;
@@ -570,9 +575,10 @@ export function mapSeerrDiscoverResults(hits, { mediaType, limit = 16, excludeId
     if (!t || discoverTitleIsOwned(t, owned)) continue;
     if (excludeHidden && titleIsCuratorHidden(t, excludeHidden)) continue;
     titles.push(t);
-    if (titles.length >= limit) break;
+    if (titles.length >= poolLimit) break;
   }
-  return titles;
+  const ranked = boost.size ? rankDiscoverByLikes(titles, boost) : titles;
+  return ranked.slice(0, limit);
 }
 
 export const DISCOVER_CATEGORIES = [
