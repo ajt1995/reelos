@@ -321,7 +321,7 @@ export function TitleView({ id }: { id: string }) {
               Collection · {resolved.collection.name}
             </Link>
           ) : null}
-          <p className="mt-5 max-w-xl text-[15px] leading-relaxed text-muted">{resolved.overview}</p>
+          <p className="mt-5 max-w-xl line-clamp-4 text-[15px] leading-relaxed text-muted md:line-clamp-none">{resolved.overview}</p>
           {(series && !onBox && !blocked && !request && !thisSeasonUnreleased) || (!series && !available && !blocked && !request) ? (
             <p className="mt-4 text-sm text-gold">{cacheCopy(resolved, source)}</p>
           ) : null}

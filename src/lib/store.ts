@@ -23,7 +23,7 @@ import { adapterProfile, syntheticRelease, titleInCache } from "./adapter";
 import { getTitle, rememberCatalogTitles } from "./catalog";
 import { mergeShelf } from "./shelf";
 import { normalizeLibraryCatchup } from "./library-catchup";
-import { dropLibraryOverlay, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
+import { dropLibraryOverlay, mergeRemoteTitles, mergeServerRequests, overlayLibraryPresence } from "./sync-requests";
 
 function watchProgressFromResume(rows: Array<{ id?: string; progress?: number }> | undefined | null) {
   if (!Array.isArray(rows)) return null;
@@ -958,11 +958,8 @@ export const useReelStore = create<ReelState>()(
         return true;
       },
       rememberTitles: (titles) => {
-        const have = new Set(get().remoteTitles.map((t) => t.id));
-        const extra = titles.filter((t) => !have.has(t.id));
-        if (!extra.length) return;
-        rememberCatalogTitles(extra);
-        set({ remoteTitles: [...extra, ...get().remoteTitles].slice(0, 80) });
+        rememberCatalogTitles(titles);
+        set({ remoteTitles: mergeRemoteTitles(get().remoteTitles, titles) });
       },
       dropLibraryTitle: (titleId, extraIds = []) => {
         const s = get();

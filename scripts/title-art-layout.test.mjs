@@ -43,6 +43,8 @@ test("title page art is clipped and never uses intrinsic-width auto", () => {
   assert.match(layoutCss, /pointer-events:\s*none/);
   assert.match(layoutCss, /minmax\(0,\s*200px\)/);
   assert.match(layoutCss, /@media \(max-height: 500px\)/);
+  assert.match(view, /line-clamp-4/);
+  assert.match(view, /md:line-clamp-none/);
   assert.match(accordion, /title-season-chips/);
   assert.match(accordion, /shrink-0/);
   assert.match(layoutCss, /flex-wrap:\s*nowrap/);

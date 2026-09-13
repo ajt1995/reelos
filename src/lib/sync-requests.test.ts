@@ -19,6 +19,7 @@ import {
   requestTitleIdForPage,
   showHashAdapter,
   showRequestQueueControls,
+  mergeRemoteTitles,
   titleForRequest,
   titleHasRemotePoster,
   titleMatchesId,
@@ -496,6 +497,31 @@ test("jf- library ids do not overlay a TMDB movie", () => {
   const requests = [row({ id: "seerr-2", titleId: "tmdb-1593", status: "downloading", progress: 0 })];
   const honest = overlayLibraryPresence(requests, { libraryIds: ["jf-abc"], titles: [] });
   assert.equal(honest[0]?.status, "downloading");
+});
+
+test("mergeRemoteTitles upgrades an empty ghost poster with TMDB art", () => {
+  const ghost = {
+    id: "tmdb-274",
+    kind: "movie" as const,
+    title: "The Silence of the Lambs",
+    year: 1991,
+    poster: "",
+    rating: 0,
+    genres: [] as string[],
+    overview: "",
+    maxQuality: "1080p" as const,
+    popularity: 0,
+  };
+  const art = {
+    ...ghost,
+    poster: "https://image.tmdb.org/t/p/w500/uS9m8OBk1A8eM9I042bx8XXpqAq.jpg",
+  };
+  const merged = mergeRemoteTitles([ghost], [art]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].poster, art.poster);
+  const store = readFileSync(new URL("./store.ts", import.meta.url), "utf8");
+  assert.match(store, /mergeRemoteTitles\(get\(\)\.remoteTitles, titles\)/);
+  assert.doesNotMatch(store, /slice\(0, 80\)/);
 });
 
 test("titleHasRemotePoster ignores empty and Jellyfin 404 URLs", () => {

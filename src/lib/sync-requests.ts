@@ -422,6 +422,30 @@ export function titleForRequest(
   };
 }
 
+/** Persist/catalog must take TMDB art even when a ghost row already occupies that id. */
+export function mergeRemoteTitles(current: Title[] = [], incoming: Title[] = [], cap = 120): Title[] {
+  const byId = new Map<string, Title>();
+  for (const t of current) {
+    if (t?.id) byId.set(t.id, t);
+  }
+  for (const t of incoming) {
+    if (!t?.id) continue;
+    const cur = byId.get(t.id);
+    if (!cur) {
+      byId.set(t.id, t);
+      continue;
+    }
+    const poster = titleHasRemotePoster(t) ? t.poster : cur.poster;
+    const title = t.title && t.title !== t.id ? t.title : cur.title;
+    byId.set(t.id, { ...cur, ...t, title, poster });
+  }
+  const merged = [...byId.values()];
+  if (merged.length <= cap) return merged;
+  const keep = merged.filter((t) => titleHasRemotePoster(t));
+  const rest = merged.filter((t) => !titleHasRemotePoster(t));
+  return [...keep, ...rest].slice(0, cap);
+}
+
 function isHashDumpId(id: string) {
   const s = String(id || "");
   return /^[0-9a-f]{32,64}$/i.test(s) || /^jf-[0-9a-f]{32,64}$/i.test(s);
