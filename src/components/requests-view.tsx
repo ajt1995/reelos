@@ -88,7 +88,14 @@ export function RequestsView() {
             <li key={r.id} className="flex items-center gap-4 py-4">
               <Link to="/title/$id" params={{ id: titleId }} className="shrink-0">
                 {t?.poster ? (
-                  <img src={t.poster} alt="" className="h-[72px] w-12 rounded-lg object-cover" />
+                  <img
+                    src={t.poster}
+                    alt=""
+                    className="h-[72px] w-12 rounded-lg object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
                 ) : (
                   <div className="h-[72px] w-12 rounded-lg bg-card-2" />
                 )}

@@ -286,11 +286,16 @@ export function TitleView({ id }: { id: string }) {
   return (
     <div className="title-page pb-16">
       <div className="title-hero" aria-hidden="true">
-        <img
-          src={resolved.poster}
-          alt=""
-          className="title-hero-art kenburns"
-        />
+        {resolved.poster ? (
+          <img
+            src={resolved.poster}
+            alt=""
+            className="title-hero-art kenburns"
+            onError={(e) => {
+              e.currentTarget.style.opacity = "0";
+            }}
+          />
+        ) : null}
         <div className="title-hero-fade" />
       </div>
       <div className="title-body">

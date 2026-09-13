@@ -691,7 +691,12 @@ export function homeShelfRows(titles) {
       const name = normalizeTitle(t.title);
       if (name && namedNames.has(name)) return false;
       if (named.some((n) => dumpMatchesNamed(t, n))) return false;
-      if (isHashDumpCard(t) && !(Number(t.year) > 0) && !t.poster) return false;
+      if (
+        (t.fromDump || isHashDumpCard(t) || looksLikeIndexerDump(t.title) || looksLikeIndexerDump(t.path)) &&
+        (!(Number(t.year) > 0) || !String(t.poster || "").trim())
+      ) {
+        return false;
+      }
     }
     return true;
   });

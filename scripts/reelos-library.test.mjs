@@ -1121,6 +1121,27 @@ test("house screenshot fixture: named titles win, dump files are Importing, TBA 
   assert.ok(reacherOut.importingSeasons.includes(2));
   assert.ok(reacherOut.importingSeasons.includes(4));
   assert.ok(!home.some((t) => /uindex|torrenting|ponte|org-silo/i.test(t.title)));
+  const leftovers = homeShelfRows([
+    {
+      id: "jf-tpb",
+      kind: "movie",
+      title: "TPB",
+      year: 0,
+      poster: "",
+      fromDump: true,
+      path: "/symlinks/radarr/TPB /Pulp.Fiction.1994.1080p.BrRip.x264.YIFY.mp4",
+    },
+    {
+      id: "jf-kaiju",
+      kind: "tv",
+      title: "Kaijuu 8-gou (Season 1) [BD",
+      year: 0,
+      poster: "",
+      fromDump: true,
+      path: "/symlinks/sonarr/[IceBlue] Kaijuu 8-gou (Season 1) [BD 1080p REMUX]",
+    },
+  ]);
+  assert.deepEqual(leftovers.map((t) => t.title), []);
   assert.deepEqual(siloOut.unreleasedSeasons, [4]);
   assert.deepEqual(rookieOut.unreleasedSeasons, [9]);
 });
