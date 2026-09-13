@@ -301,7 +301,7 @@ export function TitleView({ id }: { id: string }) {
           <p className="mt-2 text-sm text-muted">
             {resolved.year || null}
             {resolved.runtime ? ` · ${formatRuntime(resolved.runtime)}` : null}
-            {seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
+            {series && seasonNumbers.length ? ` · ${seasonNumbers.length} seasons` : null}
             {resolved.tracks ? ` · ${resolved.tracks} tracks` : null}
             {resolved.rating != null && Number.isFinite(Number(resolved.rating)) ? ` · ${Number(resolved.rating).toFixed(1)}` : null}
             {resolved.director ? ` · ${resolved.director}` : null}

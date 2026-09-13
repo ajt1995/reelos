@@ -120,6 +120,12 @@ test("TV ids stay distinct from movie tmdb ids", () => {
   });
   assert.deepEqual(moviePayload.unreleasedSeasons, []);
   assert.equal(moviePayload.title, "The Dark Knight");
+  const decorated = decorateTitlesWithDiskSeasons(
+    [{ id: "tmdb-155", kind: "movie", title: "The Dark Knight", ids: ["tmdb-155"] }],
+    { series: [thirdRockSeries] },
+  );
+  assert.equal(decorated[0].kind, "movie");
+  assert.equal(decorated[0].seasonList == null || decorated[0].seasonList.length === 0, true);
   assert.deepEqual(parseTitleId("73ceff573dc30bebc3fcf26f61de07b25f927a74"), {
     hash: "73ceff573dc30bebc3fcf26f61de07b25f927a74",
     titleId: "73ceff573dc30bebc3fcf26f61de07b25f927a74",

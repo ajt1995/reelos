@@ -587,6 +587,18 @@ test("player matches tmdb-tv to a JF series whose id is tvdb / tmdb", () => {
   assert.equal(titleMatchesId(series, "tmdb-tv-63639"), true);
   assert.equal(titleMatchesId(series, "tmdb-63639"), true);
   assert.equal(titleMatchesId(series, "tvdb-280619"), true);
+  assert.equal(
+    titleMatchesId(
+      { id: "tmdb-tv-155", kind: "tv", ids: ["tmdb-tv-155", "tmdb-155"] },
+      "tmdb-155",
+    ),
+    false,
+    "Dark Knight movie page is not 3rd Rock",
+  );
+  assert.equal(
+    titleMatchesId({ id: "tmdb-155", kind: "movie", ids: ["tmdb-155"] }, "tmdb-155"),
+    true,
+  );
 });
 
 test("title-page poll matches a tvdb URL onto the tmdb-tv request row", () => {

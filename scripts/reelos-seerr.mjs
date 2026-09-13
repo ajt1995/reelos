@@ -194,6 +194,10 @@ export function sonarrSeriesForParsed(parsed, series = []) {
 export function attachLibraryPresence(title, libraryTitle) {
   if (!title) return libraryTitle || title;
   if (!libraryTitle) return title;
+  const titleKind = title.kind === "tv" || title.kind === "anime" ? "tv" : title.kind === "movie" ? "movie" : null;
+  const libKind =
+    libraryTitle.kind === "tv" || libraryTitle.kind === "anime" ? "tv" : libraryTitle.kind === "movie" ? "movie" : null;
+  if (titleKind && libKind && titleKind !== libKind) return title;
   const ids = [
     ...new Set(
       [
@@ -1112,13 +1116,7 @@ export function decorateTitlesWithDiskSeasons(titles, facts = {}) {
       ),
     ].sort((a, b) => a - b);
     const importing = importingRaw.filter((n) => !disk.includes(n)).sort((a, b) => a - b);
-    const listed = realSeasonNumbers(
-      (facts.series || []).find(
-        (s) =>
-          (parsed?.tmdb && String(s?.tmdbId) === String(parsed.tmdb)) ||
-          (parsed?.tvdb && String(s?.tvdbId) === String(parsed.tvdb)),
-      )?.seasons,
-    );
+    const listed = parsed?.mediaType === "tv" ? realSeasonNumbers(seriesHit?.seasons) : [];
     const seasonList = [
       ...new Set([...(t.seasonList || []), ...listed].map(Number).filter((n) => Number.isFinite(n) && n > 0)),
     ].sort((a, b) => a - b);

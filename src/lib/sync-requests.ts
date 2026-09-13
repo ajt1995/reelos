@@ -376,9 +376,15 @@ export function showHashAdapter(opts: { pageId?: string; title?: string } = {}):
 }
 
 export function titleMatchesId(
-  t: Pick<Title, "id" | "ids" | "jellyfinId">,
+  t: Pick<Title, "id" | "ids" | "jellyfinId" | "kind">,
   id: string,
 ): boolean {
+  const pageId = String(id || "");
+  const pageMovie = /^tmdb-\d/.test(pageId) && !pageId.startsWith("tmdb-tv-");
+  const pageTv = pageId.startsWith("tmdb-tv-") || pageId.startsWith("tvdb-");
+  const kind = t.kind === "tv" || t.kind === "anime" ? "tv" : t.kind === "movie" ? "movie" : null;
+  if (pageMovie && kind === "tv") return false;
+  if (pageTv && kind === "movie") return false;
   const keys = new Set(titlePresenceKeys(t.id, t.ids || []));
   if (t.jellyfinId) {
     keys.add(String(t.jellyfinId));
@@ -392,7 +398,12 @@ export function titleForRequest(
   r: Pick<MediaRequest, "titleId" | "title">,
   titles: Pick<Title, "id" | "ids" | "kind" | "title" | "year" | "poster" | "jellyfinId">[] = [],
 ): Title {
-  const hit = titles.find((t) => titleMatchesId(t, r.titleId));
+  const hits = titles.filter((t) => titleMatchesId(t, r.titleId));
+  const withArt = hits.find((t) => {
+    const p = String(t.poster || "").trim();
+    return p && !p.includes("/api/jf/");
+  });
+  const hit = withArt || hits[0];
   if (hit) return hit as Title;
   return {
     id: r.titleId,
