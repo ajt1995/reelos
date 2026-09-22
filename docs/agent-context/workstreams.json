@@ -6,13 +6,13 @@
   "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
   "active": [
     {
-      "id": "day0-codex-recovery",
+      "id": "day0-clean-workspace",
       "owner": "codex",
-      "branch": "work/codex-2026-09-22",
-      "checkpoint": "68e2323",
+      "branch": "work/codex-cleanup-2026-09-22",
+      "checkpoint": "3e7f1f8",
       "status": "active",
       "scope": [
-        "repair truthful local validation under the Windows sandbox",
+        "continue product completion from the clean repository boundary",
         "resolve release-code defects before generating acceptance evidence",
         "preserve the native neural architecture and cross-platform Day-0 work"
       ],
@@ -22,7 +22,9 @@
         "type checking passes after the Home TV-platform repair",
         "122 of 132 release test files pass with in-process isolation",
         "remaining runner failures include environment-blocked child processes and targeted media/TV checks",
-        "the obsolete public GitHub repository was deleted; this workspace has no remote until a new private repository is explicitly created"
+        "the obsolete public GitHub repository was deleted",
+        "the canonical clean workspace is C:/Users/austi/Documents/Codex/ReelOS",
+        "this workspace has no remote until a new private repository is explicitly created"
       ],
       "nextChecks": [
         "npm run typecheck",
