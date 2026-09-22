@@ -1,0 +1,11 @@
+[Unit]
+Description=ReelOS plug-and-play USB storage automounter
+After=local-fs.target
+ConditionPathExists=/opt/reelos/bin/reelos-usb-automount.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30
+KillMode=process
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-usb-automount.sh

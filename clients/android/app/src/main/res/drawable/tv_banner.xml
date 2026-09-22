@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <!-- Dark Cinema Background -->
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M0,0h320v180h-320z" />
+    
+    <!-- Gold Gradient/Card Trim -->
+    <path
+        android:fillColor="#1A1815"
+        android:pathData="M8,8h304v164h-304z" />
+    
+    <!-- ReelOS Stylized Cinema Film Reel -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M70,90m-36,0a36,36 0,1,1 72,0a36,36 0,1,1 -72,0" />
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M70,90m-14,0a14,14 0,1,1 28,0a14,14 0,1,1 -28,0" />
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M70,60m-5,0a5,5 0,1,1 10,0a5,5 0,1,1 -10,0" />
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M70,120m-5,0a5,5 0,1,1 10,0a5,5 0,1,1 -10,0" />
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M40,90m-5,0a5,5 0,1,1 10,0a5,5 0,1,1 -10,0" />
+    <path
+        android:fillColor="#0F0E0C"
+        android:pathData="M100,90m-5,0a5,5 0,1,1 10,0a5,5 0,1,1 -10,0" />
+
+    <!-- "ReelOS" Typography (Letter Vectors) -->
+    <!-- R -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M130,70h16c6,0 10,4 10,10c0,5 -3,9 -8,10l9,14h-7l-8,-13h-6v13h-6z M136,75v11h10c3,0 5,-2 5,-5.5c0,-3.5 -2,-5.5 -5,-5.5z" />
+    <!-- e -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M165,85c0,-7 5,-12 12,-12c7,0 12,5 12,12v2h-18c0,4 3,6 7,6c3,0 5,-1 6,-3h6c-1,6 -6,8 -12,8c-7,0 -13,-5 -13,-13z M183,82c0,-3 -2,-5 -6,-5c-4,0 -6,2 -6,5z" />
+    <!-- e -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M195,85c0,-7 5,-12 12,-12c7,0 12,5 12,12v2h-18c0,4 3,6 7,6c3,0 5,-1 6,-3h6c-1,6 -6,8 -12,8c-7,0 -13,-5 -13,-13z M213,82c0,-3 -2,-5 -6,-5c-4,0 -6,2 -6,5z" />
+    <!-- l -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M226,68h6v36h-6z" />
+    <!-- O -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M238,87c0,-10 7,-18 17,-18c10,0 17,8 17,18c0,10 -7,18 -17,18c-10,0 -17,-8 -17,-18z M266,87c0,-7 -4,-12 -11,-12c-7,0 -11,5 -11,12c0,7 4,12 11,12c7,0 11,-5 11,-12z" />
+    <!-- S -->
+    <path
+        android:fillColor="#F5C518"
+        android:pathData="M278,98h6c1,2 3,3 6,3c3,0 5,-1 5,-3c0,-3 -2,-4 -7,-5c-7,-2 -10,-4 -10,-9c0,-5 4,-9 11,-9c6,0 10,3 11,8h-6c-1,-2 -2,-3 -5,-3c-3,0 -4,1 -4,3c0,2 2,3 6,4c8,2 11,4 11,10c0,6 -5,9 -12,9c-7,0 -11,-3 -12,-9z" />
+
+    <!-- Living Room OS Subtitle Tag -->
+    <path
+        android:fillColor="#A1A1AA"
+        android:pathData="M130,118h50v2h-50z" />
+</vector>

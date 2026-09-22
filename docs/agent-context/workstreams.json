@@ -1,0 +1,36 @@
+{
+  "schema": "reelos-workstreams/v1",
+  "updatedAt": "2026-09-22T15:30:00-05:00",
+  "maintenance": "Replace completed or abandoned entries; do not accumulate a historical log.",
+  "canonicalBranch": "main",
+  "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
+  "active": [
+    {
+      "id": "day0-codex-recovery",
+      "owner": "codex",
+      "branch": "work/codex-2026-09-22",
+      "checkpoint": "68e2323",
+      "status": "active",
+      "scope": [
+        "repair truthful local validation under the Windows sandbox",
+        "resolve release-code defects before generating acceptance evidence",
+        "preserve the native neural architecture and cross-platform Day-0 work"
+      ],
+      "currentFacts": [
+        "19 active feature groups and 2 parked groups are registered",
+        "279 tests are classified",
+        "type checking passes after the Home TV-platform repair",
+        "122 of 132 release test files pass with in-process isolation",
+        "remaining runner failures include environment-blocked child processes and targeted media/TV checks",
+        "the obsolete public GitHub repository was deleted; this workspace has no remote until a new private repository is explicitly created"
+      ],
+      "nextChecks": [
+        "npm run typecheck",
+        "npm run architecture:check",
+        "npm run audit:features",
+        "npm run audit:tests",
+        "run classified tests with honest sandbox limitations recorded"
+      ]
+    }
+  ]
+}

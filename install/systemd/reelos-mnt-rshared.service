@@ -1,0 +1,15 @@
+[Unit]
+Description=ReelOS /mnt rshared so Decypharr FUSE propagates into rslave *arr binds
+DefaultDependencies=no
+After=local-fs.target
+Before=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/mkdir -p /mnt /mnt/debrid /mnt/symlinks
+ExecStart=/bin/mount --bind /mnt /mnt
+ExecStart=/bin/mount --make-rshared /mnt
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

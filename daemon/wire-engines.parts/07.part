@@ -1,0 +1,876 @@
+            p.write_text(json.dumps({"low": True}) + "\n")
+        except OSError:
+            return True
+        return True
+    try:
+        return bool(json.loads(p.read_text()).get("low", True))
+    except json.JSONDecodeError:
+        return True
+
+
+def jellyfin_debrid_library_flags() -> dict:
+    """Never generate scene previews or extract image subs from TorBox dumps."""
+    return {
+        "EnableTrickplayImageExtraction": False,
+        "ExtractTrickplayImagesDuringLibraryScan": False,
+        "EnableChapterImageExtraction": False,
+        "ExtractChapterImagesDuringLibraryScan": False,
+        "SaveTrickplayWithMedia": False,
+        "DummyChapterDuration": 0,
+        "EnableLUFSScan": False,
+        "AllowEmbeddedSubtitles": "AllowText",
+    }
+
+
+def arr_debrid_media_flags() -> dict:
+    """Never ffprobe/MediaInfo library files on debrid/FUSE. Cap rescans. Import/grab still use filenames."""
+    return {"enableMediaInfo": False, "rescanAfterRefresh": "Never"}
+
+
+def arr_debrid_media_patch(cfg: dict) -> dict:
+    body = dict(cfg or {})
+    body.update(arr_debrid_media_flags())
+    return body
+
+
+ARR_DEBRID_APPS = (
+    ("sonarr", "http://127.0.0.1:8989/api/v3"),
+    ("radarr", "http://127.0.0.1:7878/api/v3"),
+    ("lidarr", "http://127.0.0.1:8686/api/v1"),
+)
+
+
+def persist_arr_debrid_config_files() -> None:
+    """Ship + keep compose/configs/*arr/reelos-debrid.json so Apply cannot re-enable ffprobe."""
+    text = json.dumps(
+        {
+            "enableMediaInfo": False,
+            "ffprobeLibrary": False,
+            "rescanAfterRefresh": "Never",
+            "note": "Debrid/FUSE dumps. Import and grab still use filenames. Apply must not turn this back on.",
+        },
+        indent=2,
+    ) + "\n"
+    for name, _base in ARR_DEBRID_APPS:
+        dest = COMPOSE / "configs" / name / "reelos-debrid.json"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists() and dest.read_text() == text:
+                continue
+            dest.write_text(text)
+        except OSError as e:
+            log_wire(f"{name} reelos-debrid.json {e}")
+
+
+def apply_arr_debrid_media_info() -> None:
+    persist_arr_debrid_config_files()
+    for name, base in ARR_DEBRID_APPS:
+        xml = COMPOSE / "configs" / name / "config.xml"
+        if not xml.exists():
+            log_wire(f"{name} enableMediaInfo skip — no config")
+            continue
+        key = api_key(xml) or wait_key(xml, 8)
+        if not key:
+            log_wire(f"{name} enableMediaInfo skip — no key")
+            continue
+        try:
+            cfg = call(f"{base}/config/mediamanagement", key)
+        except NET_ERR as e:
+            log_wire(f"{name} media-info get {e}")
+            continue
+        if not isinstance(cfg, dict) or not cfg.get("id"):
+            continue
+        body = arr_debrid_media_patch(cfg)
+        if cfg.get("enableMediaInfo") is False and cfg.get("rescanAfterRefresh") == "Never":
+            log_wire(f"{name} enableMediaInfo already off")
+            continue
+        try:
+            call(
+                f"{base}/config/mediamanagement/{cfg['id']}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"{name} enableMediaInfo off — no ffprobe on FUSE")
+        except NET_ERR as e:
+            log_wire(f"{name} media-info put {e}")
+    stub_container_ffprobe()
+
+
+FFPROBE_STUB_SCRIPT = r"""
+src="$1"
+[ -e "$src" ] || exit 0
+if head -1 "$src" 2>/dev/null | grep -q '^#!/bin/sh'; then
+  echo already_stub
+  exit 0
+fi
+mv "$src" "${src}.busy-inode" 2>/dev/null || true
+if [ ! -f "${src}.reelos-real" ] && [ -f "${src}.busy-inode" ]; then
+  cp -a "${src}.busy-inode" "${src}.reelos-real" 2>/dev/null || true
+fi
+cat > "$src" << 'STUB'
+#!/bin/sh
+# ReelOS: do not ffprobe FUSE dumps.
+echo '{"format":{"duration":"0","size":"0","bit_rate":"0"},"streams":[],"chapters":[]}'
+exit 0
+STUB
+chmod 755 "$src"
+"""
+
+FFPROBE_STUB_PATHS = (
+    ("reelos-sonarr-1", "/app/sonarr/bin/ffprobe"),
+    ("reelos-radarr-1", "/app/radarr/bin/ffprobe"),
+    ("reelos-jellyfin-1", "/usr/lib/jellyfin-ffmpeg/ffprobe"),
+)
+
+
+def stub_container_ffprobe() -> None:
+    """enableMediaInfo false still leaves Sonarr spawning ffprobe on FUSE dumps."""
+    for name, path in FFPROBE_STUB_PATHS:
+        r = subprocess.run(
+            ["docker", "exec", "-u", "0", name, "sh", "-c", FFPROBE_STUB_SCRIPT, "stub", path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        out = (r.stdout or r.stderr or "").strip().replace("\n", " ")[:160]
+        log_wire(f"no-ffprobe stub {name} rc={r.returncode} {out}")
+
+
+def ffprobe_is_stubbed() -> bool:
+    try:
+        r = subprocess.run(
+            ["docker", "exec", "reelos-sonarr-1", "head", "-1", "/app/sonarr/bin/ffprobe"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=8,
+        )
+        return (r.stdout or "").lstrip().startswith("#!")
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def jellyfin_debrid_encoding_patch(enc) -> dict:
+    """Do not pre-extract subtitles or mkv keyframes by reading the FUSE file."""
+    out = dict(enc or {})
+    out["EnableSubtitleExtraction"] = False
+    out["AllowOnDemandMetadataBasedKeyframeExtractionForExtensions"] = []
+    return out
+
+
+def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
+    """4GB boxes die on software 4K. Use VAAPI when /dev/dri exists; cap threads when low."""
+    out = jellyfin_debrid_encoding_patch(enc)
+    if has_dri:
+        out["HardwareAccelerationType"] = "vaapi"
+        out["EnableHardwareEncoding"] = True
+        if not out.get("VaapiDevice"):
+            out["VaapiDevice"] = "/dev/dri/renderD128"
+        codecs = [str(c) for c in (out.get("HardwareDecodingCodecs") or []) if c]
+        for c in ("h264", "hevc", "vp9", "av1", "vc1", "mpeg2video"):
+            if c not in codecs:
+                codecs.append(c)
+        out["HardwareDecodingCodecs"] = codecs
+        out["EnableIntelLowPowerH264HwEncoder"] = True
+        out["EnableIntelLowPowerHevcHwEncoder"] = True
+    if low:
+        out["EncodingThreadCount"] = 1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 60
+        out["EncoderPreset"] = "veryfast"
+    else:
+        out["EncodingThreadCount"] = -1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 180
+        out["EncoderPreset"] = "auto"
+    return out
+
+
+def jellyfin_task_library_scan(task: dict) -> bool:
+    """Periodic library walks on FUSE starve a 4GB box. Import still refreshes on demand."""
+    key = str(task.get("Key") or "")
+    if key in {"RefreshLibrary", "RefreshMediaLibrary"}:
+        return True
+    name = str(task.get("Name") or "").lower()
+    return "scan media library" in name or name == "refresh media library"
+
+
+def jellyfin_task_hammers_debrid(task: dict) -> bool:
+    key = str(task.get("Key") or "")
+    if key in {
+        "RefreshTrickplayImages",
+        "RefreshChapterImages",
+        "KeyframeExtraction",
+        "TaskExtractMediaSegments",
+    }:
+        return True
+    name = str(task.get("Name") or "").lower()
+    return any(
+        s in name
+        for s in ("trickplay", "chapter image", "keyframe", "media segment")
+    )
+
+
+def apply_jellyfin_performance(token: str | None = None) -> None:
+    token = token or jellyfin_token()
+    if not token:
+        log_wire("performance: jellyfin auth failed")
+        return
+    low = performance_low()
+    flags = jellyfin_debrid_library_flags()
+    hdr = jellyfin_headers(token)
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance folders {e}")
+        folders = []
+    for folder in folders if isinstance(folders, list) else []:
+        fid = folder.get("ItemId") or folder.get("Guid") or folder.get("Id")
+        if not fid:
+            continue
+        opts = dict(folder.get("LibraryOptions") or {})
+        opts.update(flags)
+        try:
+            call(
+                "http://127.0.0.1:8096/Library/VirtualFolders/LibraryOptions",
+                method="POST",
+                body={"Id": fid, "LibraryOptions": opts},
+                headers=hdr,
+            )
+            log_wire(f"performance library {folder.get('Name')} low={low} debrid-safe")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance library {folder.get('Name')} {e}")
+    try:
+        enc = call("http://127.0.0.1:8096/System/Configuration/encoding", headers=hdr) or {}
+        has_dri = Path("/dev/dri").exists()
+        patched = jellyfin_encoding_for_box(
+            enc if isinstance(enc, dict) else {},
+            low=low,
+            has_dri=has_dri,
+        )
+        call(
+            "http://127.0.0.1:8096/System/Configuration/encoding",
+            method="POST",
+            body=patched,
+            headers=hdr,
+        )
+        log_wire(
+            f"performance encoding low={low} dri={has_dri} "
+            f"accel={patched.get('HardwareAccelerationType')} threads={patched.get('EncodingThreadCount')}"
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance encoding {e}")
+    try:
+        tasks = call("http://127.0.0.1:8096/ScheduledTasks", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance tasks {e}")
+        tasks = []
+    cap_scans = box_is_small() or low
+    for task in tasks if isinstance(tasks, list) else []:
+        if not (
+            jellyfin_task_hammers_debrid(task)
+            or (cap_scans and jellyfin_task_library_scan(task))
+        ):
+            continue
+        tid = task.get("Id")
+        name = str(task.get("Name") or "")
+        if not tid:
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
+                method="POST",
+                body=[],
+                headers=hdr,
+            )
+            log_wire(f"performance disabled task {name}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance task {name} {e}")
+
+
+def jellyfin_folders(token: str):
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=jellyfin_headers(token)) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return []
+    return folders if isinstance(folders, list) else []
+
+
+def library_symlink_path(name: str) -> str:
+    return {"Movies": "/symlinks/radarr", "Shows": "/symlinks/sonarr", "Music": "/symlinks/music"}.get(
+        name, "/symlinks"
+    )
+
+
+def folder_has_symlinks(folder: dict, path: str | None = None) -> bool:
+    want = (path or "/symlinks").rstrip("/")
+    return want in jellyfin_folder_paths(folder)
+
+
+def jellyfin_folder_paths(folder: dict) -> list[str]:
+    """Every media path Jellyfin is scanning for this virtual folder."""
+    locs = [str(x).rstrip("/") for x in (folder.get("Locations") or []) if x]
+    opts = folder.get("LibraryOptions") or {}
+    paths = [str(p.get("Path") or "").rstrip("/") for p in (opts.get("PathInfos") or []) if isinstance(p, dict)]
+    out: list[str] = []
+    seen: set[str] = set()
+    for p in locs + paths:
+        if p and p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def library_local_path(name: str) -> str:
+    return {"Movies": "/media/movies", "Shows": "/media/tv", "Music": "/media/music"}.get(name, "")
+
+
+def jellyfin_keep_paths(name: str, a: dict | None = None) -> list[str]:
+    """The dump path, plus /media when the wizard asked to keep files on disk.
+
+    A `local`/`both` house has /media/movies as a real *arr root, so dropping it
+    would empty the library. Debrid-only houses never write there.
+    """
+    keep = [library_symlink_path(name)]
+    mode = (a or answers()).get("storageMode") or "both"
+    local = library_local_path(name)
+    if local and mode in ("local", "both"):
+        keep.append(local)
+    return keep
+
+
+def extra_jellyfin_paths(folder: dict, keep) -> list[str]:
+    """House dupes: the /symlinks parent and the /mnt/symlinks bind of the same dumps."""
+    wanted = [keep] if isinstance(keep, str) else list(keep or [])
+    keep_n = {str(k).rstrip("/") for k in wanted if k}
+    return [p for p in jellyfin_folder_paths(folder) if p not in keep_n]
+
+
+_SEASON_FOLDER = re.compile(
+    r"[\s._:-]+(?:(?:season|series)[\s._:-]*\d{1,2}(?:[\s._:-]+s\d{1,2})?|"
+    r"s\d{1,2}(?!\d)(?![eE]\d))(?![eE]\d).*$",
+    re.I,
+)
+_YEAR_TAIL = re.compile(r"\s+\((?:19|20)\d{2}\)\s*$")
+
+
+def strip_season_folder_suffix(name: str) -> str:
+    """B99 S01 / TWD - Season 1 / B99 (2013) Season 1 S01 (1080p…) → the series name."""
+    raw = str(name or "").strip()
+    stripped = _SEASON_FOLDER.sub("", raw).strip()
+    if not stripped or stripped == raw:
+        return raw
+    bare = _YEAR_TAIL.sub("", stripped).strip()
+    return bare or stripped
+
+
+def looks_like_season_folder_title(name: str) -> bool:
+    raw = str(name or "").strip()
+    return bool(raw) and strip_season_folder_suffix(raw) != raw
+
+
+_CANON_MOVIE = re.compile(r"^(.+?)\s+\((\d{4})\)$")
+_CANON_MOVIE_PLUS = re.compile(r"^(.+?)\s+\((\d{4})\)\s+.+$")
+_MOVIE_MEDIA_TAIL = re.compile(r"\.(mkv|mp4|m4v|avi|ts|m2ts)$", re.I)
+_MOVIE_QUALITY = re.compile(
+    r"(?:2160p|1080p|720p|480p|web-?dl|webrip|bluray|blu-?ray|bdremux|remux|"
+    r"uhd|hdr|dovi|x265|x264|hevc|yts|amzn|multi|proper|imax|hybrid)",
+    re.I,
+)
+
+
+def is_canonical_movie_folder(name: str) -> bool:
+    """Radarr title folder: Interstellar (2014). Not Interstellar (2014) [YTS.MX]."""
+    return bool(_CANON_MOVIE.fullmatch(str(name or "").strip()))
+
+
+def movie_title_year(name: str) -> tuple[str, str] | None:
+    """Title + year from a Radarr dump name. Remakes keep the year (Dune 1984 ≠ 2021)."""
+    raw = _MOVIE_MEDIA_TAIL.sub("", str(name or "").strip()).strip()
+    if not raw:
+        return None
+    m = _CANON_MOVIE.fullmatch(raw) or _CANON_MOVIE_PLUS.match(raw)
+    if m:
+        title = m.group(1).strip()
+        year = m.group(2)
+        if title:
+            return title, year
+    pick = None
+    for hit in re.finditer(r"((?:19|20)\d{2})", raw):
+        rest = raw[hit.end() :]
+        if _MOVIE_QUALITY.search(rest):
+            pick = hit
+            break
+    if not pick:
+        return None
+    title = raw[: pick.start()].strip(" ._-\t()[]")
+    title = re.sub(r"[._]+", " ", title)
+    title = re.sub(r"\s+", " ", title).strip(" -")
+    if len(re.sub(r"[^a-z0-9]", "", title.lower())) < 4:
+        return None
+    return title, pick.group(1)
+
+
+_PART_ONE = re.compile(r"[\s:.\-_]+(?:part|pt)[\s.\-_]*(?:one|1|i)\s*$", re.I)
+
+
+def movie_stem(title: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(title or "").lower())
+
+
+def movie_dump_keys(name: str) -> list[str]:
+    """Primary Title:Year plus Part One/Part 1 alias. Never Part Two (Dune 2021 ≠ Part Two)."""
+    parsed = movie_title_year(name)
+    if not parsed:
+        return []
+    title, year = parsed
+    keys: list[str] = []
+    seen: set[str] = set()
+    for t in (title, _PART_ONE.sub("", title).strip(" :-._")):
+        stem = movie_stem(t)
+        if len(stem) < 4:
+            continue
+        key = f"{stem}:{year}"
+        if key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
+
+
+def movie_dump_key(name: str) -> str | None:
+    keys = movie_dump_keys(name)
+    return keys[0] if keys else None
+
+
+def looks_like_movie_dump_folder(name: str) -> bool:
+    raw = str(name or "").strip()
+    if is_canonical_movie_folder(raw):
+        return False
+    return movie_dump_key(raw) is not None
+
+
+def movie_dump_item_path(path: str) -> bool:
+    """DELETE /Items removes files — only a release-named dir under radarr dumps."""
+    p = str(path or "").rstrip("/")
+    if not p or local_disk_path(p) or not dump_view_path(p):
+        return False
+    parts = [x for x in p.split("/") if x]
+    if parts[:2] == ["symlinks", "radarr"] and len(parts) == 3:
+        return looks_like_movie_dump_folder(parts[-1])
+    if parts[:3] == ["mnt", "symlinks", "radarr"] and len(parts) == 4:
+        return looks_like_movie_dump_folder(parts[-1])
+    return False
+
+
+def plan_movie_dump_item(item: dict, siblings: list) -> dict | None:
+    """jf-only release-folder Movie: delete when Title (Year) already exists."""
+    if not isinstance(item, dict):
+        return None
+    path = str(item.get("Path") or "")
+    if not movie_dump_item_path(path):
+        return None
+    folder = path.rstrip("/").split("/")[-1]
+    keys = set(movie_dump_keys(folder))
+    if not keys:
+        return None
+    item_id = item.get("Id") or item.get("id")
+    if not item_id:
+        return None
+    own = jellyfin_provider_id(item)
+    canons: list[dict] = []
+    for sib in siblings or []:
+        if sib is item or not isinstance(sib, dict):
+            continue
+        sp = str(sib.get("Path") or "").rstrip("/")
+        sfolder = sp.split("/")[-1] if sp else ""
+        if not is_canonical_movie_folder(sfolder):
+            continue
+        if not keys.intersection(movie_dump_keys(sfolder)):
+            continue
+        canons.append(sib)
+    if not canons:
+        return None
+    if own:
+        for canon in canons:
+            if jellyfin_provider_id(canon) == own:
+                return {"action": "delete", "id": str(item_id), "name": folder}
+        return None
+    return {"action": "delete", "id": str(item_id), "name": folder}
+
+
+def jellyfin_provider_id(item: dict) -> str:
+    pids = item.get("ProviderIds") or {}
+    if not isinstance(pids, dict):
+        return ""
+    tvdb = pids.get("Tvdb") or pids.get("tvdb")
+    tmdb = pids.get("Tmdb") or pids.get("tmdb")
+    if tvdb:
+        return f"tvdb-{tvdb}"
+    if tmdb:
+        return f"tmdb-{tmdb}"
+    return ""
+
+
+def series_title_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", strip_season_folder_suffix(name).lower())
+
+
+def season_folder_item_path(path: str) -> bool:
+    """Jellyfin's DELETE /Items removes the files too, so only a season-named directory
+    inside our own dump root may be handed to it. `/media` is the house's disk library
+    and a dump root itself is every show at once — both are refused.
+    """
+    p = str(path or "").rstrip("/")
+    if not p or local_disk_path(p) or not dump_view_path(p):
+        return False
+    parts = [x for x in p.split("/") if x]
+    depth = 3 if parts[0] == "symlinks" else 4
+    if len(parts) < depth:
+        return False
+    return looks_like_season_folder_title(parts[-1])
+
+
+def plan_season_folder_item(item: dict, siblings: list) -> dict | None:
+    """jf-only season-folder Series: delete when a real series exists, else rename.
+
+    Two series that both carry different tvdb/tmdb ids stay (anime split seasons).
+    Season-folder PremiereDate ≠ series start year is ignored here — names + ids decide.
+    Only a season-named dump directory is ever touched; see `season_folder_item_path`.
+    """
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("Name") or "")
+    path = str(item.get("Path") or "")
+    folder = path.rstrip("/").split("/")[-1] if path else ""
+    # JF often names a dump "The Expanse" after metadata while Path is still the S01 pack.
+    season_label = name if looks_like_season_folder_title(name) else folder
+    if not looks_like_season_folder_title(season_label):
+        return None
+    if not season_folder_item_path(path):
+        return None
+    item_id = item.get("Id") or item.get("id")
+    if not item_id:
+        return None
+    key = series_title_key(season_label)
+    if not key:
+        return None
+    own = jellyfin_provider_id(item)
+    canons: list[dict] = []
+    for sib in siblings or []:
+        if sib is item or not isinstance(sib, dict):
+            continue
+        sib_name = str(sib.get("Name") or "")
+        sib_path = str(sib.get("Path") or "")
+        sib_folder = sib_path.rstrip("/").split("/")[-1] if sib_path else ""
+        if series_title_key(sib_name) != key and series_title_key(sib_folder) != key:
+            continue
+        if looks_like_season_folder_title(sib_name) or looks_like_season_folder_title(sib_folder):
+            continue
+        canons.append(sib)
+    series_name = strip_season_folder_suffix(season_label)
+    series_name = re.sub(r"[._]+", " ", series_name)
+    series_name = re.sub(r"\s+", " ", series_name).strip() or series_name
+    if own:
+        for canon in canons:
+            if jellyfin_provider_id(canon) == own:
+                return {"action": "delete", "id": str(item_id), "name": name, "as": series_name}
+        return None
+    if canons:
+        return {"action": "delete", "id": str(item_id), "name": name, "as": series_name}
+    return {"action": "rename", "id": str(item_id), "name": name, "as": series_name}
+
+
+def extra_jellyfin_libraries(folders: list, want: list[tuple[str, str]]) -> list[dict]:
+    """Second Movies/Shows virtual folders leftover after path cleanup. Keep canonical names."""
+    canonical = {str(name) for name, _ctype in want}
+    want_types = {str(ctype).lower() for _name, ctype in want}
+    extras: list[dict] = []
+    for folder in folders or []:
+        if not isinstance(folder, dict):
+            continue
+        name = str(folder.get("Name") or "")
+        if name in canonical:
+            continue
+        ctype = str(folder.get("CollectionType") or folder.get("collectionType") or "").lower()
+        if ctype and ctype in want_types:
+            extras.append(folder)
+    return extras
+
+
+def dump_view_path(path: str) -> bool:
+    """/symlinks and its /mnt bind are two views of the same *arr dumps, never real files."""
+    p = str(path or "").rstrip("/")
+    return p in ("/symlinks", "/mnt/symlinks") or p.startswith(("/symlinks/", "/mnt/symlinks/"))
+
+
+def local_disk_path(path: str) -> bool:
+    p = str(path or "").rstrip("/")
+    return p == "/media" or p.startswith("/media/")
+
+
+def folder_collection_type(folder: dict) -> str:
+    return str(folder.get("CollectionType") or folder.get("collectionType") or "").lower()
+
+
+def plan_extra_library_drop(
+    extra: dict,
+    canon_name: str | None,
+    canon_folder: dict | None,
+    a: dict | None = None,
+) -> dict:
+    """Decide whether a leftover virtual folder is safe to delete, and what to migrate first.
+
+    Deleting a library un-lists everything it scans. A `local`/`both` house has real
+    files under /media, so any path we can neither hand to the canonical library nor
+    recognise as a dump view blocks the delete — that is the #60 class of bug. Paths
+    the canonical library already scans are skipped: re-POSTing one makes Jellyfin
+    scan the same dump twice and puts the duplicate rows straight back.
+    """
+    if not canon_name or not isinstance(canon_folder, dict):
+        return {"drop": False, "migrate": [], "blocked": ["no canonical library yet"]}
+    have = set(jellyfin_folder_paths(canon_folder))
+    keep = {str(p).rstrip("/") for p in jellyfin_keep_paths(canon_name, a) if p}
+    on_disk = ((a or answers()).get("storageMode") or "both") in ("local", "both")
+    migrate: list[str] = []
+    blocked: list[str] = []
+    for path in jellyfin_folder_paths(extra):
+        if path in have or dump_view_path(path):
+            continue
+        if path in keep:
+            migrate.append(path)
+        elif local_disk_path(path) and not on_disk:
+            continue
+        else:
+            blocked.append(path)
+    if blocked:
+        return {"drop": False, "migrate": [], "blocked": blocked}
+    return {"drop": True, "migrate": migrate, "blocked": []}
+
+
+def planned_extra_library_drops(folders: list, want: list[tuple[str, str]], a: dict | None = None) -> list[tuple]:
+    by_name = {str(f.get("Name") or ""): f for f in folders or [] if isinstance(f, dict)}
+    type_to_name = {str(ctype).lower(): name for name, ctype in want}
+    out = []
+    for extra in extra_jellyfin_libraries(folders, want):
+        canon = type_to_name.get(folder_collection_type(extra))
+        plan = plan_extra_library_drop(extra, canon, by_name.get(canon) if canon else None, a)
+        out.append((extra, canon, plan))
+    return out
+
+
+JF_NETWORK_XML = (
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<NetworkConfiguration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n'
+    "  <EnableUPnP>false</EnableUPnP>\n"
+    "  <EnableIPv4>true</EnableIPv4>\n"
+    "  <EnableIPv6>false</EnableIPv6>\n"
+    "  <EnableRemoteAccess>true</EnableRemoteAccess>\n"
+    "  <RequireHttps>false</RequireHttps>\n"
+    "  <AutoDiscovery>true</AutoDiscovery>\n"
+    "  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>\n"
+    "</NetworkConfiguration>\n"
+)
+
+
+def seed_jellyfin_network_xml() -> None:
+    """LAN/remote clients must not see docker 172.18.x as LocalAddress."""
+    dest = COMPOSE / "configs" / "jellyfin" / "config" / "network.xml"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    text = dest.read_text() if dest.exists() else ""
+    if re.search(r"<EnablePublishedServerUriByRequest>\s*true\s*<", text, re.I):
+        return
+    if "<EnablePublishedServerUriByRequest>" in text:
+        dest.write_text(
+            re.sub(
+                r"<EnablePublishedServerUriByRequest>[^<]*</EnablePublishedServerUriByRequest>",
+                "<EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>",
+                text,
+            )
+        )
+        return
+    if "</NetworkConfiguration>" in text:
+        dest.write_text(
+            text.replace(
+                "</NetworkConfiguration>",
+                "  <EnablePublishedServerUriByRequest>true</EnablePublishedServerUriByRequest>\n</NetworkConfiguration>",
+            )
+        )
+        return
+    dest.write_text(JF_NETWORK_XML)
+
+
+def seed_jellyfin_legacy_auth() -> bool:
+    """JF 12 defaults EnableLegacyAuthorization=false. Jellyseerr 2.7 still sends X-Emby-Authorization; AuthenticateByName is 400 and wizard Finish cannot login Seerr."""
+    dest = COMPOSE / "configs" / "jellyfin" / "config" / "system.xml"
+    if not dest.exists():
+        return False
+    text = dest.read_text()
+    if re.search(r"<EnableLegacyAuthorization>\s*true\s*<", text, re.I):
+        return False
+    if "<EnableLegacyAuthorization>" in text:
+        dest.write_text(
+            re.sub(
+                r"<EnableLegacyAuthorization>[^<]*</EnableLegacyAuthorization>",
+                "<EnableLegacyAuthorization>true</EnableLegacyAuthorization>",
+                text,
+            )
+        )
+        log_wire("jellyfin EnableLegacyAuthorization so Seerr can login")
+        return True
+    if "</ServerConfiguration>" in text:
+        dest.write_text(
+            text.replace(
+                "</ServerConfiguration>",
+                "  <EnableLegacyAuthorization>true</EnableLegacyAuthorization>\n</ServerConfiguration>",
+            )
+        )
+        return True
+    return False
+
+
+def apply_jellyfin_published_uri(token: str) -> None:
+    hdr = jellyfin_headers(token)
+    try:
+        cfg = call("http://127.0.0.1:8096/System/Configuration/network", headers=hdr) or {}
+    except NET_ERR:
+        cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    if cfg.get("EnablePublishedServerUriByRequest") is True and cfg.get("EnableRemoteAccess") is not False:
+        return
+    cfg["EnablePublishedServerUriByRequest"] = True
+    cfg["EnableRemoteAccess"] = True
+    try:
+        call(
+            "http://127.0.0.1:8096/System/Configuration/network",
+            method="POST",
+            body=cfg,
+            headers=hdr,
+        )
+        log_wire("jellyfin published URI by request")
+    except NET_ERR as e:
+        log_wire(f"jellyfin network {e}")
+
+
+def jellyfin_want_libraries(a: dict | None = None) -> list[tuple[str, str]]:
+    intent = (a or answers()).get("intent") or {}
+    want: list[tuple[str, str]] = []
+    if intent.get("movies", True):
+        want.append(("Movies", "movies"))
+    if intent.get("tv", True) or intent.get("anime"):
+        want.append(("Shows", "tvshows"))
+    if intent.get("music"):
+        want.append(("Music", "music"))
+    return want
+
+
+def jellyfin_startup_post(path: str, body: dict | None = None, tries: int = 20) -> None:
+    """JF 12 Startup/* 404/503s until first-run routes are up. One 404 must not skip Complete."""
+    url = "http://127.0.0.1:8096" + path
+    last: BaseException | None = None
+    for _ in range(tries):
+        try:
+            call(url, method="POST", body={} if body is None else body)
+            return
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code in (404, 503):
+                time.sleep(2)
+                continue
+            raise
+        except NET_ERR as e:
+            last = e
+            time.sleep(2)
+    if last:
+        raise last
+
+
+def complete_jellyfin_startup(user: str, password: str) -> None:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8096/System/Info/Public", timeout=5) as resp:
+            info = json.loads(resp.read().decode())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return
+    if info.get("StartupWizardCompleted"):
+        return
+    ready = False
+    for _ in range(20):
+        try:
+            req = urllib.request.Request(
+                "http://127.0.0.1:8096/Startup/User",
+                headers={"Accept": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except urllib.error.HTTPError as e:
+            if e.code not in (404, 503):
+                break
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError, OSError):
+            pass
+        time.sleep(2)
+    if not ready:
+        log_wire("jellyfin startup endpoints not ready")
+        return
+    try:
+        jellyfin_startup_post(
+            "/Startup/Configuration",
+            {
+                "UICulture": "en-US",
+                "MetadataCountryCode": "US",
+                "PreferredMetadataLanguage": "en",
+            },
+        )
+        jellyfin_startup_post(
+            "/Startup/RemoteAccess",
+            {"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False},
+        )
+        jellyfin_startup_post("/Startup/User", {"Name": user, "Password": password})
+        jellyfin_startup_post("/Startup/Complete", {})
+        log_wire("jellyfin startup complete")
+        time.sleep(3)
+    except NET_ERR as e:
+        log_wire(f"jellyfin startup {e}")
+
+
+def ensure_host_symlinks() -> None:
+    for host in ("/mnt/symlinks", "/mnt/symlinks/radarr", "/mnt/symlinks/sonarr", "/mnt/symlinks/music"):
+        Path(host).mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(host, 0o777)
+        except OSError:
+            pass
+    for name in ("reelos-jellyfin-1", "jellyfin"):
+        r = subprocess.run(
+            ["docker", "exec", name, "mkdir", "-p", "/symlinks/radarr", "/symlinks/sonarr", "/symlinks/music"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if r.returncode == 0:
+            break
+
+
+def create_jellyfin_library(token: str, name: str, ctype: str) -> None:
+    path = library_symlink_path(name)
+    q = urllib.parse.urlencode(
+        {
+            "name": name,
+            "collectionType": ctype,
+            "refreshLibrary": "true",
+            "paths": path,
+        }
+    )
+    body = {
+        "LibraryOptions": {
+            "EnableRealtimeMonitor": True,
+            **jellyfin_debrid_library_flags(),
+            "PathInfos": [{"Path": path}],
+        }
+    }
+    call(

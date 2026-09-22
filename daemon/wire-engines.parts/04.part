@@ -1,0 +1,335 @@
+OS_OTA") and not prowlarr_has_hosts():
+        running = subprocess.run(
+            ["docker", "inspect", "-f", "{{.State.Running}}", "reelos-prowlarr-1"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if "true" in (running.stdout or ""):
+            log_wire("prowlarr already up — skip recreate")
+            return
+    cmd = [
+        "docker",
+        "compose",
+        "--profile",
+        "indexers",
+        "--profile",
+        "debrid",
+        "up",
+        "-d",
+        "--force-recreate",
+        "--no-deps",
+        "prowlarr",
+    ]
+    if fuse_on_host():
+        log_wire("fuse live — recreate prowlarr only, not decypharr")
+    else:
+        fuse_unstack_stale()
+        cmd.append("decypharr")
+    r = subprocess.run(
+        cmd,
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    log_wire(f"force-recreate prowlarr+decypharr rc={r.returncode}")
+    time.sleep(8)
+
+
+def add_torbox_torznab(prow_key: str, name: str, key: str) -> bool:
+    """Generic Torznab at search-api.torbox.app. Schema optional."""
+    impl = {
+        "implementation": "Torznab",
+        "implementationName": "Torznab",
+        "configContract": "TorznabSettings",
+        "appProfileId": 1,
+        "protocol": "torrent",
+    }
+    fields = None
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"torznab schema {e}")
+        schemas = []
+    for schema in schemas if isinstance(schemas, list) else []:
+        if str(schema.get("implementation") or "").lower() == "torznab":
+            impl = schema
+            fields = []
+            for f in schema.get("fields") or []:
+                item = dict(f)
+                n = str(item.get("name") or "").lower()
+                if n in ("baseurl", "base_url"):
+                    item["value"] = "https://search-api.torbox.app"
+                elif n in ("apipath", "api_path"):
+                    item["value"] = "/torznab"
+                elif n in ("apikey", "api_key"):
+                    item["value"] = key
+                fields.append(item)
+            break
+    if not fields:
+        fields = [
+            {"name": "baseUrl", "value": "https://search-api.torbox.app"},
+            {"name": "apiPath", "value": "/torznab"},
+            {"name": "apiKey", "value": key},
+        ]
+    body = {
+        "enable": True,
+        "appProfileId": impl.get("appProfileId") or 1,
+        "priority": 25,
+        "name": name,
+        "protocol": impl.get("protocol") or "torrent",
+        "implementation": impl.get("implementation") or "Torznab",
+        "implementationName": impl.get("implementationName") or "Torznab",
+        "configContract": impl.get("configContract") or "TorznabSettings",
+        "fields": fields,
+    }
+    try:
+        call("http://127.0.0.1:9696/api/v1/indexer?forceSave=true", prow_key, method="POST", body=body)
+        log_wire(f"provider indexer added {name} via Torznab search-api")
+        return True
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:400] if e.fp else str(e)
+        set_releases_error(f"Prowlarr {e.code}: {err}")
+        return indexer_enabled(prow_key, name)
+    except NET_ERR as e:
+        set_releases_error(f"torznab POST failed {e}")
+        return False
+
+
+def indexer_test(prow_key: str, ix: dict) -> tuple[bool, str]:
+    try:
+        call(
+            "http://127.0.0.1:9696/api/v1/indexer/test",
+            prow_key,
+            method="POST",
+            body=ix,
+        )
+        return True, ""
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:400] if e.fp else str(e)
+        return False, err or f"Prowlarr test {e.code}"
+    except NET_ERR as e:
+        return False, f"indexer test {e}"
+
+
+def indexer_enabled(prow_key: str, name: str) -> bool:
+    try:
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        return False
+    for ix in have if isinstance(have, list) else []:
+        if ix.get("name") == name and ix.get("enable"):
+            return True
+    return False
+
+
+# Fallback if public_indexers.py is missing on an old bin/. YTS is movies-only.
+# Knaben + TorrentsCSV are the cloud-reachable TV search path when 1337x/TPB CF.
+PUBLIC_INDEXERS = (
+    ("ReelOS-1337x", ("1337x",)),
+    ("ReelOS-tpb", ("thepiratebay", "the pirate bay")),
+    ("ReelOS-knaben", ("knaben",)),
+    ("ReelOS-torrentcsv", ("torrentscsv", "torrents csv")),
+    ("ReelOS-yts", ("yts", "yify")),
+    ("ReelOS-eztv", ("eztv",)),
+    ("ReelOS-showrss", ("showrss", "show rss")),
+)
+
+
+def _load_public_indexers():
+    import importlib.util
+
+    for raw in (
+        Path(__file__).resolve().with_name("public_indexers.py"),
+        Path("/opt/reelos/bin/public_indexers.py"),
+        Path("/opt/reelos/daemon/public_indexers.py"),
+    ):
+        if not raw.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_public_indexers", raw)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+def _public_roster() -> list:
+    """(name, hints). Module adds ShowRSS + roles; fallback is the in-file tuple."""
+    mod = _load_public_indexers()
+    if mod and getattr(mod, "PUBLIC_INDEXERS", None):
+        return [(n, hints) for n, hints, _role in mod.PUBLIC_INDEXERS]
+    return [(n, hints) for n, hints in PUBLIC_INDEXERS]
+
+
+def _post_public_indexer(prow_key: str, name: str, body: dict, via: str) -> bool:
+    mod = _load_public_indexers()
+    url = (
+        mod.prowlarr_indexer_write_url()
+        if mod and getattr(mod, "prowlarr_indexer_write_url", None)
+        else "http://127.0.0.1:9696/api/v1/indexer?forceSave=true"
+    )
+    try:
+        call(url, prow_key, method="POST", body=body)
+        log_wire(f"public indexer added {name} via {via}")
+        return True
+    except urllib.error.HTTPError as e:
+        err = e.read().decode()[:300] if e.fp else str(e)
+        log_wire(f"public indexer {name} {e.code}: {err}")
+        if e.code == 400 and name.lower() in err.lower():
+            return indexer_enabled(prow_key, name)
+        return indexer_enabled(prow_key, name)
+    except NET_ERR as e:
+        log_wire(f"public indexer {name} {e}")
+        return indexer_enabled(prow_key, name)
+
+
+def _hard_tv_rss_body(name: str, url: str) -> dict:
+    """Inline TorrentRss when public_indexers.py is missing from bin/."""
+    return {
+        "enable": True,
+        "appProfileId": 1,
+        "priority": 25,
+        "name": name,
+        "protocol": "torrent",
+        "implementation": "TorrentRssIndexer",
+        "implementationName": "Torrent RSS Feed",
+        "configContract": "TorrentRssIndexerSettings",
+        "fields": [
+            {"name": "baseUrl", "value": url},
+            {"name": "allowZeroSize", "value": True},
+        ],
+    }
+
+
+def enabled_public_indexer_names() -> set[str]:
+    """Bundled indexers are a manual Advanced setting, never an install default."""
+    mapping = {
+        "1337x": "ReelOS-1337x",
+        "the-pirate-bay": "ReelOS-tpb",
+        "knaben": "ReelOS-knaben",
+        "torrents-csv": "ReelOS-torrentcsv",
+        "yts": "ReelOS-yts",
+        "eztv": "ReelOS-eztv",
+        "showrss": "ReelOS-showrss",
+    }
+    try:
+        raw = json.loads((STATE / "ui-settings.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    return {mapping[item] for item in raw.get("enabledIndexerIds", []) if item in mapping}
+
+
+def ensure_public_indexers(prow_key: str) -> None:
+    """Add missing publics even on OTA. Cardigann miss → TorrentRss RSS fallback.
+
+    Schema GET must not abort the hop: house Prowlarr often has native TPB +
+    TorrentRss and no Cardigann `eztv`/`showrss`. `wire-engines.py indexers`
+    runs even when compose.yml is unchanged (UI/bin OTA). lock-clients does
+    not gate this hop.
+    """
+    enabled_names = enabled_public_indexer_names()
+    ota = bool(os.environ.get("REELOS_OTA")) or "indexers" in sys.argv
+    wait_prowlarr_api(prow_key, 60)
+    try:
+        have = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"public indexers list {e}")
+        return
+    try:
+        schemas = call("http://127.0.0.1:9696/api/v1/indexer/schema", prow_key) or []
+    except NET_ERR as e:
+        log_wire(f"public indexer schema {e} — RSS fallback")
+        schemas = []
+    if not isinstance(schemas, list):
+        schemas = []
+    rows = have if isinstance(have, list) else []
+    managed_names = {name for name, _hints in _public_roster()}
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        iid = item.get("id")
+        if name not in managed_names or name in enabled_names or iid is None:
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:9696/api/v1/indexer/{iid}",
+                prow_key,
+                method="DELETE",
+            )
+            log_wire(f"bundled indexer disabled {name}")
+        except NET_ERR as e:
+            log_wire(f"bundled indexer disable {name} {e}")
+    if not enabled_names:
+        log_wire("bundled indexers disabled - Advanced settings has no selections")
+        return
+    mod = _load_public_indexers()
+
+    def _post(name, body, via):
+        return _post_public_indexer(prow_key, name, body, via)
+
+    if mod and getattr(mod, "apply_public_indexers", None):
+        mod.apply_public_indexers(
+            rows,
+            schemas,
+            post=_post,
+            log=log_wire,
+            enabled_names=enabled_names,
+        )
+    else:
+        names = {ix.get("name") for ix in rows if isinstance(ix, dict)}
+        for name, url in (
+            ("ReelOS-eztv", "https://eztvx.to/ezrss.xml"),
+            ("ReelOS-showrss", "https://showrss.info/other/all.rss"),
+        ):
+            if name not in enabled_names:
+                continue
+            if name in names:
+                continue
+            _post_public_indexer(prow_key, name, _hard_tv_rss_body(name, url), "rss fallback")
+    try:
+        have2v = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        have2v = []
+    if mod and getattr(mod, "doctor_releases_detail", None):
+        detail, ready = mod.doctor_releases_detail(mod.enabled_indexer_names(have2v))
+        log_wire(f"public TV indexers {detail}")
+        if not ready:
+            for req in mod.required_tv_public_names():
+                if req not in enabled_names:
+                    continue
+                have_names = [ix.get("name") for ix in have2v if isinstance(ix, dict)]
+                if req in have_names:
+                    continue
+                feeds = mod.rss_feeds_for(req)
+                if not feeds:
+                    continue
+                body = mod.torrent_rss_body(
+                    req,
+                    feeds[0],
+                    mod.match_schema(schemas, mod.RSS_SCHEMA_HINTS),
+                )
+                _post_public_indexer(prow_key, req, body, "rss fallback")
+            try:
+                have2v = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            except NET_ERR:
+                have2v = []
+            detail, _ready = mod.doctor_releases_detail(mod.enabled_indexer_names(have2v))
+            log_wire(f"public TV indexers {detail}")
+    if ota:
+        log_wire("OTA: public indexer add pass complete, skip live tests")
+        return
+    tested = []
+    try:
+        have2 = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+    except NET_ERR:
+        return
+    for ix in have2 if isinstance(have2, list) else []:
+        if not ix.get("enable"):
+            continue
+        ok_t, terr = indexer_test(prow_key, ix)
+        n = ix.get("name")

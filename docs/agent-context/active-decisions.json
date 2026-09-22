@@ -1,0 +1,103 @@
+{
+  "$schema": "https://reelos.local/schemas/agent-decisions/v1",
+  "purpose": "Active durable decisions only. Replace obsolete entries; do not append a history.",
+  "decisions": [
+    {
+      "id": "personal-world-ui",
+      "decision": "ReelOS is a calm, art-led personal cinema and books experience, not a dashboard.",
+      "rationale": "Personal taste, artwork, a favorite-color atmosphere, and restrained motion carry its character while navigation stays predictable.",
+      "sources": ["src/experience/reelos-world.tsx", "docs/feature-register.json"]
+    },
+    {
+      "id": "approved-visual-language",
+      "decision": "Preserve the approved Home composition, falling artwork, setup breathing glow, taste bubbles, and Family direction; use Home, never Room.",
+      "rationale": "These are the established visual anchors. New screens should extend them instead of restarting the design.",
+      "sources": ["src/experience/reelos-world.tsx", "docs/THE-LAWS-OF-REELOS.md"]
+    },
+    {
+      "id": "interaction-principles",
+      "decision": "Design touch- and TV-first with obvious stationary controls, clear exit/back paths, and no redundant page headers or decorative AI symbols.",
+      "rationale": "The interface must feel magical without becoming hard to navigate or relying on hidden gestures.",
+      "sources": ["docs/feature-register.json", "src/experience/reelos-world.tsx"]
+    },
+    {
+      "id": "profile-privacy",
+      "decision": "Each profile owns taste, appearance, saves, history, language, and reading progress. Household presence is separate from identity; children require enforced exit protection.",
+      "rationale": "Personalization must not leak private history, and child controls cannot be cosmetic.",
+      "sources": ["docs/feature-register.json", "scripts/services/profile-service.test.mjs", "scripts/services/reelos-gate-service.test.mjs"]
+    },
+    {
+      "id": "taste-semantics",
+      "decision": "Like, Love, Cozy, Dismiss, and Less like this are distinct and reversible. Dismiss means no opinion, not dislike.",
+      "rationale": "Taste calibration should remain pleasant and truthful rather than turning uncertainty into negative preference.",
+      "sources": ["src/experience/experience-state.ts", "src/lib/experience-state.test.ts"]
+    },
+    {
+      "id": "source-policy",
+      "decision": "Public-domain and personal media are complete default sources. The core exposes a neutral Media source adapter contract and contains no named debrid provider or private source preset. Named provider adapters and owner indexers ship only in separately signed private setup packs; credentials are always entered per home.",
+      "rationale": "Keep one capable extensible core while separating private household configuration, protecting credentials, and avoiding provider-specific public product language.",
+      "sources": ["scripts/services/source-access-policy.mjs", "scripts/verify-public-release.mjs", "docs/feature-register.json"]
+    },
+    {
+      "id": "private-day0-scope",
+      "decision": "Day-0 is a signed private household release across Windows, Linux, Android phone/tablet and Android TV. Android is a full ReelOS node using the same generated interface and household neural/state contracts, not a separately designed client or a server-dependent remote. Each node runs locally within its measured capabilities and may contribute compute, storage and playback services; joining a Home expands synchronization rather than unlocking the product. It includes Books, verified travel downloads, family media treatment, Companion remote control, synchronized guest-link parties, subtitles, dialogue/night listening and volume leveling. macOS, public adapter/VPN work, commercial streaming redirects, Ambiance/acoustic calibration and general shadow model packs are post-Day-0.",
+      "rationale": "One shared product prevents platform drift and makes interface changes flow into every signed platform build. Native layers remain thin capability adapters while deterministic household policy and shared-compute coordination stay authoritative. Deferred capabilities remain visible only as honest lifecycle status in Advanced Settings.",
+      "sources": ["docs/feature-register.json", "docs/feature-acceptance.json", ".reelos-audit/platform-release-status.json"]
+    },
+    {
+      "id": "access-truth",
+      "decision": "Discovery may learn from or display catalog metadata that is not available, but playable, save, request, and No idea outcomes must reflect verified access. UI never fabricates service success.",
+      "rationale": "Users can train taste on Batman without being told they can play or add Batman when their sources do not provide it.",
+      "sources": ["src/experience/source-access.ts", "src/experience/reelos-world.tsx", "scripts/services/source-access-policy.test.mjs"]
+    },
+    {
+      "id": "neural-system-identity",
+      "decision": "ReelOS is one end-to-end local neural system, not an ARR stack, Jellyfin fork, or conventional media manager with optional AI features. Product domains share a local event and feature spine through guarded specialists and a coordinator; deterministic policy remains authoritative.",
+      "rationale": "This prevents agents and implementations from rebuilding retired orchestration or treating the neural hierarchy as decoration. Registered, connected, fallback, and shadow capabilities must remain visibly distinct.",
+      "sources": ["docs/agent-context/neural-capabilities.json", "scripts/services/reel-intelligence-system.mjs", "scripts/services/intelligence-coordinator.mjs"]
+    },
+    {
+      "id": "intelligence-boundaries",
+      "decision": "Learning happens strictly on-device. Cross-home intelligence automatically shares only anonymous taste profiles, not gradients, weights, transcripts, scene analysis, histories or household settings. Local models may assist curation, search and resource adaptation, but deterministic rules control access, credentials, family safety and destructive actions.",
+      "rationale": "The original privacy boundary is taste-only sharing with private local learning, not centralized training or shared film-analysis uploads. No opt-in ceremony or visible AI branding is required. Anonymity must pass measured re-identification/linkability and payload-boundary checks, not merely removal of names; unproven payloads stay local. Explain background behavior honestly in privacy documentation. Ordinary provider/media requests are separate from the shared-learning payload.",
+      "sources": ["docs/feature-register.json", "scripts/services/neural-scale-engine.mjs"]
+    },
+    {
+      "id": "prepare-before-playback",
+      "decision": "Prefer compatible originals/existing renditions and remux/audio-only paths; prepare necessary device-compatible video renditions ahead of demand within the household storage-slider budget. Live video transcoding is a measured, yielding last resort.",
+      "rationale": "Idle time removes the real-time deadline; RAM does not replace codec compute. Private local learning ranks likely titles and device/network scenarios, while deterministic rules enforce resource limits, source access, provider backoff, and playback priority. Avoid every-format duplication, repeated downloads, and cascaded lossy encodes. Preserve personal originals and pinned media; evict only disposable managed renditions. Validate outputs before publishing readiness. This is required work, not verified implementation.",
+      "sources": ["docs/feature-register.json", "scripts/services/media-sources-service.mjs", "scripts/services/transcode-relay-service.mjs"]
+    },
+    {
+      "id": "cached-title-analysis",
+      "decision": "Reuse authorized cached media for a versioned local analysis pass: timestamped transcripts/subtitle candidates, spoiler-bounded summaries, audio characteristics, and family-content annotations. Reuse valid results before fetching media or rerunning inference; per-title analysis does not require retraining a model.",
+      "rationale": "One downloaded source can support preparation and companion features without repeated provider traffic. Jobs yield to playback and honor storage, network and provider backoff budgets. Cached-title analysis and any training are strictly on-device; transcripts, scene summaries, audio analysis and family annotations are not cross-home contributions. Only anonymous taste profiles may leave through the shared-intelligence channel, under the intelligence-boundaries decision. Match annotations to the exact edition/audio track/timebase; uncertain or conflicting results cannot silently relax family policy. Deterministic access and parent rules remain authoritative.",
+      "sources": ["docs/feature-register.json"]
+    },
+    {
+      "id": "release-truth",
+      "decision": "Playback, filtering, PIN enforcement, installation, learning, and synchronization are described as operational only after their backing service is verified. Preview adapters remain visibly distinct.",
+      "rationale": "The product must be ambitious without misrepresenting the state of its backend.",
+      "sources": ["docs/feature-register.json", "scripts/verify-public-release.mjs"]
+    },
+    {
+      "id": "household-clean-install",
+      "decision": "Build the first household installation for the owner's current computer. The HP previously used for basement measurements is intended for the owner's mother's home and is reserved for final-build testing; do no further recovery, development deployment or preparation on it. Its final installation must not import old code, profiles, library state, settings or credentials.",
+      "rationale": "The owner changed deployment order and rejected salvaging the old HP installation. Retain non-secret hardware/test evidence only. Final-build testing does not by itself authorize an OS-disk erase; exact destructive targets must be separately verified.",
+      "sources": ["docs/feature-register.json"]
+    },
+    {
+      "id": "legacy-retirement",
+      "decision": "Legacy routes and components remain until a route-by-route replacement and retirement check exists; do not delete them based on appearance alone.",
+      "rationale": "The recovered codebase contains overlapping generations. Safe removal requires evidence, not a broad rewrite.",
+      "sources": ["docs/feature-register.json", "src/routes"]
+    }
+  ],
+  "historicalSources": [
+    "GROUND-TRUTH.md",
+    "STATUS.md",
+    "PROJECT.md",
+    "docs/MASTER-VISION-LEDGER.md",
+    "docs/WHITE-PAPER-v1.6.0.md"
+  ]
+}

@@ -1,0 +1,23 @@
+[Unit]
+Description=ReelOS native entertainment appliance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/reelos
+Environment=REELOS_APPLIANCE=1
+Environment=REELOS_ROOT=/opt/reelos
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStartPre=-/usr/bin/python3 /opt/reelos/bin/reelos_hardware.py --ensure
+# One native ReelOS process on :8080 plus its compatibility shim on :8096.
+ExecStartPre=/bin/sh -c 'fuser -k 8080/tcp >/dev/null 2>&1 || true'
+ExecStart=/usr/bin/node /opt/reelos/app/scripts/reelos-launch-active.mjs
+Restart=always
+RestartSec=2
+TimeoutStartSec=90
+User=root
+
+[Install]
+WantedBy=multi-user.target

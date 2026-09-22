@@ -1,0 +1,11 @@
+[Unit]
+Description=ReelOS plug-and-play USB storage automount timer
+After=local-fs.target
+
+[Timer]
+OnBootSec=10sec
+OnUnitActiveSec=15sec
+Persistent=true
+
+[Install]
+WantedBy=timers.target

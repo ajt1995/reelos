@@ -1,0 +1,1183 @@
+             method="POST",
+                body={
+                    "name": "Sonarr",
+                    "address": "sonarr",
+                    "port": 8989,
+                    "apikey": sonarr_key,
+                    "ssl": False,
+                },
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            pass
+
+
+def ensure_indexers_and_sync() -> int:
+    """OTA/Apply hop: add missing public TV indexers and fullSync them to *arr."""
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+    prow_key = wait_key(prow_xml, 40)
+    if not prow_key:
+        log_wire("indexers skip — no Prowlarr key")
+        return 0
+    try:
+        ensure_public_indexers(prow_key)
+    except Exception as e:
+        log_wire(f"public indexers {type(e).__name__} {e}")
+    a = answers()
+    intent = a.get("intent") or {}
+    radarr_key = wait_key(COMPOSE / "configs" / "radarr" / "config.xml") if intent.get("movies", True) else None
+    sonarr_key = wait_key(COMPOSE / "configs" / "sonarr" / "config.xml") if intent.get("tv") or intent.get("anime") else None
+    rc_sync = True
+    try:
+        if radarr_key:
+            ensure_prowlarr_app(
+                "Radarr", "Radarr", docker_service_url("radarr", 7878, "radarr"), radarr_key, prow_key
+            )
+        if sonarr_key:
+            ensure_prowlarr_app(
+                "Sonarr", "Sonarr", docker_service_url("sonarr", 8989, "sonarr"), sonarr_key, prow_key
+            )
+        sync_prowlarr_apps(prow_key)
+        if radarr_key and not ensure_arr_search_indexers(
+            "Radarr", "http://127.0.0.1:7878/api/v3", radarr_key, prow_key, "movie"
+        ):
+            rc_sync = False
+        if sonarr_key and not ensure_arr_search_indexers(
+            "Sonarr", "http://127.0.0.1:8989/api/v3", sonarr_key, prow_key, "tv"
+        ):
+            rc_sync = False
+        if not rc_sync:
+            log_wire("prowlarr fullSync did not land search indexers on *arr")
+    except Exception as e:
+        log_wire(f"prowlarr sync {type(e).__name__} {e}")
+        rc_sync = False
+    try:
+        widen_sonarr_hybrid()
+    except Exception as e:
+        log_wire(f"sonarr hybrid {type(e).__name__} {e}")
+    try:
+        widen_radarr_hybrid()
+    except Exception as e:
+        log_wire(f"radarr hybrid {type(e).__name__} {e}")
+    rc = 0 if rc_sync else 1
+    try:
+        jf_token = jellyfin_token()
+        frontend = (a.get("frontend") or "jellyfin")
+        if jf_token:
+            want = jellyfin_want_libraries()
+            if ensure_jellyfin_libraries(jf_token, want, collapse_dumps=False):
+                log_wire("jellyfin libraries one dump path each")
+            else:
+                log_wire("jellyfin libraries missing after retry")
+                rc = 1
+        elif frontend in ("jellyfin", "both"):
+            log_wire("jellyfin libraries skip — no token")
+            rc = 1
+    except Exception as e:
+        log_wire(f"jellyfin libraries {type(e).__name__} {e}")
+        rc = 1
+    if prow_key:
+        try:
+            rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+            mod = _load_public_indexers()
+            names = mod.enabled_indexer_names(rows) if mod else []
+            if mod:
+                _detail, good = mod.doctor_releases_detail(names)
+                if not good:
+                    log_wire(f"indexers heal red {_detail}")
+                    rc = 1
+        except Exception as e:
+            log_wire(f"indexers verify {type(e).__name__} {e}")
+            rc = 1
+    try:
+        if rc == 0:
+            research_missing_after_indexers()
+        else:
+            log_wire("research-missing skipped — indexer heal red")
+    except Exception as e:
+        log_wire(f"research-missing {type(e).__name__} {e}")
+    return rc
+
+
+def widen_sonarr_hybrid() -> None:
+    """Hybrid is '1080p / 4K when available'. Stock Ultra-HD is 2160p-only and
+    rejects EZTV 720p WEB-DL. Widen in place so existing B99/TWD series keep
+    the same profile id."""
+    want_q = answers().get("quality") or "hybrid"
+    if want_q != "hybrid":
+        return
+    xml = COMPOSE / "configs" / "sonarr" / "config.xml"
+    key = wait_key(xml, 20)
+    if not key:
+        return
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "widen_hybrid_profile_items", None):
+        return
+    name = QUALITY.get(want_q, "Ultra-HD")
+    try:
+        profiles = call("http://127.0.0.1:8989/api/v3/qualityprofile", key) or []
+    except NET_ERR:
+        return
+    for p in profiles if isinstance(profiles, list) else []:
+        if p.get("name") != name:
+            continue
+        items = p.get("items") or []
+        if not mod.widen_hybrid_profile_items(items):
+            log_wire(f"sonarr {name} already allows HD+UHD")
+            return
+        body = dict(p)
+        body["items"] = items
+        body["upgradeAllowed"] = True
+        try:
+            call(
+                f"http://127.0.0.1:8989/api/v3/qualityprofile/{p.get('id')}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"sonarr {name} allows 720p/1080p/2160p (hybrid)")
+        except NET_ERR as e:
+            log_wire(f"sonarr hybrid profile {e}")
+        return
+
+
+def ensure_hybrid_recycle_bin(key: str | None = None) -> bool:
+    """Radarr upgrade deletes the 1080. Recycle keeps it so restore can put it back.
+
+    Hybrid only. Never /media. Cleanup days 0 — do not auto-empty the 1080.
+    """
+    if (answers().get("quality") or "hybrid") != "hybrid":
+        return False
+    rec = HYBRID_RECYCLE.as_posix()
+    try:
+        Path(rec).mkdir(parents=True, exist_ok=True)
+        # Radarr's FolderWritableValidator 400s the mediamanagement PUT unless the
+        # recycle bin is writable by the container user (PUID 1000). OTA runs
+        # wire-engines as root, so a bare mkdir leaves it root-owned and every
+        # Apply logs "radarr hybrid recycle put HTTP Error 400". Hand it back.
+        os.chmod(rec, 0o775)
+        if hasattr(os, "chown"):
+            os.chown(rec, 1000, 1000)
+    except OSError as e:
+        log_wire(f"radarr hybrid recycle mkdir {e}")
+    if not key:
+        xml = COMPOSE / "configs" / "radarr" / "config.xml"
+        key = wait_key(xml, 20)
+    if not key:
+        return False
+    try:
+        cfg = call("http://127.0.0.1:7878/api/v3/config/mediamanagement", key)
+    except NET_ERR as e:
+        log_wire(f"radarr hybrid recycle {e}")
+        return False
+    if not isinstance(cfg, dict) or not cfg.get("id"):
+        return False
+    if (
+        str(cfg.get("recycleBin") or "").rstrip("/") == rec.rstrip("/")
+        and int(cfg.get("recycleBinCleanupDays") or -1) == 0
+        and cfg.get("enableMediaInfo") is False
+    ):
+        return True
+    body = arr_debrid_media_patch(cfg)
+    body["recycleBin"] = rec
+    body["recycleBinCleanupDays"] = 0
+    try:
+        call(
+            f"http://127.0.0.1:7878/api/v3/config/mediamanagement/{cfg['id']}",
+            key,
+            method="PUT",
+            body=body,
+        )
+        log_wire("radarr hybrid recycle keeps upgraded 1080")
+        return True
+    except NET_ERR as e:
+        log_wire(f"radarr hybrid recycle put {e}")
+        return False
+
+
+def widen_radarr_hybrid() -> None:
+    """MoviesSearch against Ultra-HD 2160p-only rejects 1080p National Treasure.
+
+    Upgrade is still allowed so 4K can land; recycle + restore keep the 1080.
+    """
+    want_q = answers().get("quality") or "hybrid"
+    if want_q != "hybrid":
+        return
+    xml = COMPOSE / "configs" / "radarr" / "config.xml"
+    key = wait_key(xml, 20)
+    if not key:
+        return
+    ensure_hybrid_recycle_bin(key)
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "widen_hybrid_profile_items", None):
+        return
+    name = QUALITY.get(want_q, "Ultra-HD")
+    try:
+        profiles = call("http://127.0.0.1:7878/api/v3/qualityprofile", key) or []
+    except NET_ERR:
+        return
+    for p in profiles if isinstance(profiles, list) else []:
+        if p.get("name") != name:
+            continue
+        items = p.get("items") or []
+        widened = bool(mod.widen_hybrid_profile_items(items))
+        if not widened and p.get("upgradeAllowed") is True:
+            log_wire(f"radarr {name} already allows HD+UHD")
+            return
+        body = dict(p)
+        body["items"] = items
+        body["upgradeAllowed"] = True
+        try:
+            call(
+                f"http://127.0.0.1:7878/api/v3/qualityprofile/{p.get('id')}",
+                key,
+                method="PUT",
+                body=body,
+            )
+            log_wire(f"radarr {name} allows 720p/1080p/2160p (hybrid)")
+        except NET_ERR as e:
+            log_wire(f"radarr hybrid profile {e}")
+        return
+
+
+def ensure_arr_search_indexers(name: str, origin: str, arr_key: str, prow_key: str, role: str) -> bool:
+    """After ApplicationIndexerSync: enable search flags, then Torznab-attach if *arr is still empty."""
+    mod = _load_public_indexers()
+    if not mod or not getattr(mod, "apply_arr_search_indexers", None):
+        log_wire(f"{name} search indexers skip — no public_indexers")
+        return False
+    def read_prow_rows() -> list:
+        try:
+            rows = call("http://127.0.0.1:9696/api/v1/indexer", prow_key) or []
+        except NET_ERR as e:
+            log_wire(f"{name} prow list {e}")
+            return []
+        return rows if isinstance(rows, list) else []
+
+    prow_rows = read_prow_rows()
+    write_url = (
+        mod.arr_indexer_write_url(origin)
+        if getattr(mod, "arr_indexer_write_url", None)
+        else f"{origin}/indexer?forceSave=true"
+    )
+    prow_host = "prowlarr"
+    schema = None
+    try:
+        schemas = call(f"{origin}/indexer/schema", arr_key) or []
+        schema = mod.pick_torznab_schema(schemas) if getattr(mod, "pick_torznab_schema", None) else None
+    except NET_ERR as e:
+        log_wire(f"{name} indexer schema {e}")
+
+    def read_arr_rows() -> list:
+        try:
+            rows = call(f"{origin}/indexer", arr_key) or []
+        except NET_ERR as e:
+            log_wire(f"{name} indexer list {e}")
+            rows = []
+        return rows if isinstance(rows, list) else []
+
+    def post(ix_name, body):
+        try:
+            call(write_url, arr_key, method="POST", body=body)
+            log_wire(f"{name} torznab {ix_name}")
+            status = 200
+        except urllib.error.HTTPError as e:
+            err = e.read().decode()[:240] if e.fp else str(e)
+            log_wire(f"{name} torznab {ix_name} {e.code}: {err}")
+            # 400 + name is not attached. House #67 treated it as success and left *arr empty.
+            status = int(getattr(e, "code", 0) or 0)
+        except NET_ERR as e:
+            log_wire(f"{name} torznab {ix_name} {e}")
+            return False
+        rows = read_arr_rows()
+        if getattr(mod, "arr_indexer_write_landed", None):
+            return mod.arr_indexer_write_landed(status, rows, role)
+        _, good = mod.arr_search_indexers_ok(rows, role)
+        return 200 <= status < 300 and good
+
+    def put(iid, body):
+        put_url = (
+            mod.arr_indexer_write_url(origin, iid)
+            if getattr(mod, "arr_indexer_write_url", None)
+            else f"{origin}/indexer/{iid}?forceSave=true"
+        )
+        try:
+            call(put_url, arr_key, method="PUT", body=body)
+            log_wire(f"{name} indexer {body.get('name')} search enabled")
+            return True
+        except NET_ERR as e:
+            log_wire(f"{name} indexer enable {e}")
+            return False
+
+    # A just-(re)created arr answers /indexer with an error for 10-30s (longer on
+    # a loaded low-power box). The short attach loop below then reads zero rows
+    # and wrongly logs "no enabled indexer" heal red even though the indexers are
+    # persisted on the config volume. Wait for the API to come up first so the
+    # check judges a ready arr, not a starting one.
+    for _ in range(45):
+        try:
+            status = call(f"{origin}/system/status", arr_key)
+            if isinstance(status, dict) and status.get("version"):
+                break
+        except NET_ERR:
+            pass
+        time.sleep(2)
+
+    arr_rows: list = []
+    for attempt in range(5):
+        arr_rows = read_arr_rows()
+        detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+        if good:
+            log_wire(f"{name} search indexers {detail}")
+            return True
+        # A one-shot Prowlarr read makes every retry a no-op and turns a blip into heal red.
+        if not prow_rows:
+            prow_rows = read_prow_rows()
+        if schema is None:
+            try:
+                schemas = call(f"{origin}/indexer/schema", arr_key) or []
+                schema = mod.pick_torznab_schema(schemas) if getattr(mod, "pick_torznab_schema", None) else None
+            except NET_ERR:
+                schema = None
+        landed = mod.apply_arr_search_indexers(
+            prow_rows, arr_rows, role, prow_key, post, put, schema=schema, prow_host=prow_host
+        )
+        if landed:
+            log_wire(f"{name} attached {','.join(landed)}")
+            # Re-read immediately so a last-attempt attach is not judged on stale pre-apply rows.
+            arr_rows = read_arr_rows()
+            detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+            if good:
+                log_wire(f"{name} search indexers {detail}")
+                return True
+        elif attempt < 4:
+            time.sleep(0.4)
+    # Final ok must re-read post-apply rows, not stale pre-apply.
+    arr_rows = read_arr_rows()
+    detail, good = mod.arr_search_indexers_ok(arr_rows, role)
+    if not good:
+        log_wire(f"{name} search indexers heal red {detail}")
+    else:
+        log_wire(f"{name} search indexers {detail}")
+    return good
+
+
+def research_missing_after_indexers() -> None:
+    """Lock Decypharr client, then SeasonSearch 0-file seasons against new EZTV/ShowRSS."""
+    lock = ROOT / "bin" / "lock-download-clients.py"
+    if not lock.is_file():
+        lock = Path("/opt/reelos/bin/lock-download-clients.py")
+    if lock.is_file():
+        try:
+            subprocess.run([sys.executable, str(lock), "--quick"], check=False, timeout=20)
+            log_wire("download client locked before SeasonSearch")
+        except Exception as e:
+            log_wire(f"lock-clients {type(e).__name__} {e}")
+    sweep = ROOT / "bin" / "stuck-downloads.py"
+    if not sweep.is_file():
+        sweep = Path("/opt/reelos/bin/stuck-downloads.py")
+    if not sweep.is_file():
+        return
+    try:
+        subprocess.run(
+            [sys.executable, str(sweep), "--research-missing"],
+            check=False,
+            timeout=90,
+        )
+        log_wire("SeasonSearch re-fired after indexer sync")
+        heal_hybrid_1080_companions()
+    except Exception as e:
+        log_wire(f"research-missing {type(e).__name__} {e}")
+
+
+def extra_access() -> None:
+    if os.environ.get("REELOS_OTA") == "1":
+        return
+    script = ROOT / "bin" / "reelos-access.sh"
+    if script.exists():
+        subprocess.run(["bash", str(script)], check=False)
+
+
+# Seerr permission bits: REQUEST + AUTO_APPROVE movie/tv + household admin.
+SEERR_HOUSEHOLD = 2 | 16 | 32 | 128 | 256 | 131072 | 262144 | 524288
+
+
+class Seerr:
+    def __init__(self) -> None:
+        self.cj = http.cookiejar.CookieJar()
+        self.op = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
+
+    def call(self, path: str, method: str = "GET", body: dict | None = None):
+        data = None
+        headers = {"Accept": "application/json"}
+        if body is not None:
+            data = json.dumps(body).encode()
+            headers["Content-Type"] = "application/json"
+        req = urllib.request.Request(
+            "http://127.0.0.1:5055" + path,
+            data=data,
+            method=method,
+            headers=headers,
+        )
+        with self.op.open(req, timeout=25) as resp:
+            raw = resp.read().decode() or "{}"
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {"raw": raw[:200]}
+
+
+def _seerr_service_rows(rows) -> list:
+    items = rows if isinstance(rows, list) else (rows or {}).get("results") or rows or []
+    if not isinstance(items, list):
+        return []
+    return [x for x in items if isinstance(x, dict)]
+
+
+def _seerr_has_service(rows, name: str) -> bool:
+    return any(str(x.get("name") or "") == name for x in _seerr_service_rows(rows))
+
+
+def _seerr_find_service(rows, name: str) -> dict | None:
+    for x in _seerr_service_rows(rows):
+        if str(x.get("name") or "") == name:
+            return x
+    return None
+
+
+def seerr_needs_search_enable(service: dict | None, body: dict | None = None) -> bool:
+    """Old house Seerr can sit on preventSearch=true, or hostname radarr that DNS cannot resolve."""
+    return seerr_needs_arr_update(service, body)
+
+
+def seerr_needs_arr_update(service: dict | None, body: dict | None = None) -> bool:
+    if not service:
+        return False
+    if service.get("preventSearch") is True:
+        return True
+    if not body:
+        return False
+    if str(service.get("hostname") or "") != str(body.get("hostname") or ""):
+        return True
+    if body.get("apiKey") and str(service.get("apiKey") or "") != str(body.get("apiKey") or ""):
+        return True
+    return False
+
+
+def ensure_seerr_arr_service(s, kind: str, existing, body: dict) -> str:
+    """POST if missing. PUT preventSearch=False so Request actually searches *arr."""
+    name = str(body.get("name") or "")
+    hit = _seerr_find_service(existing, name)
+    if not hit:
+        s.call(f"/api/v1/settings/{kind}", "POST", body)
+        return "created"
+    if not seerr_needs_arr_update(hit, body):
+        return "ok"
+    upd = dict(hit)
+    upd["preventSearch"] = False
+    if body.get("hostname"):
+        upd["hostname"] = body.get("hostname")
+    if body.get("apiKey"):
+        upd["apiKey"] = body.get("apiKey")
+    sid = hit.get("id")
+    path = f"/api/v1/settings/{kind}/{sid}" if sid is not None else f"/api/v1/settings/{kind}"
+    s.call(path, "PUT", upd)
+    return "updated"
+
+
+def bootstrap_seerr(radarr_key: str | None, sonarr_key: str | None) -> None:
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    password = (a.get("adminPassword") or "reelos").strip() or "reelos"
+    up = False
+    for _ in range(90):
+        try:
+            urllib.request.urlopen("http://127.0.0.1:5055/api/v1/status", timeout=3).read()
+            up = True
+            break
+        except NET_ERR:
+            time.sleep(2)
+    if not up:
+        log_wire("seerr not up")
+        return
+    s = Seerr()
+    try:
+        pub = s.call("/api/v1/settings/public")
+    except NET_ERR as e:
+        log_wire(f"seerr public {e}")
+        return
+    if not pub.get("initialized"):
+        try:
+            s.call(
+                "/api/v1/auth/jellyfin",
+                "POST",
+                {
+                    "username": user,
+                    "password": password,
+                    "hostname": "jellyfin",
+                    "port": 8096,
+                    "useSsl": False,
+                    "urlBase": "",
+                    "email": f"{user}@reelos.local",
+                    "serverType": 2,
+                },
+            )
+            log_wire("seerr jellyfin login")
+        except NET_ERR as e:
+            log_wire(f"seerr setup {type(e).__name__} {e}")
+            return
+    else:
+        try:
+            s.call("/api/v1/auth/jellyfin", "POST", {"username": user, "password": password})
+        except NET_ERR as e:
+            log_wire(f"seerr reauth {type(e).__name__} {e}")
+    try:
+        libs = s.call("/api/v1/settings/jellyfin/library?sync=true")
+        rows = libs if isinstance(libs, list) else libs.get("libraries") or []
+        enabled = []
+        for lib in rows:
+            item = dict(lib)
+            item["enabled"] = True
+            enabled.append(item)
+        if enabled:
+            s.call("/api/v1/settings/jellyfin", "POST", {"libraries": enabled})
+    except NET_ERR as e:
+        log_wire(f"seerr libraries {type(e).__name__} {e}")
+    qid = quality_id("http://127.0.0.1:7878/api/v3", radarr_key) if radarr_key else 1
+    if radarr_key:
+        try:
+            existing = s.call("/api/v1/settings/radarr")
+            body = {
+                "name": "Radarr",
+                "hostname": "radarr",
+                "port": 7878,
+                "apiKey": radarr_key,
+                "useSsl": False,
+                "activeProfileId": qid or 1,
+                "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
+                "activeDirectory": "/symlinks/radarr",
+                "isDefault": True,
+                "is4k": False,
+                "minimumAvailability": "released",
+                "syncEnabled": True,
+                "preventSearch": False,
+                "tagRequests": False,
+                "tags": [],
+            }
+            op = ensure_seerr_arr_service(s, "radarr", existing, body)
+            if op == "created":
+                log_wire("seerr radarr")
+            elif op == "updated":
+                log_wire("seerr radarr search enabled")
+        except NET_ERR as e:
+            log_wire(f"seerr radarr {type(e).__name__} {e}")
+    sqid = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key) if sonarr_key else 1
+    if sonarr_key:
+        try:
+            existing = s.call("/api/v1/settings/sonarr")
+            body = {
+                "name": "Sonarr",
+                "hostname": "sonarr",
+                "port": 8989,
+                "apiKey": sonarr_key,
+                "useSsl": False,
+                "activeProfileId": sqid or 1,
+                "activeProfileName": QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD"),
+                "activeDirectory": "/symlinks/sonarr",
+                "isDefault": True,
+                "is4k": False,
+                "syncEnabled": True,
+                "preventSearch": False,
+                "tagRequests": False,
+                "enableSeasonFolders": True,
+                "tags": [],
+            }
+            op = ensure_seerr_arr_service(s, "sonarr", existing, body)
+            if op == "created":
+                log_wire("seerr sonarr")
+            elif op == "updated":
+                log_wire("seerr sonarr search enabled")
+        except NET_ERR as e:
+            log_wire(f"seerr sonarr {type(e).__name__} {e}")
+    try:
+        main = s.call("/api/v1/settings/main") or {}
+        main["localLogin"] = True
+        main["mediaServerLogin"] = True
+        main["hideAvailable"] = True
+        main["defaultPermissions"] = SEERR_HOUSEHOLD
+        s.call("/api/v1/settings/main", "POST", main)
+    except NET_ERR as e:
+        log_wire(f"seerr main {type(e).__name__} {e}")
+    try:
+        users = s.call("/api/v1/user")
+        rows = users if isinstance(users, list) else users.get("results") or []
+        for u in rows:
+            uid = u.get("id")
+            if not uid:
+                continue
+            s.call(f"/api/v1/user/{uid}", "PUT", {"permissions": SEERR_HOUSEHOLD, "id": uid})
+        log_wire("seerr auto-approve household")
+    except NET_ERR as e:
+        log_wire(f"seerr users {type(e).__name__} {e}")
+    try:
+        settings = Path("/opt/reelos/compose/configs/seerr/settings.json")
+        if settings.exists():
+            j = json.loads(settings.read_text())
+            key = (j.get("main") or {}).get("apiKey")
+            if key:
+                (STATE / "seerr.key").write_text(str(key) + "\n")
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+
+
+def share_mnt() -> None:
+    fuse_clear_stale()
+    Path("/mnt").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/symlinks").mkdir(parents=True, exist_ok=True)
+    Path("/mnt/debrid").mkdir(parents=True, exist_ok=True)
+    persist_mnt_shared()
+    if fuse_on_host():
+        log_wire("share_mnt: fuse on host — not bind-mounting /mnt")
+        fuse_unstack_extra_mnt_binds()
+        return
+    r = subprocess.run(["mount", "--make-rshared", "/mnt"], check=False, capture_output=True, text=True)
+    if r.returncode:
+        log_wire(f"rshared /mnt skipped: {(r.stderr or r.stdout or '')[:160]}")
+    else:
+        log_wire("rshared /mnt")
+    for p in ("/mnt/debrid", "/mnt/symlinks"):
+        try:
+            os.chmod(p, 0o777)
+            if hasattr(os, "chown"):
+                os.chown(p, 1000, 1000)
+        except OSError as e:
+            log_wire(f"chmod {p} {e}")
+    log_wire("fuse mountpoint writable")
+
+
+def main() -> int:
+    STATE.mkdir(parents=True, exist_ok=True)
+    share_mnt()
+    for d in (
+        "/srv/media/movies",
+        "/srv/media/tv",
+        "/srv/media/anime",
+        "/srv/media/music",
+        "/srv/media/downloads",
+        "/mnt/symlinks",
+        "/mnt/symlinks/radarr",
+        "/mnt/symlinks/sonarr",
+        "/mnt/symlinks/anime",
+        "/mnt/symlinks/music",
+    ):
+        Path(d).mkdir(parents=True, exist_ok=True)
+    mount_extra_disks()
+    if source() != "local-vpn":
+        try:
+            patch_decypharr()
+        except Exception as e:
+            log_wire(f"decypharr {type(e).__name__} {e}")
+    try:
+        transcode_override()
+    except Exception as e:
+        log_wire(f"transcode {type(e).__name__} {e}")
+
+    a = answers()
+    intent = a.get("intent") or {}
+    frontend = a.get("frontend") or "jellyfin"
+
+    if frontend in ("jellyfin", "both"):
+        try:
+            bootstrap_jellyfin()
+        except Exception as e:
+            log_wire(f"jellyfin bootstrap {type(e).__name__} {e}")
+
+    radarr_xml = COMPOSE / "configs" / "radarr" / "config.xml"
+    sonarr_xml = COMPOSE / "configs" / "sonarr" / "config.xml"
+    lidarr_xml = COMPOSE / "configs" / "lidarr" / "config.xml"
+    prow_xml = COMPOSE / "configs" / "prowlarr" / "config.xml"
+
+    radarr_key = wait_key(radarr_xml) if intent.get("movies", True) else None
+    sonarr_key = wait_key(sonarr_xml) if intent.get("tv") or intent.get("anime") else None
+    lidarr_key = wait_key(lidarr_xml) if intent.get("music") else None
+    prow_key = wait_key(prow_xml)
+    try:
+        if prow_key:
+            ensure_provider_indexer(prow_key)
+            ensure_public_indexers(prow_key)
+    except Exception as e:
+        log_wire(f"provider indexer {type(e).__name__} {e}")
+
+    engine: dict = {"wiredAt": int(time.time()), "quality": a.get("quality")}
+
+    try:
+        if radarr_key:
+            ensure_roots("http://127.0.0.1:7878/api/v3", radarr_key, "movie")
+            engine["radarrQuality"] = quality_id("http://127.0.0.1:7878/api/v3", radarr_key)
+            if prow_key:
+                ensure_prowlarr_app(
+                    "Radarr",
+                    "Radarr",
+                    docker_service_url("radarr", 7878, "radarr"),
+                    radarr_key,
+                    prow_key,
+                )
+        if sonarr_key:
+            kind = "anime" if intent.get("anime") and not intent.get("tv") else "tv"
+            ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, kind)
+            if intent.get("anime"):
+                ensure_roots("http://127.0.0.1:8989/api/v3", sonarr_key, "anime")
+            engine["sonarrQuality"] = quality_id("http://127.0.0.1:8989/api/v3", sonarr_key)
+            if prow_key:
+                ensure_prowlarr_app(
+                    "Sonarr",
+                    "Sonarr",
+                    docker_service_url("sonarr", 8989, "sonarr"),
+                    sonarr_key,
+                    prow_key,
+                )
+        if lidarr_key:
+            ensure_roots("http://127.0.0.1:8686/api/v1", lidarr_key, "music")
+            if prow_key:
+                ensure_prowlarr_app(
+                    "Lidarr",
+                    "Lidarr",
+                    docker_service_url("lidarr", 8686, "lidarr"),
+                    lidarr_key,
+                    prow_key,
+                )
+        if prow_key:
+            sync_prowlarr_apps(prow_key)
+        apply_arr_debrid_media_info()
+        widen_sonarr_hybrid()
+        widen_radarr_hybrid()
+    except Exception as e:
+        log_wire(f"arr wire {type(e).__name__} {e}")
+
+    try:
+        wire_bazarr(radarr_key, sonarr_key)
+    except Exception as e:
+        log_wire(f"bazarr {type(e).__name__} {e}")
+    if frontend in ("jellyfin", "both"):
+        try:
+            bootstrap_seerr(radarr_key, sonarr_key)
+        except Exception as e:
+            log_wire(f"seerr bootstrap {type(e).__name__} {e}")
+    extra_access()
+
+    try:
+        ensure_fuse()
+    except Exception as e:
+        log_wire(f"fuse {type(e).__name__} {e}")
+
+    (STATE / "engine.json").write_text(json.dumps(engine, indent=2) + "\n")
+
+    lock = ROOT / "bin" / "lock-download-clients.py"
+    if lock.exists() and source() != "local-vpn":
+        subprocess.run([sys.executable, str(lock)], check=False)
+    kiosk = ROOT / "bin" / "kiosk.sh"
+    if os.environ.get("REELOS_OTA") != "1" and kiosk.exists() and Path("/dev/dri").exists():
+        subprocess.run(["bash", str(kiosk)], check=False)
+    if os.environ.get("REELOS_OTA") != "1":
+        try:
+            log_wire("first provision — library walk")
+            kick_imports(catch_up=False)
+        except Exception as e:
+            log_wire(f"provision import {e}")
+    return 0
+
+
+
+def has_vaapi_dri(path: str | None = None) -> bool:
+    """Host GPU node for VAAPI. Missing/empty /dev/dri ⇒ DirectPlay only (no CPU ffmpeg storm)."""
+    dri = Path(path or "/dev/dri")
+    if not dri.exists():
+        return False
+    if dri.is_dir():
+        try:
+            return any(p.name.startswith(("renderD", "card")) for p in dri.iterdir())
+        except OSError:
+            return True
+    return True
+
+
+def transcode_override(*, compose_up=True) -> None:
+    """Redefines 06.part. Hardware mem_limit + optional /dev/dri. Never clobber RAM profile."""
+    mod = None
+    try:
+        mod = hw()
+    except Exception:
+        mod = None
+    dri = has_vaapi_dri()
+    if mod is not None:
+        try:
+            mod.apply_runtime_files(has_dri=dri, compose_dir=COMPOSE)
+        except Exception as e:
+            log_wire(f"hardware compose override {e}")
+    else:
+        override = COMPOSE / "compose.override.yml"
+        if not dri:
+            if override.exists():
+                try:
+                    override.unlink()
+                except OSError:
+                    pass
+            if not compose_up:
+                return
+        else:
+            override.write_text(
+                "services:\n"
+                "  jellyfin:\n"
+                "    devices:\n"
+                "      - /dev/dri:/dev/dri\n"
+                "  plex:\n"
+                "    devices:\n"
+                "      - /dev/dri:/dev/dri\n"
+            )
+    if not compose_up:
+        return
+    subprocess.run(
+        ["docker", "compose", "up", "-d"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def jellyfin_encoding_for_box(enc, *, low=True, has_dri=False) -> dict:
+    """GPU: VAAPI transcode (low still caps threads). No GPU: DirectPlay/DirectStream — no CPU ffmpeg."""
+    out = jellyfin_debrid_encoding_patch(enc)
+    if has_dri:
+        out["HardwareAccelerationType"] = "vaapi"
+        out["EnableHardwareEncoding"] = True
+        if not out.get("VaapiDevice"):
+            out["VaapiDevice"] = "/dev/dri/renderD128"
+        codecs = [str(c) for c in (out.get("HardwareDecodingCodecs") or []) if c]
+        for c in ("h264", "hevc", "vp9", "av1", "vc1", "mpeg2video"):
+            if c not in codecs:
+                codecs.append(c)
+        out["HardwareDecodingCodecs"] = codecs
+        out["EnableIntelLowPowerH264HwEncoder"] = True
+        out["EnableIntelLowPowerHevcHwEncoder"] = True
+        out["AllowHevcEncoding"] = True
+    else:
+        out["HardwareAccelerationType"] = "none"
+        out["EnableHardwareEncoding"] = False
+        out["EnableIntelLowPowerH264HwEncoder"] = False
+        out["EnableIntelLowPowerHevcHwEncoder"] = False
+        out["AllowHevcEncoding"] = False
+    if low:
+        out["EncodingThreadCount"] = 1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 60
+        out["EncoderPreset"] = "veryfast"
+    else:
+        out["EncodingThreadCount"] = -1
+        out["EnableThrottling"] = True
+        out["EnableSegmentDeletion"] = True
+        out["SegmentKeepSeconds"] = 180
+        out["EncoderPreset"] = "auto"
+    return out
+
+
+def jellyfin_playback_policy_for_box(policy, *, has_dri=False) -> dict:
+    """No GPU: DirectPlay/DirectStream only. Remux stays; ffmpeg transcode does not."""
+    out = dict(policy or {})
+    out["EnableVideoPlaybackTranscoding"] = bool(has_dri)
+    out["EnableAudioPlaybackTranscoding"] = bool(has_dri)
+    out["EnablePlaybackRemuxing"] = True
+    out["ForceRemoteSourceTranscoding"] = False
+    return out
+
+
+JF_ENCODING_XML = (
+    '<?xml version="1.0" encoding="utf-8"?>\n'
+    '<EncodingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xmlns:xsd="http://www.w3.org/2001/XMLSchema">\n'
+    "  <EncodingThreadCount>1</EncodingThreadCount>\n"
+    "  <EnableThrottling>true</EnableThrottling>\n"
+    "  <EnableSegmentDeletion>true</EnableSegmentDeletion>\n"
+    "  <SegmentKeepSeconds>60</SegmentKeepSeconds>\n"
+    "  <HardwareAccelerationType>none</HardwareAccelerationType>\n"
+    "  <EnableHardwareEncoding>false</EnableHardwareEncoding>\n"
+    "  <EnableSubtitleExtraction>false</EnableSubtitleExtraction>\n"
+    "  <EncoderPreset>veryfast</EncoderPreset>\n"
+    "  <AllowHevcEncoding>false</AllowHevcEncoding>\n"
+    "  <VaapiDevice>/dev/dri/renderD128</VaapiDevice>\n"
+    "</EncodingOptions>\n"
+)
+
+
+def _xml_bool(value) -> str:
+    return "true" if value else "false"
+
+
+def encoding_xml_set(text: str, tag: str, value: str) -> str:
+    pat = rf"<{tag}>[^<]*</{tag}>"
+    repl = f"<{tag}>{value}</{tag}>"
+    if re.search(pat, text, flags=re.I):
+        return re.sub(pat, repl, text, count=1, flags=re.I)
+    if "</EncodingOptions>" in text:
+        return text.replace("</EncodingOptions>", f"  {repl}\n</EncodingOptions>", 1)
+    return text
+
+
+def persist_jellyfin_encoding_xml(enc: dict, dest: Path | None = None) -> Path:
+    """Write encoding.xml so DirectPlay/VAAPI survives before JF is up and after a reset."""
+    dest = dest or (COMPOSE / "configs" / "jellyfin" / "config" / "encoding.xml")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    text = dest.read_text() if dest.exists() else JF_ENCODING_XML
+    if "</EncodingOptions>" not in text:
+        text = JF_ENCODING_XML
+    scalars = {
+        "HardwareAccelerationType": str(enc.get("HardwareAccelerationType") or "none"),
+        "EnableHardwareEncoding": _xml_bool(enc.get("EnableHardwareEncoding")),
+        "EncodingThreadCount": str(enc.get("EncodingThreadCount", 1)),
+        "EnableThrottling": _xml_bool(enc.get("EnableThrottling", True)),
+        "EnableSegmentDeletion": _xml_bool(enc.get("EnableSegmentDeletion", True)),
+        "SegmentKeepSeconds": str(enc.get("SegmentKeepSeconds", 60)),
+        "EncoderPreset": str(enc.get("EncoderPreset") or "veryfast"),
+        "EnableSubtitleExtraction": _xml_bool(enc.get("EnableSubtitleExtraction")),
+        "AllowHevcEncoding": _xml_bool(enc.get("AllowHevcEncoding")),
+        "EnableIntelLowPowerH264HwEncoder": _xml_bool(enc.get("EnableIntelLowPowerH264HwEncoder")),
+        "EnableIntelLowPowerHevcHwEncoder": _xml_bool(enc.get("EnableIntelLowPowerHevcHwEncoder")),
+    }
+    if enc.get("VaapiDevice"):
+        scalars["VaapiDevice"] = str(enc.get("VaapiDevice"))
+    for tag, value in scalars.items():
+        text = encoding_xml_set(text, tag, value)
+    dest.write_text(text)
+    return dest
+
+
+def persist_transcode_state(has_dri: bool) -> None:
+    try:
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "transcode.json").write_text(
+            json.dumps(
+                {
+                    "dri": bool(has_dri),
+                    "mode": "vaapi" if has_dri else "direct",
+                    "videoTranscoding": bool(has_dri),
+                    "audioTranscoding": bool(has_dri),
+                    "remux": True,
+                }
+            )
+            + "\n"
+        )
+    except OSError:
+        pass
+
+
+def seed_jellyfin_encoding_xml() -> None:
+    has_dri = has_vaapi_dri()
+    persist_jellyfin_encoding_xml(
+        jellyfin_encoding_for_box({}, low=performance_low(), has_dri=has_dri)
+    )
+    persist_transcode_state(has_dri)
+
+
+def _encoding_needs_write(cur, patched) -> bool:
+    keys = (
+        "HardwareAccelerationType",
+        "EnableHardwareEncoding",
+        "EncodingThreadCount",
+        "EnableThrottling",
+        "EnableSegmentDeletion",
+        "EnableSubtitleExtraction",
+        "EncoderPreset",
+        "AllowHevcEncoding",
+    )
+    cur = cur if isinstance(cur, dict) else {}
+    return any(cur.get(k) != patched.get(k) for k in keys)
+
+
+def apply_jellyfin_playback_policies(token: str, *, has_dri: bool) -> None:
+    hdr = jellyfin_headers(token)
+    try:
+        users = call("http://127.0.0.1:8096/Users", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance users {e}")
+        return
+    for user in users if isinstance(users, list) else []:
+        uid = user.get("Id")
+        policy = user.get("Policy")
+        if not uid or not isinstance(policy, dict):
+            continue
+        patched = jellyfin_playback_policy_for_box(policy, has_dri=has_dri)
+        if (
+            policy.get("EnableVideoPlaybackTranscoding") == patched["EnableVideoPlaybackTranscoding"]
+            and policy.get("EnableAudioPlaybackTranscoding") == patched["EnableAudioPlaybackTranscoding"]
+            and policy.get("EnablePlaybackRemuxing") is True
+            and policy.get("ForceRemoteSourceTranscoding") is not True
+        ):
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:8096/Users/{uid}/Policy",
+                method="POST",
+                body=patched,
+                headers=hdr,
+            )
+            log_wire(
+                f"performance user {user.get('Name') or uid} transcode="
+                f"{'vaapi' if has_dri else 'DirectPlay/DirectStream'}"
+            )
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance user {uid} {e}")
+
+
+def apply_jellyfin_performance(token: str | None = None) -> None:
+    low = performance_low()
+    has_dri = has_vaapi_dri()
+    persist_jellyfin_encoding_xml(jellyfin_encoding_for_box({}, low=low, has_dri=has_dri))
+    persist_transcode_state(has_dri)
+    try:
+        transcode_override(compose_up=False)
+    except Exception as e:
+        log_wire(f"performance transcode override {e}")
+    token = token or jellyfin_token()
+    if not token:
+        log_wire("performance: jellyfin auth failed — encoding.xml persisted DirectPlay/VAAPI")
+        return
+    flags = jellyfin_debrid_library_flags()
+    hdr = jellyfin_headers(token)
+    try:
+        folders = call("http://127.0.0.1:8096/Library/VirtualFolders", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance folders {e}")
+        folders = []
+    for folder in folders if isinstance(folders, list) else []:
+        fid = folder.get("ItemId") or folder.get("Guid") or folder.get("Id")
+        if not fid:
+            continue
+        opts = dict(folder.get("LibraryOptions") or {})
+        opts.update(flags)
+        try:
+            call(
+                "http://127.0.0.1:8096/Library/VirtualFolders/LibraryOptions",
+                method="POST",
+                body={"Id": fid, "LibraryOptions": opts},
+                headers=hdr,
+            )
+            log_wire(f"performance library {folder.get('Name')} low={low} debrid-safe")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance library {folder.get('Name')} {e}")
+    try:
+        enc = call("http://127.0.0.1:8096/System/Configuration/encoding", headers=hdr) or {}
+        patched = jellyfin_encoding_for_box(
+            enc if isinstance(enc, dict) else {},
+            low=low,
+            has_dri=has_dri,
+        )
+        persist_jellyfin_encoding_xml(patched)
+        if _encoding_needs_write(enc if isinstance(enc, dict) else {}, patched):
+            call(
+                "http://127.0.0.1:8096/System/Configuration/encoding",
+                method="POST",
+                body=patched,
+                headers=hdr,
+            )
+        log_wire(
+            f"performance encoding low={low} dri={has_dri} "
+            f"mode={'vaapi' if has_dri else 'DirectPlay/DirectStream'} "
+            f"accel={patched.get('HardwareAccelerationType')} threads={patched.get('EncodingThreadCount')}"
+        )
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance encoding {e}")
+    apply_jellyfin_playback_policies(token, has_dri=has_dri)
+    try:
+        tasks = call("http://127.0.0.1:8096/ScheduledTasks", headers=hdr) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+        log_wire(f"performance tasks {e}")
+        tasks = []
+    cap_scans = box_is_small() or low
+    for task in tasks if isinstance(tasks, list) else []:
+        if not (
+            jellyfin_task_hammers_debrid(task)
+            or (cap_scans and jellyfin_task_library_scan(task))
+        ):
+            continue
+        tid = task.get("Id")
+        name = str(task.get("Name") or "")
+        if not tid:
+            continue
+        try:
+            call(
+                f"http://127.0.0.1:8096/ScheduledTasks/{tid}/Triggers",
+                method="POST",
+                body=[],
+                headers=hdr,
+            )
+            log_wire(f"performance disabled task {name}")
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError) as e:
+            log_wire(f"performance task {name} {e}")
+
+
+_bootstrap_jellyfin = bootstrap_jellyfin
+
+
+def bootstrap_jellyfin() -> None:
+    seed_jellyfin_encoding_xml()
+    _bootstrap_jellyfin()
+
+
+_reset_jellyfin_config = reset_jellyfin_config
+
+
+def reset_jellyfin_config() -> None:
+    _reset_jellyfin_config()
+    seed_jellyfin_encoding_xml()
+
+
+def ota_clean_bounded_heal() -> None:
+    """API-only leftover JF rows. Not a dump walk. Not docker restart Sonarr."""
+    apply_jellyfin_performance()
+    apply_arr_debrid_media_info()
+    fuse_unstack_stale()
+    token = jellyfin_token()
+    if token:
+        try:
+            heal_season_folder_items(token)
+        except Exception as e:
+            log_wire(f"ota-clean season-folder {e}")
+        try:
+            heal_movie_dump_items(token)
+        except Exception as e:
+            log_wire(f"ota-clean movie dump {e}")
+        try:
+            want = jellyfin_want_libraries()
+            folders = jellyfin_folders(token)
+            if folders:
+                drop_extra_jellyfin_libraries(token, folders, want)
+        except Exception as e:
+            log_wire(f"ota-clean extra libraries {e}")
+    log_wire("ota-clean bounded heal")
+
+
+if __name__ == "__main__":
+    if "ota-clean" in sys.argv:
+        ota_clean_bounded_heal()
+        raise SystemExit(0)
+    if "--performance" in sys.argv or "no-ffprobe" in sys.argv:
+        apply_jellyfin_performance()
+        apply_arr_debrid_media_info()
+        fuse_unstack_stale()
+        raise SystemExit(0)
+    if "fuse" in sys.argv:
+        raise SystemExit(0 if ensure_fuse() is None else 0)
+    if "merge-movies" in sys.argv:
+        try:
+            ensure_hybrid_recycle_bin()
+        except Exception as e:
+            log_wire(f"radarr hybrid recycle {e}")
+        raise SystemExit(0 if heal_merge_movie_posters() else 1)
+    if "heal" in sys.argv:
+        raise SystemExit(0 if heal_after_import() else 1)
+    if "import" in sys.argv:
+        raise SystemExit(0 if kick_imports(catch_up="--catch-up" in sys.argv) else 1)
+    if "indexers" in sys.argv:
+        raise SystemExit(ensure_indexers_and_sync())
+    raise SystemExit(main())

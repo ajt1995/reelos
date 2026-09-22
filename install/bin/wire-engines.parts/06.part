@@ -1,0 +1,319 @@
+                clear_releases_error()
+                return
+        time.sleep(4)
+    err_now = ""
+    try:
+        err_now = (STATE / "releases-error.txt").read_text()
+    except OSError:
+        err_now = ""
+    if "530" in err_now or "resolv" in err_now.lower():
+        log_wire("STAMP FAIL keeping Prowlarr error")
+        return
+    set_releases_error(f"STAMP FAIL {name} missing after retry")
+
+
+def transcode_override() -> None:
+    dri = Path("/dev/dri")
+    override = COMPOSE / "compose.override.yml"
+    if not dri.exists():
+        return
+    override.write_text(
+        "services:\n"
+        "  jellyfin:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+        "  plex:\n"
+        "    devices:\n"
+        "      - /dev/dri:/dev/dri\n"
+    )
+    subprocess.run(
+        ["docker", "compose", "up", "-d"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+
+def mount_extra_disks() -> None:
+    try:
+        _mount_extra_disks()
+    except Exception as exc:
+        print(f"wire-engines: extra disks skipped: {exc}", file=sys.stderr)
+
+
+def _mount_extra_disks() -> None:
+    a = answers()
+    selected = a.get("selectedDisks") or []
+    format_ok = set(a.get("formatDisks") or [])
+    os_dev = None
+    try:
+        os_dev = os.path.realpath("/dev/disk/by-label/cloudimg-rootfs")
+    except OSError:
+        pass
+    for raw in selected:
+        name = raw.replace("/dev/", "").strip()
+        if not name or name.endswith("n1") and "nvme" in name and Path("/").stat().st_dev:
+            pass
+        dev = Path("/dev") / name
+        if not dev.exists():
+            continue
+        real = os.path.realpath(dev)
+        if os_dev and real == os_dev:
+            continue
+        # never format the disk that holds /
+        try:
+            root_src = subprocess.check_output(["findmnt", "-n", "-o", "SOURCE", "/"], text=True).strip()
+            if real in root_src or root_src.startswith(real):
+                continue
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+        mnt = Path("/srv/media") / name
+        mnt.mkdir(parents=True, exist_ok=True)
+        try:
+            if name in format_ok and not str(name).startswith("sdb"):
+                mounted = subprocess.run(["findmnt", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                has_fs = subprocess.run(["blkid", str(dev)], stdout=subprocess.DEVNULL).returncode == 0
+                if not mounted and not has_fs:
+                    subprocess.run(["mkfs.ext4", "-F", "-L", f"reelos-{name}", str(dev)], check=False)
+            line = f"{dev} {mnt} auto defaults,nofail 0 2"
+            fstab = Path("/etc/fstab")
+            text = fstab.read_text() if fstab.exists() else ""
+            if str(dev) not in text:
+                fstab.write_text(text.rstrip() + "\n" + line + "\n")
+            r = subprocess.run(["mount", str(mnt)], check=False, capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"wire-engines: mount {dev} skipped: {(r.stderr or r.stdout or '').strip()}", file=sys.stderr)
+        except Exception as exc:
+            print(f"wire-engines: disk {name} skipped: {exc}", file=sys.stderr)
+
+
+JF_AUTH_CLIENT = 'MediaBrowser Client="ReelOS", Device="ReelOS", DeviceId="reelos", Version="1.2.50.13"'
+
+
+def jellyfin_headers(token: str = "") -> dict:
+    """JF 10.10+ VirtualFolders 401s on X-Emby-Token alone — send MediaBrowser Token=."""
+    auth = JF_AUTH_CLIENT + (f', Token="{token}"' if token else "")
+    hdrs = {
+        "Accept": "application/json",
+        "Authorization": auth,
+        "X-Emby-Authorization": auth,
+    }
+    if token:
+        hdrs["X-Emby-Token"] = token
+    return hdrs
+
+
+def jellyfin_authenticate(user: str, password: str) -> str | None:
+    body = json.dumps({"Username": user, "Pw": password}).encode()
+    req = urllib.request.Request(
+        "http://127.0.0.1:8096/Users/AuthenticateByName",
+        data=body,
+        method="POST",
+        headers={
+            "Content-Type": "application/json",
+            **jellyfin_headers(),
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode())
+            return data.get("AccessToken")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError, ConnectionError, OSError):
+        return None
+
+
+def reveal_jellyfin_admin(token: str) -> None:
+    """JF hides the first admin from /Users/Public (IsHidden=true) → empty login list."""
+    try:
+        me = call("http://127.0.0.1:8096/Users/Me", headers=jellyfin_headers(token)) or {}
+    except NET_ERR:
+        return
+    uid = me.get("Id")
+    policy = me.get("Policy")
+    if not uid or not isinstance(policy, dict):
+        return
+    if policy.get("IsHidden") is False:
+        return
+    body = dict(policy)
+    body["IsHidden"] = False
+    try:
+        call(
+            f"http://127.0.0.1:8096/Users/{uid}/Policy",
+            method="POST",
+            body=body,
+            headers=jellyfin_headers(token),
+        )
+        log_wire("jellyfin admin visible")
+    except NET_ERR as e:
+        log_wire(f"jellyfin unhide {e}")
+
+
+def jellyfin_token() -> str | None:
+    cached = STATE / "jellyfin.token"
+    if cached.exists():
+        t = cached.read_text().strip()
+        if t:
+            try:
+                call("http://127.0.0.1:8096/Users/Me", headers=jellyfin_headers(t))
+                reveal_jellyfin_admin(t)
+                return t
+            except NET_ERR:
+                pass
+    for _ in range(8):
+        tok = jellyfin_token_once()
+        if tok:
+            try:
+                STATE.mkdir(parents=True, exist_ok=True)
+                cached.write_text(tok + "\n")
+            except OSError:
+                pass
+            reveal_jellyfin_admin(tok)
+            return tok
+        time.sleep(3)
+    return None
+
+
+def jellyfin_token_once() -> str | None:
+    a = answers()
+    user = (a.get("adminName") or "reelos").strip() or "reelos"
+    pw = (a.get("adminPassword") or "").strip()
+    names: list[str] = []
+    for n in (user, "reelos"):
+        if n and n not in names:
+            names.append(n)
+    try:
+        public = call("http://127.0.0.1:8096/Users/Public") or []
+        for row in public if isinstance(public, list) else []:
+            n = str(row.get("Name") or "").strip()
+            if n and n not in names:
+                names.append(n)
+    except NET_ERR:
+        pass
+    pws: list[str] = []
+    for p in (pw, str(a.get("password") or ""), str(a.get("boxPassword") or ""), "reelos", user):
+        if p and p not in pws:
+            pws.append(p)
+    for n in names:
+        for p in pws:
+            tok = jellyfin_authenticate(n, p)
+            if tok:
+                log_wire(f"jellyfin auth as {n}")
+                return tok
+    return None
+
+
+def log_wire(msg: str) -> None:
+    line = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} {msg}\n"
+    try:
+        (STATE / "wire.log").open("a").write(line)
+    except OSError:
+        pass
+
+
+SMALL_MEM_KB = 4_718_592  # 4.5 Gi — tiny fixture; limits come from reelos_hardware
+
+
+def _load_reelos_hardware():
+    import importlib.util
+
+    candidates = []
+    try:
+        candidates.append(Path(__file__).resolve().parent / "reelos_hardware.py")
+    except Exception:
+        pass
+    candidates.append(Path("/opt/reelos/bin/reelos_hardware.py"))
+    for cand in candidates:
+        if not cand.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("reelos_hardware", cand)
+        if spec is None or spec.loader is None:
+            continue
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    return None
+
+
+_HW = None
+
+
+def hw():
+    global _HW
+    if _HW is None:
+        _HW = _load_reelos_hardware()
+    return _HW
+
+
+def hardware_profile() -> dict:
+    mod = hw()
+    if mod is None:
+        n = mem_total_kb()
+        return {"ram_kb": n, "ram_gb": round(n / 1024 / 1024, 2), "cpus": 1, "disk_kind": "unknown", "tiny": 0 < n <= SMALL_MEM_KB, "box_is_small": 0 < n <= SMALL_MEM_KB}
+    if hasattr(mod, "current_profile"):
+        return mod.current_profile()
+    saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+    return saved if saved else mod.measure()
+
+
+def mem_total_kb(text: str | None = None) -> int:
+    mod = hw()
+    if mod is not None:
+        return int(mod.mem_total_kb(text))
+    raw = text
+    if raw is None:
+        try:
+            raw = Path("/proc/meminfo").read_text()
+        except OSError:
+            return 0
+    for line in raw.splitlines():
+        if line.startswith("MemTotal:"):
+            try:
+                return int(line.split()[1])
+            except (ValueError, IndexError):
+                return 0
+    return 0
+
+
+def loadavg_1(text: str | None = None) -> float:
+    raw = text
+    if raw is None:
+        try:
+            raw = Path("/proc/loadavg").read_text()
+        except OSError:
+            return 0.0
+    try:
+        return float(raw.split()[0])
+    except (ValueError, IndexError):
+        return 0.0
+
+
+def box_is_small(mem_kb: int | None = None) -> bool:
+    """Tiny (≤4.5Gi) fixture. Saved hardware profile wins; MemTotal is fallback."""
+    if mem_kb is not None:
+        return 0 < mem_kb <= SMALL_MEM_KB
+    mod = hw()
+    if mod is not None:
+        if hasattr(mod, "current_profile"):
+            return bool(mod.current_profile().get("tiny"))
+        saved = mod.load_saved() if hasattr(mod, "load_saved") else None
+        if saved:
+            return bool(saved.get("tiny"))
+        return bool(mod.measure().get("tiny"))
+    n = mem_total_kb()
+    return 0 < n <= SMALL_MEM_KB
+
+
+def box_load_high(load1: float | None = None) -> bool:
+    n = loadavg_1() if load1 is None else load1
+    return n >= 2.0
+
+
+def performance_low() -> bool:
+    if box_is_small():
+        return True
+    p = STATE / "performance.json"
+    if not p.exists():
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)

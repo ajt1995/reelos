@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "presets": [
+    {
+      "id": "my-authorized-catalog",
+      "displayName": "My authorized catalog",
+      "name": "ReelOS-owner-catalog",
+      "role": "both",
+      "type": "torznab",
+      "mirrors": ["https://catalog.example.test/api"]
+    }
+  ]
+}

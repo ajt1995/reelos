@@ -1,0 +1,12 @@
+[Unit]
+Description=ReelOS expand persistent USB partition and set volatile logs
+Before=docker.service reelos.service
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/reelos/bin/reelos-expand-usb.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=basic.target

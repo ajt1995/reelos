@@ -1,0 +1,1 @@
+import{o as e}from"./useStore-CP8wJgJA.js";import{t}from"./reelos-world-C0GtE05K.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as component};

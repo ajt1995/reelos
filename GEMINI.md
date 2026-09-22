@@ -1,0 +1,18 @@
+# ReelOS tool adapter
+
+This file is deliberately small. It exists only for tools that automatically
+read `GEMINI.md`.
+
+1. Read [`AGENTS.md`](AGENTS.md) completely.
+2. Run `npm run context:brief` and inspect
+   [`docs/agent-context/workstreams.json`](docs/agent-context/workstreams.json).
+3. Treat current code/tests, `docs/feature-register.json`, and
+   `docs/agent-context/active-decisions.json` as authoritative, in that order.
+4. Work only on the assigned branch/workstream. Do not edit `main` directly or
+   overwrite another tool's uncommitted changes.
+5. Return a commit plus the smallest relevant validation evidence. Never claim
+   preview, simulated, skipped, or environment-blocked behavior as verified.
+
+ReelOS is one end-to-end local neural system. Deterministic policy remains
+authoritative for access, credentials, PINs, destructive actions, updates, and
+resource safety. Jellyfin is only an optional client-protocol shim.

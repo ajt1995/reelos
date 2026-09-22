@@ -1,0 +1,67 @@
+{
+  "$schema": "https://reelos.local/schemas/vision-reconciliation/v1",
+  "purpose": "Maps recovered vision sources to current scope. Historical text is input for reconciliation, not live authority.",
+  "acceptanceLedger": {
+    "source": "docs/feature-acceptance.json",
+    "disposition": "active",
+    "rationale": "Maps all active feature groups and individual interface requirements to explicit, currently missing acceptance evidence without claiming completion."
+  },
+  "entries": [
+    {
+      "id": "personal-cinema-world",
+      "source": "docs/MASTER-VISION-LEDGER.md",
+      "disposition": "active",
+      "targets": ["profiles-and-taste", "home", "discover", "natural-language-search"],
+      "rationale": "The personal, art-led world is the active consumer direction."
+    },
+    {
+      "id": "family-and-kids",
+      "source": "docs/MASTER-VISION-LEDGER.md",
+      "disposition": "active",
+      "targets": ["family", "kids-present", "companion-and-story"],
+      "rationale": "Family administration, presence, and child boundaries remain household-core work."
+    },
+    {
+      "id": "media-and-books",
+      "source": "STATUS.md",
+      "disposition": "replaced",
+      "targets": ["title-and-player", "library", "books", "sources-and-providers"],
+      "rationale": "Older provider and Books assumptions are superseded by the current source policy and feature register."
+    },
+    {
+      "id": "devices-and-appliance",
+      "source": "GROUND-TRUTH.md",
+      "disposition": "active",
+      "targets": ["devices-and-installation", "updates-and-recovery", "resource-orchestration"],
+      "rationale": "Appliance capability is active only when it is measured and backed by release evidence."
+    },
+    {
+      "id": "private-intelligence",
+      "source": "docs/WHITE-PAPER-v1.6.0.md",
+      "disposition": "replaced",
+      "targets": ["private-intelligence", "resource-orchestration"],
+      "rationale": "Local intelligence is optional, measured, and bounded; historical performance claims do not establish release truth."
+    },
+    {
+      "id": "legacy-route-surface",
+      "source": "PROJECT.md",
+      "disposition": "private-support",
+      "targets": ["settings-and-help", "devices-and-installation"],
+      "rationale": "Recovered technical screens remain behind owner/support access until replaced or retired with evidence."
+    },
+    {
+      "id": "live-rights-dependent-content",
+      "source": "docs/FUTURE_HORIZONS_TICKETS.md",
+      "disposition": "parked",
+      "targets": ["live-tv-and-sports"],
+      "rationale": "Promotion requires a separately approved rights, service, and safety plan."
+    },
+    {
+      "id": "private-fleet-control",
+      "source": "docs/FUTURE_HORIZONS_TICKETS.md",
+      "disposition": "parked",
+      "targets": ["private-fleet-administration"],
+      "rationale": "Promotion requires authenticated enrollment, consent, signing, and threat review."
+    }
+  ]
+}

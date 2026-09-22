@@ -1,0 +1,10 @@
+[Unit]
+Description=ReelOS native appliance health check
+After=network-online.target reelos.service
+ConditionPathExists=/opt/reelos/bin/reelos-selfheal.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=45
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-selfheal.sh

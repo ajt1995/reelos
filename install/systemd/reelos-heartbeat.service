@@ -1,0 +1,12 @@
+[Unit]
+Description=ReelOS anonymous fleet heartbeat
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/reelos/bin/reelos-heartbeat.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30
+KillMode=process
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-heartbeat.sh

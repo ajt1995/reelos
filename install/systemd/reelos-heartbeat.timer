@@ -1,0 +1,12 @@
+[Unit]
+Description=ReelOS anonymous fleet heartbeat timer
+After=network-online.target
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=6h
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

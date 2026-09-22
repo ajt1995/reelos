@@ -1,0 +1,25 @@
+[Unit]
+Description=ReelOS shell
+After=network-online.target
+Wants=network-online.target
+# Do not wait on firstboot. A looping firstboot (ISO stopped short) used to
+# block this unit forever, so the phone never saw the wizard.
+RequiresMountsFor=/opt/reelos/app
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/reelos/app
+Environment=REELOS_APPLIANCE=1
+Environment=REELOS_ROOT=/opt/reelos
+Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStartPre=-/usr/bin/python3 /opt/reelos/bin/reelos_hardware.py --ensure
+# One Node on :8080. Kill leftover vite/nitro from a previous start.
+ExecStartPre=/bin/sh -c 'fuser -k 8080/tcp >/dev/null 2>&1 || true'
+ExecStart=/usr/bin/env npm run start:box
+Restart=always
+RestartSec=2
+User=root
+
+[Install]
+WantedBy=multi-user.target

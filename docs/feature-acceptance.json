@@ -1,0 +1,1448 @@
+{
+  "$schema": "https://reelos.local/schemas/feature-acceptance/v1",
+  "schema": "reelos-feature-acceptance/v1",
+  "purpose": "Release evidence ledger. Structural inventory and implementation references do not constitute accepted behavior. Every active group and interface requirement remains blocked until current automated and observed evidence is recorded.",
+  "groups": [
+    {
+      "id": "group-onboarding",
+      "featureId": "onboarding",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-profiles-and-taste",
+      "featureId": "profiles-and-taste",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-profiles-and-taste-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Personal profile destination keeps taste separate from Family administration",
+            "Endless taste field replenishes and updates the Cozy collection"
+          ]
+        },
+        {
+          "id": "group-profiles-and-taste-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Personal profile destination keeps taste separate from Family administration",
+            "Endless taste field replenishes and updates the Cozy collection"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-home",
+      "featureId": "home",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-home-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Natural-language search sits directly beneath the hero",
+            "No-idea helper makes a decision and asks for feedback"
+          ]
+        },
+        {
+          "id": "group-home-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Home leads with artwork and a personal hero",
+            "No-idea helper makes a decision and asks for feedback"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-discover",
+      "featureId": "discover",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-discover-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover is art-led, not an introductory control stack",
+            "Discover keeps Search and Refine compact and functional"
+          ]
+        },
+        {
+          "id": "group-discover-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover person invitations open an actual destination",
+            "Discover has no horizontal overflow"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-natural-language-search",
+      "featureId": "natural-language-search",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-title-and-player",
+      "featureId": "title-and-player",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-title-and-player-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "registers local start, progress, and stop without an external media service",
+            "subtitles select exact metadata identity despite duplicate labels/languages and list order",
+            "sleep timer pauses the actual video once at its deadline"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-library",
+      "featureId": "library",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-books",
+      "featureId": "books",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-family",
+      "featureId": "family",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": [
+        {
+          "id": "group-family-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "requires a child PIN, preserves it on empty updates, and bounds playback policy",
+            "merges participating child policy by the strictest safe preference",
+            "family treatment accepts only verified exact-edition, exact-timebase manifests",
+            "blocks child escape through changes, deletion, stale cookies, and cookie clearing",
+            "requires current child exit and target adult entry PINs",
+            "fails closed for child playback until this exact local edition has a verified treatment"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-kids-present",
+      "featureId": "kids-present",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-kids-present-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "resolves child policy from each device instead of the shared active profile or request body",
+            "uses presence for the authenticated device session and rechecks policy on progress"
+          ]
+        },
+        {
+          "id": "group-kids-present-observed-run-family",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Kids Present round-trips and Home filters out adult-only catalog titles"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-companion-and-story",
+      "featureId": "companion-and-story",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-companion-and-story-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        },
+        {
+          "id": "group-companion-and-story-observed-run-family",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-watch-together",
+      "featureId": "watch-together",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-watch-together-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Watch Together host, join, participant confirmation, and stable reconnect render from live service state"
+          ]
+        },
+        {
+          "id": "group-watch-together-observed-run-family",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Watch Together host, join, participant confirmation, and stable reconnect render from live service state"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-devices-and-installation",
+      "featureId": "devices-and-installation",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-devices-and-installation-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "native clients are paired-home clients, never direct provider clients",
+            "catalog and streams cross an authenticated same-origin boundary",
+            "credentials are excluded from Android backup and pairing links",
+            "paired Android clients receive truthful hashed update metadata and exact bytes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-ambiance",
+      "featureId": "ambiance",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-settings-and-help",
+      "featureId": "settings-and-help",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-sources-and-providers",
+      "featureId": "sources-and-providers",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-updates-and-recovery",
+      "featureId": "updates-and-recovery",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "group-updates-and-recovery-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "APK updates require origin, digest, and installed signer continuity",
+            "paired Android clients receive truthful hashed update metadata and exact bytes",
+            "Android update routes fail closed for absent, stale, and traversal-shaped artifacts",
+            "verified release is staged and becomes active only after version-matched health",
+            "failed health gate restores and verifies the previous release",
+            "artifact tampering is rejected before unpack or activation"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "group-resource-orchestration",
+      "featureId": "resource-orchestration",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "group-private-intelligence",
+      "featureId": "private-intelligence",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": []
+    }
+  ],
+  "requirements": [
+    {
+      "id": "ui-active-identity",
+      "featureId": "profiles-and-taste",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 9,
+      "label": "Active identity",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-active-identity-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Profile switcher keeps personal and Family destinations separate"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-personal-destination",
+      "featureId": "profiles-and-taste",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 10,
+      "label": "Personal destination",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-personal-destination-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Personal profile destination keeps taste separate from Family administration"
+          ]
+        },
+        {
+          "id": "ui-personal-destination-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Personal profile destination keeps taste separate from Family administration"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-setup-identity",
+      "featureId": "onboarding",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 11,
+      "label": "Setup identity",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-setup-color",
+      "featureId": "onboarding",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 12,
+      "label": "Setup color",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-setup-guidance",
+      "featureId": "onboarding",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 13,
+      "label": "Setup guidance",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-setup-taste",
+      "featureId": "onboarding",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 14,
+      "label": "Setup taste",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-setup-home",
+      "featureId": "onboarding",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 15,
+      "label": "Setup home",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-source-choice",
+      "featureId": "sources-and-providers",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 16,
+      "label": "Source choice",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-deployment-choice",
+      "featureId": "devices-and-installation",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 17,
+      "label": "Deployment choice",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-home-hero",
+      "featureId": "home",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 18,
+      "label": "Home hero",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-home-search",
+      "featureId": "home",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 19,
+      "label": "Home search",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-home-search-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Home search parses a precise natural-language request"
+          ]
+        },
+        {
+          "id": "ui-home-search-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Natural-language search sits directly beneath the hero"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-home-shelves",
+      "featureId": "home",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 20,
+      "label": "Home shelves",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-home-shelves-automated-test-settingsBrowser",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/setup-settings-browser/result.json",
+          "capturedAt": "2026-09-21T12:11:48.747Z",
+          "expiresAt": "2026-09-22T12:11:48.747Z",
+          "artifactSha256": "f8764c7a837bae1fffc68c6c86b1d157af61878c3afa83e25b0f43421ade3213",
+          "directlySupports": [
+            "Home curated shelves expose real title cards"
+          ]
+        },
+        {
+          "id": "ui-home-shelves-observed-run-settingsBrowser",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/setup-settings-browser/result.json",
+          "capturedAt": "2026-09-21T12:11:48.747Z",
+          "expiresAt": "2026-09-22T12:11:48.747Z",
+          "artifactSha256": "f8764c7a837bae1fffc68c6c86b1d157af61878c3afa83e25b0f43421ade3213",
+          "directlySupports": [
+            "Home curated shelves expose real title cards"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-no-idea",
+      "featureId": "home",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 21,
+      "label": "No idea",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-no-idea-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "No-idea helper makes a decision and asks for feedback"
+          ]
+        },
+        {
+          "id": "ui-no-idea-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "No-idea helper makes a decision and asks for feedback"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-taste-calibration",
+      "featureId": "profiles-and-taste",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 22,
+      "label": "Taste calibration",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-taste-calibration-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Endless taste field replenishes and updates the Cozy collection"
+          ]
+        },
+        {
+          "id": "ui-taste-calibration-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Endless taste field replenishes and updates the Cozy collection"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-taste-explanation",
+      "featureId": "profiles-and-taste",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 23,
+      "label": "Taste explanation",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-tonight-context",
+      "featureId": "discover",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 24,
+      "label": "Tonight context",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-tonight-context-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover keeps Search and Refine compact and functional"
+          ]
+        },
+        {
+          "id": "ui-tonight-context-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover keeps Search and Refine compact and functional"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-discover-invitation",
+      "featureId": "discover",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 25,
+      "label": "Discover invitation",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-illustrated-paths",
+      "featureId": "discover",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 26,
+      "label": "Illustrated paths",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-curated-shelves",
+      "featureId": "discover",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 27,
+      "label": "Curated shelves",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-deeper-invitation",
+      "featureId": "discover",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 28,
+      "label": "Deeper invitation",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-deeper-invitation-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover person invitations open an actual destination"
+          ]
+        },
+        {
+          "id": "ui-deeper-invitation-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Discover person invitations open an actual destination"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-search-results",
+      "featureId": "natural-language-search",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 29,
+      "label": "Search results",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-search-results-automated-test-e2e",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Home search parses a precise natural-language request"
+          ]
+        },
+        {
+          "id": "ui-search-results-observed-run-e2e",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/e2e-matrix/result.json",
+          "capturedAt": "2026-09-21T12:11:18.582Z",
+          "expiresAt": "2026-09-22T12:11:18.582Z",
+          "artifactSha256": "bc81877f3f145955014045e0fb3e2f849912d2d8f2d33f8a99eb1e9f70f0e4cb",
+          "directlySupports": [
+            "Home search parses a precise natural-language request"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-title-details",
+      "featureId": "title-and-player",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 30,
+      "label": "Title details",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-prepare-play",
+      "featureId": "title-and-player",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 31,
+      "label": "Prepare/play",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-player",
+      "featureId": "title-and-player",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 32,
+      "label": "Player",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-player-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "registers local start, progress, and stop without an external media service",
+            "subtitles select exact metadata identity despite duplicate labels/languages and list order",
+            "sleep timer pauses the actual video once at its deadline"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-library-continue",
+      "featureId": "library",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 33,
+      "label": "Library continue",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-library-collections",
+      "featureId": "library",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 34,
+      "label": "Library collections",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-library-activity",
+      "featureId": "library",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 35,
+      "label": "Library activity",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-travel-downloads",
+      "featureId": "library",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 36,
+      "label": "Travel downloads",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-books-shelf",
+      "featureId": "books",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 37,
+      "label": "Books shelf",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-reader",
+      "featureId": "books",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 38,
+      "label": "Reader",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-family-overview",
+      "featureId": "family",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 39,
+      "label": "Family overview",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": [
+        {
+          "id": "ui-family-overview-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "service-backed Family overview renders adult and protected child truth"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-adult-profile-editing",
+      "featureId": "family",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 40,
+      "label": "Adult profile editing",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": [
+        {
+          "id": "ui-adult-profile-editing-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "adult edit persists and optional PIN is confirmed by the service"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-child-profile-editing",
+      "featureId": "family",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 41,
+      "label": "Child profile editing",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": [
+        {
+          "id": "ui-child-profile-editing-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "child boundaries edit persists without weakening required exit PIN"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-kids-present",
+      "featureId": "kids-present",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 42,
+      "label": "Kids present",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-kids-present-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "resolves child policy from each device instead of the shared active profile or request body",
+            "uses presence for the authenticated device session and rechecks policy on progress"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-family-filtering",
+      "featureId": "family",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 43,
+      "label": "Family filtering",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-family-filtering-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "merges participating child policy by the strictest safe preference",
+            "fails closed for unrated or over-boundary titles and honors unanimous exceptions",
+            "fails closed for child playback until this exact local edition has a verified treatment"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-companion-strip",
+      "featureId": "companion-and-story",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 44,
+      "label": "Companion strip",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-companion-strip-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        },
+        {
+          "id": "ui-companion-strip-observed-run-family",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-companion-remote",
+      "featureId": "companion-and-story",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 45,
+      "label": "Companion remote",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-companion-remote-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-story-companion",
+      "featureId": "companion-and-story",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 46,
+      "label": "Story companion",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-story-companion-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        },
+        {
+          "id": "ui-story-companion-observed-run-family",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Companion strip, remote, and story states fail closed when playback evidence is absent"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-watch-together",
+      "featureId": "watch-together",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 47,
+      "label": "Watch together",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-watch-together-automated-test-family",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/family-social/result.json",
+          "capturedAt": "2026-09-21T12:07:59.393Z",
+          "expiresAt": "2026-09-22T12:07:59.393Z",
+          "artifactSha256": "5f8e31b8aa95027f635255d44bf8ce493d7d076964d7c46f6b2e8e0af098cde3",
+          "directlySupports": [
+            "Watch Together host, join, participant confirmation, and stable reconnect render from live service state"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-devices",
+      "featureId": "devices-and-installation",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 48,
+      "label": "Devices",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-devices-automated-test-contracts",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/acceptance-contracts/result.json",
+          "capturedAt": "2026-09-21T12:13:48.992Z",
+          "expiresAt": "2026-09-22T12:13:48.992Z",
+          "artifactSha256": "c2959d67363eaa5a8a8d34af86fb1d6fc77f41248831b2f53313bcc3a4920f7e",
+          "directlySupports": [
+            "native clients are paired-home clients, never direct provider clients",
+            "catalog and streams cross an authenticated same-origin boundary",
+            "credentials are excluded from Android backup and pairing links",
+            "paired Android clients receive truthful hashed update metadata and exact bytes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ui-torbox-management",
+      "featureId": "sources-and-providers",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 49,
+      "label": "TorBox management",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "security-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-ambiance",
+      "featureId": "ambiance",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 50,
+      "label": "Ambiance",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-acoustic-calibration",
+      "featureId": "ambiance",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 51,
+      "label": "Acoustic calibration",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "hardware-run"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-settings",
+      "featureId": "settings-and-help",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 52,
+      "label": "Settings",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-motion-preference",
+      "featureId": "settings-and-help",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 53,
+      "label": "Motion preference",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-density-preference",
+      "featureId": "settings-and-help",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 54,
+      "label": "Density preference",
+      "status": "missing",
+      "requiredEvidence": [
+        "automated-test",
+        "visual-review"
+      ],
+      "evidence": []
+    },
+    {
+      "id": "ui-help-status",
+      "featureId": "settings-and-help",
+      "source": "docs/INTERFACE-FEATURE-REGISTER.md",
+      "sourceLine": 55,
+      "label": "Help/status",
+      "status": "verified",
+      "requiredEvidence": [
+        "automated-test",
+        "observed-run"
+      ],
+      "evidence": [
+        {
+          "id": "ui-help-status-automated-test-settingsBrowser",
+          "type": "automated-test",
+          "result": "passed",
+          "location": ".reelos-audit/setup-settings-browser/result.json",
+          "capturedAt": "2026-09-21T12:11:48.747Z",
+          "expiresAt": "2026-09-22T12:11:48.747Z",
+          "artifactSha256": "f8764c7a837bae1fffc68c6c86b1d157af61878c3afa83e25b0f43421ade3213",
+          "directlySupports": [
+            "Help status exposes honest update recovery and capability state"
+          ]
+        },
+        {
+          "id": "ui-help-status-observed-run-settingsBrowser",
+          "type": "observed-run",
+          "result": "passed",
+          "location": ".reelos-audit/setup-settings-browser/result.json",
+          "capturedAt": "2026-09-21T12:11:48.747Z",
+          "expiresAt": "2026-09-22T12:11:48.747Z",
+          "artifactSha256": "f8764c7a837bae1fffc68c6c86b1d157af61878c3afa83e25b0f43421ade3213",
+          "directlySupports": [
+            "Help status exposes honest update recovery and capability state"
+          ]
+        }
+      ]
+    }
+  ],
+  "evidenceRefreshedAt": "2026-09-21T12:13:48.992Z"
+}

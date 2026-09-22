@@ -1,0 +1,113 @@
+name: Build ReelOS Android APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "clients/android/**"
+      - ".github/workflows/android-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
+
+jobs:
+  build-apk:
+    name: Build & Publish APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('clients/android/**/*.gradle.kts', 'clients/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Make gradlew executable
+        working-directory: clients/android
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        working-directory: clients/android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Sign APK
+        if: ${{ env.KEYSTORE_BASE64 != '' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > /tmp/reelos-release.jks
+          $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+            --ks /tmp/reelos-release.jks \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass "pass:$STORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out clients/android/app/build/outputs/apk/release/reelos-android-universal.apk \
+            clients/android/app/build/outputs/apk/release/app-release-unsigned.apk
+
+      - name: Rename APK for distribution
+        run: |
+          APK_DIR="clients/android/app/build/outputs/apk/release"
+          mkdir -p public/downloads public/clients
+          if [ -f "$APK_DIR/reelos-android-universal.apk" ]; then
+            echo "Signed APK found."
+          elif [ -f "$APK_DIR/app-release.apk" ]; then
+            cp "$APK_DIR/app-release.apk" "$APK_DIR/reelos-android-universal.apk"
+            echo "Using signed release APK."
+          elif [ -f "$APK_DIR/app-release-unsigned.apk" ]; then
+            cp "$APK_DIR/app-release-unsigned.apk" "$APK_DIR/reelos-android-universal.apk"
+            echo "Using unsigned APK (add KEYSTORE_BASE64 secret to sign)."
+          else
+            echo "No APK produced." >&2
+            ls -la "$APK_DIR" || true
+            exit 1
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: reelos-android-universal
+          path: clients/android/app/build/outputs/apk/release/reelos-android-universal.apk
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Commit APK to public/downloads
+        run: |
+          APK_SRC="clients/android/app/build/outputs/apk/release/reelos-android-universal.apk"
+          if [ -f "$APK_SRC" ]; then
+            mkdir -p public/downloads public/clients
+            cp "$APK_SRC" public/downloads/reelos-app.apk
+            cp "$APK_SRC" public/clients/reelos-android-universal.apk
+
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f public/downloads/reelos-app.apk public/clients/reelos-android-universal.apk
+
+            if git diff --cached --quiet; then
+              echo "APK unchanged, no commit needed."
+            else
+              git commit -m "chore(android): update APK from CI build [skip ci]"
+              git push
+            fi
+          fi

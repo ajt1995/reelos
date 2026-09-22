@@ -1,0 +1,16 @@
+[Unit]
+Description=ReelOS finish install if the ISO stopped short
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/reelos/install.sh
+ConditionPathExists=!/var/lib/reelos/stack-installed
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /opt/reelos/install.sh
+TimeoutStartSec=0
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Optional touchscreen for TV & Box compatibility -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
+    <application
+        android:name=".ReelOsApplication"
+        android:allowBackup="false"
+        android:icon="@drawable/reelos_launcher"
+        android:banner="@drawable/tv_banner"
+        android:label="@string/app_name"
+        android:roundIcon="@drawable/reelos_launcher"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ReelOS"
+        android:networkSecurityConfig="@xml/network_security_config">
+
+        <!-- Mobile & Foldable Entry Point -->
+        <activity
+            android:name=".ui.mobile.MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Android TV / Google TV / Fire TV Entry Point -->
+        <activity
+            android:name=".ui.tv.TvMainActivity"
+            android:exported="true"
+            android:banner="@drawable/tv_banner"
+            android:theme="@style/Theme.ReelOS.TV"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Deep-Link Intent Handler (reelos://auth?resident=...) -->
+        <activity
+            android:name=".ui.onboarding.DeepLinkActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="reelos" android:host="pair" />
+            </intent-filter>
+        </activity>
+
+        <!-- TV Quick Connect PIN Screen -->
+        <activity
+            android:name=".ui.tv.TvPairingActivity"
+            android:theme="@style/Theme.ReelOS.TV"
+            android:exported="false" />
+
+        <!-- 4K DirectPlay Player Activities -->
+        <activity
+            android:name=".ui.tv.TvPlayerActivity"
+            android:theme="@style/Theme.ReelOS.TV"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.mobile.MobilePlayerActivity"
+            android:supportsPictureInPicture="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:exported="false" />
+
+        <!-- FileProvider for OTA APK In-App Self Updates -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+
+    </application>
+
+</manifest>

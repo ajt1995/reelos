@@ -1,0 +1,19 @@
+[Unit]
+Description=ReelOS library catch-up (dumps/import after Apply stamp)
+After=network-online.target reelos.service
+ConditionPathExists=/opt/reelos/bin/reelos-library-catchup.sh
+
+[Service]
+Type=oneshot
+# Must outlive reelos-selfheal TimeoutStartSec=90 / KillMode. 600s systemd-run
+# was not enough for a FUSE list of dump folders. Infinity + KillMode=process.
+TimeoutStartSec=infinity
+KillMode=process
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# 768M is the 4GB/tiny default. reelos_hardware.py writes a drop-in
+# (MemoryMax 2G/8G on 16–32GB). Do not hardcode laptop RAM here.
+MemoryMax=768M
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-library-catchup.sh

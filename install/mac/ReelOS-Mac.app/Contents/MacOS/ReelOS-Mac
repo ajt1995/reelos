@@ -1,0 +1,68 @@
+#!/bin/bash
+# ReelOS-Mac: Native Apple Silicon (Darwin arm64) Zero-VM Runner
+set -euo pipefail
+
+# 1. Hardware & Architecture Verification (Zero-VM Invariant)
+ARCH=$(uname -m)
+if [ "$ARCH" != "arm64" ]; then
+  echo "[ReelOS-Mac] FATAL: ReelOS for Mac requires native Apple Silicon (arm64). Detected: $ARCH"
+  echo "[ReelOS-Mac] x86_64 emulation under Rosetta and virtual machines are strictly rejected."
+  exit 1
+fi
+
+# Detect whether running inside a hypervisor / VM
+SYSCTL_VM=$(sysctl -n kern.hv_vmm_present 2>/dev/null || echo "0")
+if [ "$SYSCTL_VM" = "1" ]; then
+  echo "[ReelOS-Mac] FATAL: virtual-machine execution is not supported by this package."
+  exit 1
+fi
+
+# 2. Hardware Acceleration Configuration (VideoToolbox & Metal)
+export REELOS_HWACCEL="videotoolbox"
+export REELOS_GFX_BACKEND="metal"
+export FFMPEG_HWACCEL_FLAGS="-hwaccel videotoolbox -hwaccel_output_format videotoolbox_vld"
+export ELECTRON_EXTRA_FLAGS="--use-metal --enable-features=Metal,VaapiVideoDecoder"
+
+# 3. Resolve the runtime bundled by macOS-zero-vm-bundle.sh. Do not guess a
+# neighbouring clone: a release app must run the exact sources it contains.
+CONTENTS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+RESOURCES_DIR="$CONTENTS_DIR/Resources"
+ROOT_DIR="$RESOURCES_DIR/reelos-runtime"
+
+if [ ! -f "$ROOT_DIR/scripts/reelos-box.mjs" ] || [ ! -f "$ROOT_DIR/package.json" ]; then
+  echo "[ReelOS-Mac] FATAL: bundled runtime is missing or incomplete."
+  exit 1
+fi
+
+export REELOS_ROOT="$ROOT_DIR"
+export REELOS_STATE="${REELOS_STATE:-$HOME/Library/Application Support/ReelOS}"
+mkdir -p "$REELOS_STATE"
+
+echo "[ReelOS-Mac] Starting the bundled Apple Silicon runtime on port 8080..."
+echo "[ReelOS-Mac] VideoToolbox and Metal preferences requested; runtime verification is still required."
+
+if command -v node >/dev/null 2>&1; then
+  NODE_BIN="node"
+elif [ -f "/opt/homebrew/bin/node" ]; then
+  NODE_BIN="/opt/homebrew/bin/node"
+else
+  echo "[ReelOS-Mac] FATAL: Node.js was not found. Install a supported Node runtime, then retry."
+  exit 1
+fi
+
+# 4. Launch AppKit Menu Bar Controller & NSWorkspace Pro-App Yielding Sentinel
+if [ -f "$RESOURCES_DIR/ReelOSMenuBarController" ]; then
+  "$RESOURCES_DIR/ReelOSMenuBarController" &
+  CONTROLLER_PID=$!
+elif command -v swift >/dev/null 2>&1 && [ -f "$RESOURCES_DIR/ReelOSMenuBarController.swift" ]; then
+  swift "$RESOURCES_DIR/ReelOSMenuBarController.swift" &
+  CONTROLLER_PID=$!
+else
+  # Node.js AppKit bridge runner
+  node "$RESOURCES_DIR/reelos-mac-controller.mjs" &
+  CONTROLLER_PID=$!
+fi
+
+# 5. Launch Node.js ReelOS Core Engine
+cd "$ROOT_DIR"
+exec "$NODE_BIN" scripts/with-app-env.mjs scripts/reelos-box.mjs

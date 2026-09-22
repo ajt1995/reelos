@@ -1,0 +1,8 @@
+# ReelOS Agent Quarantine
+# AI agents and semantic indexing tools MUST ignore these paths to prevent resurrecting obsolete specs:
+docs/archive/
+docs/archive/historical/
+docs/archive/legacy/
+scratch/
+testbench/
+.soak/

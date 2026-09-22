@@ -1,0 +1,7 @@
+services:
+  jellyfin:
+    mem_limit: 5G
+  sonarr:
+    mem_limit: 2G
+  radarr:
+    mem_limit: 1G

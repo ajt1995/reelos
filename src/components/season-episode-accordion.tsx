@@ -1,0 +1,288 @@
+import { useEffect, useState } from "react";
+import { ChevronDown, Play, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  EPISODE_STATUS_LABEL,
+  IMPORTING_SEASON_COPY,
+  UNRELEASED_SEASON_COPY,
+  episodeRequestAction,
+  seasonChipLabel,
+  seasonShowsRequestButton,
+  type EpisodeStatus,
+  type SeasonEpisodeRow,
+} from "@/lib/episode-status";
+import { cn } from "@/lib/utils";
+
+const STATUS_CLASS: Record<EpisodeStatus, string> = {
+  "in-library": "bg-success/15 text-success",
+  importing: "bg-gold/15 text-gold",
+  downloading: "bg-gold/15 text-gold",
+  requested: "bg-card-2 text-muted",
+  missing: "bg-danger/10 text-danger",
+};
+
+export function SeasonEpisodeAccordion({
+  seasonNumbers,
+  selectedSeason,
+  onSelectSeason,
+  diskSeasons,
+  importingSeasons,
+  unreleasedSeasons,
+  titleId,
+  seasonsLoading,
+  seasonErr,
+  onRetrySeasons,
+  blocked,
+  removedHere,
+  onRequestSeason,
+  onRequestEpisode,
+  onPlayEpisode,
+}: {
+  seasonNumbers: number[];
+  selectedSeason: number;
+  onSelectSeason: (n: number) => void;
+  diskSeasons: number[];
+  importingSeasons?: number[];
+  unreleasedSeasons?: number[];
+  titleId: string;
+  seasonsLoading?: boolean;
+  seasonErr?: string | null;
+  onRetrySeasons?: () => void;
+  blocked?: boolean;
+  removedHere?: boolean;
+  onRequestSeason: (season: number) => void;
+  onRequestEpisode: (season: number, episode: number) => void;
+  onPlayEpisode?: (ep: SeasonEpisodeRow, seasonNumber: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [episodes, setEpisodes] = useState<SeasonEpisodeRow[]>([]);
+  const [unreleasedOpen, setUnreleasedOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let stop = false;
+    const ac = new AbortController();
+    setEpisodes([]);
+    setLoading(true);
+    setErr(null);
+    setUnreleasedOpen(false);
+    const q = new URLSearchParams({ id: titleId, season: String(selectedSeason) });
+    void fetch(`/api/episodes?${q}`, { cache: "no-store", signal: ac.signal })
+      .then((r) => r.json() as Promise<{ episodes?: SeasonEpisodeRow[]; error?: string; unreleased?: boolean }>)
+      .then((j) => {
+        if (stop) return;
+        setUnreleasedOpen(Boolean(j.unreleased));
+        setEpisodes(Array.isArray(j.episodes) ? j.episodes : []);
+        setErr(j.error || null);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (stop) return;
+        setErr(String(e?.message || e));
+        setLoading(false);
+      });
+    return () => {
+      stop = true;
+      ac.abort();
+    };
+  }, [open, titleId, selectedSeason]);
+
+  useEffect(() => {
+    if (!open || loading) return;
+    const node = document.getElementById(`season-${selectedSeason}-episodes`);
+    if (!node) return;
+    const id = window.requestAnimationFrame(() => {
+      node.scrollIntoView({ block: "end", behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(id);
+  }, [open, selectedSeason, loading, episodes.length]);
+
+  const tapSeason = (n: number) => {
+    if (n === selectedSeason && open) {
+      setOpen(false);
+      return;
+    }
+    setEpisodes([]);
+    setErr(null);
+    setUnreleasedOpen(false);
+    onSelectSeason(n);
+    setOpen(true);
+  };
+
+  const thisUnreleased = Boolean(unreleasedSeasons?.includes(selectedSeason) || unreleasedOpen);
+  const thisOnDisk = diskSeasons.includes(selectedSeason) && !removedHere && !thisUnreleased;
+  const thisImporting =
+    Boolean(importingSeasons?.includes(selectedSeason)) && !thisOnDisk && !thisUnreleased;
+  const showSeasonRequest = seasonShowsRequestButton({
+    blocked,
+    onDisk: thisOnDisk,
+    importing: thisImporting,
+    unreleased: thisUnreleased,
+    removedHere,
+    open,
+    loading,
+  });
+
+  if (seasonNumbers.length === 0 && seasonsLoading) {
+    return <p className="text-sm text-muted">Loading season guide…</p>;
+  }
+  if (seasonNumbers.length === 0) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-danger">{seasonErr || "Could not load season details." /* Could not load seasons from Seerr */}</p>
+        {onRetrySeasons ? (
+          <Button variant="ghost" size="lg" onClick={onRetrySeasons}>
+            Retry
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="title-season-accordion relative z-20 w-full min-w-0">
+      <div className="title-season-chips no-scrollbar">
+        {seasonNumbers.map((n) => {
+          const selected = selectedSeason === n;
+          const expanded = selected && open;
+          const unreleased = Boolean(unreleasedSeasons?.includes(n));
+          const onDisk = diskSeasons.includes(n) && !removedHere && !unreleased;
+          const importing = Boolean(importingSeasons?.includes(n)) && !onDisk && !unreleased;
+          const chip = seasonChipLabel({ onDisk, importing, unreleased, removedHere });
+          return (
+            <button
+              key={n}
+              type="button"
+              aria-expanded={expanded}
+              aria-controls={`season-${n}-episodes`}
+              onClick={() => tapSeason(n)}
+              className={cn(
+                "inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded-full px-3 text-sm",
+                selected ? "bg-gold text-gold-fg" : "bg-card text-muted shadow-[var(--shadow-border)]",
+              )}
+            >
+              Season {n}
+              {` · ${chip}`}
+              <ChevronDown className={cn("size-3.5 opacity-80 transition-transform", expanded ? "rotate-180" : "")} />
+            </button>
+          );
+        })}
+      </div>
+      {open ? (
+        <div
+          id={`season-${selectedSeason}-episodes`}
+          className="relative z-20 mt-3 min-w-0 scroll-mt-4 scroll-mb-24 rounded-2xl bg-card px-3 py-2 shadow-[var(--shadow-border)]"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 py-2">
+            <p className="text-sm text-muted">
+              S{String(selectedSeason).padStart(2, "0")} episodes
+              {episodes.length && !thisUnreleased ? ` · ${episodes.length}` : ""}
+            </p>
+            {showSeasonRequest ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={pending === "season"}
+                onClick={() => {
+                  setPending("season");
+                  onRequestSeason(selectedSeason);
+                }}
+              >
+                <Plus className="size-4" />
+                Request this season
+              </Button>
+            ) : null}
+          </div>
+          {loading ? <p className="py-3 text-sm text-muted">Checking episode availability…</p> : null}
+          {err && !episodes.length ? <p className="py-2 text-sm text-danger">{err}</p> : null}
+          {!loading && thisUnreleased ? (
+            <p className="py-3 text-sm text-muted">
+              {UNRELEASED_SEASON_COPY}. Request cannot grab files that do not exist.
+            </p>
+          ) : null}
+          {!loading && thisImporting ? (
+            <p className="py-3 text-sm text-muted">{IMPORTING_SEASON_COPY} — Preparing files for streaming.</p>
+          ) : null}
+          {!loading && !episodes.length && !err && !thisUnreleased && !thisImporting ? (
+            <p className="py-3 text-sm text-muted">
+              Episode names will appear once linked. Request this season to begin streaming.
+            </p>
+          ) : null}
+          {thisUnreleased ? null : (
+          <ul className="divide-y divide-border">
+            {episodes.map((ep) => {
+              const action = episodeRequestAction(ep.status, Boolean(removedHere));
+              const canPlay = ep.status === "in-library" || Boolean(ep.jellyfinId);
+              const key = `e${ep.episodeNumber}`;
+              return (
+                <li
+                  key={ep.episodeNumber}
+                  className={cn(
+                    "flex min-h-11 items-center gap-2 py-2.5 rounded-xl px-1.5 transition-colors",
+                    canPlay ? "hover:bg-white/[0.03]" : ""
+                  )}
+                >
+                  <span className="w-9 shrink-0 text-xs font-mono text-faint">
+                    E{String(ep.episodeNumber).padStart(2, "0")}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{ep.title}</span>
+                  <span
+                    data-episode-status={ep.status}
+                    className={cn("shrink-0 rounded-full px-2 py-1 text-[11px] leading-none font-medium", STATUS_CLASS[ep.status])}
+                  >
+                    {ep.label || EPISODE_STATUS_LABEL[ep.status]}
+                  </span>
+                  {canPlay ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="shrink-0 h-8 gap-1.5 px-3 text-xs text-gold border border-gold/40 bg-gold/10 hover:bg-gold/20 hover:border-gold font-medium rounded-xl transition-colors cursor-pointer"
+                      onClick={() => onPlayEpisode?.(ep, selectedSeason)}
+                      title={`Play ${ep.title}`}
+                    >
+                      <Play className="size-3.5 fill-current" />
+                      <span>Play</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="shrink-0 h-8 gap-1.5 px-3 text-xs text-gold border border-gold/40 bg-gold/10 hover:bg-gold/20 hover:border-gold font-medium rounded-xl transition-colors cursor-pointer"
+                      disabled={pending === key}
+                      onClick={() => {
+                        setPending(key);
+                        onRequestEpisode(selectedSeason, ep.episodeNumber);
+                        setEpisodes((cur) =>
+                          cur.map((row) =>
+                            row.episodeNumber === ep.episodeNumber
+                              ? { ...row, status: "requested", label: EPISODE_STATUS_LABEL.requested }
+                              : row,
+                          ),
+                        );
+                        if (onPlayEpisode) {
+                          onPlayEpisode(ep, selectedSeason);
+                        }
+                      }}
+                      title={action === "Request again" ? "Request again" : `Stream ${ep.title}`}
+                      aria-label={action === "Request again" ? "Request again" : `Stream ${ep.title}`}
+                    >
+                      <Play className="size-3.5" />
+                      <span>{pending === key ? "Caching…" : action === "Request again" ? "Request again" : "Stream 4K"}</span>
+                    </Button>
+                  )}
+
+                </li>
+              );
+            })}
+          </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}

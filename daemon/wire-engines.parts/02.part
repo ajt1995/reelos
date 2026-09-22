@@ -1,0 +1,350 @@
+ef ensure_fuse() -> None:
+    persist_mnt_shared()
+    share_mnt()
+    n = fuse_host_mount_count()
+    if fuse_on_host():
+        persist_fuse_listed()
+        if n > 1:
+            log_wire(f"fuse already on host — stacked {n}, do not remount if listed")
+        else:
+            log_wire("fuse already on host — do not remount if listed")
+        subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
+        log_wire("door caddy/reelos started after fuse")
+        return
+    log_wire("fuse missing on host — recreate decypharr")
+    fuse_unstack_stale()
+    subprocess.run(
+        ["docker", "compose", "--profile", "debrid", "up", "-d", "--force-recreate", "decypharr"],
+        cwd=str(COMPOSE),
+        env=compose_env(),
+        check=False,
+        capture_output=True,
+    )
+    for _ in range(20):
+        time.sleep(2)
+        if fuse_on_host():
+            log_wire("fuse on host")
+            restart_fuse_readers()
+            if not fuse_on_host():
+                log_wire("fuse vanished after reader restart")
+                continue
+            subprocess.run(["systemctl", "start", "caddy", "reelos"], check=False, capture_output=True)
+            log_wire("door caddy/reelos started after fuse")
+            return
+    log_wire("fuse still missing after recreate")
+
+
+
+def root_paths(kind: str) -> list[str]:
+    mode = answers().get("storageMode") or "both"
+    paths: list[str] = []
+    if mode in ("debrid", "both"):
+        if kind == "movie":
+            paths.append("/symlinks/radarr")
+            paths.append("/mnt/symlinks/radarr")
+        elif kind == "tv":
+            paths.append("/symlinks/sonarr")
+            paths.append("/mnt/symlinks/sonarr")
+        else:
+            paths.append("/symlinks")
+            paths.append("/mnt/symlinks")
+        if kind == "anime":
+            paths.append("/mnt/symlinks/anime")
+        if kind == "music":
+            paths.append("/mnt/symlinks/music")
+    if mode in ("local", "both"):
+        folder = {"movie": "movies", "tv": "tv", "anime": "anime", "music": "music"}.get(kind, "movies")
+        paths.append(f"/media/{folder}")
+    return paths or ["/mnt/symlinks"]
+
+
+HOST_FOR = {
+    "/symlinks": "/mnt/symlinks",
+    "/symlinks/radarr": "/mnt/symlinks/radarr",
+    "/symlinks/sonarr": "/mnt/symlinks/sonarr",
+    "/mnt/symlinks": "/mnt/symlinks",
+    "/mnt/symlinks/radarr": "/mnt/symlinks/radarr",
+    "/mnt/symlinks/sonarr": "/mnt/symlinks/sonarr",
+    "/media/movies": "/srv/media/movies",
+    "/media/tv": "/srv/media/tv",
+    "/media/anime": "/srv/media/anime",
+    "/media/music": "/srv/media/music",
+}
+
+
+def ensure_roots(base: str, key: str, kind: str) -> None:
+    try:
+        existing = call(f"{base}/rootfolder", key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return
+    have = {r.get("path") for r in existing if isinstance(r, dict)}
+    for path in root_paths(kind):
+        host = Path(HOST_FOR.get(path, path))
+        try:
+            host.mkdir(parents=True, exist_ok=True)
+            os.chown(host, 1000, 1000)
+        except OSError:
+            pass
+        if path in have:
+            continue
+        try:
+            call(f"{base}/rootfolder", key, method="POST", body={"path": path})
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            pass
+
+
+def quality_id(base: str, key: str, want: str | None = None) -> int | None:
+    name = want or QUALITY.get(answers().get("quality") or "hybrid", "Ultra-HD")
+    try:
+        profiles = call(f"{base}/qualityprofile", key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return None
+    if not isinstance(profiles, list):
+        return None
+    for p in profiles:
+        if p.get("name") == name:
+            return p.get("id")
+    for p in profiles:
+        if p.get("name") == "Any":
+            return p.get("id")
+    return profiles[0].get("id") if profiles else None
+
+
+def prowlarr_app_sync_level() -> str:
+    return "fullSync"
+
+
+SONARR_SYNC_CATEGORIES = (5000, 5010, 5020, 5030, 5040, 5045, 5050, 5090, 8000)
+RADARR_SYNC_CATEGORIES = (2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 8000)
+
+
+def _set_app_field(fields: list[dict], name: str, value) -> None:
+    hit = next((f for f in fields if isinstance(f, dict) and f.get("name") == name), None)
+    if hit is None:
+        fields.append({"name": name, "value": value})
+    else:
+        hit["value"] = value
+
+
+def prowlarr_app_fields(name: str, fields, *, prow_url: str | None = None, arr_url: str | None = None) -> list[dict]:
+    """TorrentRss reports only 8000/Other; Sonarr must opt into it to receive RSS feeds.
+
+    Radarr needs movie cats (2000+) or YTS/TPB never attach — Prowlarr-green is not MoviesSearch.
+    """
+    out = [dict(f) for f in (fields or []) if isinstance(f, dict)]
+    if prow_url:
+        _set_app_field(out, "prowlarrUrl", prow_url)
+    if arr_url:
+        _set_app_field(out, "baseUrl", arr_url)
+    if name == "Sonarr":
+        cats, extra = SONARR_SYNC_CATEGORIES, (8000,)
+    elif name == "Radarr":
+        cats, extra = RADARR_SYNC_CATEGORIES, RADARR_SYNC_CATEGORIES
+    else:
+        return out
+    hit = next((f for f in out if f.get("name") == "syncCategories"), None)
+    if hit is None:
+        out.append({"name": "syncCategories", "value": list(cats)})
+        return out
+    values = hit.get("value") if isinstance(hit.get("value"), list) else []
+    hit["value"] = list(dict.fromkeys([*values, *extra]))
+    return out
+
+
+def prowlarr_movie_cats_present(have) -> bool:
+    """8000/Other is not a movie category. Radarr needs 2000-2999 or YTS/TPB never sync."""
+    for c in have or []:
+        try:
+            n = int(c)
+        except (TypeError, ValueError):
+            continue
+        if 2000 <= n < 3000:
+            return True
+    return False
+
+
+def prowlarr_app_needs_update(app: dict | None, *, prow_url: str | None = None, arr_url: str | None = None) -> bool:
+    if not app:
+        return False
+    if app.get("enable") is False:
+        return True
+    if str(app.get("syncLevel") or "") != prowlarr_app_sync_level():
+        return True
+    name = str(app.get("name") or "")
+    fields = app.get("fields") or []
+    sync = next((f for f in fields if isinstance(f, dict) and f.get("name") == "syncCategories"), None)
+    have = sync.get("value") if sync and isinstance(sync.get("value"), list) else []
+    if name == "Sonarr" and (not sync or 8000 not in have):
+        return True
+    if name == "Radarr" and (not sync or not prowlarr_movie_cats_present(have)):
+        return True
+    if prow_url:
+        cur = next((f.get("value") for f in fields if isinstance(f, dict) and f.get("name") == "prowlarrUrl"), None)
+        if cur != prow_url:
+            return True
+    if arr_url:
+        cur = next((f.get("value") for f in fields if isinstance(f, dict) and f.get("name") == "baseUrl"), None)
+        if cur != arr_url:
+            return True
+    return False
+
+
+def docker_service_ip(service: str) -> str | None:
+    """Inspect by container name. `docker compose ps` ETIMEDOUT on the house Apply."""
+    names = [f"reelos-{service}-1", service]
+    if service == "decypharr":
+        names = ["decypharr", "reelos-decypharr-1"]
+    for name in names:
+        try:
+            ins = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "-f",
+                    "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}",
+                    name,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            ip = next((p for p in (ins.stdout or "").split() if p), "")
+            if ip:
+                return ip
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    return None
+
+
+def docker_service_url(service: str, port: int, fallback: str) -> str:
+    """Hostname survives recreate. dns: 1.1.1.1 is gone so radarr/prowlarr resolve."""
+    return f"http://{fallback}:{port}"
+
+
+def ensure_prowlarr_app(name: str, implementation: str, base_url: str, arr_key: str, prow_key: str) -> None:
+    """Keep Prowlarr→*arr enabled at fullSync so YTS/TPB land in Radarr and EZTV in Sonarr."""
+    url = "http://127.0.0.1:9696/api/v1/applications"
+    prow_url = docker_service_url("prowlarr", 9696, "prowlarr")
+    try:
+        apps = call(url, prow_key) or []
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        return
+    for app in apps if isinstance(apps, list) else []:
+        if app.get("name") != name:
+            continue
+        if app.get("id") is not None and prowlarr_app_needs_update(app, prow_url=prow_url, arr_url=base_url):
+            body = dict(app)
+            body["enable"] = True
+            body["syncLevel"] = prowlarr_app_sync_level()
+            body["fields"] = prowlarr_app_fields(
+                name, body.get("fields"), prow_url=prow_url, arr_url=base_url
+            )
+            try:
+                call(f"{url}/{app['id']}", prow_key, method="PUT", body=body)
+                suffix = " + 8000/Other" if name == "Sonarr" else " + movie cats"
+                log_wire(f"prowlarr app {name} fullSync{suffix}")
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+                pass
+        return
+    body = {
+        "name": name,
+        "enable": True,
+        "syncLevel": prowlarr_app_sync_level(),
+        "implementation": implementation,
+        "implementationName": implementation,
+        "configContract": f"{implementation}Settings",
+        "fields": prowlarr_app_fields(
+            name,
+            [
+                {"name": "prowlarrUrl", "value": prow_url},
+                {"name": "baseUrl", "value": base_url},
+                {"name": "apiKey", "value": arr_key},
+            ],
+            prow_url=prow_url,
+            arr_url=base_url,
+        ),
+    }
+    try:
+        call(url, prow_key, method="POST", body=body)
+        log_wire(f"prowlarr app {name} added fullSync")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+        pass
+
+
+def sync_prowlarr_apps(prow_key: str) -> None:
+    """Push current Prowlarr indexers into *arr. Wait — fire-and-forget left house *arr empty."""
+    for name in ("ApplicationIndexerSync", "IndexerSync"):
+        try:
+            cmd = call(
+                "http://127.0.0.1:9696/api/v1/command",
+                prow_key,
+                method="POST",
+                body={"name": name, "forceSync": True},
+            )
+            cid = (cmd or {}).get("id") if isinstance(cmd, dict) else None
+            if cid is not None:
+                status = "queued"
+                for _ in range(20):
+                    time.sleep(0.5)
+                    try:
+                        row = call(f"http://127.0.0.1:9696/api/v1/command/{cid}", prow_key) or {}
+                    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+                        break
+                    status = str((row or {}).get("status") or "").lower()
+                    if status in ("completed", "failed", "aborted"):
+                        break
+                log_wire(f"prowlarr {name} forceSync {status}")
+            else:
+                log_wire(f"prowlarr {name} forceSync")
+            return
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, urllib.error.HTTPError):
+            continue
+    log_wire("prowlarr sync command skipped")
+
+
+PROVIDER_HINTS = {
+    "torbox": ("torbox",),
+    "real-debrid": ("real-debrid", "realdebrid", "real debrid"),
+    "alldebrid": ("alldebrid", "all-debrid", "all debrid"),
+    "premiumize": ("premiumize",),
+}
+
+# Vendor-published Prowlarr Cardigann only. Not a tracker roster.
+OFFICIAL_YML = {
+    "torbox": "https://raw.githubusercontent.com/TorBox-App/torbox-prowlarr-indexers/main/torbox-torrents.yml",
+}
+
+
+def _schema_blob(schema: dict) -> str:
+    parts = [
+        str(schema.get("implementation") or ""),
+        str(schema.get("implementationName") or ""),
+        str(schema.get("name") or ""),
+        str(schema.get("infoLink") or ""),
+    ]
+    for f in schema.get("fields") or []:
+        if f.get("name") in ("definitionFile", "definitionName"):
+            parts.append(str(f.get("value") or ""))
+    return " ".join(parts).lower()
+
+
+def _find_schema(prow_key: str, src: str):
+    url = "http://127.0.0.1:9696/api/v1/indexer/schema"
+    schemas = call(url, prow_key) or []
+    hints = PROVIDER_HINTS.get(src, (src,))
+    for schema in schemas if isinstance(schemas, list) else []:
+        if any(h in _schema_blob(schema) for h in hints):
+            return schema
+    return None
+
+
+def install_official_yml(src: str) -> bool:
+    url = OFFICIAL_YML.get(src)
+    if not url:
+        log_wire(f"no official Prowlarr yml for {src}")
+        return False
+    dest_dir = COMPOSE / "configs" / "prowlarr" / "Definitions" / "Custom"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / Path(url).name
+    try:
+        req = urllib.request.Re

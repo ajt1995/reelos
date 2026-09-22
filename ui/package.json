@@ -1,0 +1,6 @@
+{
+  "name": "reelos",
+  "private": true,
+  "type": "module",
+  "description": "ReelOS shell. Canonical package.json is the repo root (OTA unpacks that)."
+}

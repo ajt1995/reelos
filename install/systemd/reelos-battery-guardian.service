@@ -1,0 +1,11 @@
+[Unit]
+Description=ReelOS laptop battery guardian
+After=multi-user.target
+ConditionPathExists=/opt/reelos/bin/reelos-battery-guardian.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30
+KillMode=process
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-battery-guardian.sh

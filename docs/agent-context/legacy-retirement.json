@@ -1,0 +1,54 @@
+{
+  "$schema": "https://reelos.local/schemas/legacy-retirement/v1",
+  "purpose": "Concise current classification of superseded architectures. This is a boundary manifest, not deletion authority.",
+  "entries": [
+    {
+      "id": "arr-stack",
+      "patterns": ["*arr", "Sonarr", "Radarr", "Decypharr"],
+      "disposition": "retired",
+      "replacement": "native ReelOS source, preparation, and retention services",
+      "releaseBoundary": "Must not appear in active installers, settings, consumer copy, or release artifacts.",
+      "testEvidence": ["scripts/services/native-runtime-boundary.test.mjs", "scripts/packaging-boundaries.test.mjs"]
+    },
+    {
+      "id": "managed-jellyfin-server",
+      "patterns": ["scripts/services/jellyfin-service.mjs", "Docker Jellyfin service"],
+      "disposition": "retired",
+      "replacement": "native ReelOS server and player",
+      "releaseBoundary": "Do not install or manage a Jellyfin server.",
+      "testEvidence": ["scripts/services/native-runtime-boundary.test.mjs"]
+    },
+    {
+      "id": "jellyfin-protocol-shim",
+      "patterns": ["scripts/services/jellyfin-shim-service.mjs"],
+      "disposition": "active-shim",
+      "replacement": "none; this is the deliberately retained compatibility boundary",
+      "releaseBoundary": "Must delegate source, profile, and child-safety authority to native ReelOS.",
+      "testEvidence": ["scripts/services/jellyfin-shim-service.test.mjs"]
+    },
+    {
+      "id": "gemini-runtime",
+      "patterns": ["Gemini status route", "remote Gemini taste generation"],
+      "disposition": "retired",
+      "replacement": "local capability runtime plus deterministic fallbacks",
+      "releaseBoundary": "Must not be required by the native runtime or presented as the neural spine.",
+      "testEvidence": ["scripts/services/native-runtime-boundary.test.mjs"]
+    },
+    {
+      "id": "fleet-and-gossip-prototypes",
+      "patterns": ["fleet-learning", "anonymous-gossip", "basement-lighthouse"],
+      "disposition": "migration-only",
+      "replacement": "local household learning; taste-only exchange remains shadow-gated",
+      "releaseBoundary": "Routes are retired and implementations cannot enter the native package.",
+      "testEvidence": ["scripts/services/native-runtime-boundary.test.mjs", "scripts/packaging-boundaries.test.mjs"]
+    },
+    {
+      "id": "prototype-brains",
+      "patterns": ["cinema-brain", "neural-scale", "neural-distillation", "yield-simulation"],
+      "disposition": "migration-only",
+      "replacement": "shared coordinator, guarded local runtime, and resource governor",
+      "releaseBoundary": "May remain only for classified migration tests until explicit retirement evidence permits deletion.",
+      "testEvidence": ["docs/test-inventory-policy.json"]
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+{
+  "$schema": "https://reelos.local/schemas/test-inventory-policy/v1",
+  "purpose": "Every test must have one deliberate release disposition. Rules are ordered; the first match wins.",
+  "rules": [
+    {"id":"setup-settings-evidence","match":"scripts/setup-settings-evidence.test.mjs","disposition":"release","reason":"Setup, Home, Settings, provider, and device-install evidence must be current, source-fingerprinted, narrowly attributed, and must not manufacture security, visual, or hardware review."},
+    {"id":"setup-settings-browser","match":"scripts/test-setup-settings-journey.mjs","disposition":"targeted","reason":"A source-fingerprinted browser journey must observe Home shelves, persist profile motion and density through the server and reload, and expose honest Help/status state."},
+    {"id":"family-social-browser-matrix","match":"scripts/test-family-social-journey.mjs","disposition":"release","reason":"Day-0 Family, child exit, Kids Present, filtering, Companion truth, and Watch Together host/join/reconnect journeys must pass against a fresh isolated service with source-fingerprinted evidence."},
+    {"id":"android-day0-update-host","match":"scripts/services/android-client-service.test.mjs","disposition":"release","reason":"Paired Android update discovery must report only an existing APK, bind the same-origin download to its SHA-256, serve identical bytes, and reject stale or traversal-shaped paths."},
+    {"id":"release-trust","match":"scripts/release-trust.test.mjs","disposition":"release","reason":"Day-0 trust bootstrap, signed manifests, and anti-replay fail closed."},
+    {"id":"signed-update","match":"scripts/reelos-ota-rollback.test.mjs","disposition":"release","reason":"Signed artifact staging, health-gated activation, and rollback fail closed."},
+    {"id":"recovery-bundle","match":"scripts/reelos-backup.test.mjs","disposition":"release","reason":"Recovery remains checksummed, allowlisted, confirmed, and credential-free."},
+    {"id":"update-entrypoint","match":"scripts/reelos-update.test.mjs","disposition":"release","reason":"Packaged update entry points cannot bypass signed apply."},
+    {
+      "id": "family-treatment-contract",
+      "match": "scripts/services/family-treatment-service.test.mjs",
+      "disposition": "release",
+      "reason": "Family treatment must bind to one verified edition and timebase, validate deterministic intervals, and fail closed when evidence is absent or mismatched."
+    },
+    {
+      "id": "family-treatment-browser-executor",
+      "match": "src/lib/family-treatment.test.ts",
+      "disposition": "release",
+      "reason": "The browser executor must deterministically skip or hide visuals, mute unsafe audio, and hide or replace subtitles only inside verified intervals."
+    },
+    {
+      "id": "player-companion-control",
+      "match": "src/lib/player-companion.test.ts",
+      "disposition": "release",
+      "reason": "Web players must publish real session timing and consume only bounded commands addressed to their active session."
+    },
+    {
+      "id": "watch-together-client",
+      "match": "src/lib/watch-together-client.test.ts",
+      "disposition": "release",
+      "reason": "Household matching must preserve objections and remote invites may render only server-confirmed rooms and participants."
+    },
+    {
+      "id": "companion-deep-link-boundary",
+      "match": "src/lib/companion-deep-link.test.ts",
+      "disposition": "release",
+      "reason": "Legacy companion links may restore only validated episode context that the authenticated profile can already access; malformed, unavailable, and child-ineligible targets fail closed."
+    },
+    {
+      "id": "release-artifact-boundary",
+      "match": "scripts/packaging-boundaries.test.mjs",
+      "disposition": "release",
+      "reason": "Every release packager must share the same allowlist, manifest, secret scan, retired-stack exclusion, and verification boundary."
+    },
+    {
+      "id": "native-playback-source-projection",
+      "match": "scripts/services/playback-source-projection.test.mjs",
+      "disposition": "release",
+      "reason": "Native personal, public-domain, prepared, and authorized provider sources must project honestly into playback without inventing readiness."
+    },
+    {
+      "id": "streaming-availability-service",
+      "match": "scripts/services/streaming-availability-service.test.mjs",
+      "disposition": "release",
+      "reason": "Legal external availability must remain regional, attributed, bounded, and quietly unavailable when it cannot be verified."
+    },
+    {
+      "id": "shipping-neural-specialists",
+      "match": "scripts/services/shipping-intelligence-specialists.test.mjs",
+      "disposition": "release",
+      "reason": "Connected specialists must retain deterministic safety fallbacks and cannot gain access, destructive, or playback authority."
+    },
+    {
+      "id": "endless-taste-field",
+      "match": "src/lib/taste-field.test.ts",
+      "disposition": "release",
+      "reason": "The taste field must replenish continuously, preserve distinct reversible reactions, and avoid forced pagination or completion."
+    },
+    {
+      "id": "streaming-availability-client",
+      "match": "src/lib/streaming-availability.test.ts",
+      "disposition": "release",
+      "reason": "Client availability parsing must preserve honest unavailable states and official attributed destinations."
+    },
+    {
+      "id": "local-model-pack-installer",
+      "match": "scripts/install-local-intelligence-pack.test.mjs",
+      "disposition": "release",
+      "reason": "Optional local-model downloads must remain pinned, integrity-checked, external to the repository, and non-activating."
+    },
+    {
+      "id": "private-preparation-routing",
+      "match": "scripts/reelos-preparation-routing.test.mjs",
+      "disposition": "release",
+      "reason": "Preparation must use bounded authenticated requests and verified originals, never client paths or invented availability."
+    },
+    {
+      "id": "private-retention-routing",
+      "match": "scripts/reelos-retention-routing.test.mjs",
+      "disposition": "release",
+      "reason": "Retention acknowledgements require a durable private pin on the authorized server-resolved local original; unpin never deletes media."
+    },
+    {
+      "id": "discover-page-recovery",
+      "match": "scripts/discover-browse-pagination.test.mjs",
+      "disposition": "release",
+      "reason": "Repeated first pages and stale query responses cannot erase or replace the current discovery results."
+    },
+    {
+      "id": "private-curator-recovery",
+      "match": "scripts/curator-status.test.mjs",
+      "disposition": "release",
+      "reason": "Every legacy taste entry point must expose accessible recovery without replaying unacknowledged reactions."
+    },
+    {
+      "id": "private-curator-routing",
+      "match": "scripts/reelos-curator-routing.test.mjs",
+      "disposition": "release",
+      "reason": "Legacy curator URLs must preserve profile privacy and cannot mutate household-global taste."
+    },
+    {
+      "id": "storage-ownership-safety",
+      "match": "scripts/storage-lru-watchdog.test.mjs",
+      "disposition": "release",
+      "reason": "Automatic cleanup cannot scan or delete originals without an authoritative managed-retention ledger."
+    },
+    {
+      "id": "guarded-stream-routing",
+      "match": "scripts/reelos-stream-routing.test.mjs",
+      "disposition": "release",
+      "reason": "Development and preview must enforce the same playback-byte authority as the household server."
+    },
+    {
+      "id": "coverage-tooling",
+      "match": "scripts/context-brief.test.mjs",
+      "disposition": "release",
+      "reason": "Fresh-session context must remain accurate and compact."
+    },
+    {
+      "id": "neural-architecture-context",
+      "match": "scripts/neural-architecture.test.mjs",
+      "disposition": "release",
+      "reason": "The runtime registry, coordinator wiring, lifecycle metadata, fallbacks, privacy boundaries, evidence, and retired architecture must remain reconciled."
+    },
+    {
+      "id": "coverage-lock",
+      "match": "scripts/coverage-lock.test.mjs",
+      "disposition": "release",
+      "reason": "Feature, vision, and test accountability is a release invariant."
+    },
+    {
+      "id": "feature-acceptance",
+      "match": "scripts/feature-acceptance.test.mjs",
+      "disposition": "release",
+      "reason": "Release acceptance must stay blocked until current evidence exists for every active feature and interface requirement."
+    },
+    {
+      "id": "release-runner",
+      "match": "scripts/run-test-group.test.mjs",
+      "disposition": "release",
+      "reason": "The release gate must execute its intended classified contract set."
+    },
+    {
+      "id": "retired-anonymous-gossip",
+      "match": "scripts/services/anonymous-gossip-service.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The cross-home gossip prototype is excluded from the shipping private intelligence runtime."
+    },
+    {
+      "id": "retired-fleet-learning",
+      "match": "scripts/services/fleet-learning-service.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The fleet-learning prototype is excluded; household learning remains local."
+    },
+    {
+      "id": "retired-basement-lighthouse",
+      "match": "scripts/services/basement-lighthouse-service.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The peer gossip lighthouse is not part of the native shipping control plane."
+    },
+    {
+      "id": "retired-jellyfin-server",
+      "match": "scripts/services/jellyfin-service.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "ReelOS ships only the Jellyfin protocol shim, not a managed Jellyfin server."
+    },
+    {
+      "id": "retired-cinema-brain",
+      "match": "scripts/services/cinema-brain-loader.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The deterministic cinema-brain prototype is archived compatibility, not a trained shipping model."
+    },
+    {
+      "id": "retired-neural-scale",
+      "match": "scripts/services/neural-scale-engine.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "Resource safety now belongs to the shared governor; the old scale engine is retained only for migration coverage."
+    },
+    {
+      "id": "retired-neural-distillation",
+      "match": "scripts/services/neural-distillation-service.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The distillation prototype cannot ship until it is registered with the guarded model lifecycle."
+    },
+    {
+      "id": "retired-yield-simulation",
+      "match": "scripts/services/yield-simulation-testbench.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "The old simulation imports retired engines; current release evidence comes from resource-governor and preparation tests."
+    },
+    {
+      "id": "service-contract",
+      "match": "scripts/services/**.test.mjs",
+      "disposition": "release",
+      "reason": "Core server, source, safety, and resource contracts."
+    },
+    {
+      "id": "experience-domain",
+      "match": "src/lib/**.test.ts",
+      "disposition": "release",
+      "reason": "Consumer state, search, taste, and source-access contracts."
+    },
+    {
+      "id": "browser-targeted",
+      "match": "scripts/browser-*.test.mjs",
+      "disposition": "targeted",
+      "reason": "Local browser availability varies; required before an install candidate when the browser matrix is enabled."
+    },
+    {
+      "id": "appliance-deployment",
+      "match": "scripts/*install*.test.mjs",
+      "disposition": "private-deployment",
+      "reason": "Appliance packaging and install contracts are exercised for household candidates."
+    },
+    {
+      "id": "appliance-update",
+      "match": "scripts/*ota*.test.mjs",
+      "disposition": "private-deployment",
+      "reason": "Update and rollback contracts are exercised for household candidates."
+    },
+    {
+      "id": "appliance-usb",
+      "match": "scripts/*usb*.test.mjs",
+      "disposition": "private-deployment",
+      "reason": "USB creation and recovery contracts are exercised for household candidates."
+    },
+    {
+      "id": "appliance-platform",
+      "match": "scripts/*windows*.test.mjs",
+      "disposition": "private-deployment",
+      "reason": "Platform-specific packaging contracts are exercised for the matching install target."
+    },
+    {
+      "id": "legacy-compatibility",
+      "match": "scripts/**.test.mjs",
+      "disposition": "legacy-compatibility",
+      "reason": "Retained while its route or service is reconciled; cannot be silently deleted or ignored."
+    }
+  ]
+}

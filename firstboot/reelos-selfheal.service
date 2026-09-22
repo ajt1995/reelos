@@ -1,0 +1,13 @@
+[Unit]
+Description=ReelOS background self-heal (door, compose, Jellyfin, recover)
+After=network-online.target
+ConditionPathExists=/opt/reelos/bin/reelos-selfheal.sh
+
+[Service]
+Type=oneshot
+TimeoutStartSec=90
+# Catch-up import is nohup/systemd-run from this script. Default KillMode=control-group
+# would SIGTERM it when the oneshot exits or hits 90s — splash-lock catch-up again.
+KillMode=process
+Environment=REELOS_ROOT=/opt/reelos
+ExecStart=/bin/bash /opt/reelos/bin/reelos-selfheal.sh

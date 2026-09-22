@@ -1,0 +1,13 @@
+[Unit]
+Description=ReelOS Wi-Fi SoftAP and Captive Portal for Setup
+After=network.target
+ConditionPathExists=!/var/lib/reelos/provisioned
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/reelos/bin/reelos-hotspot.sh start
+RemainAfterExit=yes
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
