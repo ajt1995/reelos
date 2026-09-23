@@ -4551,9 +4551,13 @@ function readUiSettings() {
   }
 }
 
-function publicUiSettings(settings) {
+function publicUiSettings(settings, policy = null) {
   const { debridValidationAttempt: _privateAttempt, ...publicSettings } = settings;
-  return publicSettings;
+  return policy ? {
+    ...publicSettings,
+    debridStatus: policy.status,
+    debridValidatedAt: policy.connected ? settings.debridValidatedAt : null,
+  } : publicSettings;
 }
 
 function currentProviderValidation() {
@@ -4671,7 +4675,7 @@ async function handleSettings(req, res) {
     });
     send(res, 200, {
       ok: true,
-      ...publicUiSettings(settings),
+      ...publicUiSettings(settings, sourcePolicy),
       availableIndexerPresets: PUBLIC_INDEXER_ROSTER.map(
         ({ id, name, displayName, role, type }) => ({
           id,
@@ -4833,7 +4837,7 @@ async function handleSettings(req, res) {
   if (cleanupScheduled) void reconcileDisabledProvider();
   send(res, 200, {
     ok: true,
-    ...publicUiSettings(next),
+    ...publicUiSettings(next, sourcePolicy),
     beta,
     sourcePolicy: publicSourcePolicy(sourcePolicy),
     providerCleanup: cleanupScheduled ? "scheduled" : undefined,

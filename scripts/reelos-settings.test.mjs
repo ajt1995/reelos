@@ -64,6 +64,8 @@ test("debrid settings use server-side validation and do not accept client connec
   const chunk = src.slice(idx, src.indexOf("async function handlePorts", idx));
   assert.match(chunk, /pingWizardSource\(provider, key, undefined, \{ requireAccount: true \}\)/);
   assert.match(chunk, /writeProviderValidation/);
+  assert.match(chunk, /publicUiSettings\(settings, sourcePolicy\)/);
+  assert.match(chunk, /publicUiSettings\(next, sourcePolicy\)/);
   assert.match(chunk, /debridProvider : cur\.debridProvider/);
   assert.match(chunk, /atomicWriteJsonSync/);
   assert.match(chunk, /mode: 0o600/);
