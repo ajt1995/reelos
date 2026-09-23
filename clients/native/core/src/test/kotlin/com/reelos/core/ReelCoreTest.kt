@@ -91,59 +91,57 @@ class ReelCoreTest {
     }
 
     @Test
-    fun optionalProviderBetaIsInstallWideAndNeverRestoresAccessByItself() = withFileStore { path ->
+    fun validatedOptionalSourcesDoNotDependOnHandoffExperiments() = withFileStore { path ->
         val core = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
-        assertFalse(core.snapshot.optionalProviderBetaEnabled)
-        assertFailsWith<IllegalArgumentException> {
-            core.putOptionalSource("optional", SourceStatus.AVAILABLE)
-        }
+        assertFalse(core.snapshot.experimentalHandoffsEnabled)
         core.putSource(SourceRecord("personal", SourceKind.PERSONAL, SourceStatus.AVAILABLE))
         core.putMedia(MediaRecord("own", "Own film", "personal", MediaAvailability.READY))
         core.createProfile("ada", "Ada")
         core.save("ada", "optional-film", true)
-        core.setOptionalProviderBetaEnabled(true)
-        core.putOptionalSource("optional", SourceStatus.AVAILABLE)
+        core.putOptionalSource("optional", SourceStatus.AVAILABLE) // trusted adapter result, not UI consent
         core.putMedia(MediaRecord("optional-film", "Optional film", "optional", MediaAvailability.READY))
         assertEquals(MediaAction.PLAY, core.mediaAction("optional-film"))
 
-        core.setOptionalProviderBetaEnabled(false)
+        core.setExperimentalHandoffsEnabled(true)
+        core.setExperimentalHandoffsEnabled(false)
+        assertEquals(MediaAction.PLAY, core.mediaAction("optional-film"))
+        core.revokeSource("optional")
         assertEquals(MediaAction.UNAVAILABLE, core.mediaAction("optional-film"))
-        assertEquals(SourceStatus.UNAVAILABLE, core.snapshot.sources.getValue("optional").status)
+        assertEquals(SourceStatus.REVOKED, core.snapshot.sources.getValue("optional").status)
         assertEquals(MediaAction.PLAY, core.mediaAction("own"))
         assertTrue("optional-film" in core.snapshot.activeProfile!!.savedMediaIds)
         assertTrue("optional-film" in core.snapshot.media)
 
         val restarted = ReelCore(FileCoreStore(path), DeviceKind.ANDROID_TV)
-        assertFalse(restarted.snapshot.optionalProviderBetaEnabled)
-        restarted.setOptionalProviderBetaEnabled(true)
+        restarted.setExperimentalHandoffsEnabled(true)
         assertEquals(MediaAction.UNAVAILABLE, restarted.mediaAction("optional-film"))
         restarted.putOptionalSource("optional", SourceStatus.AVAILABLE)
         assertEquals(MediaAction.PLAY, restarted.mediaAction("optional-film"))
-        assertTrue(ReelCore(FileCoreStore(path), DeviceKind.LINUX).snapshot.optionalProviderBetaEnabled)
+        assertTrue(ReelCore(FileCoreStore(path), DeviceKind.LINUX).snapshot.experimentalHandoffsEnabled)
     }
 
     @Test
-    fun betaToggleRebasesAcrossPlaybackWriterWithoutLosingProgress() = withFileStore { path ->
+    fun handoffToggleRebasesAcrossPlaybackWriterWithoutLosingProgress() = withFileStore { path ->
         val settings = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
         settings.createProfile("ada", "Ada")
         val playback = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
         playback.setPlaybackPosition("ada", "film", 12_345)
-        settings.setOptionalProviderBetaEnabled(true)
-        assertTrue(settings.snapshot.optionalProviderBetaEnabled)
+        settings.setExperimentalHandoffsEnabled(true)
+        assertTrue(settings.snapshot.experimentalHandoffsEnabled)
         assertEquals(12_345, settings.snapshot.activeProfile?.playbackPositionsMs?.get("film"))
 
         val laterPlayback = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
         laterPlayback.setPlaybackPosition("ada", "film", 67_890)
-        settings.setOptionalProviderBetaEnabled(false)
-        assertFalse(settings.snapshot.optionalProviderBetaEnabled)
+        settings.setExperimentalHandoffsEnabled(false)
+        assertFalse(settings.snapshot.experimentalHandoffsEnabled)
         assertEquals(67_890, settings.snapshot.activeProfile?.playbackPositionsMs?.get("film"))
         val reopened = ReelCore(FileCoreStore(path), DeviceKind.LINUX)
-        assertFalse(reopened.snapshot.optionalProviderBetaEnabled)
+        assertFalse(reopened.snapshot.experimentalHandoffsEnabled)
         assertEquals(67_890, reopened.snapshot.activeProfile?.playbackPositionsMs?.get("film"))
     }
 
     @Test
-    fun betaToggleStopsAfterBoundedConflicts() {
+    fun handoffToggleStopsAfterBoundedConflicts() {
         var saves = 0
         val store = object : CoreStore {
             override fun load() = CoreState()
@@ -153,9 +151,9 @@ class ReelCoreTest {
             }
         }
         val core = ReelCore(store, DeviceKind.WINDOWS)
-        assertFailsWith<ConcurrentModificationException> { core.setOptionalProviderBetaEnabled(true) }
+        assertFailsWith<ConcurrentModificationException> { core.setExperimentalHandoffsEnabled(true) }
         assertEquals(3, saves)
-        assertFalse(core.snapshot.optionalProviderBetaEnabled)
+        assertFalse(core.snapshot.experimentalHandoffsEnabled)
     }
 
     @Test
@@ -172,7 +170,7 @@ class ReelCoreTest {
         assertFailsWith<IllegalArgumentException> {
             core.putSource(SourceRecord("addon", SourceKind.OPTIONAL_ADAPTER, SourceStatus.UNAVAILABLE))
         }
-        core.setOptionalProviderBetaEnabled(true)
+        core.setExperimentalHandoffsEnabled(true)
         core.putOptionalSource("addon", SourceStatus.AVAILABLE)
         assertEquals(SourceKind.OPTIONAL_ADAPTER, core.snapshot.sources.getValue("addon").kind)
         assertFailsWith<IllegalArgumentException> {
@@ -184,10 +182,15 @@ class ReelCoreTest {
     }
 
     @Test
-    fun versionOneSnapshotMigratesWithoutRevivingOptionalAccess() = withFileStore { path ->
+    fun versionOneSnapshotMigratesWithoutRevivingOptionalAccess() = assertLegacyMigration(1)
+
+    @Test
+    fun versionTwoConsentDoesNotEnableHandoffExperimentsOrReviveSources() = assertLegacyMigration(2)
+
+    private fun assertLegacyMigration(version: Int) = withFileStore { path ->
         DataOutputStream(Files.newOutputStream(path)).use { output ->
             output.writeInt(0x52454F53)
-            output.writeInt(1)
+            output.writeInt(version)
             output.writeLong(0)
             output.writeInt(1)
             output.writeUTF("ada")
@@ -213,14 +216,15 @@ class ReelCoreTest {
             output.writeBoolean(true)
             output.writeUTF("optional")
             output.writeUTF(MediaAvailability.READY.name)
+            if (version == 2) output.writeBoolean(true) // old provider beta, not new consent
         }
         val core = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
         assertEquals(CORE_SCHEMA_VERSION, core.snapshot.schemaVersion)
         assertEquals("Ada", core.snapshot.activeProfile?.name)
         assertEquals("Old title", core.snapshot.media.getValue("film").title)
-        assertFalse(core.snapshot.optionalProviderBetaEnabled)
+        assertFalse(core.snapshot.experimentalHandoffsEnabled)
         assertEquals(SourceStatus.UNAVAILABLE, core.snapshot.sources.getValue("optional").status)
-        core.setOptionalProviderBetaEnabled(true)
+        core.setExperimentalHandoffsEnabled(true)
         assertEquals(MediaAction.UNAVAILABLE, core.mediaAction("film"))
         assertEquals(1L, ReelCore(FileCoreStore(path), DeviceKind.WINDOWS).snapshot.revision)
     }

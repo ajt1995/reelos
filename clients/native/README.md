@@ -68,9 +68,10 @@ dependency-free core smoke remains offline. No existing household application wa
 uninstalled, household data wiped, or signing key replaced. A failed build must remain visible,
 not be replaced by a stale APK.
 
-External-provider setup is behind an off-by-default beta in Settings > Advanced settings.
-The native adapter itself is not implemented; opt-in truthfully reports that state and does
-not connect an account. Provider beta is not a child/owner authorization mechanism.
+Validated optional media sources are normal functionality, not blanket beta. Only unverified
+external-app handoffs have an experimental preference. No source/handoff adapter exists in
+this validation build yet, and the toggle cannot grant media access. Core schema 3 migrates
+old blanket-beta snapshots without reviving optional access or inheriting experiment consent.
 
 ## Physical media checks
 

@@ -37,19 +37,20 @@ availability policy, not an ML implementation or a complete product runtime.
   must verify access again before opening media.
 - `navigation()` omits `BOOKS` for `ANDROID_TV`. Other device kinds retain Books. Native
   renderers should derive their navigation from this method.
-- `setOptionalProviderBetaEnabled(enabled)` persists a per-install opt-in, default off.
-  Advanced Settings is its entry point, not ordinary onboarding. Optional adapters cannot
-  publish `AVAILABLE` while off. Disabling changes available optional sources to unavailable
-  but retains their IDs, media, saves and all personal originals. Enabling alone never restores
-  availability: an installed trusted adapter must independently revalidate access. The toggle
-  is not an owner/PIN authorization system and does not establish that an adapter exists.
+- `putOptionalSource(sourceId, status)` is a trusted adapter boundary, never a UI access grant.
+  Normal validated optional sources do not depend on experimental handoffs. Revoke a source
+  with `revokeSource`; personal originals and metadata are retained.
+- `setExperimentalHandoffsEnabled(enabled)` persists a per-install experiment preference.
+  It cannot grant, revoke, or restore media-source access. No external-app integration is
+  operational just because this preference is enabled.
 
 ## Storage and safety boundary
 
-`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 2`. Version 1 snapshots load with beta
-off and optional-source availability revoked, preserving profiles and media. The next write
-persists version 2; older binaries cannot read that state, so rollback needs compatible state
-backup/migration rather than assuming binary compatibility. `FileCoreStore` writes a synced
+`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 3`. Version 1 and 2 snapshots migrate
+with optional sources unavailable until adapter revalidation; legacy beta consent does not
+enable handoff experiments. Profile data and media metadata are preserved. Rollback requires
+compatible state backup/migration; older binaries must not open a newer schema.
+`FileCoreStore` writes a synced
 temporary file and replaces the prior state atomically. If atomic replacement is unsupported,
 the write fails and the old snapshot remains. Each write checks `CoreState.revision` under a
 same-directory OS file lock; a stale writer fails visibly and must reload before retrying.

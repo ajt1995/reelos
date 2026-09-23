@@ -64,7 +64,7 @@ data class UiModel(
     val tasteSeeds: Set<String>,
     val guidance: String,
     val destinations: List<String>,
-    val optionalProviderBetaEnabled: Boolean,
+    val experimentalHandoffsEnabled: Boolean,
     val error: String? = null,
 )
 
@@ -80,7 +80,7 @@ sealed interface UiEvent {
     data class Play(val id: String) : UiEvent
     data class Save(val id: String, val saved: Boolean) : UiEvent
     data class React(val id: String, val reaction: String?) : UiEvent
-    data class SetOptionalProviderBeta(val enabled: Boolean) : UiEvent
+    data class SetExperimentalHandoffs(val enabled: Boolean) : UiEvent
 }
 
 private val canvas = Color(0xFF080809)
@@ -192,10 +192,8 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                 UiStep.SOURCES -> item {
                     Text("Bring your collection.", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Text("Start with personal media. Public-domain titles can appear when a source adds them.", color = muted)
-                    if (model.optionalProviderBetaEnabled) {
-                        Spacer(Modifier.height(16.dp))
-                        Panel { Text("Optional external provider setup is unavailable. No adapter is installed in this build.", color = muted) }
-                    }
+                    Spacer(Modifier.height(16.dp))
+                    Text("External media connections are optional. No connection adapter is installed in this build yet.", color = muted)
                     Spacer(Modifier.height(20.dp))
                     ReelButton("Continue", accent) { onEvent(UiEvent.ConfirmSources) }
                 }
@@ -250,20 +248,23 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                         if (advancedOpen) {
                             Text("Advanced settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(10.dp))
-                            Text("Upcoming external provider beta is off by default. This choice reveals setup only; it does not connect an account or grant access.", color = muted)
+                            Text("Try supported external-app handoffs as they become available. This does not change your media connections.", color = muted)
                             Spacer(Modifier.height(14.dp))
-                            ReelButton(if (model.optionalProviderBetaEnabled) "Turn provider beta off" else "Turn provider beta on", accent) {
-                                onEvent(UiEvent.SetOptionalProviderBeta(!model.optionalProviderBetaEnabled))
+                            ReelButton(if (model.experimentalHandoffsEnabled) "Turn handoff experiments off" else "Try handoff experiments", accent) {
+                                onEvent(UiEvent.SetExperimentalHandoffs(!model.experimentalHandoffsEnabled))
                             }
-                            if (model.optionalProviderBetaEnabled) {
+                            if (model.experimentalHandoffsEnabled) {
                                 Spacer(Modifier.height(16.dp))
-                                Text("Optional external provider setup", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                                Text("Unavailable · no adapter is installed in this build.", color = muted)
+                                Text("External-app handoffs", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                Text("No handoff integration is available in this build yet.", color = muted)
                             }
                         } else {
                             Text("Settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(10.dp))
                             Text("Your personal collection stays on this device. Home connections and family controls are still in development.", color = muted)
+                            Spacer(Modifier.height(12.dp))
+                            Text("Media connections", color = Color.White, fontSize = 20.sp)
+                            Text("Personal media is available. External adapters are not installed yet; they will not require experimental handoffs.", color = muted)
                             Spacer(Modifier.height(12.dp))
                             ReelButton("Add personal media", accent) { onEvent(UiEvent.Import) }
                             Spacer(Modifier.height(12.dp))

@@ -39,7 +39,7 @@ fun NativeExperience(
             color = profile?.color ?: "#7357A6",
             step = profile?.onboardingStep?.let { UiStep.valueOf(it.name) } ?: UiStep.IDENTITY,
             guidance = profile?.guidance?.name ?: GuidanceLevel.BALANCED.name,
-            optionalProviderBetaEnabled = state.optionalProviderBetaEnabled,
+            experimentalHandoffsEnabled = state.experimentalHandoffsEnabled,
             tasteSeeds = profile?.tasteSeeds ?: emptySet(),
             destinations = core.navigation().map { it.name }.filter { it == "HOME" || it == "LIBRARY" || it == "SETTINGS" },
             media = state.media.values.sortedBy { it.title.lowercase() }.map { item ->
@@ -83,7 +83,7 @@ fun NativeExperience(
                     core.save(activeId, event.id, event.saved)
                 }
                 is UiEvent.React -> core.setReaction(requireNotNull(profileId), event.id, event.reaction?.let(ReactionKind::valueOf))
-                is UiEvent.SetOptionalProviderBeta -> core.setOptionalProviderBetaEnabled(event.enabled)
+                is UiEvent.SetExperimentalHandoffs -> core.setExperimentalHandoffsEnabled(event.enabled)
             }
             error = null
             revision++

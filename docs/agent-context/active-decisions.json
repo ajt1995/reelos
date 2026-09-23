@@ -57,9 +57,9 @@
       "sources": ["scripts/services/source-access-policy.mjs", "scripts/verify-public-release.mjs", "docs/feature-register.json"]
     },
     {
-      "id": "optional-provider-beta",
-      "decision": "External-provider setup is an off-by-default beta under Advanced Settings. Default first run stays personal/public-domain. Beta opt-in does not bypass source authorization, adapter validation, privacy or release checks; disable removes optional access without deleting personal originals. Official streaming title handoff is additive beta work, not protected-stream capture or a universal third-party Cast sender.",
-      "rationale": "Owner approved progressive provider testing while preparing first distribution on 2026-09-23. Keep missing adapter and unverified handoff states honest. Tool/dependency downloads needed for this release are approved; no implicit paid purchase, wipe, signing replacement or publication authority.",
+      "id": "optional-provider-separation",
+      "decision": "Validated owner-configured source/provider playback is normal optional functionality, not blanket beta. Personal/public-domain remains default. Installing or enabling an adapter is not source authority; validate credentials and bytes. Disable revokes that source without deleting originals. Unverified official handoffs and experiments remain individually gated; no protected browser-stream capture.",
+      "rationale": "Owner explicitly selected Separate them and approved the detailed execution plan on 2026-09-23, superseding blanket provider beta. Incomplete adapters stay honest without hiding validated functionality. No implicit paid purchase or signing replacement.",
       "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-register.json"]
     },
     {
@@ -112,7 +112,7 @@
     },
     {
       "id": "household-clean-install",
-      "decision": "Build and validate the shared native slice on all four approved devices with isolated test state; preserve existing installations and data. Then install the signed household candidate and rehearse a clean friend setup. HP final installation must not import obsolete code, profiles, settings, library state or credentials. No disk wipe without exact target authorization.",
+      "decision": "Validate four native targets in isolated state, then install the signed candidate and rehearse clean friend setup. Obsolete ReelOS application state is disposable after exact app/package targets are identified; do not import old HP state. Never wipe OS, networking, unrelated files or signing identity. Subsequent updates preserve new installation state.",
       "rationale": "The owner approved four-device feasibility and debugging in the 2026-09-23 plan, superseding the former final-candidate-only restriction. This does not authorize destructive cleanup or replacing the existing signing identity.",
       "sources": ["docs/feature-register.json"]
     },

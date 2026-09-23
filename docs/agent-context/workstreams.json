@@ -9,17 +9,16 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "94ec167",
+      "checkpoint": "3d464b0",
       "status": "active",
       "scope": [
-        "implement shared Kotlin/Compose standalone native feasibility slice",
-        "lead owns integration, hardware operation, scripts and persistent decisions; desktop worker owns clients/native/desktop",
-        "independent reviewer owns docs/native-hardware-review.md and bounded reviewed Android corrections; no overlapping edits"
+        "Lead owns shared contracts, native policy/UI integration, versioning, docs and central verification; no shared-tree workers.",
+        "Source binding worker owns legacy source/stream correctness in isolated work/codex-source-binding-2026-09-23.",
+        "Native learning worker owns new pure Kotlin intelligence primitives/tests in isolated work/codex-neural-core-2026-09-23."
       ],
       "currentFacts": [
         "19 active feature groups and 2 parked groups are registered",
         "the canonical clean workspace is C:/Users/austi/Documents/Codex/ReelOS",
-        "origin is the private ajt1995/reelos repository; native-platform decision 5f039fd was pushed",
         "incoming Antigravity branch c404416 contains native Android work plus unresolved runtime and packaging defects",
         "all 19 feature-group and 47 UI acceptance IDs and evidence requirements survived the incoming branch",
         "owner confirmed authorized phone-to-computer storage-budget management",
@@ -36,17 +35,17 @@
         "Windows native onboarding/restart/import/render/pause/seek/resume/replay and normal exit observed; seven desktop unit/integration tests pass with zero skips. Silent short fixture does not certify whole-film/audio/subtitles or installation",
         "Do not compile desktop/core/shared UI during live Gradle desktop:run: mutable classpath caused observed NoClassDefFoundError; serialize builds and desktop UI testing",
         "HP Java17/LibVLC installed with approval; Linux Skiko runtime downloaded and immutable native bundle transferred with matching SHA256. Native first-run screen rendered in Cage/Xwayland; input/playback verification remains in progress. Existing household state untouched",
-        "external-provider beta is now approved off-by-default in Advanced Settings; initial core11 tests pass but independent review identified stale toggle and source-identity collisions for correction before acceptance",
         "native model execution remains unwired: 15 intended specialists differ from 11 legacy registered capabilities; registry validation is not inference evidence",
-        "named ML skill files were not found; concrete ML rules are persistent repository requirements"
+        "named ML skill files were not found; concrete ML rules are persistent repository requirements",
+        "origin ajt1995/reelos is PUBLIC as inspected; secret scan before push; no private presets or credentials in commits.",
+        "Owner approved detailed completion plan; normal validated source/provider playback is not blanket beta. Only unverified handoffs/experiments remain gated.",
+        "Checkpoint 3d464b0 preserves all 14 previously dirty/untracked paths; no feature acceptance implied."
       ],
       "nextChecks": [
-        "test native onboarding, keyboard/Back/focus, persistence and real local playback on devices; Fold screenshot retest alone does not certify these",
-        "npm run architecture:check",
-        "npm run audit:features",
-        "npm run audit:tests",
-        "build native slice with approved cached/downloaded dependencies then verify all four actual platforms",
-        "do not overwrite installed household applications or signing keys with debug builds"
+        "Integrate exact source/file authorization and positive readiness regressions; do not claim live provider verification.",
+        "Migrate blanket beta policy separately from optional source authority and test native saved-state migration.",
+        "Verify real Kotlin learning primitives before connecting persisted reactions; no mocked semantic embeddings.",
+        "Run targeted checks then independent review; commit/push with verified upstream before physical candidate work."
       ]
     },
     {
@@ -55,9 +54,47 @@
       "branch": "work/antigravity-foundation-2026-09-22",
       "checkpoint": "c404416",
       "status": "waiting",
-      "scope": ["preserved source for central review; do not merge wholesale"],
-      "currentFacts": ["source inspected from remote ref; original branch remains unchanged"],
-      "nextChecks": ["integrate reviewed source changes under the reconciled owner requirements"]
+      "scope": [
+        "preserved source for central review; do not merge wholesale"
+      ],
+      "currentFacts": [
+        "source inspected from remote ref; original branch remains unchanged"
+      ],
+      "nextChecks": [
+        "integrate reviewed source changes under the reconciled owner requirements"
+      ]
+    },
+    {
+      "id": "source-binding",
+      "owner": "codex-worker",
+      "branch": "work/codex-source-binding-2026-09-23",
+      "checkpoint": "3d464b0",
+      "status": "active",
+      "scope": [
+        "Streaming ID/file/episode binding and readiness repairs plus regression tests only."
+      ],
+      "currentFacts": [
+        "Isolated worktree; lead reviews and integrates commits; no independent deployments."
+      ],
+      "nextChecks": [
+        "Targeted tests, commit, independent integration review."
+      ]
+    },
+    {
+      "id": "native-learning",
+      "owner": "codex-worker",
+      "branch": "work/codex-neural-core-2026-09-23",
+      "checkpoint": "3d464b0",
+      "status": "active",
+      "scope": [
+        "New pure Kotlin learned algorithm primitives and tests; no UI or shared state edits."
+      ],
+      "currentFacts": [
+        "Isolated worktree; lead reviews and integrates commits; no independent deployments."
+      ],
+      "nextChecks": [
+        "Targeted tests, commit, independent integration review."
+      ]
     }
   ]
 }

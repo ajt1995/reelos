@@ -55,12 +55,12 @@ data class CoreState(
     val requestedHomeId: String? = null,
     val sources: Map<String, SourceRecord> = emptyMap(),
     val media: Map<String, MediaRecord> = emptyMap(),
-    /** Per-install preview choice; never a credential, connection, or access grant. */
-    val optionalProviderBetaEnabled: Boolean = false,
+    /** Unverified external-app handoff experiments only; never gates validated media sources. */
+    val experimentalHandoffsEnabled: Boolean = false,
 ) {
     val activeProfile: ProfileState? get() = activeProfileId?.let(profiles::get)
 }
 
-const val CORE_SCHEMA_VERSION = 2
+const val CORE_SCHEMA_VERSION = 3
 const val PERSONAL_SOURCE_ID = "personal"
 const val PUBLIC_DOMAIN_SOURCE_ID = "public-domain"
