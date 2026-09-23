@@ -120,7 +120,10 @@ export class NativeMediaRegistry {
         }
       }
     }
-    const sources = [...(existing?.sources || []).filter((entry) => entry.id !== source.id), source];
+    const sources = [...(existing?.sources || []).filter((entry) => entry.id !== source.id).map((entry) =>
+      source.kind === "provider_stream" && entry.kind === "provider_stream" && entry.provider === source.provider
+        ? { ...entry, accessState: "revoked", replacedAt: Date.now() }
+        : entry), source];
     state.items[itemId] = {
       itemId,
       workId,

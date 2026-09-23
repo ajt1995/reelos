@@ -249,12 +249,13 @@ test("provider byte route requires exact stored torrent, ready state and episode
     { ...base, id: 22, download_state: "completed" },
     { ...base, download_state: "downloading" },
     { ...base, download_state: "completed", files: [{ id: 3, name: "Show.S01E02.mkv", size: 100 }] },
+    { ...base, download_state: "completed", files: [{ id: 3, name: "Show.S01E01E02.mkv", size: 100 }] },
   ]) {
     const result = await byteRequest(who, "/api/stream/item/episode-one", { options: { fetchImpl: lookup(row) } });
     assert.equal(result.statusCode, 404);
     assert.equal(result.json.code, "playback_source_unavailable");
   }
-  assert.equal(checked.length, 3);
+  assert.equal(checked.length, 4);
   assert.ok(checked.every((url) => url.includes("mylist?id=21")));
 });
 

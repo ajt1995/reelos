@@ -69,3 +69,24 @@ test("native registry presence does not hide separately verified personal shelf 
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test("playback projection follows a reacquired provider torrent", () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), "reelos-provider-reacquire-"));
+  try {
+    fs.writeFileSync(path.join(stateDir, "answers.json"), JSON.stringify({ source: "torbox", apiKey: "fixture-key" }));
+    fs.writeFileSync(path.join(stateDir, "ui-settings.json"), JSON.stringify({ debridConnection: {
+      provider: "torbox", enabled: true, status: "connected",
+    } }));
+    const registry = new NativeMediaRegistry({ stateDir });
+    for (const torrentId of [10, 11]) registry.register({ workId: "series", editionId: "episode-cut",
+      mediaType: "episode", season: 1, episode: 2,
+      source: { id: `torrent-${torrentId}`, kind: "provider_stream", provider: "torbox", verified: true,
+        binding: { infohash: "a".repeat(40), torrentId, fileId: 2 } } });
+    const [item] = readPlaybackLibraryItems({ stateDir });
+    assert.equal(item.source.torrentId, 11);
+    assert.equal(item.season, 1);
+    assert.equal(item.episode, 2);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});

@@ -46,7 +46,25 @@ test("TorBox adapter binds the returned torrent id, hash, file and episode", asy
   const verified = await adapter.verify(acquired);
   assert.deepEqual(verified.source.binding, { infohash: hash, torrentId: 11, fileId: 1, sizeBytes: 100 });
   await assert.rejects(() => adapter.verify({ ...acquired, requestedFileId: 2 }), (error) => error.code === "provider_episode_mismatch");
-  await assert.rejects(() => adapter.verify({ ...acquired, requestedFileId: null }), (error) => error.code === "provider_file_ambiguous");
+  const selected = await adapter.verify({ ...acquired, requestedFileId: null });
+  assert.equal(selected.source.binding.fileId, 1);
+});
+
+test("TorBox episode packs fail closed for duplicate or combined episode files", async () => {
+  const hash = "f".repeat(40);
+  let files = [];
+  const adapter = new TorBoxProviderAdapter({ apiKey: "secret", rateLimiter: limiter, fetchImpl: async () => response(200, {
+    data: [{ id: 19, hash, download_state: "completed", files }],
+  }) });
+  const requested = { torrentId: 19, hash, requestedMedia: { mediaType: "episode", season: 1, episode: 2 } };
+  files = [{ id: 1, name: "Show.S01E01.mkv", size: 100 }, { id: 2, name: "Show.S01E02.mkv", size: 200 }];
+  assert.equal((await adapter.verify(requested)).source.binding.fileId, 2);
+  files = [{ id: 2, name: "Show.S01E02.1080p.mkv", size: 200 }, { id: 3, name: "Show.S01E02.720p.mkv", size: 150 }];
+  await assert.rejects(() => adapter.verify(requested), (error) => error.code === "provider_file_ambiguous");
+  files = [{ id: 2, name: "Show.S01E02E03.mkv", size: 200 }];
+  await assert.rejects(() => adapter.verify(requested), (error) => error.code === "provider_file_ambiguous");
+  files = [{ id: 1, name: "Show.S01E01.mkv", size: 100 }];
+  await assert.rejects(() => adapter.verify(requested), (error) => error.code === "provider_file_ambiguous");
 });
 
 test("TorBox adapter rejects a same-hash torrent with a different id", async () => {

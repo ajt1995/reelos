@@ -54,3 +54,17 @@ test("registry pins a provider file to one canonical episode", () => {
   assert.throws(() => registry.register({ workId: "other", editionId: "other-cut", mediaType: "episode", season: 1, episode: 2,
     source: { ...source, id: "duplicate-file" } }), (error) => error.code === "registry_identity_conflict");
 });
+
+test("reacquiring the same edition replaces the stale provider torrent binding", () => {
+  const registry = new NativeMediaRegistry({ stateDir: fixture() });
+  const first = registry.register({ workId: "series", editionId: "episode-cut", mediaType: "episode", season: 1, episode: 2,
+    source: { id: "old-torrent", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { infohash: "d".repeat(40), torrentId: 10, fileId: 2 } } });
+  registry.register({ workId: "series", editionId: "episode-cut", mediaType: "episode", season: 1, episode: 2,
+    source: { id: "new-torrent", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { infohash: "d".repeat(40), torrentId: 11, fileId: 2 } } });
+  const sources = registry.get(first.itemId).sources;
+  assert.equal(sources.find((source) => source.id === "old-torrent").accessState, "revoked");
+  assert.equal(sources.filter((source) => source.accessState === "active").length, 1);
+  assert.equal(sources.find((source) => source.accessState === "active").binding.torrentId, 11);
+});

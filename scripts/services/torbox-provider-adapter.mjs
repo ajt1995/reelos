@@ -30,13 +30,17 @@ function candidateHash(candidate) {
   return match ? match[1].toLowerCase() : "";
 }
 
-function selectVideoFile(files, requestedId = null) {
+function selectVideoFile(files, requestedId = null, requestedMedia = null) {
   const usable = (Array.isArray(files) ? files : []).filter((file) => {
     const name = String(file?.name || file?.short_name || file?.path || "");
     return file?.id != null && VIDEO.test(name) && Number(file?.size || 0) > 0;
   });
   if (requestedId != null) {
     const exact = usable.filter((file) => String(file.id) === String(requestedId));
+    return exact.length === 1 ? exact[0] : null;
+  }
+  if (requestedMedia?.mediaType === "episode" || requestedMedia?.episode != null) {
+    const exact = usable.filter((file) => episodeMatches(file, requestedMedia));
     return exact.length === 1 ? exact[0] : null;
   }
   return usable.length === 1 ? usable[0] : null;
@@ -48,7 +52,10 @@ function episodeMatches(file, requestedMedia) {
   const episode = requestedMedia.episode;
   if (!Number.isInteger(season) || !Number.isInteger(episode)) return false;
   const name = String(file?.name || file?.short_name || file?.path || "");
-  return new RegExp(`(?:^|[^a-z0-9])s0*${season}e0*${episode}(?!\\d)`, "i").test(name);
+  const markers = [...name.matchAll(/(?:^|[^a-z0-9])s0*(\d{1,3})e0*(\d{1,3})(?!\d)/gi)];
+  if (markers.length !== 1 || Number(markers[0][1]) !== season || Number(markers[0][2]) !== episode) return false;
+  const suffix = name.slice(markers[0].index + markers[0][0].length);
+  return !/^(?:[-_. ]*e0*\d{1,3}|[-_]0*\d{1,3}(?:[^0-9]|$))/i.test(suffix);
 }
 
 export class TorBoxProviderAdapter {
@@ -144,7 +151,7 @@ export class TorBoxProviderAdapter {
       if (["expired", "incomplete", "error", "failed"].includes(state)) throw providerError("The TorBox item is not currently playable.", "provider_item_unavailable", 409);
       throw providerError("TorBox is still preparing this title.", "provider_item_pending", 202);
     }
-    const file = selectVideoFile(torrent.files, acquired.requestedFileId);
+    const file = selectVideoFile(torrent.files, acquired.requestedFileId, acquired.requestedMedia);
     if (!file) throw providerError("ReelOS could not select one exact playable video file.", "provider_file_ambiguous", 409);
     if (!episodeMatches(file, acquired.requestedMedia)) throw providerError("The selected file does not match the requested episode.", "provider_episode_mismatch", 409);
     const hash = String(torrent.hash || acquired.hash || "").toLowerCase();
