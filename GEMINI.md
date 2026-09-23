@@ -15,4 +15,9 @@ read `GEMINI.md`.
 
 ReelOS is one end-to-end local neural system. Deterministic policy remains
 authoritative for access, credentials, PINs, destructive actions, updates, and
-resource safety. Jellyfin is only an optional client-protocol shim.
+resource safety. It is one canonical codebase with device-native Windows,
+Linux, Android phone/tablet, and Android TV applications. Those targets must
+not ship a browser, localhost web UI, embedded WebView, Electron, or another
+browser-rendered consumer shell. Only iOS may use the temporary browser/PWA
+fallback until a native iOS target exists. Jellyfin is only an optional
+client-protocol shim.

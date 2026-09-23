@@ -2,7 +2,7 @@
 
 This is the first file a fresh engineering agent should read. It is intentionally short.
 
-> **Architectural identity:** ReelOS is one end-to-end local neural system—not an ARR stack, a Jellyfin fork, or a conventional media manager with AI features attached. Search, taste, preparation, playback, storage, machine health, interface adaptation, scene understanding, family analysis, and recovery share one event and feature spine. Deterministic policy remains authoritative for access, credentials, PINs, destructive actions, updates, and resource safety. Jellyfin exists only as an optional client-protocol compatibility shim.
+> **Architectural identity:** ReelOS is one end-to-end local neural system and one canonical codebase—not an ARR stack, a Jellyfin fork, a website wrapped as an app, or a conventional media manager with AI features attached. Search, taste, preparation, playback, storage, machine health, interface adaptation, scene understanding, family analysis, and recovery share one event and feature spine. Windows, Linux, Android phone/tablet, and Android TV ship device-native ReelOS applications over the shared core and contracts; they must not ship an external-browser, localhost-browser, embedded-WebView, Electron, or other browser-rendered consumer shell. An iOS browser/PWA fallback is the sole temporary exception until a native iOS target exists. Deterministic policy remains authoritative for access, credentials, PINs, destructive actions, updates, and resource safety. Jellyfin exists only as an optional client-protocol compatibility shim.
 
 ## Resume in under a minute
 

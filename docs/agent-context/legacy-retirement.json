@@ -49,6 +49,14 @@
       "replacement": "shared coordinator, guarded local runtime, and resource governor",
       "releaseBoundary": "May remain only for classified migration tests until explicit retirement evidence permits deletion.",
       "testEvidence": ["docs/test-inventory-policy.json"]
+    },
+    {
+      "id": "browser-packaged-consumer-shells",
+      "patterns": ["SharedReelOsActivity", "build-android-shared-ui", "Open ReelOS Web Interface", "localhost browser launcher", "embedded WebView", "Electron consumer shell"],
+      "disposition": "migration-only",
+      "replacement": "device-native Windows, Linux, Android phone/tablet, and Android TV renderers over the shared ReelOS core, state, neural, design-token, and behavior contracts",
+      "releaseBoundary": "Browser-rendered surfaces may remain only as development visual references, migration fixtures, automated test harnesses, and the temporary iOS browser/PWA fallback. They cannot enter Windows, Linux, Android, or Android TV consumer release packages or count as native-platform evidence.",
+      "testEvidence": ["clients/android/android-contracts.test.mjs", "scripts/packaging-boundaries.test.mjs"]
     }
   ]
 }
