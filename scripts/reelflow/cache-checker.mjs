@@ -5,10 +5,15 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { torBoxRateLimiter } from "../services/debrid-service.mjs";
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
-const memoryCache = new Map(); // hash -> { cached: boolean, data: Object, expiresAt: number }
+const memoryCache = new Map(); // provider/account-scoped hash -> entry
+
+export function providerCacheScope(provider, apiKey, accountScope = "") {
+  return createHash("sha256").update(JSON.stringify([provider, String(apiKey || "").trim(), accountScope])).digest("hex");
+}
 
 /**
  * Retrieves the TorBox API key from answers.json or process environment.
@@ -54,8 +59,9 @@ export function getDebridProvider() {
  * @returns {Promise<Record<string, { cached: boolean, name?: string, size?: number, files?: Array<{ name: string, size: number }> }>>}
  */
 export async function checkCachedTorrents(hashes = [], apiKey = "", options = {}) {
-  const key = (apiKey || getDebridApiKey()).trim();
+  const key = String(apiKey || "").trim();
   const provider = options.provider || getDebridProvider();
+  const scope = providerCacheScope(provider, key, options.accountScope);
   const fetchImpl = options.fetchImpl || fetch;
   const maxRetries = options.maxRetries || 3;
 
@@ -69,7 +75,7 @@ export async function checkCachedTorrents(hashes = [], apiKey = "", options = {}
 
   // Check in-memory cache first
   for (const h of cleanHashes) {
-    const entry = memoryCache.get(h);
+    const entry = key ? memoryCache.get(`${scope}:${h}`) : null;
     if (entry && entry.expiresAt > now) {
       results[h] = entry.data;
     } else {
@@ -118,7 +124,7 @@ export async function checkCachedTorrents(hashes = [], apiKey = "", options = {}
         const json = isRealDebrid
           ? await request()
           : (await torBoxRateLimiter.executeRequest(
-              `checkcached:${batch.slice().sort().join(",")}`,
+              `checkcached:${scope}:${batch.slice().sort().join(",")}`,
               request,
               { ttlMs: CACHE_TTL_MS },
             )).data;
@@ -140,7 +146,7 @@ export async function checkCachedTorrents(hashes = [], apiKey = "", options = {}
             files: isRealDebrid ? rdVariants.flatMap((variant) => variant?.files || []) : typeof item === "object" && Array.isArray(item.files) ? item.files : [],
           };
           results[h] = entryData;
-          memoryCache.set(h, { cached: isCached, data: entryData, expiresAt: now + CACHE_TTL_MS });
+          memoryCache.set(`${scope}:${h}`, { cached: isCached, data: entryData, expiresAt: now + CACHE_TTL_MS });
         }
         break; // Success!
       } catch {

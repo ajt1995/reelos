@@ -4,7 +4,7 @@ import { getRequestActiveProfile, getProfile, listProfiles } from "./profile-ser
 import { getAuthorizedDevice } from "./reelos-gate-service.mjs";
 import { childProfileService } from "./child-profile-service.mjs";
 import { resolveFamilyPlaybackPolicy, verifyFamilyTitle } from "./playback-session-service.mjs";
-import { libraryItemIsAccessible, libraryItemSourceKind, sourcePolicyFromState } from "./source-access-policy.mjs";
+import { libraryItemIsAccessible, libraryItemSourceKind, readProviderValidation, sourcePolicyFromState } from "./source-access-policy.mjs";
 import { NativeMediaRegistry } from "./native-media-registry.mjs";
 
 export function playbackStateDir(options = {}) {
@@ -84,6 +84,7 @@ export function readPlaybackSourcePolicy(options = {}) {
     answers: readJson(path.join(stateDir, "answers.json"), {}),
     uiSettings: readJson(path.join(stateDir, "ui-settings.json"), {}),
     env: process.env,
+    validation: readProviderValidation(stateDir),
   });
 }
 

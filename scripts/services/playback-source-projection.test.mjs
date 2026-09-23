@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { projectPlaybackSources, readPlaybackLibraryItems } from "./playback-access-service.mjs";
 import { NativeMediaRegistry } from "./native-media-registry.mjs";
+import { createProviderValidation, writeProviderValidation } from "./source-access-policy.mjs";
 
 const allowed = (sourceKind, sourcePolicy = {}) => ({ ok: true, sourceKind, sourcePolicy });
 
@@ -77,6 +78,7 @@ test("playback projection follows a reacquired provider torrent", () => {
     fs.writeFileSync(path.join(stateDir, "ui-settings.json"), JSON.stringify({ debridConnection: {
       provider: "torbox", enabled: true, status: "connected",
     } }));
+    writeProviderValidation(stateDir, createProviderValidation("torbox", "fixture-key", "fixture-account"));
     const registry = new NativeMediaRegistry({ stateDir });
     for (const torrentId of [10, 11]) registry.register({ workId: "series", editionId: "episode-cut",
       mediaType: "episode", season: 1, episode: 2,

@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { torBoxRateLimiter } from "../services/debrid-service.mjs";
 import {
   circuitBreaker,
   recordFailure,
@@ -359,4 +360,36 @@ test("scrapeTorBoxSearch returns [] on 404 instead of throwing", async () => {
   const fetchImpl = async () => ({ ok: false, status: 404, json: async () => ({}) });
   const hits = await scrapeTorBoxSearch("nope", "test-key-12345", fetchImpl);
   assert.deepEqual(hits, []);
+});
+
+test("TorBox search cache separates validated accounts and never embeds credentials", async () => {
+  const requests = [];
+  const fetchImpl = async (_url, options) => {
+    requests.push(options.headers.Authorization);
+    return { ok: true, json: async () => ({ data: { torrents: [
+      { name: "Example", hash: "a".repeat(40), size: 123 },
+    ] } }) };
+  };
+  try {
+    await scrapeTorBoxSearch("Unique scope fixture", "synthetic-key-A", fetchImpl, "account-A");
+    await scrapeTorBoxSearch("Unique scope fixture", "synthetic-key-B", fetchImpl, "account-B");
+    await scrapeTorBoxSearch("Unique scope fixture", "synthetic-key-A", fetchImpl, "account-C");
+    await scrapeTorBoxSearch("Unique scope fixture", "synthetic-key-A", fetchImpl, "account-A");
+    assert.equal(requests.length, 3);
+    assert.ok([...torBoxRateLimiter.cache.keys()].every((key) => !key.includes("synthetic-key")));
+  } finally {
+    torBoxRateLimiter.clearCache();
+  }
+});
+
+test("Real-Debrid credential is never sent to TorBox search", async () => {
+  const urls = [];
+  await searchAndScoreReleases({ title: "Provider boundary fixture", year: 2024 }, {
+    provider: "real-debrid", apiKey: "synthetic-rd-key", enabledIndexerIds: ["torrents-csv"],
+    fetchImpl: async (url) => {
+      urls.push(String(url));
+      return { ok: true, json: async () => ({ streams: [] }) };
+    },
+  });
+  assert.ok(urls.every((url) => !url.includes("torbox.app")));
 });

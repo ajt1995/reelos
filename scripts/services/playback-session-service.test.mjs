@@ -16,6 +16,7 @@ import {
 } from "./playback-session-service.mjs";
 import { validateEvent } from "./intelligence-contracts.mjs";
 import { localEditionFingerprint } from "./family-treatment-service.mjs";
+import { createProviderValidation, writeProviderValidation } from "./source-access-policy.mjs";
 
 describe("Playback Session Service", () => {
   let stateDir, profilesDir;
@@ -263,8 +264,9 @@ describe("Playback Session Service", () => {
     presence.clear();
     localLibrary({ sourceKind: "debrid", source: { provider: "torbox" } });
     assert.equal((await forwardPlaybackSession("start", body, opts)).code, "source_unavailable");
-    fs.writeFileSync(path.join(stateDir, "answers.json"), JSON.stringify({ apiKey: "fixture-only" }));
+    fs.writeFileSync(path.join(stateDir, "answers.json"), JSON.stringify({ source: "torbox", apiKey: "fixture-only" }));
     fs.writeFileSync(path.join(stateDir, "ui-settings.json"), JSON.stringify({ debridConnection: { enabled: true, provider: "torbox", status: "connected" } }));
+    writeProviderValidation(stateDir, createProviderValidation("torbox", "fixture-only", "fixture-account"));
     assert.equal((await forwardPlaybackSession("start", body, opts)).ok, true);
     fs.writeFileSync(path.join(stateDir, "ui-settings.json"), JSON.stringify({ debridConnection: { enabled: false } }));
     assert.equal((await forwardPlaybackSession("progress", body, opts)).code, "source_unavailable");

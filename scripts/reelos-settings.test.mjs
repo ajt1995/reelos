@@ -62,8 +62,9 @@ test("provider requests can resolve a curated title and year through the live ca
 test("debrid settings use server-side validation and do not accept client connection status", () => {
   const idx = src.indexOf("async function handleSettings");
   const chunk = src.slice(idx, src.indexOf("async function handlePorts", idx));
-  assert.match(chunk, /pingWizardSource\(provider, key\)/);
-  assert.match(chunk, /body\.debridProvider === "real-debrid"/);
+  assert.match(chunk, /pingWizardSource\(provider, key, undefined, \{ requireAccount: true \}\)/);
+  assert.match(chunk, /writeProviderValidation/);
+  assert.match(chunk, /debridProvider : cur\.debridProvider/);
   assert.match(chunk, /atomicWriteJsonSync/);
   assert.match(chunk, /mode: 0o600/);
   assert.match(chunk, /next\.debridStatus = "connected"/);
@@ -72,7 +73,7 @@ test("debrid settings use server-side validation and do not accept client connec
 
 test("consumer setup advertises only the provider with a certified native path", () => {
   assert.match(world, /Connect TorBox/);
-  assert.match(world, /Real-Debrid is validating locally/);
+  assert.doesNotMatch(world, /Real-Debrid is validating locally/);
   assert.doesNotMatch(world, />Connect Real-Debrid</);
   assert.doesNotMatch(world, /option value="real-debrid"/);
 });

@@ -26,6 +26,7 @@ import {
   splashTuneFromProfile,
 } from "./reelos-box-scale.mjs";
 import { spawn, spawnSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import { politeScheduler } from "./services/polite-scheduler.mjs";
 import { dirname, basename, join } from "node:path";
@@ -108,6 +109,10 @@ import {
   providerUnavailablePayload,
   publicSourcePolicy,
   sourcePolicyFromState,
+  createProviderValidation,
+  effectiveProviderKey,
+  readProviderValidation,
+  writeProviderValidation,
 } from "./services/source-access-policy.mjs";
 import {
   collectRequestList,
@@ -2821,6 +2826,7 @@ async function handleRequestList(res) {
     answers: answers(),
     uiSettings: readUiSettings(),
     env: process.env,
+    validation: currentProviderValidation(),
   });
   if (!canDispatchProviderRequest(sourcePolicy)) {
     send(res, 200, {
@@ -2845,6 +2851,7 @@ async function handleRequestStatus(req, res) {
     answers: answers(),
     uiSettings: readUiSettings(),
     env: process.env,
+    validation: currentProviderValidation(),
   });
   if (!canDispatchProviderRequest(sourcePolicy)) {
     send(res, 409, { status: "unavailable", ...providerUnavailablePayload() });
@@ -2979,6 +2986,11 @@ async function triggerReelFlowFulfill({
 }) {
   try {
     const sourceSettings = readUiSettings();
+    const providerPolicy = sourcePolicyFromState({
+      answers: answers(), uiSettings: sourceSettings, env: process.env,
+      validation: currentProviderValidation(),
+    });
+    if (!providerPolicy.connected) return { ok: false, reason: "provider_not_connected" };
     note(
       `reelflow fulfill start: ${title} (${year || ""}) type=${mediaType} season=${season ?? ""}`,
     );
@@ -2990,7 +3002,9 @@ async function triggerReelFlowFulfill({
         episode: episode != null ? parseInt(episode, 10) : null,
       },
       {
-        provider: sourceSettings.debridProvider || "torbox",
+        provider: providerPolicy.provider,
+        apiKey: providerPolicy.apiKey,
+        accountScope: providerPolicy.accountScope,
         enabledIndexerIds: sourceSettings.enabledIndexerIds || [],
       },
     );
@@ -3006,9 +3020,18 @@ async function triggerReelFlowFulfill({
     );
     const magnet = `magnet:?xt=urn:btih:${best.infoHash}&dn=${encodeURIComponent(best.title)}`;
     const category = mediaType === "tv" ? "tv" : "movies";
+    const currentPolicy = sourcePolicyFromState({
+      answers: answers(), uiSettings: readUiSettings(), env: process.env,
+      validation: currentProviderValidation(),
+    });
+    if (!currentPolicy.connected || currentPolicy.accountScope !== providerPolicy.accountScope) {
+      return { ok: false, reason: "provider_connection_changed" };
+    }
     const dispatchRes = await dispatchTorrent(magnet, {
       category,
-      provider: sourceSettings.debridProvider || "torbox",
+      provider: currentPolicy.provider,
+      apiKey: currentPolicy.apiKey,
+      accountScope: currentPolicy.accountScope,
     });
 
     if (!dispatchRes.ok) {
@@ -3098,6 +3121,7 @@ async function handleRequest(req, res) {
     answers: answers(),
     uiSettings: readUiSettings(),
     env: process.env,
+    validation: currentProviderValidation(),
   });
   if (!canDispatchProviderRequest(sourcePolicy)) {
     send(res, 409, providerUnavailablePayload());
@@ -4527,6 +4551,15 @@ function readUiSettings() {
   }
 }
 
+function publicUiSettings(settings) {
+  const { debridValidationAttempt: _privateAttempt, ...publicSettings } = settings;
+  return publicSettings;
+}
+
+function currentProviderValidation() {
+  return readProviderValidation(dirname(uiSettingsPath()));
+}
+
 function writeSystemdFile(path, body) {
   try {
     mkdirSync("/etc/systemd/system", { recursive: true });
@@ -4634,10 +4667,11 @@ async function handleSettings(req, res) {
       answers: answers(),
       uiSettings: settings,
       env: process.env,
+      validation: currentProviderValidation(),
     });
     send(res, 200, {
       ok: true,
-      ...settings,
+      ...publicUiSettings(settings),
       availableIndexerPresets: PUBLIC_INDEXER_ROSTER.map(
         ({ id, name, displayName, role, type }) => ({
           id,
@@ -4704,29 +4738,39 @@ async function handleSettings(req, res) {
         ? body.debridEnabled === true
         : cur.debridEnabled === true;
     const provider =
-      body.debridProvider === "real-debrid" ? "real-debrid" : "torbox";
+      ("debridProvider" in body ? body.debridProvider : cur.debridProvider) === "real-debrid" ? "real-debrid" : "torbox";
     next.debridEnabled = enable;
     next.debridProvider = provider;
     next.debridStatus = enable ? "validating" : "disabled";
     next.debridValidatedAt = null;
+    next.debridValidationAttempt = enable ? randomUUID() : null;
     if (enable) {
       const suppliedKey =
         typeof body.debridKey === "string" ? body.debridKey.trim() : "";
       const currentAnswers = answers();
-      const key = String(
-        suppliedKey ||
-          (currentAnswers.source === provider ? currentAnswers.apiKey : "") ||
-          (provider === "real-debrid"
-            ? process.env.REAL_DEBRID_API_KEY || process.env.RD_API_KEY
-            : process.env.TORBOX_API_KEY) ||
-          "",
-      ).trim();
-      const validation = await pingWizardSource(provider, key);
+      const candidateAnswers = suppliedKey ? { ...currentAnswers, source: provider, apiKey: suppliedKey } : currentAnswers;
+      const key = effectiveProviderKey(provider, candidateAnswers, process.env);
+      mkdirSync(dirname(uiSettingsPath()), { recursive: true });
+      writeFileSync(uiSettingsPath(), JSON.stringify(next, null, 2) + "\n");
+      const envKey = effectiveProviderKey(provider, {}, process.env);
+      const validation = suppliedKey && envKey && suppliedKey !== envKey
+        ? { ok: false, code: "provider_key_overridden", error: "An environment key overrides this provider key." }
+        : await pingWizardSource(provider, key, undefined, { requireAccount: true });
+      if (readUiSettings().debridValidationAttempt !== next.debridValidationAttempt) {
+        send(res, 409, { ok: false, code: "provider_validation_superseded", error: "Provider settings changed during validation." });
+        return;
+      }
       if (!validation.ok) {
         next.debridStatus = "failed";
-        mkdirSync(dirname(uiSettingsPath()), { recursive: true });
         writeFileSync(uiSettingsPath(), JSON.stringify(next, null, 2) + "\n");
-        send(res, 422, { ok: false, ...next, error: validation.error });
+        send(res, 422, { ok: false, ...publicUiSettings(next), code: validation.code, error: validation.error });
+        return;
+      }
+      const effectiveAfter = effectiveProviderKey(provider, suppliedKey ? candidateAnswers : answers(), process.env);
+      if (effectiveAfter !== key) {
+        next.debridStatus = "validating";
+        writeFileSync(uiSettingsPath(), JSON.stringify(next, null, 2) + "\n");
+        send(res, 409, { ok: false, code: "provider_key_changed", error: "The provider key changed during validation." });
         return;
       }
       if (suppliedKey) {
@@ -4738,8 +4782,10 @@ async function handleSettings(req, res) {
           { mode: 0o600 },
         );
       }
+      writeProviderValidation(dirname(uiSettingsPath()), createProviderValidation(provider, key, validation.accountId));
       next.debridStatus = "connected";
       next.debridValidatedAt = new Date().toISOString();
+      next.debridValidationAttempt = null;
     }
   }
   mkdirSync(dirname(uiSettingsPath()), { recursive: true });
@@ -4780,13 +4826,14 @@ async function handleSettings(req, res) {
     answers: answers(),
     uiSettings: next,
     env: process.env,
+    validation: currentProviderValidation(),
   });
   const cleanupScheduled =
     "debridEnabled" in body && body.debridEnabled !== true;
   if (cleanupScheduled) void reconcileDisabledProvider();
   send(res, 200, {
     ok: true,
-    ...next,
+    ...publicUiSettings(next),
     beta,
     sourcePolicy: publicSourcePolicy(sourcePolicy),
     providerCleanup: cleanupScheduled ? "scheduled" : undefined,
@@ -5129,6 +5176,7 @@ async function handleLibrary(req, res) {
     answers: answers(),
     uiSettings: readUiSettings(),
     env: process.env,
+    validation: currentProviderValidation(),
   });
   const { annotateVerifiedLibraryOriginals } = await import("./services/library-api-service.mjs");
   const originalOptions = { stateDir: process.env.REELOS_STATE, profilesDir: process.env.REELOS_PROFILES_DIR };
@@ -5517,6 +5565,7 @@ async function handleReady(req, res) {
     answers: answers(),
     uiSettings: readUiSettings(),
     env: process.env,
+    validation: currentProviderValidation(),
   });
   const host =
     String(req.headers.host || "")

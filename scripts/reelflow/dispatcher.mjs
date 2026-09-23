@@ -3,7 +3,7 @@
  * Submits torrents/magnets to Decypharr qBittorrent bridge (:8282) or directly to TorBox debrid.
  */
 
-import { getDebridApiKey } from "./cache-checker.mjs";
+import { providerCacheScope } from "./cache-checker.mjs";
 import { torBoxRateLimiter } from "../services/debrid-service.mjs";
 
 const DECYPHARR_API = process.env.DECYPHARR_API || "http://127.0.0.1:8282";
@@ -20,6 +20,10 @@ const DECYPHARR_API = process.env.DECYPHARR_API || "http://127.0.0.1:8282";
 export async function dispatchTorrent(magnetOrUrl, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const category = options.category || "movies";
+  const apiKey = String(options.apiKey || "").trim();
+  if (!apiKey || !/^[a-f0-9]{64}$/.test(String(options.accountScope || ""))) {
+    return { ok: false, error: "Connect and validate a provider before dispatching." };
+  }
 
   if (!magnetOrUrl) {
     return { ok: false, error: "Missing magnet or torrent URL" };
@@ -59,13 +63,12 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
   }
 
   // Step 2: Fallback to TorBox Native API if Decypharr is unavailable
-  const apiKey = (options.apiKey || getDebridApiKey()).trim();
   if ((options.provider || "torbox") === "torbox" && apiKey && hash) {
     try {
       const tbForm = new URLSearchParams();
       tbForm.append("magnet", magnetOrUrl);
 
-      const cacheKey = `createtorrent:${hash}`;
+      const cacheKey = `createtorrent:${providerCacheScope("torbox", apiKey, options.accountScope)}:${hash}`;
       const { data } = await torBoxRateLimiter.executeRequest(cacheKey, async () => {
         return fetchImpl("https://api.torbox.app/v1/api/torrents/createtorrent", {
           method: "POST",
@@ -82,8 +85,8 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
       if (data) {
         return { ok: true, hash, method: "torbox_native", data: data?.data || data };
       }
-    } catch (e) {
-      return { ok: false, error: `TorBox API error: ${String(e)}` };
+    } catch {
+      return { ok: false, error: "TorBox could not accept this request." };
     }
   }
 

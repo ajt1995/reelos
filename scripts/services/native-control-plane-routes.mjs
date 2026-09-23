@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { getRequestProfileAuthorization } from "./profile-service.mjs";
-import { sourcePolicyFromState } from "./source-access-policy.mjs";
+import { readProviderValidation, sourcePolicyFromState } from "./source-access-policy.mjs";
 import { loadOwnerIndexerPresets } from "./neural-indexer-repair.mjs";
 import { searchAndScoreReleases } from "../reelflow/search.mjs";
 import { NativeAcquisitionService, publicAcquisition } from "./native-acquisition-service.mjs";
@@ -61,6 +61,7 @@ function sourcePolicy(stateDir) {
     answers: readJson(path.join(stateDir, "answers.json")),
     uiSettings: readJson(path.join(stateDir, "ui-settings.json")),
     env: process.env,
+    validation: readProviderValidation(stateDir),
   });
 }
 
@@ -108,7 +109,7 @@ async function launchAcquisition(ctx, job) {
       title: current.title, year: current.year, season: current.season, episode: current.episode,
     }, {
       fetchImpl: (url, options = {}) => fetch(url, { ...options, signal: options.signal || signal }),
-      provider: policy.provider, apiKey: policy.apiKey,
+      provider: policy.provider, apiKey: policy.connected ? policy.apiKey : "", accountScope: policy.accountScope,
       enabledIndexerIds: settings.enabledIndexerIds, indexerRoster: roster,
       qualityFloor: settings.qualityFloor, preferHdr: settings.preferHdr,
       preferRemux: settings.preferRemux, providerSearch: false,
@@ -117,8 +118,9 @@ async function launchAcquisition(ctx, job) {
       magnet: candidate.magnet || `magnet:?xt=urn:btih:${candidate.infoHash}&dn=${encodeURIComponent(candidate.title || current.title)}` }))),
     rank: async (_current, candidates) => candidates[0] || null,
     resolveProvider: async () => {
-      if (!policy.connected || policy.provider !== "torbox") return null;
-      return { id: "torbox", adapter: new TorBoxProviderAdapter({ apiKey: policy.apiKey }) };
+      const current = sourcePolicy(ctx.stateDir);
+      if (!current.connected || current.provider !== "torbox" || current.accountScope !== policy.accountScope) return null;
+      return { id: "torbox", adapter: new TorBoxProviderAdapter({ apiKey: current.apiKey, accountScope: current.accountScope }) };
     },
     registry: ctx.registry,
   });

@@ -69,6 +69,31 @@ test("TorBox ping sends User-Agent ReelOS and uses the live URL", async () => {
   assert.match(headers.Authorization, /^Bearer /);
 });
 
+test("private validation requires exact provider account and distinguishes failures", async () => {
+  const key = "synthetic-key-for-testing";
+  const torbox = await pingWizardSource("torbox", key, async () => ({
+    ok: true, status: 200, json: async () => ({ success: true, data: { id: 42 } }),
+  }), { requireAccount: true });
+  assert.equal(torbox.accountId, "42");
+  const publicPing = await pingWizardSource("torbox", key, async () => ({
+    ok: true, status: 200, json: async () => ({ success: true, data: { id: 42 } }),
+  }));
+  assert.equal("accountId" in publicPing, false);
+  assert.equal((await pingWizardSource("torbox", key, async () => ({
+    ok: true, status: 200, json: async () => ({ data: {} }),
+  }), { requireAccount: true })).code, "provider_identity_missing");
+  assert.equal((await pingWizardSource("torbox", key, async () => ({ ok: false, status: 401 }),
+    { requireAccount: true })).code, "provider_rejected");
+  assert.equal((await pingWizardSource("torbox", key, async () => { throw Object.assign(new Error("fixture"), { name: "TimeoutError" }); },
+    { requireAccount: true })).code, "provider_timeout");
+  assert.equal((await pingWizardSource("torbox", key, async () => { throw new Error("fixture"); },
+    { requireAccount: true })).code, "provider_connectivity");
+  const rd = await pingWizardSource("real-debrid", key, async () => ({
+    ok: true, status: 200, json: async () => ({ id: 84, username: "owner" }),
+  }), { requireAccount: true });
+  assert.equal(rd.accountId, "84");
+});
+
 test("provision refuses Plex claim and Cloudflare Tunnel as working paths", () => {
   const ok = { source: "torbox", frontend: "jellyfin", access: "lan" };
   assert.equal(provisionHonestyError(ok), null);

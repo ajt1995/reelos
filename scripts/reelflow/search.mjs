@@ -5,7 +5,7 @@
  */
 
 import { parseSceneTitle, scoreRelease } from "./quality.mjs";
-import { checkCachedTorrents, getDebridApiKey } from "./cache-checker.mjs";
+import { checkCachedTorrents, providerCacheScope } from "./cache-checker.mjs";
 import { torBoxRateLimiter } from "../services/debrid-service.mjs";
 import { neuralIndexerRepair, PUBLIC_INDEXER_ROSTER } from "../services/neural-indexer-repair.mjs";
 
@@ -99,13 +99,13 @@ function torboxSearchItems(json) {
   return [];
 }
 
-export async function scrapeTorBoxSearch(query, apiKey = "", fetchImpl = fetch) {
-  const key = (apiKey || getDebridApiKey()).trim();
+export async function scrapeTorBoxSearch(query, apiKey = "", fetchImpl = fetch, accountScope = "") {
+  const key = String(apiKey || "").trim();
   if (!key || !query) return [];
 
   try {
     const url = `${TORBOX_SEARCH_BASE}/${encodeURIComponent(query)}?check_cache=true`;
-    const cacheKey = `search:${encodeURIComponent(query.toLowerCase())}`;
+    const cacheKey = `search:${providerCacheScope("torbox", key, accountScope)}:${encodeURIComponent(query.toLowerCase())}`;
     const { data: json } = await torBoxRateLimiter.executeRequest(cacheKey, async () => {
       return fetchImpl(url, {
         headers: {
@@ -388,12 +388,12 @@ export async function searchAndScoreReleases(queryParams = {}, options = {}) {
   const isTv = hasEp || (typeof season === "number" && !isNaN(season));
 
   // Step 2: Fallback to TorBox Search if Torrentio gave 0 results or circuit is open
-  if (rawReleases.length === 0 && options.providerSearch !== false
+  if (rawReleases.length === 0 && (options.provider || "torbox") === "torbox" && options.providerSearch !== false
       && Array.isArray(options.enabledIndexerIds) && options.enabledIndexerIds.length > 0) {
     const q = hasEp
       ? `${title} S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`
       : `${title} ${year || ""}`.trim();
-    rawReleases = await scrapeTorBoxSearch(q, options.apiKey, fetchImpl);
+    rawReleases = await scrapeTorBoxSearch(q, options.apiKey, fetchImpl, options.accountScope);
   }
 
   // Step 2.5: Fallback to Public Indexers with autonomous mirror repair
@@ -443,6 +443,7 @@ export async function searchAndScoreReleases(queryParams = {}, options = {}) {
   const cacheMap = await checkCachedTorrents(hashesToCheck, options.apiKey, {
     fetchImpl,
     provider: options.provider,
+    accountScope: options.accountScope,
   });
 
   // Step 5: Score releases against quality profiles

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { torBoxRateLimiter } from "./debrid-service.mjs";
-import { checkCachedTorrents, getDebridApiKey } from "../reelflow/cache-checker.mjs";
+import { checkCachedTorrents } from "../reelflow/cache-checker.mjs";
 
 const API = "https://api.torbox.app/v1/api";
 const HASH = /^[a-f0-9]{40}$/i;
@@ -59,13 +59,14 @@ function episodeMatches(file, requestedMedia) {
 }
 
 export class TorBoxProviderAdapter {
-  constructor({ apiKey = "", fetchImpl = fetch, rateLimiter = torBoxRateLimiter, pollIntervalMs = 5_000, maxWaitMs = 10 * 60_000 } = {}) {
-    this.apiKey = String(apiKey || getDebridApiKey()).trim();
+  constructor({ apiKey = "", accountScope = "", fetchImpl = fetch, rateLimiter = torBoxRateLimiter, pollIntervalMs = 5_000, maxWaitMs = 10 * 60_000 } = {}) {
+    this.apiKey = String(apiKey || "").trim();
+    this.accountScope = accountScope;
     this.fetch = fetchImpl;
     this.rateLimiter = rateLimiter;
     this.pollIntervalMs = pollIntervalMs;
     this.maxWaitMs = maxWaitMs;
-    this.scope = this.apiKey ? createHash("sha256").update(this.apiKey).digest("hex").slice(0, 16) : "missing";
+    this.scope = this.apiKey ? createHash("sha256").update(JSON.stringify(["torbox", this.apiKey, accountScope])).digest("hex") : "missing";
   }
 
   requireKey() {
@@ -104,7 +105,7 @@ export class TorBoxProviderAdapter {
   async checkAvailability(candidate, { signal } = {}) {
     const hash = candidateHash(candidate);
     if (!hash) return { available: false, cached: false, reason: "missing_infohash" };
-    const checked = await checkCachedTorrents([hash], this.apiKey, { provider: "torbox", fetchImpl: this.fetch, signal });
+    const checked = await checkCachedTorrents([hash], this.apiKey, { provider: "torbox", accountScope: this.accountScope, fetchImpl: this.fetch, signal });
     return { available: true, hash, ...(checked[hash] || { cached: false }) };
   }
 
