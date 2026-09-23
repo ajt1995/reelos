@@ -1,5 +1,7 @@
 package com.reelos.core
 
+import java.util.ConcurrentModificationException
+
 /**
  * Local state coordinator shared by native renderers. Methods persist before publishing a new
  * snapshot, so a failed write leaves the previous snapshot intact. No model inference is implied.
@@ -172,7 +174,43 @@ class ReelCore(private val store: CoreStore, val deviceKind: DeviceKind) {
     @Synchronized
     fun putSource(source: SourceRecord) {
         requireId(source.id)
+        require(source.kind != SourceKind.OPTIONAL_ADAPTER) { "Use the optional source registration boundary" }
+        require((source.kind == SourceKind.PERSONAL && source.id == PERSONAL_SOURCE_ID) ||
+            (source.kind == SourceKind.PUBLIC_DOMAIN && source.id == PUBLIC_DOMAIN_SOURCE_ID)) {
+            "Built-in sources require their reserved identity"
+        }
+        require(snapshot.sources[source.id]?.kind?.let { it == source.kind } ?: true) { "Source kind cannot change" }
         publish(snapshot.copy(sources = snapshot.sources + (source.id to source)))
+    }
+
+    /** Trusted optional adapters report availability after their own access checks. */
+    @Synchronized
+    fun putOptionalSource(sourceId: String, status: SourceStatus) {
+        requireId(sourceId)
+        require(sourceId != PERSONAL_SOURCE_ID && sourceId != PUBLIC_DOMAIN_SOURCE_ID) { "Built-in source identity is reserved" }
+        require(snapshot.sources[sourceId]?.kind?.let { it == SourceKind.OPTIONAL_ADAPTER } ?: true) { "Source kind cannot change" }
+        require(snapshot.optionalProviderBetaEnabled || status != SourceStatus.AVAILABLE) {
+            "Enable optional provider beta before an adapter can publish availability"
+        }
+        publish(snapshot.copy(sources = snapshot.sources + (sourceId to SourceRecord(sourceId, SourceKind.OPTIONAL_ADAPTER, status))))
+    }
+
+    /** Preview visibility only. Disabling retains records but requires adapters to revalidate access. */
+    @Synchronized
+    fun setOptionalProviderBetaEnabled(enabled: Boolean) {
+        repeat(3) { attempt ->
+            val sources = if (enabled) snapshot.sources else snapshot.sources.mapValues { (_, source) ->
+                if (source.kind == SourceKind.OPTIONAL_ADAPTER && source.status == SourceStatus.AVAILABLE)
+                    source.copy(status = SourceStatus.UNAVAILABLE) else source
+            }
+            try {
+                publish(snapshot.copy(optionalProviderBetaEnabled = enabled, sources = sources))
+                return
+            } catch (stale: ConcurrentModificationException) {
+                snapshot = validateCoreState(store.load())
+                if (attempt == 2) throw stale
+            }
+        }
     }
 
     @Synchronized
@@ -190,9 +228,11 @@ class ReelCore(private val store: CoreStore, val deviceKind: DeviceKind) {
 
     fun mediaAction(mediaId: String): MediaAction {
         val item = snapshot.media[mediaId] ?: return MediaAction.UNAVAILABLE
+        val source = item.sourceId?.let(snapshot.sources::get)
+        if (source?.kind == SourceKind.OPTIONAL_ADAPTER && !snapshot.optionalProviderBetaEnabled) return MediaAction.UNAVAILABLE
         if (item.availability == MediaAvailability.METADATA_ONLY) return MediaAction.FIND
         if (item.availability == MediaAvailability.UNAVAILABLE) return MediaAction.UNAVAILABLE
-        val source = item.sourceId?.let(snapshot.sources::get) ?: return MediaAction.UNAVAILABLE
+        if (source == null) return MediaAction.UNAVAILABLE
         if (source.status != SourceStatus.AVAILABLE) return MediaAction.UNAVAILABLE
         return if (item.availability == MediaAvailability.PREPARING) MediaAction.PREPARING else MediaAction.PLAY
     }

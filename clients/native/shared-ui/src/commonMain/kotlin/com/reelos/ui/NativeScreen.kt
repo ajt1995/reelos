@@ -64,6 +64,7 @@ data class UiModel(
     val tasteSeeds: Set<String>,
     val guidance: String,
     val destinations: List<String>,
+    val optionalProviderBetaEnabled: Boolean,
     val error: String? = null,
 )
 
@@ -79,6 +80,7 @@ sealed interface UiEvent {
     data class Play(val id: String) : UiEvent
     data class Save(val id: String, val saved: Boolean) : UiEvent
     data class React(val id: String, val reaction: String?) : UiEvent
+    data class SetOptionalProviderBeta(val enabled: Boolean) : UiEvent
 }
 
 private val canvas = Color(0xFF080809)
@@ -101,12 +103,15 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
     var guidanceDraft by remember(model.name, model.guidance) { mutableStateOf(model.guidance) }
     var query by remember { mutableStateOf("") }
     var destination by remember { mutableStateOf("HOME") }
+    var advancedOpen by remember { mutableStateOf(false) }
     SideEffect { onBackAvailabilityChanged((model.step != UiStep.IDENTITY && model.step != UiStep.COMPLETE) || destination != "HOME") }
     var seenBackRevision by remember { mutableIntStateOf(backRevision) }
     LaunchedEffect(backRevision) {
         if (backRevision != seenBackRevision) {
             seenBackRevision = backRevision
-            if (model.step == UiStep.COMPLETE) destination = "HOME"
+            if (model.step == UiStep.COMPLETE) {
+                if (advancedOpen) advancedOpen = false else destination = "HOME"
+            }
             else if (model.step != UiStep.IDENTITY) onEvent(UiEvent.Back)
         }
     }
@@ -126,7 +131,9 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         ).onPreviewKeyEvent {
             if (it.type == KeyEventType.KeyDown && (it.key == Key.Escape || it.key == Key.Back)) {
                 if (model.step != UiStep.COMPLETE || destination != "HOME") {
-                    if (model.step == UiStep.COMPLETE) destination = "HOME" else onEvent(UiEvent.Back)
+                    if (model.step == UiStep.COMPLETE) {
+                        if (advancedOpen) advancedOpen = false else destination = "HOME"
+                    } else onEvent(UiEvent.Back)
                     true
                 } else false
             } else false
@@ -185,6 +192,10 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                 UiStep.SOURCES -> item {
                     Text("Bring your collection.", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Text("Start with personal media. Public-domain titles can appear when a source adds them.", color = muted)
+                    if (model.optionalProviderBetaEnabled) {
+                        Spacer(Modifier.height(16.dp))
+                        Panel { Text("Optional external provider setup is unavailable. No adapter is installed in this build.", color = muted) }
+                    }
                     Spacer(Modifier.height(20.dp))
                     ReelButton("Continue", accent) { onEvent(UiEvent.ConfirmSources) }
                 }
@@ -200,11 +211,18 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
             item {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     model.destinations.forEach { target ->
-                        ReelButton(target.lowercase().replaceFirstChar { it.uppercase() }, accent, selected = destination == target, compact = true) { destination = target }
+                        ReelButton(target.lowercase().replaceFirstChar { it.uppercase() }, accent, selected = destination == target, compact = true) {
+                            destination = target
+                            advancedOpen = false
+                        }
                     }
                 }
             }
-            if (destination != "HOME") item { ReelButton("Back to Home", accent) { destination = "HOME" } }
+            if (destination != "HOME") item {
+                ReelButton(if (advancedOpen) "Back to Settings" else "Back to Home", accent) {
+                    if (advancedOpen) advancedOpen = false else destination = "HOME"
+                }
+            }
             when (destination) {
                 "HOME" -> {
                     item {
@@ -229,11 +247,28 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                 }
                 else -> item {
                     Panel {
-                        Text("Your space", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(10.dp))
-                        Text("Personal collection on this device. Home connections and family controls are still in development.", color = muted)
-                        Spacer(Modifier.height(12.dp))
-                        ReelButton("Add personal media", accent) { onEvent(UiEvent.Import) }
+                        if (advancedOpen) {
+                            Text("Advanced settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
+                            Text("Upcoming external provider beta is off by default. This choice reveals setup only; it does not connect an account or grant access.", color = muted)
+                            Spacer(Modifier.height(14.dp))
+                            ReelButton(if (model.optionalProviderBetaEnabled) "Turn provider beta off" else "Turn provider beta on", accent) {
+                                onEvent(UiEvent.SetOptionalProviderBeta(!model.optionalProviderBetaEnabled))
+                            }
+                            if (model.optionalProviderBetaEnabled) {
+                                Spacer(Modifier.height(16.dp))
+                                Text("Optional external provider setup", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
+                                Text("Unavailable · no adapter is installed in this build.", color = muted)
+                            }
+                        } else {
+                            Text("Settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(10.dp))
+                            Text("Your personal collection stays on this device. Home connections and family controls are still in development.", color = muted)
+                            Spacer(Modifier.height(12.dp))
+                            ReelButton("Add personal media", accent) { onEvent(UiEvent.Import) }
+                            Spacer(Modifier.height(12.dp))
+                            ReelButton("Advanced settings", accent) { advancedOpen = true }
+                        }
                     }
                 }
             }

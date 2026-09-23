@@ -57,7 +57,9 @@ does not reset data. The local snapshot is a feasibility store, not the finished
    replaces evidence on each run and fails on missing checks. This is not full UI acceptance.
    Fold ARM64 is currently disconnected. Windows .214 is 15.8 GiB, not 64 GiB.
    HP password SSH verified Ubuntu 26.04.1 x86_64, about 3.2 GiB RAM and an active Wayland
-   desktop. Java and LibVLC are absent; installing those runtimes awaits owner approval.
+   Cage Wayland kiosk, not a general desktop. Java 17 and LibVLC are now installed with
+   approval; an immutable Linux x64 validation bundle renders its first native screen.
+   Input and playback acceptance on that compositor remain in progress.
 4. Preserve all 19 active feature groups / 47 UI requirements. Update their existing acceptance
    ledger only with current evidence; a core smoke pass is not a platform or UI pass.
 
@@ -65,6 +67,10 @@ No models were downloaded. Build dependencies were downloaded with owner approva
 dependency-free core smoke remains offline. No existing household application was
 uninstalled, household data wiped, or signing key replaced. A failed build must remain visible,
 not be replaced by a stale APK.
+
+External-provider setup is behind an off-by-default beta in Settings > Advanced settings.
+The native adapter itself is not implemented; opt-in truthfully reports that state and does
+not connect an account. Provider beta is not a child/owner authorization mechanism.
 
 ## Physical media checks
 

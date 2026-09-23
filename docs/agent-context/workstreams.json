@@ -9,7 +9,7 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "aa23872",
+      "checkpoint": "94ec167",
       "status": "active",
       "scope": [
         "implement shared Kotlin/Compose standalone native feasibility slice",
@@ -35,7 +35,8 @@
         "TV passed ten physical media checks with zero skips including decoder/import/seek/resume/isolation, mutable provider, completion and screen-awake behavior; scoped evidence replaces .reelos-audit/native-hardware/<serial>/result.json",
         "Windows native onboarding/restart/import/render/pause/seek/resume/replay and normal exit observed; seven desktop unit/integration tests pass with zero skips. Silent short fixture does not certify whole-film/audio/subtitles or installation",
         "Do not compile desktop/core/shared UI during live Gradle desktop:run: mutable classpath caused observed NoClassDefFoundError; serialize builds and desktop UI testing",
-        "HP Java and LibVLC are absent; explicit runtime installation approval pending; no existing machine data changed",
+        "HP Java17/LibVLC installed with approval; Linux Skiko runtime downloaded and immutable native bundle transferred with matching SHA256. Native first-run screen rendered in Cage/Xwayland; input/playback verification remains in progress. Existing household state untouched",
+        "external-provider beta is now approved off-by-default in Advanced Settings; initial core11 tests pass but independent review identified stale toggle and source-identity collisions for correction before acceptance",
         "native model execution remains unwired: 15 intended specialists differ from 11 legacy registered capabilities; registry validation is not inference evidence",
         "named ML skill files were not found; concrete ML rules are persistent repository requirements"
       ],

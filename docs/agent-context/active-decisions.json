@@ -16,8 +16,8 @@
     },
     {
       "id": "physical-platform-acceptance",
-      "decision": "Release acceptance requires physical tests on the owner's Windows workstation at 192.168.1.214, Onn TV at 192.168.1.95:5555, Galaxy Z Fold serial R5GL64PC0CF, and HP Debian 12 Minimal appliance at 192.168.1.234. Verify live identities and resources; source/unit/simulation checks alone do not establish completion.",
-      "rationale": "Physical inventory on 2026-09-23 found LAPTOP-8J93FFJH at .214 with 15.8 GiB RAM, not the earlier 64GB claim; Fold R5GL64PC0CF was USB-authorized. TV ADB and HP SSH ports were reachable, not yet authenticated identity evidence. Non-destructive verification and isolated feasibility testing are allowed; destructive targets need exact authorization and old HP state must not enter the final installation.",
+      "decision": "Release acceptance requires physical tests on the owner's Windows workstation at 192.168.1.214, Onn TV at 192.168.1.95:5555, Galaxy Z Fold serial R5GL64PC0CF, and HP Ubuntu 26.04.1 appliance at 192.168.1.234. Verify live identities and resources; source/unit/simulation checks alone do not establish completion.",
+      "rationale": "Authenticated 2026-09-23 inventory found Windows .214 with 15.8 GiB RAM, Onn TV using a 32-bit Android ABI, and HP Ubuntu with about 3.2 GiB RAM and a Cage Wayland kiosk. Fold was previously USB-authorized but is currently disconnected. Non-destructive isolated testing is allowed; destructive targets need exact authorization and old HP state must not enter the final installation.",
       "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-acceptance.json"]
     },
     {
@@ -55,6 +55,12 @@
       "decision": "Public-domain and personal media are complete default sources. The core exposes a neutral Media source adapter contract and contains no named debrid provider or private source preset. Named provider adapters and owner indexers ship only in separately signed private setup packs; credentials are always entered per home.",
       "rationale": "Keep one capable extensible core while separating private household configuration, protecting credentials, and avoiding provider-specific public product language.",
       "sources": ["scripts/services/source-access-policy.mjs", "scripts/verify-public-release.mjs", "docs/feature-register.json"]
+    },
+    {
+      "id": "optional-provider-beta",
+      "decision": "External-provider setup is an off-by-default beta under Advanced Settings. Default first run stays personal/public-domain. Beta opt-in does not bypass source authorization, adapter validation, privacy or release checks; disable removes optional access without deleting personal originals. Official streaming title handoff is additive beta work, not protected-stream capture or a universal third-party Cast sender.",
+      "rationale": "Owner approved progressive provider testing while preparing first distribution on 2026-09-23. Keep missing adapter and unverified handoff states honest. Tool/dependency downloads needed for this release are approved; no implicit paid purchase, wipe, signing replacement or publication authority.",
+      "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-register.json"]
     },
     {
       "id": "private-day0-scope",

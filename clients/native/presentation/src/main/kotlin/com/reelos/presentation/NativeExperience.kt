@@ -15,6 +15,7 @@ import com.reelos.ui.UiEvent
 import com.reelos.ui.UiMedia
 import com.reelos.ui.UiModel
 import com.reelos.ui.UiStep
+import java.util.ConcurrentModificationException
 import java.util.UUID
 
 /** JVM bridge shared by the Android and desktop hosts. Host callbacks supply native import/play. */
@@ -38,6 +39,7 @@ fun NativeExperience(
             color = profile?.color ?: "#7357A6",
             step = profile?.onboardingStep?.let { UiStep.valueOf(it.name) } ?: UiStep.IDENTITY,
             guidance = profile?.guidance?.name ?: GuidanceLevel.BALANCED.name,
+            optionalProviderBetaEnabled = state.optionalProviderBetaEnabled,
             tasteSeeds = profile?.tasteSeeds ?: emptySet(),
             destinations = core.navigation().map { it.name }.filter { it == "HOME" || it == "LIBRARY" || it == "SETTINGS" },
             media = state.media.values.sortedBy { it.title.lowercase() }.map { item ->
@@ -81,11 +83,15 @@ fun NativeExperience(
                     core.save(activeId, event.id, event.saved)
                 }
                 is UiEvent.React -> core.setReaction(requireNotNull(profileId), event.id, event.reaction?.let(ReactionKind::valueOf))
+                is UiEvent.SetOptionalProviderBeta -> core.setOptionalProviderBetaEnabled(event.enabled)
             }
             error = null
             revision++
         } catch (failure: Exception) {
-            error = failure.message?.take(180) ?: "That change could not be saved."
+            error = if (failure is ConcurrentModificationException) {
+                "Other changes were saved. Review the current setting and try again."
+            } else failure.message?.take(180) ?: "That change could not be saved."
+            revision++ // A retry may have reloaded a newer snapshot even when persistence failed.
         }
     }
 }

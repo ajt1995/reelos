@@ -42,7 +42,7 @@ class FileCoreStore(private val path: Path) : CoreStore {
         DataInputStream(Files.newInputStream(path)).use { input ->
             require(input.readInt() == MAGIC) { "Not a ReelOS core snapshot" }
             val version = input.readInt()
-            require(version == schemaVersion) { "Unsupported core state version: $version" }
+            require(version == 1 || version == schemaVersion) { "Unsupported core state version: $version" }
             val revision = input.readLong()
             val profiles = readMap(input) {
                 val id = input.readUTF()
@@ -71,9 +71,14 @@ class FileCoreStore(private val path: Path) : CoreStore {
                 val id = input.readUTF()
                 id to MediaRecord(id, input.readUTF(), readNullable(input), enumValueOf<MediaAvailability>(input.readUTF()))
             }
+            val betaEnabled = if (version >= 2) input.readBoolean() else false
             require(input.read() == -1) { "Unexpected trailing core data" }
             require(activeId == null || activeId in profiles) { "Active profile is missing" }
-            return validateCoreState(CoreState(version, revision, profiles, activeId, requestedHomeId, sources, media))
+            val migratedSources = if (version == 1) sources.mapValues { (_, source) ->
+                if (source.kind == SourceKind.OPTIONAL_ADAPTER && source.status == SourceStatus.AVAILABLE)
+                    source.copy(status = SourceStatus.UNAVAILABLE) else source
+            } else sources
+            return validateCoreState(CoreState(CORE_SCHEMA_VERSION, revision, profiles, activeId, requestedHomeId, migratedSources, media, betaEnabled))
         }
     }
 
@@ -138,6 +143,7 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     writeNullable(output, item.sourceId)
                     output.writeUTF(item.availability.name)
                 }
+                output.writeBoolean(state.optionalProviderBetaEnabled)
                 output.flush()
                 file.fd.sync()
             }
@@ -209,7 +215,17 @@ internal fun validateCoreState(state: CoreState): CoreState {
         require((profile.dismissedIds intersect profile.lessLikeIds).isEmpty()) { "Conflicting reactions" }
         require(profile.playbackPositionsMs.values.all { it >= 0 }) { "Invalid playback position" }
     }
-    state.sources.forEach { (id, source) -> require(id.isNotBlank() && id == source.id) { "Invalid source identity" } }
+    state.sources.forEach { (id, source) ->
+        require(id.isNotBlank() && id == source.id) { "Invalid source identity" }
+        require(when (source.kind) {
+            SourceKind.PERSONAL -> id == PERSONAL_SOURCE_ID
+            SourceKind.PUBLIC_DOMAIN -> id == PUBLIC_DOMAIN_SOURCE_ID
+            SourceKind.OPTIONAL_ADAPTER -> id != PERSONAL_SOURCE_ID && id != PUBLIC_DOMAIN_SOURCE_ID
+        }) { "Source kind conflicts with reserved identity" }
+    }
+    require(state.optionalProviderBetaEnabled || state.sources.values.none {
+        it.kind == SourceKind.OPTIONAL_ADAPTER && it.status == SourceStatus.AVAILABLE
+    }) { "Optional source cannot be available while beta is off" }
     state.media.forEach { (id, item) ->
         require(id.isNotBlank() && id == item.id && item.title.isNotBlank() && item.title.length <= 512) { "Invalid media identity" }
     }
