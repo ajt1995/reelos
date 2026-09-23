@@ -13,4 +13,10 @@ their model identity, version, and provenance. It does not make vectors,
 encode queries, or equate matrix-factorization coordinates with semantic
 embeddings. A null cosine result means the model space cannot be compared.
 
-This module is not yet connected to core events, storage, or native UI.
+`ReelCore.rankedHomeMedia` now calls `NativeTasteCoordinator`; the shared native
+presentation consumes that ordering. Reactions are durably saved by CoreStore, then
+bounded factors are replayed deterministically from the latest snapshot. Reset and
+neutral Dismiss remove earlier feedback; Library and explicit search retain all titles.
+This ranks rated/exact-seed items only, not semantic recommendations for unseen titles.
+The default gate only checks interruption and JVM heap headroom. Full device-governor,
+event/feature-spine and production encoder integration remain required work.

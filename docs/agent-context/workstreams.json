@@ -9,43 +9,35 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "3d464b0",
+      "checkpoint": "95a1ab7",
       "status": "active",
       "scope": [
-        "Lead owns shared contracts, native policy/UI integration, versioning, docs and central verification; no shared-tree workers.",
-        "Source binding worker owns legacy source/stream correctness in isolated work/codex-source-binding-2026-09-23.",
-        "Native learning worker owns new pure Kotlin intelligence primitives/tests in isolated work/codex-neural-core-2026-09-23."
+        "Lead owns shared Kotlin/Compose integration, contracts, native versions, context and physical validation; isolated workers return reviewed commits.",
+        "Source identity/CDN and native-learning worker slices are integrated; no independent deployments."
       ],
       "currentFacts": [
-        "19 active feature groups and 2 parked groups are registered",
-        "the canonical clean workspace is C:/Users/austi/Documents/Codex/ReelOS",
-        "incoming Antigravity branch c404416 contains native Android work plus unresolved runtime and packaging defects",
-        "all 19 feature-group and 47 UI acceptance IDs and evidence requirements survived the incoming branch",
-        "owner confirmed authorized phone-to-computer storage-budget management",
-        "no incoming application code merged; review is static, not device certification",
-        "owner's seven-part decision list is reconciled in docs/agent-context/owner-requirements.md",
-        "approved shared Kotlin/Compose replaces earlier C# split; Books excluded TV; no learning exports beyond Home",
-        "Windows .214 measured at 15.8 GiB; TV ADB authorized; Fold currently disconnected; HP password SSH verified Ubuntu 26.04.1 x86_64, 3.2 GiB RAM and Wayland desktop",
-        "native feasibility is not release acceptance; all 19 groups and 47 UI requirements remain mandatory",
-        "shared core compiles and dependency-free Kotlin smoke passes; independent 47-ID UX source audit exists",
-        "native structural checks cover shared dependencies, system/keyboard insets and inventory; use audit:tests for generated counts, not test-pass claims",
-        "owner approved dependency retry/download: Gradle core JUnit 9/9 zero skips, desktop compilation and Android debug assembly passed",
-        "isolated com.reelos.nativepreview installed and launched on Fold and 32-bit TV; Fold system-bar overlap and banner contrast fixed and visually retested; full interaction/media/device acceptance remains open",
-        "TV passed ten physical media checks with zero skips including decoder/import/seek/resume/isolation, mutable provider, completion and screen-awake behavior; scoped evidence replaces .reelos-audit/native-hardware/<serial>/result.json",
-        "Windows native onboarding/restart/import/render/pause/seek/resume/replay and normal exit observed; seven desktop unit/integration tests pass with zero skips. Silent short fixture does not certify whole-film/audio/subtitles or installation",
-        "Do not compile desktop/core/shared UI during live Gradle desktop:run: mutable classpath caused observed NoClassDefFoundError; serialize builds and desktop UI testing",
-        "HP Java17/LibVLC installed with approval; Linux Skiko runtime downloaded and immutable native bundle transferred with matching SHA256. Native first-run screen rendered in Cage/Xwayland; input/playback verification remains in progress. Existing household state untouched",
-        "native model execution remains unwired: 15 intended specialists differ from 11 legacy registered capabilities; registry validation is not inference evidence",
-        "named ML skill files were not found; concrete ML rules are persistent repository requirements",
-        "origin ajt1995/reelos is PUBLIC as inspected; secret scan before push; no private presets or credentials in commits.",
-        "Owner approved detailed completion plan; normal validated source/provider playback is not blanket beta. Only unverified handoffs/experiments remain gated.",
-        "Checkpoint 3d464b0 preserves all 14 previously dirty/untracked paths; no feature acceptance implied."
+        "Canonical repo C:/Users/austi/Documents/Codex/ReelOS; PUBLIC origin; no credentials/private presets in pushes.",
+        "19 active groups, 2 parked and all 47 UI acceptance IDs retained. Completion graph: completion-execution.md. Native validation foundation is not friend-ready.",
+        "Shared Kotlin/Compose supersedes C# split; Books absent TV; no learning exports beyond Home. Missing named ML skills are not claimed installed.",
+        "Windows .214 is 15.8 GiB. Fold absent from current ADB list. Onn TV .95 authorized armeabi-v7a. HP previously authenticated Ubuntu 26.04.1 x86_64 about 3.2 GiB; Java17/LibVLC and Cage/Xwayland first-screen render verified, not full playback.",
+        "Preserved dirty work at 3d464b0. Prior push 18aa1b5 verified; inspect git upstream for latest published checkpoint.",
+        "Validated optional sources no longer blanket beta; schema3 revokes old optional access pending revalidation and keeps experimental handoff consent separate.",
+        "Reviewed provider fixes use exact torrent/file/episode identity, positive readiness, same-edition reacquisition and per-hop HTTPS/public DNS pinning. Live provider playback and native adapter remain unverified.",
+        "Native Home uses persisted per-profile reactions through bounded local SGD learning. Dismiss neutral, Less reversible, search/Library full catalog. Rated/seed-matched ranking only; no pretrained semantic encoder or held-out usefulness certification.",
+        "33 core JUnit tests and 7 Windows desktop tests passed with zero skips; real LibVLC decoder used the isolated 30-second fixture. Desktop compilation and Android validation assembly passed. Focused Node checks 65 passed/0 failed/1 legacy platform-state skip; skipped check is not release evidence.",
+        "TV physical local-media integration passed 10/10 zero skips; hashes and exact source identity in .reelos-audit/native-hardware/192.168.1.95_5555/result.json. Does not certify whole-film, audio/subtitles or UI. Rerun after affected native changes.",
+        "Native package identity derives from VERSION, Git revision and source fingerprint. Hardware runner verifies source set, APK hashes and canonical VERSION hash before installation.",
+        "Earlier Windows native first-run/import/render/pause/seek/resume/end checks used short silent fixture; not installer/audio/subtitle certification. Serialize desktop execution and shared-module compilation.",
+        "Full npm test:all exited1: unresolved legacy-stack expectations, missing sample fixtures, platform/tool prerequisites and current service failures. Follow targeted failures; never reintroduce retired stack or fake media to turn tests green.",
+        "Architecture report: 11 legacy coordinator routes, 7 fallback and 4 shadow; not all 15 native specialists executing. Pretrained runtime, full governor, full native journeys and Home sync remain open.",
+        "Independent streaming and native-learning reviewers verified integrated bounded fixes; final VERSION provenance finding corrected. No signed consumer release, wipe, signing-key replacement or public release performed."
       ],
       "nextChecks": [
-        "Integrate exact source/file authorization and positive readiness regressions; do not claim live provider verification.",
-        "Migrate blanket beta policy separately from optional source authority and test native saved-state migration.",
-        "Verify real Kotlin learning primitives before connecting persisted reactions; no mocked semantic embeddings.",
-        "Run targeted checks then independent review; commit/push with verified upstream before physical candidate work."
+        "Complete live credential-revision/account-scoped source validation and native authorized network playback; current native validation app local-only.",
+        "Finish native artwork/taste/onboarding and remaining journeys with independent installed-device UX audit; do not treat source inventory as acceptance.",
+        "Connect true learned encoder/model-worker isolation, event/resource spine and all15 specialists with quality evidence.",
+        "Run current native candidate on Fold/Windows/HP; complete real audio/subtitle/whole-film, Home sync, signed install/update/rollback and 19/47 acceptance.",
+        "Use git/context:brief and current hash-scoped evidence; full baseline remains failed. Track, secret-scan, push and verify each validated checkpoint."
       ]
     },
     {
@@ -62,38 +54,6 @@
       ],
       "nextChecks": [
         "integrate reviewed source changes under the reconciled owner requirements"
-      ]
-    },
-    {
-      "id": "source-binding",
-      "owner": "codex-worker",
-      "branch": "work/codex-source-binding-2026-09-23",
-      "checkpoint": "3d464b0",
-      "status": "active",
-      "scope": [
-        "Streaming ID/file/episode binding and readiness repairs plus regression tests only."
-      ],
-      "currentFacts": [
-        "Isolated worktree; lead reviews and integrates commits; no independent deployments."
-      ],
-      "nextChecks": [
-        "Targeted tests, commit, independent integration review."
-      ]
-    },
-    {
-      "id": "native-learning",
-      "owner": "codex-worker",
-      "branch": "work/codex-neural-core-2026-09-23",
-      "checkpoint": "3d464b0",
-      "status": "active",
-      "scope": [
-        "New pure Kotlin learned algorithm primitives and tests; no UI or shared state edits."
-      ],
-      "currentFacts": [
-        "Isolated worktree; lead reviews and integrates commits; no independent deployments."
-      ],
-      "nextChecks": [
-        "Targeted tests, commit, independent integration review."
       ]
     }
   ]

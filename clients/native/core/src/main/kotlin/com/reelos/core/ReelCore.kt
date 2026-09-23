@@ -1,12 +1,25 @@
 package com.reelos.core
 
 import java.util.ConcurrentModificationException
+import com.reelos.core.intelligence.LearningGate
+import com.reelos.core.intelligence.NativeTasteCoordinator
+import com.reelos.core.intelligence.TasteRankingTrace
 
 /**
  * Local state coordinator shared by native renderers. Methods persist before publishing a new
  * snapshot, so a failed write leaves the previous snapshot intact. No model inference is implied.
  */
-class ReelCore(private val store: CoreStore, val deviceKind: DeviceKind) {
+class ReelCore(
+    private val store: CoreStore,
+    val deviceKind: DeviceKind,
+    learningGate: LearningGate = LearningGate {
+        val runtime = Runtime.getRuntime()
+        !Thread.currentThread().isInterrupted &&
+            runtime.maxMemory() - runtime.totalMemory() + runtime.freeMemory() >= 16L * 1024 * 1024
+    },
+) {
+    // Bounded heap admission only; full device/thermal resource-governor integration is pending.
+    private val taste = NativeTasteCoordinator(gate = learningGate)
     @Volatile
     var snapshot: CoreState = validateCoreState(store.load())
         private set
@@ -144,6 +157,19 @@ class ReelCore(private val store: CoreStore, val deviceKind: DeviceKind) {
             else -> p.positiveReactions[itemId]
         }
     }
+
+    /** Native Home only. Library and explicit search retain the complete catalog. */
+    @Synchronized
+    fun rankedHomeMedia(profileId: String): List<MediaRecord> {
+        val person = profile(profileId)
+        val candidates = snapshot.media.values
+            .sortedWith(compareBy<MediaRecord>({ it.title.lowercase() }, { it.id }))
+            .take(2048)
+        return taste.rank(person, candidates)
+    }
+
+    @Synchronized
+    fun tasteRankingTrace(profileId: String): TasteRankingTrace? = taste.lastTrace(profileId)
 
     @Synchronized
     fun save(profileId: String, mediaId: String, saved: Boolean) {

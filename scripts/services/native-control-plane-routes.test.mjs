@@ -38,7 +38,8 @@ test("native control plane exposes safe library and capability projections", asy
     workId: "tmdb-10",
     editionId: "edition-10",
     title: "Visible",
-    source: { id: "provider-10", kind: "provider_stream", provider: "torbox", verified: true, binding: { private: true } },
+    source: { id: "provider-10", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { torrentId: "10", fileId: "1", infohash: "a".repeat(40), private: true } },
   });
   const library = await request(who, context, "/api/library");
   assert.equal(library.statusCode, 200);

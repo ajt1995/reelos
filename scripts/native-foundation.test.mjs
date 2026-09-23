@@ -61,10 +61,28 @@ test("validation Android app cannot replace household installation or claim rele
 
 test("new native Kotlin tests cannot disappear from the test inventory", () => {
   const inventory = buildTestInventory();
-  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt"]) {
+  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt", "/LocalLearningTest.kt", "/NativeTasteCoordinatorTest.kt", "/NativeTasteIntegrationTest.kt"]) {
     const entry = inventory.tests.find((candidate) => candidate.file.endsWith(suffix));
     assert.ok(entry, `Missing test inventory entry: ${suffix}`);
     assert.equal(entry.disposition, "targeted");
   }
   assert.deepEqual(inventory.unclassified, []);
+});
+
+test("native package identity and hardware provenance include canonical VERSION and source bytes", () => {
+  // Structural guard; the physical runner independently checks actual hashes before install.
+  const build = read("clients/native/build.gradle.kts");
+  const android = read("clients/native/android/build.gradle.kts");
+  const runner = read("scripts/test-native-android-hardware.ps1");
+  assert.match(build, /resolve\("\.\.\/\.\.\/VERSION"\)/);
+  assert.match(build, /sourceDigest\.update\(it\.readBytes\(\)\)/);
+  assert.match(android, /dependsOn\("assembleDebug", "assembleDebugAndroidTest"\)/);
+  assert.match(android, /"productVersionSha256" to digest\(rootProject\.rootDir\.resolve\("\.\.\/\.\.\/VERSION"\)\)/);
+  assert.match(runner, /\$buildEvidence\.productVersionSha256 -ne \$result\.productVersionSha256/);
+  assert.match(runner, /\$buildEvidence\.appSha256 -ne \$result\.appSha256/);
+  assert.match(runner, /\$buildEvidence\.testApkSha256 -ne \$result\.testApkSha256/);
+  assert.match(runner, /\$sourceFiles\.Count -ne \$declared\.Count/);
+  assert.match(runner, /\$actual -ne \$expected\.Value/);
+  assert.ok(runner.indexOf('$actual -ne $expected.Value') < runner.indexOf('install -r $apk'));
+  assert.doesNotMatch(runner, /LastWriteTimeUtc/);
 });

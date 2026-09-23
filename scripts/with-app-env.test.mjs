@@ -33,12 +33,13 @@ function makeWorkspace(appEnvJson) {
  * platform state, so a clone has no file for it to find. A CLI test that runs
  * the checked-out wrapper is therefore asserting on whatever the surrounding
  * machine happens to carry; it has to bring its own workspace to be about
- * anything. The wrapper imports only node builtins, so a copy runs as itself.
+ * anything. Include its local discovery dependency in the isolated workspace.
  */
 function makeWrapperWorkspace(appEnvJson) {
   const root = makeWorkspace(appEnvJson);
   mkdirSync(join(root, "scripts"), { recursive: true });
   copyFileSync(WRAPPER, join(root, "scripts/with-app-env.mjs"));
+  copyFileSync(join(projectRoot(), "scripts/local-tool-discovery.mjs"), join(root, "scripts/local-tool-discovery.mjs"));
   return join(root, "scripts/with-app-env.mjs");
 }
 

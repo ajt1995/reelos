@@ -62,9 +62,11 @@ data class UiModel(
     val step: UiStep,
     val media: List<UiMedia>,
     val tasteSeeds: Set<String>,
+    val homeMediaIds: List<String>,
     val guidance: String,
     val destinations: List<String>,
     val experimentalHandoffsEnabled: Boolean,
+    val buildVersion: String,
     val error: String? = null,
 )
 
@@ -122,7 +124,9 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         val alpha by breathing.animateFloat(0.22f, 0.36f, infiniteRepeatable(tween(5600), RepeatMode.Reverse), label = "Breathing color")
         alpha
     } else 0.29f
-    val content = model.media.filter { query.isBlank() || it.title.contains(query.trim(), ignoreCase = true) }
+    val byId = model.media.associateBy { it.id }
+    val content = if (query.isBlank()) model.homeMediaIds.mapNotNull(byId::get)
+        else model.media.filter { it.title.contains(query.trim(), ignoreCase = true) }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color.White, surface = surface, background = canvas, onSurface = Color.White)) {
     LazyColumn(
@@ -269,6 +273,8 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                             ReelButton("Add personal media", accent) { onEvent(UiEvent.Import) }
                             Spacer(Modifier.height(12.dp))
                             ReelButton("Advanced settings", accent) { advancedOpen = true }
+                            Spacer(Modifier.height(16.dp))
+                            Text(model.buildVersion, color = muted, fontSize = 12.sp)
                         }
                     }
                 }
@@ -283,6 +289,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
 }
 
 @Composable private fun MediaCard(media: UiMedia, accent: Color, onEvent: (UiEvent) -> Unit) {
+    var reactionsOpen by remember(media.id) { mutableStateOf(false) }
     Panel {
         Text(media.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
@@ -300,11 +307,19 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         if (media.saved || media.action == UiAction.PLAY) {
             ReelButton(if (media.saved) "Remove from saved" else "Save", accent) { onEvent(UiEvent.Save(media.id, !media.saved)) }
         }
-        listOf("LIKE" to "Like", "LOVE" to "Love", "COZY" to "Cozy", "LESS" to "Less", "DISMISS" to "Dismiss").forEach { (value, label) ->
-            ReelButton(if (media.reaction == value) "$label · selected" else label, accent, selected = media.reaction == value) {
-                onEvent(UiEvent.React(media.id, if (media.reaction == value) null else value))
+        Spacer(Modifier.height(8.dp))
+        ReelButton(if (reactionsOpen) "Close reactions" else media.reaction?.lowercase()?.replaceFirstChar { it.uppercase() } ?: "Your reaction", accent, compact = true) {
+            reactionsOpen = !reactionsOpen
+        }
+        if (reactionsOpen) {
+            Spacer(Modifier.height(8.dp))
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("LIKE" to "Like", "LOVE" to "Love", "COZY" to "Cozy", "LESS" to "Less like this", "DISMISS" to "Not sure").forEach { (value, label) ->
+                    ReelButton(if (media.reaction == value) "$label · selected" else label, accent, selected = media.reaction == value, compact = true) {
+                        onEvent(UiEvent.React(media.id, if (media.reaction == value) null else value))
+                    }
+                }
             }
-            Spacer(Modifier.height(4.dp))
         }
     }
 }

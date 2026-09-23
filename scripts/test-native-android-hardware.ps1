@@ -18,20 +18,38 @@ try {
     $result.abi = ((& $Adb -s $Device shell getprop ro.product.cpu.abilist) -join '').Trim()
     $result.appSha256 = (Get-FileHash -Algorithm SHA256 $app).Hash.ToLowerInvariant()
     $result.testApkSha256 = (Get-FileHash -Algorithm SHA256 $tests).Hash.ToLowerInvariant()
-    $result.sources = @{}
-    $sourceFiles = @(Get-ChildItem (Join-Path $repo 'clients/native') -Recurse -File | Where-Object {
-        $_.FullName -notmatch '[\\/](build|\.gradle|\.kotlin|desktop|test|smoke)[\\/]' -and
-        $_.Extension -in @('.kt','.kts','.xml','.java','.mp4')
-    })
-    $appWritten = (Get-Item -LiteralPath $app).LastWriteTimeUtc
-    $testsWritten = (Get-Item -LiteralPath $tests).LastWriteTimeUtc
-    foreach ($sourceFile in $sourceFiles) {
-        $testOnly = $sourceFile.FullName -match '[\\/]androidTest[\\/]'
-        if ($sourceFile.LastWriteTimeUtc -gt $testsWritten -or (-not $testOnly -and $sourceFile.LastWriteTimeUtc -gt $appWritten)) {
-            throw "Native source is newer than the APK; rebuild before claiming current-source evidence: $($sourceFile.Name)"
-        }
-        $result.sources[[IO.Path]::GetRelativePath($repo, $sourceFile.FullName)] = (Get-FileHash -Algorithm SHA256 $sourceFile.FullName).Hash.ToLowerInvariant()
+    $buildEvidencePath = Join-Path $repo 'clients/native/android/build/outputs/native-validation-build.json'
+    if (-not (Test-Path -LiteralPath $buildEvidencePath)) {
+        throw 'Missing build provenance. Run :android:prepareHardwareValidation before hardware checks.'
     }
+    $buildEvidence = Get-Content -LiteralPath $buildEvidencePath -Raw | ConvertFrom-Json
+    $result.productVersionSha256 = (Get-FileHash -LiteralPath (Join-Path $repo 'VERSION') -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($buildEvidence.schema -ne 'reelos-native-validation-build/v1' -or
+        $buildEvidence.productVersionSha256 -ne $result.productVersionSha256 -or
+        $buildEvidence.appSha256 -ne $result.appSha256 -or
+        $buildEvidence.testApkSha256 -ne $result.testApkSha256) {
+        throw 'APK bytes do not match build provenance. Rebuild with :android:prepareHardwareValidation.'
+    }
+    $nativeRoot = Join-Path $repo 'clients/native'
+    $sourceFiles = @(Get-ChildItem $nativeRoot -Recurse -File | Where-Object {
+        $_.FullName -notmatch '[\\/](build|\.gradle|\.kotlin|desktop|test|smoke)[\\/]' -and
+        $_.Name -ne 'local.properties' -and
+        $_.Extension -in @('.kt','.kts','.xml','.java','.mp4','.properties')
+    })
+    $declared = @($buildEvidence.sources.PSObject.Properties)
+    if ($sourceFiles.Count -ne $declared.Count) { throw 'Native source set changed; rebuild the validation APKs.' }
+    $result.sources = @{}
+    foreach ($sourceFile in $sourceFiles) {
+        $relative = [IO.Path]::GetRelativePath($nativeRoot, $sourceFile.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/'[0])
+        $expected = $buildEvidence.sources.PSObject.Properties[$relative]
+        $actual = (Get-FileHash -LiteralPath $sourceFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        if (-not $expected -or $actual -ne $expected.Value) {
+            throw "Native source differs from built evidence: $relative"
+        }
+        $result.sources["clients/native/$relative"] = $actual
+    }
+    $result.sourceRevision = $buildEvidence.sourceRevision
+    $result.displayVersion = $buildEvidence.displayVersion
     foreach ($apk in @($app,$tests)) {
         & $Adb -s $Device install -r $apk
         if ($LASTEXITCODE -ne 0) { throw 'Isolated test package installation failed.' }

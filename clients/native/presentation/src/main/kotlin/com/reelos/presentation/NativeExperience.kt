@@ -40,7 +40,9 @@ fun NativeExperience(
             step = profile?.onboardingStep?.let { UiStep.valueOf(it.name) } ?: UiStep.IDENTITY,
             guidance = profile?.guidance?.name ?: GuidanceLevel.BALANCED.name,
             experimentalHandoffsEnabled = state.experimentalHandoffsEnabled,
+            buildVersion = com.reelos.core.NativeBuildInfo.current.displayVersion,
             tasteSeeds = profile?.tasteSeeds ?: emptySet(),
+            homeMediaIds = profile?.let { core.rankedHomeMedia(it.id).map { item -> item.id } } ?: emptyList(),
             destinations = core.navigation().map { it.name }.filter { it == "HOME" || it == "LIBRARY" || it == "SETTINGS" },
             media = state.media.values.sortedBy { it.title.lowercase() }.map { item ->
                 UiMedia(

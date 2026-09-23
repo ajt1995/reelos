@@ -10,7 +10,11 @@ test("neural architecture report reconciles runtime registration, coordinator wi
   const report = buildNeuralArchitectureReport();
   assert.match(report.systemStatement, /one end-to-end local neural system/);
   assert.equal(report.summary.registered, 11);
-  assert.equal(report.summary.coordinatorConnected, 7);
+  // All eleven legacy routes now exist, including four non-authoritative shadow routes.
+  // This is registry/wiring evidence, not execution of fifteen native specialists.
+  assert.equal(report.summary.coordinatorConnected, 11);
+  assert.equal(report.summary.fallback, 7);
+  assert.equal(report.summary.shadow, 4);
   assert.deepEqual(validateNeuralArchitecture(report), []);
   assert.equal(report.capabilities.find((capability) => capability.id === "taste-ranking")?.coordinatorConnected, true);
   assert.equal(report.capabilities.find((capability) => capability.id === "scene-understanding")?.lifecycle, "shadow");

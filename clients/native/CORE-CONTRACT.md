@@ -60,7 +60,10 @@ token, or PIN field; source adapters keep those in their own protected storage. 
 record stores no URL or playback token. The native playback adapter must resolve the opaque
 media/source IDs and apply its own access and child-safety checks before opening bytes.
 
-No learned vectors, ranking model, cross-Home export, or shared intelligence transport is
-implemented here. Those capabilities require measured model identity, version, provenance,
-quality, privacy and lifecycle evidence before wiring into this core. Home membership is
-optional and this core performs no learning exports.
+`rankedHomeMedia(profileId)` connects durable reactions to bounded native SGD ranking for
+rated/exact-seed titles. Home uses at most 2048 candidates; Library/search keep the full catalog.
+`tasteRankingTrace` distinguishes learned scores, deterministic fallback and pressure yield.
+Neutral Dismiss is not dislike; Less excludes from recommendations only. Replays are profile
+isolated and restart reproducible. This is not a trained semantic encoder or proof of useful
+unseen-title recommendations. Full resource governance, event/feature spine and model-runtime
+integration remain pending. Home is optional and the core performs no learning exports.

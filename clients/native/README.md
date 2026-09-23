@@ -17,7 +17,10 @@ implementation; `clients/android` and the web application remain migration refer
 
 The first slice persists name, color, guidance, taste selections/reactions and local
 profile state. Public catalog retrieval, endless artwork bubbles, full Family/PIN enforcement,
-actual model inference, Home sync, complete journeys and packaging are not established by it.
+pretrained encoder inference, Home sync, complete journeys and packaging are not established by it.
+Native Home now replays persisted per-profile reactions through a bounded local SGD learner.
+This ranks rated or seed-matched titles; it does not establish semantic discovery of unseen titles,
+held-out recommendation quality, all fifteen specialists, or a complete machine-resource governor.
 Empty/imported catalog state is honest; no movie title is backed by an unrelated sample stream.
 Never use this slice for children or treat its local adapter assertions as security certification.
 
@@ -36,7 +39,7 @@ With approved build dependencies and JDK 17 / Android SDK 35 available:
 ```powershell
 $env:GRADLE_USER_HOME = 'C:\Users\austi\Documents\Codex\.toolchains\gradle-home'
 $env:ANDROID_HOME = 'C:\Users\austi\Documents\Codex\.toolchains\android-sdk'
-.\clients\android\gradlew.bat -p .\clients\native :core:test :desktop:compileKotlin :android:assembleDebug
+.\clients\android\gradlew.bat -p .\clients\native :core:test :desktop:compileKotlin :android:prepareHardwareValidation --offline --max-workers=1 --no-daemon
 .\clients\android\gradlew.bat -p .\clients\native :desktop:run
 ```
 
@@ -47,7 +50,7 @@ does not reset data. The local snapshot is a feasibility store, not the finished
 
 ## Current blockers / next slice
 
-1. Approved build dependencies downloaded on 2026-09-23. Gradle passed nine core JUnit tests
+1. Approved build dependencies downloaded on 2026-09-23. Gradle passed 33 core JUnit tests
    (zero failures/skips), desktop Kotlin compilation and Android debug assembly. Both the Fold
    and 32-bit Onn TV installed and launched the isolated APK. This is launch/render evidence,
    not complete onboarding, playback, model or platform acceptance.
@@ -77,11 +80,18 @@ old blanket-beta snapshots without reviving optional access or inheriting experi
 
 `scripts/test-native-android-hardware.ps1 -Device <authorized-adb-serial>` installs only
 `com.reelos.nativepreview` and its test APK, wakes the display, and requires every named
-test to finish within a bounded timeout. Build `:android:assembleDebug` and
-`:android:assembleDebugAndroidTest` first. Results, source/package hashes and scoped logs
+test to finish within a bounded timeout. Build `:android:prepareHardwareValidation` first.
+That task builds both APKs and records their exact source/file hashes. The runner rejects changed
+sources or APK bytes before installation, rather than rejecting valid Gradle cache timestamps.
+Results, source/package hashes and scoped logs
 replace `.reelos-audit/native-hardware/<serial>/result.json`. The generated video lives
 only under `src/androidTest/assets`; it contains no personal data and must never enter
 the application APK/catalog. Tests cover integration, not a complete user journey.
+
+Native versions derive from the root `VERSION`, Git revision and source fingerprint. Settings
+shows the same generated identity on every host; Android package metadata uses that identity too.
+These are validation artifacts, not a newly signed consumer release. Changing a native source
+invalidates affected device evidence until rebuilt and retested.
 
 Desktop tests need `REELOS_DESKTOP_FIXTURE` pointing to a real local fixture and installed
 LibVLC. Without the fixture the decoder test is skipped, which is not release evidence.

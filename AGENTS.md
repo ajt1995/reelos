@@ -11,6 +11,8 @@ Read `docs/agent-context/owner-requirements.md` before any implementation. The a
 1. Run `npm run context:brief`.
 2. Read `docs/agent-context/workstreams.json`, then only the file(s) named for
    the task in the brief's **Start here** section.
+   The approved dependency graph and unchanged release gate are in
+   `docs/agent-context/completion-execution.md`; do not reconstruct the plan from chat history.
 3. Before changing consumer scope, inspect `docs/feature-register.json`; before changing a durable product or release boundary, inspect `docs/agent-context/active-decisions.json`.
 4. Before changing intelligence or legacy boundaries, run `npm run architecture:report` and read `docs/agent-context/legacy-retirement.json`.
 5. Preserve unrelated working-tree changes. Validate the smallest relevant command first, then the applicable release checks.
