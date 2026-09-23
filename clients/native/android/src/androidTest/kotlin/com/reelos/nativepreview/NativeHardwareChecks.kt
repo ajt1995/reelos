@@ -13,8 +13,17 @@ import androidx.media3.ui.PlayerView
 
 /** Real-device integration checks; direct setup below is NOT onboarding/UI acceptance. */
 class NativeHardwareChecks : Instrumentation() {
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); start() }
+    private var journey: String? = null
+    override fun onCreate(arguments: Bundle?) {
+        journey = arguments?.getString("journey")
+        super.onCreate(arguments)
+        start()
+    }
     override fun onStart() {
+        if (journey == "personal-ui") {
+            NativePersonalUiChecks.run(this)
+            return
+        }
         val results = Bundle()
         var passed = 0
         fun checkCase(name: String, block: () -> Unit) {

@@ -61,7 +61,7 @@ test("validation Android app cannot replace household installation or claim rele
 
 test("new native Kotlin tests cannot disappear from the test inventory", () => {
   const inventory = buildTestInventory();
-  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt", "/LocalLearningTest.kt", "/NativeTasteCoordinatorTest.kt", "/NativeTasteIntegrationTest.kt"]) {
+  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt", "/LocalLearningTest.kt", "/NativeTasteCoordinatorTest.kt", "/NativeTasteIntegrationTest.kt", "/AppearanceCoreTest.kt", "/NativeTasteCatalogTest.kt", "/DesktopMotionPolicyTest.kt"]) {
     const entry = inventory.tests.find((candidate) => candidate.file.endsWith(suffix));
     assert.ok(entry, `Missing test inventory entry: ${suffix}`);
     assert.equal(entry.disposition, "targeted");
@@ -85,4 +85,32 @@ test("native package identity and hardware provenance include canonical VERSION 
   assert.match(runner, /\$actual -ne \$expected\.Value/);
   assert.ok(runner.indexOf('$actual -ne $expected.Value') < runner.indexOf('install -r $apk'));
   assert.doesNotMatch(runner, /LastWriteTimeUtc/);
+  assert.ok(build.includes('"**/*.tsv"'));
+  assert.ok(android.includes('"**/*.tsv"'));
+  assert.ok(runner.includes("'.tsv'"));
+});
+
+test("native calibration metadata is separate from playable media and excludes books on TV", () => {
+  // Boundary guard, not a claim of visual or recommendation-quality acceptance.
+  const bridge = read("clients/native/presentation/src/main/kotlin/com/reelos/presentation/NativeExperience.kt");
+  const field = read("clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/NativeTasteField.kt");
+  const subjects = read("clients/native/core/src/main/kotlin/com/reelos/core/intelligence/NativeTasteCatalog.kt");
+  assert.ok(bridge.includes("NativeTasteCatalog.subjects(includeBooks = core.deviceKind != DeviceKind.ANDROID_TV)"));
+  assert.ok(bridge.includes("UiTasteSubject(item.id"));
+  assert.ok(field.includes("model.tasteSubjects"));
+  assert.ok(field.includes('if (columns == 1) 2 else 1'));
+  assert.doesNotMatch(subjects, /MediaRecord\(/);
+  assert.doesNotMatch(field, /UiEvent\.(Save|Play)\(/);
+  assert.doesNotMatch(field, /ReelButton\("(More|Next batch)"/);
+});
+
+test("personal navigation resets entry scroll and appearance controls send only field changes", () => {
+  // Structural guards; installed native interaction evidence remains separately required.
+  const screen = read("clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/NativeScreen.kt");
+  const personal = read("clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/PersonalView.kt");
+  assert.ok(screen.includes("remember(model.profileId, model.step, destination, advancedOpen) { LazyListState() }"));
+  assert.ok(screen.includes("state = destinationScroll"));
+  assert.ok(personal.includes("UiEvent.Appearance(motion = value)"));
+  assert.ok(personal.includes("UiEvent.Appearance(density = value)"));
+  assert.ok(personal.includes("UiEvent.Appearance(toggleTransparency = true)"));
 });

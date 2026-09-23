@@ -84,6 +84,10 @@ test("private validation requires exact provider account and distinguishes failu
   }), { requireAccount: true })).code, "provider_identity_missing");
   assert.equal((await pingWizardSource("torbox", key, async () => ({ ok: false, status: 401 }),
     { requireAccount: true })).code, "provider_rejected");
+  const denied = await pingWizardSource("torbox", key, async () => ({ ok: false, status: 403 }),
+    { requireAccount: true });
+  assert.equal(denied.code, "provider_access_denied");
+  assert.match(denied.error, /key may still be valid/);
   assert.equal((await pingWizardSource("torbox", key, async () => { throw Object.assign(new Error("fixture"), { name: "TimeoutError" }); },
     { requireAccount: true })).code, "provider_timeout");
   assert.equal((await pingWizardSource("torbox", key, async () => { throw new Error("fixture"); },

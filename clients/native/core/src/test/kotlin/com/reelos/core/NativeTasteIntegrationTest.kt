@@ -9,6 +9,22 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NativeTasteIntegrationTest {
+    @Test fun calibrationSubjectsDoNotCreateMediaOrSourceAuthority() {
+        val store = MemoryCoreStore()
+        val core = ReelCore(store, DeviceKind.ANDROID_TV)
+        core.createProfile("ada", "Ada")
+        core.createProfile("bea", "Bea")
+        val item = com.reelos.core.intelligence.NativeTasteCatalog.subjects(false).first()
+        core.setReaction("ada", item.id, ReactionKind.LOVE)
+        val restored = ReelCore(store, DeviceKind.ANDROID_TV)
+        assertEquals(ReactionKind.LOVE, restored.reactionFor("ada", item.id))
+        assertEquals(null, restored.reactionFor("bea", item.id))
+        assertTrue(restored.snapshot.media.isEmpty())
+        assertTrue(restored.snapshot.sources.isEmpty())
+        assertTrue(restored.snapshot.profiles.values.all { it.savedMediaIds.isEmpty() })
+        assertTrue(restored.rankedHomeMedia("ada").isEmpty())
+    }
+
     @Test fun persistedNativeReactionsDriveHomeWithoutChangingCatalogOrOtherProfiles() {
         val directory = Files.createTempDirectory("native-taste-integration")
         val file = directory.resolve("core.bin")

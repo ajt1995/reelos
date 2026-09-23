@@ -22,7 +22,7 @@ val sourceRevision = if (revisionResult.result.get().exitValue == 0)
 val sourceDigest = MessageDigest.getInstance("SHA-256")
 sourceDigest.update(productVersion.toByteArray(Charsets.UTF_8))
 fileTree(rootDir) {
-    include("**/*.kt", "**/*.kts", "**/*.xml", "**/*.properties", "**/*.sh")
+    include("**/*.kt", "**/*.kts", "**/*.xml", "**/*.properties", "**/*.sh", "**/*.tsv")
     exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "**/local.properties")
 }.files.sortedBy { it.relativeTo(rootDir).invariantSeparatorsPath }.forEach {
     sourceDigest.update(it.relativeTo(rootDir).invariantSeparatorsPath.toByteArray(Charsets.UTF_8))

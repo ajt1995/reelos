@@ -7,6 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.reelos.core.GuidanceLevel
+import com.reelos.core.DeviceKind
+import com.reelos.core.intelligence.NativeTasteCatalog
+import com.reelos.core.MotionMode
+import com.reelos.core.BrowsingDensity
+import com.reelos.core.effectiveMotionMode
 import com.reelos.core.ReactionKind
 import com.reelos.core.ReelCore
 import com.reelos.ui.NativeScreen
@@ -15,6 +20,8 @@ import com.reelos.ui.UiEvent
 import com.reelos.ui.UiMedia
 import com.reelos.ui.UiModel
 import com.reelos.ui.UiStep
+import com.reelos.ui.UiProfile
+import com.reelos.ui.UiTasteSubject
 import java.util.ConcurrentModificationException
 import java.util.UUID
 
@@ -31,16 +38,22 @@ fun NativeExperience(
 ) {
     var revision by remember(core) { mutableIntStateOf(0) }
     var error by remember(core) { mutableStateOf<String?>(null) }
-    val model = remember(core, revision, hostRevision, error) {
+    val model = remember(core, revision, hostRevision, error, motionAllowed) {
         val state = core.snapshot
         val profile = state.activeProfile
         UiModel(
+            profileId = profile?.id,
+            profiles = state.profiles.values.map { UiProfile(it.id, it.name, it.color) },
             name = profile?.name,
             color = profile?.color ?: "#7357A6",
             step = profile?.onboardingStep?.let { UiStep.valueOf(it.name) } ?: UiStep.IDENTITY,
             guidance = profile?.guidance?.name ?: GuidanceLevel.BALANCED.name,
             experimentalHandoffsEnabled = state.experimentalHandoffsEnabled,
             buildVersion = com.reelos.core.NativeBuildInfo.current.displayVersion,
+            motionMode = profile?.motionMode?.name ?: "SUBTLE",
+            effectiveMotion = profile?.let { effectiveMotionMode(it, motionAllowed, !core.canEnterHome(it.id)).name } ?: if (motionAllowed) "EXPRESSIVE" else "STILL",
+            browsingDensity = profile?.browsingDensity?.name ?: "COMFORTABLE",
+            transparencyEnabled = profile?.transparencyEnabled ?: true,
             tasteSeeds = profile?.tasteSeeds ?: emptySet(),
             homeMediaIds = profile?.let { core.rankedHomeMedia(it.id).map { item -> item.id } } ?: emptyList(),
             destinations = core.navigation().map { it.name }.filter { it == "HOME" || it == "LIBRARY" || it == "SETTINGS" },
@@ -52,6 +65,24 @@ fun NativeExperience(
                     saved = profile?.savedMediaIds?.contains(item.id) == true,
                     reaction = profile?.let { core.reactionFor(it.id, item.id)?.name },
                 )
+            },
+            tasteSubjects = run {
+                val subjects = NativeTasteCatalog.subjects(includeBooks = core.deviceKind != DeviceKind.ANDROID_TV)
+                // Interleave titles, actors and illustrated-by-example moods without inventing media access.
+                val titles = subjects.filter { it.kind in setOf("movie", "series", "book") }
+                val actors = subjects.filter { it.kind == "person" }
+                val moods = subjects.filter { it.kind == "mood" }
+                val mixed = buildList {
+                    titles.chunked(4).forEachIndexed { index, chunk ->
+                        addAll(chunk)
+                        actors.getOrNull(index)?.let(::add)
+                        moods.getOrNull(index)?.let(::add)
+                    }
+                }
+                (state.media.values.map { UiTasteSubject(it.id, it.title, profile?.let { p -> core.reactionFor(p.id, it.id)?.name }) } +
+                    mixed.map { item -> UiTasteSubject(item.id, item.title, profile?.let { core.reactionFor(it.id, item.id)?.name },
+                        when (item.kind) { "person" -> "Actor"; "mood" -> item.examples.joinToString(" · "); "book" -> "Book"; else -> "" }) })
+                    .distinctBy { it.id }
             },
             error = error,
         )
@@ -86,6 +117,17 @@ fun NativeExperience(
                 }
                 is UiEvent.React -> core.setReaction(requireNotNull(profileId), event.id, event.reaction?.let(ReactionKind::valueOf))
                 is UiEvent.SetExperimentalHandoffs -> core.setExperimentalHandoffsEnabled(event.enabled)
+                is UiEvent.SelectProfile -> core.selectProfile(event.id)
+                is UiEvent.CreateProfile -> {
+                    val id = UUID.randomUUID().toString()
+                    core.createProfile(id, event.name)
+                    core.selectProfile(id)
+                }
+                is UiEvent.Appearance -> core.setAppearance(requireNotNull(profileId),
+                    motionMode = event.motion?.let(MotionMode::valueOf),
+                    browsingDensity = event.density?.let(BrowsingDensity::valueOf),
+                    toggleTransparency = event.toggleTransparency)
+                UiEvent.FinishTaste -> core.finishTaste(requireNotNull(profileId))
             }
             error = null
             revision++

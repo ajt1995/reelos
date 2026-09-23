@@ -74,15 +74,17 @@ class ReelCore(
     @Synchronized
     fun setAppearance(
         profileId: String,
-        motionMode: MotionMode,
-        browsingDensity: BrowsingDensity,
-        transparencyEnabled: Boolean,
+        motionMode: MotionMode? = null,
+        browsingDensity: BrowsingDensity? = null,
+        transparencyEnabled: Boolean? = null,
+        toggleTransparency: Boolean = false,
     ) {
+        require(!toggleTransparency || transparencyEnabled == null)
         updateProfile(profileId) {
             it.copy(
-                motionMode = motionMode,
-                browsingDensity = browsingDensity,
-                transparencyEnabled = transparencyEnabled,
+                motionMode = motionMode ?: it.motionMode,
+                browsingDensity = browsingDensity ?: it.browsingDensity,
+                transparencyEnabled = if (toggleTransparency) !it.transparencyEnabled else transparencyEnabled ?: it.transparencyEnabled,
             )
         }
     }

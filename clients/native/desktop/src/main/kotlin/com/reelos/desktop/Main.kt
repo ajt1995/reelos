@@ -102,7 +102,9 @@ fun main(args: Array<String>) = application {
     var active by remember { mutableStateOf<ActivePlayback?>(null) }
     var importJob by remember { mutableStateOf<Job?>(null) }
     var closing by remember { mutableStateOf(false) }
+    var deviceMotionAllowed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { deviceMotionAllowed = withContext(Dispatchers.IO) { DesktopMotionPolicy.readAllowed() } }
 
     fun queueImport(selected: Path) {
         if (closing) return
@@ -160,6 +162,15 @@ fun main(args: Array<String>) = application {
             }
         }
     }, title = "ReelOS — Native Validation") {
+        DisposableEffect(window) {
+            val listener = object : java.awt.event.WindowAdapter() {
+                override fun windowActivated(event: java.awt.event.WindowEvent) {
+                    scope.launch { deviceMotionAllowed = withContext(Dispatchers.IO) { DesktopMotionPolicy.readAllowed() } }
+                }
+            }
+            window.addWindowListener(listener)
+            onDispose { window.removeWindowListener(listener) }
+        }
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize()) { if (loaded.isFailure) {
                 Text("Your saved state could not be opened. Nothing was reset. Close ReelOS and use recovery before continuing.", Modifier.padding(32.dp))
@@ -194,7 +205,7 @@ fun main(args: Array<String>) = application {
                         message = "Playback unavailable: ${failure.message?.take(180) ?: "the media could not be opened"}"
                         revision++
                     }
-                }, hostRevision = revision, motionAllowed = false)
+                }, hostRevision = revision, motionAllowed = deviceMotionAllowed)
             } }
             pendingLaunch?.let { path ->
                 AlertDialog(

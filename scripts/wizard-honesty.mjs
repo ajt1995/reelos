@@ -63,7 +63,8 @@ export function provisionHonestyError(answers = {}) {
  */
 
 function providerFailure(provider, status) {
-  if (status === 401 || status === 403) return { ok: false, code: "provider_rejected", error: `${provider} rejected this key.` };
+  if (status === 401) return { ok: false, code: "provider_rejected", error: `${provider} rejected this key.` };
+  if (status === 403) return { ok: false, code: "provider_access_denied", error: `${provider} denied this request. Check account access or network restrictions; the key may still be valid.` };
   if (status === 408 || status === 504) return { ok: false, code: "provider_timeout", error: `${provider} did not respond in time.` };
   if (status === 429) return { ok: false, code: "provider_rate_limited", error: `${provider} asked ReelOS to slow down.` };
   return { ok: false, code: "provider_unavailable", error: `${provider} is temporarily unavailable.` };

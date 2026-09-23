@@ -10,13 +10,17 @@ implementation; `clients/android` and the web application remain migration refer
 - `shared-ui`: Compose Multiplatform UI, Android + desktop targets, no browser.
 - `presentation`: one Kotlin adapter compiled into both host applications.
 - `desktop`: Windows/Linux native-rendered JVM host with a LibVLC local-media adapter.
-  Windows rendered real fixture bytes in a native video surface; Linux execution is not yet verified.
+  Windows rendered real fixture bytes in a native video surface; Linux first-screen rendering is verified,
+  but Linux input/playback acceptance remains open.
   LibVLC is currently a separately installed host dependency, not bundled release media tooling.
 - `android`: isolated `com.reelos.nativepreview` local-media validation host using native Media3.
   It has no internet permission, does not replace `com.reelos`, and cannot produce a release.
 
-The first slice persists name, color, guidance, taste selections/reactions and local
-profile state. Public catalog retrieval, endless artwork bubbles, full Family/PIN enforcement,
+The first slice persists name, color, guidance, taste selections/reactions, per-profile motion,
+density/transparency and local profile state. The native taste field automatically cycles a finite
+factual title/actor/mood catalog independently of playable media; it does not grant access or invent
+streams. Its current circles have text and breathing light, not the finished artwork treatment.
+Public catalog retrieval, endless artwork bubbles, full Family/PIN enforcement,
 pretrained encoder inference, Home sync, complete journeys and packaging are not established by it.
 Native Home now replays persisted per-profile reactions through a bounded local SGD learner.
 This ranks rated or seed-matched titles; it does not establish semantic discovery of unseen titles,
@@ -50,8 +54,9 @@ does not reset data. The local snapshot is a feasibility store, not the finished
 
 ## Current blockers / next slice
 
-1. Approved build dependencies downloaded on 2026-09-23. Gradle passed 33 core JUnit tests
-   (zero failures/skips), desktop Kotlin compilation and Android debug assembly. Both the Fold
+1. Approved build dependencies downloaded on 2026-09-23. Gradle passed 45 core JUnit tests
+   and nine Windows desktop tests (zero failures/skips), desktop Kotlin compilation and Android
+   debug assembly. Both the Fold
    and 32-bit Onn TV installed and launched the isolated APK. This is launch/render evidence,
    not complete onboarding, playback, model or platform acceptance.
 2. Complete model-worker boundary and approved artwork/taste field;
@@ -62,7 +67,8 @@ does not reset data. The local snapshot is a feasibility store, not the finished
    HP password SSH verified Ubuntu 26.04.1 x86_64, about 3.2 GiB RAM and an active Wayland
    Cage Wayland kiosk, not a general desktop. Java 17 and LibVLC are now installed with
    approval; an immutable Linux x64 validation bundle renders its first native screen.
-   Input and playback acceptance on that compositor remain in progress.
+   The active kiosk is still the old browser installation; the isolated native render is not
+   an installed replacement. Input and playback acceptance on that compositor remain open.
 4. Preserve all 19 active feature groups / 47 UI requirements. Update their existing acceptance
    ledger only with current evidence; a core smoke pass is not a platform or UI pass.
 
@@ -73,8 +79,9 @@ not be replaced by a stale APK.
 
 Validated optional media sources are normal functionality, not blanket beta. Only unverified
 external-app handoffs have an experimental preference. No source/handoff adapter exists in
-this validation build yet, and the toggle cannot grant media access. Core schema 3 migrates
-old blanket-beta snapshots without reviving optional access or inheriting experiment consent.
+this validation build yet, and the toggle cannot grant media access. Core schema 4 adds personal
+appearance while retaining schema 3's separation: old blanket-beta snapshots do not revive
+optional access or inherit experiment consent. OS motion preferences override decorative motion.
 
 ## Physical media checks
 
@@ -87,6 +94,14 @@ Results, source/package hashes and scoped logs
 replace `.reelos-audit/native-hardware/<serial>/result.json`. The generated video lives
 only under `src/androidTest/assets`; it contains no personal data and must never enter
 the application APK/catalog. Tests cover integration, not a complete user journey.
+
+Use `-Journey personal-ui` for a separate seeded native appearance/taste/profile interaction
+check. Evidence replaces `.reelos-audit/native-personal-ui/<serial>/result.json`. It verifies
+Like/Love/Cozy/Reset/neutral Dismiss, reentry, profile isolation, restart persistence and the
+Taste-to-Sources transition. It does not certify fresh onboarding, artwork quality or the
+whole product. The runner backs up and restores the isolated validation package's core state;
+an interrupted baseline remains recoverable and intervening state is retained before recovery.
+It never resets the installed consumer package. Both journeys require current source hashes.
 
 Native versions derive from the root `VERSION`, Git revision and source fingerprint. Settings
 shows the same generated identity on every host; Android package metadata uses that identity too.
@@ -109,5 +124,5 @@ Windows manual native checks on 2026-09-23 observed onboarding and restart persi
 confirmed Open With import, real video frames, pause, backward seek, resumed playback,
 end-of-video Replay and normal application exit. This uses a 30-second silent fixture,
 not a sustained feature film, audio/subtitle certification, OS file-picker certification,
-or an installer test. Seven desktop tests also passed with the real decoder fixture and
+or an installer test. Nine desktop tests also passed with the real decoder fixture and
 zero skips. Neither this nor TV integration evidence completes the 19/47 release gates.

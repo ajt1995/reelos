@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
@@ -36,8 +37,11 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
@@ -56,17 +60,26 @@ import androidx.compose.ui.unit.sp
 enum class UiStep { IDENTITY, ATMOSPHERE, CURATOR, TASTE, SOURCES, HOME, COMPLETE }
 enum class UiAction { PLAY, FIND, PREPARING, UNAVAILABLE }
 data class UiMedia(val id: String, val title: String, val action: UiAction, val saved: Boolean, val reaction: String?)
+data class UiTasteSubject(val id: String, val title: String, val reaction: String?, val context: String = "")
+data class UiProfile(val id: String, val name: String, val color: String)
 data class UiModel(
+    val profileId: String?,
+    val profiles: List<UiProfile>,
     val name: String?,
     val color: String,
     val step: UiStep,
     val media: List<UiMedia>,
+    val tasteSubjects: List<UiTasteSubject>,
     val tasteSeeds: Set<String>,
     val homeMediaIds: List<String>,
     val guidance: String,
     val destinations: List<String>,
     val experimentalHandoffsEnabled: Boolean,
     val buildVersion: String,
+    val motionMode: String,
+    val effectiveMotion: String,
+    val browsingDensity: String,
+    val transparencyEnabled: Boolean,
     val error: String? = null,
 )
 
@@ -83,67 +96,84 @@ sealed interface UiEvent {
     data class Save(val id: String, val saved: Boolean) : UiEvent
     data class React(val id: String, val reaction: String?) : UiEvent
     data class SetExperimentalHandoffs(val enabled: Boolean) : UiEvent
+    data class SelectProfile(val id: String) : UiEvent
+    data class CreateProfile(val name: String) : UiEvent
+    data class Appearance(val motion: String? = null, val density: String? = null, val toggleTransparency: Boolean = false) : UiEvent
+    data object FinishTaste : UiEvent
 }
 
-private val canvas = Color(0xFF080809)
-private val surface = Color(0xFF17171C)
-private val muted = Color(0xFFB9B9C3)
-private val palette = listOf(
+internal val canvas = Color(0xFF080809)
+internal val surface = Color(0xFF17171C)
+internal val muted = Color(0xFFB9B9C3)
+internal val LocalTransparency = staticCompositionLocalOf { true }
+internal val LocalCompact = staticCompositionLocalOf { false }
+internal val palette = listOf(
     "#7357A6" to Color(0xFF9866D9), "#376FE4" to Color(0xFF376FE4),
     "#0D9990" to Color(0xFF0D9990), "#659E46" to Color(0xFF659E46),
     "#D39328" to Color(0xFFD39328), "#D56A4A" to Color(0xFFD56A4A),
     "#C65BA1" to Color(0xFFC65BA1), "#657BB3" to Color(0xFF657BB3),
 )
-private val colorNames = listOf("Violet", "Blue", "Teal", "Moss", "Amber", "Coral", "Rose", "Slate")
+internal val colorNames = listOf("Violet", "Blue", "Teal", "Moss", "Amber", "Coral", "Rose", "Slate")
 
 @Composable
 fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: Int = 0,
     onBackAvailabilityChanged: (Boolean) -> Unit = {}, onEvent: (UiEvent) -> Unit) {
-    var nameDraft by remember(model.name) { mutableStateOf(model.name.orEmpty()) }
-    var colorDraft by remember(model.name, model.color) { mutableStateOf(model.color) }
-    var seedDraft by remember(model.name, model.tasteSeeds) { mutableStateOf(model.tasteSeeds) }
+    var nameDraft by remember(model.profileId, model.name) { mutableStateOf(model.name.orEmpty()) }
+    var colorDraft by remember(model.profileId, model.color) { mutableStateOf(model.color) }
     var guidanceDraft by remember(model.name, model.guidance) { mutableStateOf(model.guidance) }
-    var query by remember { mutableStateOf("") }
-    var destination by remember { mutableStateOf("HOME") }
-    var advancedOpen by remember { mutableStateOf(false) }
+    var query by remember(model.profileId) { mutableStateOf("") }
+    var destination by remember(model.profileId) { mutableStateOf("HOME") }
+    var advancedOpen by remember(model.profileId) { mutableStateOf(false) }
+    // A new destination/person starts at its entry controls, never a prior screen's scroll offset.
+    val destinationScroll = remember(model.profileId, model.step, destination, advancedOpen) { LazyListState() }
     SideEffect { onBackAvailabilityChanged((model.step != UiStep.IDENTITY && model.step != UiStep.COMPLETE) || destination != "HOME") }
     var seenBackRevision by remember { mutableIntStateOf(backRevision) }
     LaunchedEffect(backRevision) {
         if (backRevision != seenBackRevision) {
             seenBackRevision = backRevision
             if (model.step == UiStep.COMPLETE) {
-                if (advancedOpen) advancedOpen = false else destination = "HOME"
+                if (advancedOpen) advancedOpen = false else destination = if (destination == "TASTE" || destination == "PEOPLE") "PROFILE" else "HOME"
             }
             else if (model.step != UiStep.IDENTITY) onEvent(UiEvent.Back)
         }
     }
     val activeColor = if (model.step == UiStep.ATMOSPHERE) colorDraft else model.color
-    val accent = palette.firstOrNull { it.first == activeColor }?.second ?: palette.first().second
-    val auraAlpha = if (motionAllowed) {
+    val accent = palette.firstOrNull { it.first.equals(activeColor, ignoreCase = true) }?.second ?: palette.first().second
+    val showingTaste = model.step == UiStep.TASTE || destination == "TASTE"
+    val auraAlpha = if (!showingTaste && motionAllowed && model.effectiveMotion != "STILL") {
         val breathing = rememberInfiniteTransition(label = "Personal atmosphere")
-        val alpha by breathing.animateFloat(0.22f, 0.36f, infiniteRepeatable(tween(5600), RepeatMode.Reverse), label = "Breathing color")
-        alpha
-    } else 0.29f
+        val expressive = model.effectiveMotion == "EXPRESSIVE"
+        breathing.animateFloat(if (expressive) 0.20f else 0.26f, if (expressive) 0.42f else 0.32f,
+            infiniteRepeatable(tween(if (expressive) 4200 else 7000), RepeatMode.Reverse), label = "Breathing color")
+    } else remember { mutableStateOf(0.29f) }
     val byId = model.media.associateBy { it.id }
     val content = if (query.isBlank()) model.homeMediaIds.mapNotNull(byId::get)
         else model.media.filter { it.title.contains(query.trim(), ignoreCase = true) }
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Color.White, surface = surface, background = canvas, onSurface = Color.White)) {
+    CompositionLocalProvider(LocalTransparency provides model.transparencyEnabled, LocalCompact provides (model.browsingDensity == "COMPACT")) {
+    if (showingTaste) {
+        NativeTasteField(model, accent, motionAllowed && model.effectiveMotion != "STILL",
+            onExit = { if (model.step == UiStep.TASTE) onEvent(UiEvent.FinishTaste) else destination = "PROFILE" },
+            onBack = { if (model.step == UiStep.TASTE) onEvent(UiEvent.Back) else destination = "PROFILE" }, onEvent = onEvent)
+    } else {
     LazyColumn(
-        modifier = Modifier.fillMaxSize().background(
-            Brush.radialGradient(listOf(accent.copy(alpha = auraAlpha), canvas, canvas), radius = 900f)
-        ).onPreviewKeyEvent {
+        state = destinationScroll,
+        // Read animation during drawing, not composition: the whole catalog must not recompose each frame.
+        modifier = Modifier.fillMaxSize().background(canvas).drawBehind {
+            drawRect(Brush.radialGradient(listOf(accent.copy(alpha = auraAlpha.value), canvas, canvas), radius = size.maxDimension.coerceAtLeast(1f)))
+        }.onPreviewKeyEvent {
             if (it.type == KeyEventType.KeyDown && (it.key == Key.Escape || it.key == Key.Back)) {
                 if (model.step != UiStep.COMPLETE || destination != "HOME") {
                     if (model.step == UiStep.COMPLETE) {
-                        if (advancedOpen) advancedOpen = false else destination = "HOME"
+                        if (advancedOpen) advancedOpen = false else destination = if (destination == "PEOPLE") "PROFILE" else "HOME"
                     } else onEvent(UiEvent.Back)
                     true
                 } else false
             } else false
         },
         contentPadding = androidx.compose.foundation.layout.PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(if (LocalCompact.current) 10.dp else 18.dp),
     ) {
         if (model.error != null) item { Panel { Text(model.error, color = Color(0xFFFFC7B9)); Spacer(Modifier.height(8.dp)); Text("Please try again.", color = muted) } }
         if (model.step != UiStep.COMPLETE) {
@@ -180,19 +210,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                     }
                     ReelButton("Continue", accent) { onEvent(UiEvent.ContinueCurator(guidanceDraft)) }
                 }
-                UiStep.TASTE -> {
-                    item {
-                        Text("A few favorites?", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-                        Text("Pick from your imported titles, or skip for now.", color = muted)
-                    }
-                    if (model.media.isEmpty()) item { Panel { Text("No titles here yet. You can add them after setup.", color = muted) } }
-                    items(model.media, key = { it.id }) { media ->
-                        ReelButton("${media.title}${if (media.id in seedDraft) " · selected" else ""}", accent, selected = media.id in seedDraft) {
-                            seedDraft = if (media.id in seedDraft) seedDraft - media.id else seedDraft + media.id
-                        }
-                    }
-                    item { ReelButton(if (seedDraft.isEmpty()) "Skip for now" else "Continue", accent) { onEvent(UiEvent.Taste(seedDraft)) } }
-                }
+                UiStep.TASTE -> Unit // The full-screen field above owns this step.
                 UiStep.SOURCES -> item {
                     Text("Bring your collection.", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Text("Start with personal media. Public-domain titles can appear when a source adds them.", color = muted)
@@ -218,6 +236,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                             advancedOpen = false
                         }
                     }
+                    ReelButton(model.name ?: "You", accent, selected = destination == "PROFILE", compact = true) { destination = "PROFILE"; advancedOpen = false }
                 }
             }
             if (destination != "HOME") item {
@@ -226,6 +245,13 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                 }
             }
             when (destination) {
+                "PROFILE" -> item {
+                    PersonalView(model, accent, onTaste = { destination = "TASTE" }, onPeople = { destination = "PEOPLE" }, onEvent = onEvent)
+                }
+                "PEOPLE" -> item { ProfilePicker(model, accent) { event ->
+                    onEvent(event)
+                    if (event is UiEvent.SelectProfile) destination = if (event.id == model.profileId) "PROFILE" else "HOME"
+                } }
                 "HOME" -> {
                     item {
                         Panel {
@@ -264,6 +290,8 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                             }
                         } else {
                             Text("Settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(16.dp))
+                            AppearanceControls(model, accent, onEvent)
                             Spacer(Modifier.height(10.dp))
                             Text("Your personal collection stays on this device. Home connections and family controls are still in development.", color = muted)
                             Spacer(Modifier.height(12.dp))
@@ -280,6 +308,8 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                 }
             }
         }
+    }
+    }
     }
     }
 }
@@ -324,11 +354,11 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
     }
 }
 
-@Composable private fun Panel(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxWidth().background(surface, RoundedCornerShape(22.dp)).border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(22.dp)).padding(20.dp), content = content)
+@Composable internal fun Panel(content: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxWidth().background(surface.copy(alpha = if (LocalTransparency.current) 0.76f else 1f), RoundedCornerShape(22.dp)).padding(if (LocalCompact.current) 14.dp else 20.dp), content = content)
 }
 
-@Composable private fun ReelButton(label: String, accent: Color, enabled: Boolean = true, selected: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
+@Composable internal fun ReelButton(label: String, accent: Color, enabled: Boolean = true, selected: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val lit = focused || selected
     Box(

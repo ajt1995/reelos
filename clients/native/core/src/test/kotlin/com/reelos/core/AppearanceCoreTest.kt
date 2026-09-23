@@ -110,6 +110,19 @@ class AppearanceCoreTest {
         assertFailsWith<IllegalArgumentException> { FileCoreStore(path).load() }
     }
 
+    @Test fun independentAppearanceCommandsMergeWithLatestProfile() {
+        val core = ReelCore(MemoryCoreStore(), DeviceKind.WINDOWS)
+        core.createProfile("ada", "Ada")
+        core.setAppearance("ada", motionMode = MotionMode.EXPRESSIVE)
+        core.setAppearance("ada", browsingDensity = BrowsingDensity.COMPACT)
+        core.setAppearance("ada", toggleTransparency = true)
+        assertEquals(MotionMode.EXPRESSIVE, core.snapshot.activeProfile?.motionMode)
+        assertEquals(BrowsingDensity.COMPACT, core.snapshot.activeProfile?.browsingDensity)
+        assertEquals(false, core.snapshot.activeProfile?.transparencyEnabled)
+        core.setAppearance("ada", toggleTransparency = true)
+        assertEquals(true, core.snapshot.activeProfile?.transparencyEnabled)
+    }
+
     private fun writeLegacyProfile(
         path: Path,
         version: Int,
