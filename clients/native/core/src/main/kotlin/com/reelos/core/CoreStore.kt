@@ -59,6 +59,9 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     savedMediaIds = readSet(input),
                     playbackPositionsMs = readMap(input) { input.readUTF() to input.readLong() },
                     readingPositions = readMap(input) { input.readUTF() to input.readUTF() },
+                    motionMode = if (version >= 4) enumValueOf<MotionMode>(input.readUTF()) else MotionMode.SUBTLE,
+                    browsingDensity = if (version >= 4) enumValueOf<BrowsingDensity>(input.readUTF()) else BrowsingDensity.COMFORTABLE,
+                    transparencyEnabled = if (version >= 4) input.readBoolean() else true,
                 )
             }
             val activeId = readNullable(input)
@@ -131,6 +134,9 @@ class FileCoreStore(private val path: Path) : CoreStore {
                         output.writeUTF(id)
                         output.writeUTF(position)
                     }
+                    output.writeUTF(p.motionMode.name)
+                    output.writeUTF(p.browsingDensity.name)
+                    output.writeBoolean(p.transparencyEnabled)
                 }
                 writeNullable(output, state.activeProfileId)
                 writeNullable(output, state.requestedHomeId)

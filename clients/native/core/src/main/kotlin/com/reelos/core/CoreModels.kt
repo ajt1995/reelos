@@ -7,6 +7,15 @@ enum class Destination { HOME, DISCOVER, LIBRARY, BOOKS, SETTINGS }
 
 enum class OnboardingStep { IDENTITY, ATMOSPHERE, CURATOR, TASTE, SOURCES, HOME, COMPLETE }
 enum class GuidanceLevel { GUIDED, BALANCED, INDEPENDENT }
+enum class MotionMode { STILL, SUBTLE, EXPRESSIVE }
+enum class BrowsingDensity { COMFORTABLE, COMPACT }
+
+/** OS reduced-motion and explicit Still take priority; setup otherwise uses expressive motion. */
+fun effectiveMotionMode(profile: ProfileState, osMotionAllowed: Boolean, setup: Boolean): MotionMode = when {
+    !osMotionAllowed || profile.motionMode == MotionMode.STILL -> MotionMode.STILL
+    setup -> MotionMode.EXPRESSIVE
+    else -> profile.motionMode
+}
 
 enum class ReactionKind { LIKE, LOVE, COZY, DISMISS, LESS }
 
@@ -29,6 +38,9 @@ data class ProfileState(
     val savedMediaIds: Set<String> = emptySet(),
     val playbackPositionsMs: Map<String, Long> = emptyMap(),
     val readingPositions: Map<String, String> = emptyMap(),
+    val motionMode: MotionMode = MotionMode.SUBTLE,
+    val browsingDensity: BrowsingDensity = BrowsingDensity.COMFORTABLE,
+    val transparencyEnabled: Boolean = true,
 )
 
 data class SourceRecord(
@@ -61,6 +73,6 @@ data class CoreState(
     val activeProfile: ProfileState? get() = activeProfileId?.let(profiles::get)
 }
 
-const val CORE_SCHEMA_VERSION = 3
+const val CORE_SCHEMA_VERSION = 4
 const val PERSONAL_SOURCE_ID = "personal"
 const val PUBLIC_DOMAIN_SOURCE_ID = "public-domain"

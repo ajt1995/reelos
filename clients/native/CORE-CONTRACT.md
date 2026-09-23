@@ -13,12 +13,13 @@ availability policy, not an ML implementation or a complete product runtime.
   snapshot changes; exceptions leave the previous snapshot in memory. The published state
   and nested profile collections are defensive immutable copies.
 - `snapshot.activeProfile` and `selectProfile(id)` identify the private profile. The profile
-  carries name, color, taste seeds, reactions, saves, playback positions, and reading positions.
+  carries name, color, appearance, taste seeds, reactions, saves, playback positions, and reading positions.
   `createProfile(id, name = "")` starts at `IDENTITY` or `ATMOSPHERE` when a name is given.
 - Onboarding steps are `IDENTITY → ATMOSPHERE → CURATOR → TASTE → SOURCES → HOME → COMPLETE`.
   Call `setName`, `setColor`, `acknowledgeCurator(profileId, guidance = BALANCED)`, `setTasteSeeds`,
-  `confirmDefaultSources`, then `chooseHome(profileId, homeId = null)`. Taste seeds may be
-  empty when the person skips them. Guidance choices are `GUIDED`, `BALANCED`, and
+  `confirmDefaultSources`, then `chooseHome(profileId, homeId = null)`. Call `finishTaste`
+  to leave the Taste step without changing seeds or reactions; `setTasteSeeds` still saves a
+  new selection and advances. Taste seeds may be empty when the person skips them. Guidance choices are `GUIDED`, `BALANCED`, and
   `INDEPENDENT`; they persist per profile. `back(profileId)`
   preserves earlier input. `canEnterHome(profileId)` gates the cinema Home. A null Home ID
   completes a standalone node. `snapshot.requestedHomeId` is only the person's choice,
@@ -29,6 +30,12 @@ availability policy, not an ML implementation or a complete product runtime.
   dismissed set, and less-like set remain separate and mutually exclusive per item.
 - `save(profileId, mediaId, saved)` changes a private watchlist preference. It does not
   acquire media or assert that a playable copy exists.
+- `setAppearance(profileId, motionMode, browsingDensity, transparencyEnabled)` saves the
+  selected profile only and does not change onboarding. Defaults are `SUBTLE`,
+  `COMFORTABLE`, and `true`. `effectiveMotionMode(profile, osMotionAllowed, setup)`
+  returns `STILL` when OS motion is disallowed or the profile explicitly chose Still;
+  otherwise setup uses `EXPRESSIVE` and normal browsing uses the profile's selection.
+  Renderers still apply platform accessibility settings and hardware-safe effects.
 - Source adapters call `putSource(SourceRecord)` and `putMedia(MediaRecord)` only after
   determining actual availability. `mediaAction(mediaId)` yields `PLAY` solely when media
   is `READY` and its source is `AVAILABLE`. Metadata-only yields `FIND`; `revokeSource`
@@ -46,9 +53,11 @@ availability policy, not an ML implementation or a complete product runtime.
 
 ## Storage and safety boundary
 
-`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 3`. Version 1 and 2 snapshots migrate
+`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 4`. Version 1 and 2 snapshots migrate
 with optional sources unavailable until adapter revalidation; legacy beta consent does not
-enable handoff experiments. Profile data and media metadata are preserved. Rollback requires
+enable handoff experiments. Version 3 preserves its handoff preference and source status.
+Versions 1–3 receive appearance defaults; malformed version 4 appearance enums fail load.
+Profile data and media metadata are preserved. Rollback requires
 compatible state backup/migration; older binaries must not open a newer schema.
 `FileCoreStore` writes a synced
 temporary file and replaces the prior state atomically. If atomic replacement is unsupported,

@@ -72,6 +72,22 @@ class ReelCore(
     }
 
     @Synchronized
+    fun setAppearance(
+        profileId: String,
+        motionMode: MotionMode,
+        browsingDensity: BrowsingDensity,
+        transparencyEnabled: Boolean,
+    ) {
+        updateProfile(profileId) {
+            it.copy(
+                motionMode = motionMode,
+                browsingDensity = browsingDensity,
+                transparencyEnabled = transparencyEnabled,
+            )
+        }
+    }
+
+    @Synchronized
     fun acknowledgeCurator(profileId: String, guidance: GuidanceLevel = GuidanceLevel.BALANCED) {
         updateProfile(profileId) {
             require(it.onboardingStep == OnboardingStep.CURATOR) { "Curator step is not current" }
@@ -86,6 +102,15 @@ class ReelCore(
         updateProfile(profileId) {
             require(it.onboardingStep.ordinal >= OnboardingStep.TASTE.ordinal) { "Taste step is not current" }
             it.copy(tasteSeeds = clean, onboardingStep = advance(it.onboardingStep, OnboardingStep.TASTE))
+        }
+    }
+
+    /** Continue calibration using the reactions and optional seeds already collected. */
+    @Synchronized
+    fun finishTaste(profileId: String) {
+        updateProfile(profileId) {
+            require(it.onboardingStep == OnboardingStep.TASTE) { "Taste step is not current" }
+            it.copy(onboardingStep = OnboardingStep.SOURCES)
         }
     }
 
