@@ -13,8 +13,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
@@ -60,7 +64,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 BackHandler(enabled = handlesBack) { backRevision++ }
-                Column {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                Column(Modifier.safeDrawingPadding().imePadding()) {
                     Text("Native validation · isolated from your installed ReelOS", Modifier.padding(12.dp), style = MaterialTheme.typography.labelSmall)
                     hostMessage?.let { Text(it, Modifier.padding(12.dp)) }
                     NativeExperience(core, onImport = {
@@ -73,6 +78,7 @@ class MainActivity : ComponentActivity() {
                         } else hostMessage = "This title is not available from your current sources."
                     }, hostRevision = hostRevision, motionAllowed = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f,
                         backRevision = backRevision, onBackAvailabilityChanged = { handlesBack = it })
+                }
                 }
             }
         }

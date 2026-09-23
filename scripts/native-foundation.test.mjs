@@ -18,6 +18,8 @@ test("independent native UX audit retains every existing UI acceptance ID", () =
 });
 
 test("both native hosts consume the same core, presentation and Compose UI", () => {
+  // Both hosts import MaterialTheme from the shared UI's exported Compose runtime.
+  assert.match(read("clients/native/shared-ui/build.gradle.kts"), /api\(compose\.material3\)/);
   for (const platform of ["desktop", "android"]) {
     const build = read(`clients/native/${platform}/build.gradle.kts`);
     assert.match(build, /project\(":core"\)/);
@@ -25,6 +27,13 @@ test("both native hosts consume the same core, presentation and Compose UI", () 
     assert.match(build, /presentation\/src\/main\/kotlin/);
     assert.doesNotMatch(build, /webkit|build-android-shared-ui|chromium/i);
   }
+});
+
+test("Android host declares system and keyboard insets inside a themed surface", () => {
+  // Structural regression only; physical keyboard/posture acceptance remains separate.
+  const host = read("clients/native/android/src/main/kotlin/com/reelos/nativepreview/MainActivity.kt");
+  assert.match(host, /Surface\(modifier = Modifier\.fillMaxSize\(\)\)/);
+  assert.match(host, /Column\(Modifier\.safeDrawingPadding\(\)\.imePadding\(\)\)/);
 });
 
 test("validation Android app cannot replace household installation or claim release signing", () => {

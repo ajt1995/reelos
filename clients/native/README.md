@@ -45,15 +45,18 @@ does not reset data. The local snapshot is a feasibility store, not the finished
 
 ## Current blockers / next slice
 
-1. Build dependency download approval: cached Kotlin can compile core, but offline Gradle lacks
-   plugin markers and Compose desktop artifacts. Native UI and Android host are not compile-verified yet.
+1. Approved build dependencies downloaded on 2026-09-23. Gradle passed nine core JUnit tests
+   (zero failures/skips), desktop Kotlin compilation and Android debug assembly. Both the Fold
+   and 32-bit Onn TV installed and launched the isolated APK. This is launch/render evidence,
+   not complete onboarding, playback, model or platform acceptance.
 2. Complete desktop media adapter, model-worker boundary and approved artwork/taste field;
    then measure the actual native slice on all four targets before expanding remaining journeys.
-3. Validate 32-bit Android TV ABI (`armeabi-v7a`) and Fold ARM64. Windows .214 is 15.8 GiB,
+3. Complete interaction/media checks on Android TV (`armeabi-v7a`) and Fold ARM64. Windows .214 is 15.8 GiB,
    not 64 GiB. HP SSH port is reachable but current key authentication failed.
 4. Preserve all 19 active feature groups / 47 UI requirements. Update their existing acceptance
    ledger only with current evidence; a core smoke pass is not a platform or UI pass.
 
-No models or tools were downloaded for the offline core test. No existing application was
+No models were downloaded. Build dependencies were downloaded with owner approval; the separate
+dependency-free core smoke remains offline. No existing household application was
 uninstalled, household data wiped, or signing key replaced. A failed build must remain visible,
 not be replaced by a stale APK.
