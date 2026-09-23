@@ -2,6 +2,8 @@
 
 Reviewed 2026-09-23. Replace this report when integration advances; do not append a diary.
 
+Current implementation authority: the owner-approved native completion plan supersedes this audit's earlier C# Windows split, unsettled Books-on-TV decision and final-only HP testing restriction. Use shared Kotlin/Compose, exclude Books on TV, forbid learning exports beyond Home, and allow non-destructive isolated four-device feasibility checks. The findings below remain evidence of the preserved incoming branch, not current toolkit decisions. Integration begins from 532ccee on work/codex-native-core-2026-09-23; no whole-branch import.
+
 Base: `428978a`. Incoming: `origin/work/antigravity-foundation-2026-09-22` at `c404416` (implementation `23be08d`). Native-platform contract: `5f039fd` on `work/codex-cleanup-2026-09-22`. Findings below are source inspection, not device certification. No application code was merged or deployed during this review.
 
 ## Recovered decisions and provenance

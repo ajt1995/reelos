@@ -38,7 +38,7 @@
       "id": "fleet-and-gossip-prototypes",
       "patterns": ["fleet-learning", "anonymous-gossip", "basement-lighthouse"],
       "disposition": "migration-only",
-      "replacement": "local household learning; taste-only exchange remains shadow-gated",
+      "replacement": "local learning and authorized within-Home matching; all cross-home learning exports retired",
       "releaseBoundary": "Routes are retired and implementations cannot enter the native package.",
       "testEvidence": ["scripts/services/native-runtime-boundary.test.mjs", "scripts/packaging-boundaries.test.mjs"]
     },

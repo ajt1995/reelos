@@ -6,7 +6,7 @@ This is the first file a fresh engineering agent should read. It is intentionall
 
 ## Resume in under a minute
 
-Read `docs/agent-context/owner-requirements.md` before any implementation. It preserves the owner's platform, ML, workflow and physical-acceptance requirements across tools, including C# native Windows and Kotlin/Compose Android. The named ML skills are not installed here; follow the recorded rules without claiming otherwise. Audit neural systems, UI contracts and feature coverage before changing critical foundations.
+Read `docs/agent-context/owner-requirements.md` before any implementation. The approved shared Kotlin engine and Compose UI supersede the C# Windows / Kotlin Android split. Windows, Linux, Android phone and TV share the native product; Books is absent on TV. No learning exports outside the Home. Start native work in `clients/native`; older surfaces remain migration references, not native release evidence. The named ML skills are not installed here; follow the recorded rules without claiming otherwise. Audit neural systems, UI contracts and feature coverage before changing critical foundations.
 
 1. Run `npm run context:brief`.
 2. Read `docs/agent-context/workstreams.json`, then only the file(s) named for

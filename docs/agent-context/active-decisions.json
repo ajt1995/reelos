@@ -4,8 +4,8 @@
   "decisions": [
     {
       "id": "native-platform-and-first-run",
-      "decision": "One standalone ReelOS product uses Kotlin/Jetpack Compose on Android/TV, C# native presentation on Windows, and a native Linux appliance presentation. Only iOS may use browser/PWA presentation. All platforms share onboarding behavior: identity, personal atmosphere, curator, taste constellation and mesh topology, preserving source/access steps. Fresh nodes must onboard before the cinema stage; Home membership is optional. TV uses hardware-friendly gradients and high-contrast D-pad focus.",
-      "rationale": "Owner supplied these choices explicitly on 2026-09-23. Shared core/contracts preserve parity while input and layout adapt. Existing web launchers and platform-specific divergent flows remain migration gaps, not implementation authority.",
+      "decision": "One shared Kotlin engine and Compose UI serve standalone Windows, Linux, Android phone/tablet and TV, with narrow native platform adapters. This supersedes separate C# Windows presentation. Desktop bundles its runtime without browser rendering. Only iOS may use browser/PWA presentation. Books is absent on TV. All targets share resumable identity, atmosphere, guidance, taste, source and optional Home onboarding. The HP has a visible interface by default; TV uses lightweight gradients and high-contrast stationary focus.",
+      "rationale": "Owner approved the unified native completion plan on 2026-09-23. Equivalent standalone products share behavior and implementation, not identical executable bytes. Existing web launchers and separate Android subsets remain migration gaps, not acceptance evidence.",
       "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-register.json"]
     },
     {
@@ -17,7 +17,7 @@
     {
       "id": "physical-platform-acceptance",
       "decision": "Release acceptance requires physical tests on the owner's Windows workstation at 192.168.1.214, Onn TV at 192.168.1.95:5555, Galaxy Z Fold serial R5GL64PC0CF, and HP Debian 12 Minimal appliance at 192.168.1.234. Verify live identities and resources; source/unit/simulation checks alone do not establish completion.",
-      "rationale": "The owner supplied the fleet on 2026-09-23. Test runs must record actual device/build identity and results. The HP remains reserved for final candidate testing and no old-state import; destructive disk targets still require exact verification.",
+      "rationale": "Physical inventory on 2026-09-23 found LAPTOP-8J93FFJH at .214 with 15.8 GiB RAM, not the earlier 64GB claim; Fold R5GL64PC0CF was USB-authorized. TV ADB and HP SSH ports were reachable, not yet authenticated identity evidence. Non-destructive verification and isolated feasibility testing are allowed; destructive targets need exact authorization and old HP state must not enter the final installation.",
       "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-acceptance.json"]
     },
     {
@@ -58,8 +58,8 @@
     },
     {
       "id": "private-day0-scope",
-      "decision": "Day-0 is a signed private household release across Windows, Linux, Android phone/tablet and Android TV. Every target is a full, standalone ReelOS node built from the one canonical codebase and presented through a device-native application, not a separately designed client, server-dependent remote, website, external browser, localhost browser, embedded WebView, Electron shell, or other browser-rendered wrapper. The shared core, neural/state contracts, design tokens, behavior contracts and acceptance fixtures keep the native renderers coherent. Each node runs locally within its measured capabilities and may contribute compute, storage and playback services; joining a Home expands synchronization rather than unlocking the product. Only iOS may use a temporary browser/PWA fallback until a native iOS target exists. Day-0 includes Books, verified travel downloads, family media treatment, Companion remote control, synchronized guest-link parties, subtitles, dialogue/night listening and volume leveling. macOS, public adapter/VPN work, commercial streaming redirects, Ambiance/acoustic calibration and general shadow model packs are post-Day-0.",
-      "rationale": "One codebase and shared contracts prevent product drift without mistaking shared HTML for a native product. Platform renderers may adapt layout, input, animation and resource use to measured device capabilities while preserving the same ReelOS journeys and state. Existing browser-packaged Windows, Linux and Android surfaces are migration code and cannot be release evidence. Deferred capabilities remain visible only as honest lifecycle status in Advanced Settings.",
+      "decision": "The approved friend-ready milestone includes every one of the 19 active feature groups and 47 interface requirements, native on Windows/Linux/Android/TV, with Books excluded on TV. Preserve background channels with isolated history and Tune In, overnight preparation, household compute, in-flight analysis, predictive cache, guidance, remote device policy and atmosphere. MacOS, live TV/sports and fleet administration remain parked. Hardware-specific unsupported integrations require explicit capability contracts; ordinary missing journeys cannot be relabeled unavailable. Shadow models remain non-authoritative until qualified.",
+      "rationale": "The 2026-09-23 full completion plan supersedes narrower Day-0 deferrals. Independent UI/UX and physical acceptance are release gates; one source revision, native packages, signing, clean-user installation and update/recovery evidence precede friend distribution.",
       "sources": ["docs/feature-register.json", "docs/feature-acceptance.json", ".reelos-audit/platform-release-status.json"]
     },
     {
@@ -82,8 +82,8 @@
     },
     {
       "id": "intelligence-boundaries",
-      "decision": "Learning happens strictly on-device. Cross-home intelligence automatically shares only anonymous taste profiles, not gradients, weights, transcripts, scene analysis, histories or household settings. Local models may assist curation, search and resource adaptation, but deterministic rules control access, credentials, family safety and destructive actions.",
-      "rationale": "The original privacy boundary is taste-only sharing with private local learning, not centralized training or shared film-analysis uploads. No opt-in ceremony or visible AI branding is required. Anonymity must pass measured re-identification/linkability and payload-boundary checks, not merely removal of names; unproven payloads stay local. Explain background behavior honestly in privacy documentation. Ordinary provider/media requests are separate from the shared-learning payload.",
+      "decision": "Learning remains local with no exports beyond the Home, including anonymous taste profiles. The former cross-home exchange is retired in favor of authorized within-Home matching. Models run in network-isolated workers with no credentials; separate constrained brokers handle authorized Home sync and media/update traffic. Deterministic policy controls access, family safety, resources and destructive actions.",
+      "rationale": "Owner selected no learning exports and approved this privacy boundary on 2026-09-23. Test actual egress isolation; do not equate a privacy label with isolation or describe internet-connected devices as physically air-gapped. Private analysis must not escape via diagnostics.",
       "sources": ["docs/feature-register.json", "scripts/services/neural-scale-engine.mjs"]
     },
     {
@@ -95,7 +95,7 @@
     {
       "id": "cached-title-analysis",
       "decision": "Reuse authorized cached media for a versioned local analysis pass: timestamped transcripts/subtitle candidates, spoiler-bounded summaries, audio characteristics, and family-content annotations. Reuse valid results before fetching media or rerunning inference; per-title analysis does not require retraining a model.",
-      "rationale": "One downloaded source can support preparation and companion features without repeated provider traffic. Jobs yield to playback and honor storage, network and provider backoff budgets. Cached-title analysis and any training are strictly on-device; transcripts, scene summaries, audio analysis and family annotations are not cross-home contributions. Only anonymous taste profiles may leave through the shared-intelligence channel, under the intelligence-boundaries decision. Match annotations to the exact edition/audio track/timebase; uncertain or conflicting results cannot silently relax family policy. Deterministic access and parent rules remain authoritative.",
+      "rationale": "One authorized source supports preparation and companion features without repeated provider traffic. Jobs yield to playback and respect storage/network/provider budgets. No analysis or learning exports beyond the Home. Match evidence to exact edition/audio/timebase; uncertainty must not relax parent policy. In-flight sampled analysis is distinct from rendition compression.",
       "sources": ["docs/feature-register.json"]
     },
     {
@@ -106,8 +106,8 @@
     },
     {
       "id": "household-clean-install",
-      "decision": "Build the first household installation for the owner's current computer. The HP previously used for basement measurements is intended for the owner's mother's home and is reserved for final-build testing; do no further recovery, development deployment or preparation on it. Its final installation must not import old code, profiles, library state, settings or credentials.",
-      "rationale": "The owner changed deployment order and rejected salvaging the old HP installation. Retain non-secret hardware/test evidence only. Final-build testing does not by itself authorize an OS-disk erase; exact destructive targets must be separately verified.",
+      "decision": "Build and validate the shared native slice on all four approved devices with isolated test state; preserve existing installations and data. Then install the signed household candidate and rehearse a clean friend setup. HP final installation must not import obsolete code, profiles, settings, library state or credentials. No disk wipe without exact target authorization.",
+      "rationale": "The owner approved four-device feasibility and debugging in the 2026-09-23 plan, superseding the former final-candidate-only restriction. This does not authorize destructive cleanup or replacing the existing signing identity.",
       "sources": ["docs/feature-register.json"]
     },
     {

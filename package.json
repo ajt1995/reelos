@@ -39,6 +39,8 @@
     "acceptance:check-current": "node scripts/acceptance-evidence.mjs --check",
     "context:brief": "node scripts/context-brief.mjs",
     "context:check": "node scripts/context-brief.mjs --check",
+    "test:native-core": "pwsh -NoProfile -File scripts/test-native-core.ps1",
+    "test:native-contracts": "node --test --test-isolation=none scripts/native-foundation.test.mjs",
     "architecture:report": "node scripts/neural-architecture.mjs",
     "architecture:check": "node scripts/neural-architecture.mjs --check",
     "audit:tests": "node scripts/test-inventory.mjs --check",

@@ -101,7 +101,7 @@ export function buildContext() {
       retirementEntries: architecture.summary.retirementEntries
     },
     startHere: {
-      interface: ["src/experience/reelos-world.tsx", "src/experience/experience-state.ts", "src/experience/source-access.ts"],
+      interface: ["clients/native/README.md", "clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/NativeScreen.kt", "docs/native-ui-ux-audit.md"],
       consumerScope: ["docs/feature-register.json", "docs/agent-context/active-decisions.json"],
       neuralSystem: ["docs/agent-context/neural-capabilities.json", "scripts/services/reel-intelligence-system.mjs", "scripts/services/intelligence-coordinator.mjs"],
       legacyBoundary: ["docs/agent-context/legacy-retirement.json"],

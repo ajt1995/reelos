@@ -2,6 +2,9 @@
   "$schema": "https://reelos.local/schemas/test-inventory-policy/v1",
   "purpose": "Every test must have one deliberate release disposition. Rules are ordered; the first match wins.",
   "rules": [
+    {"id":"native-foundation-contract","match":"scripts/native-foundation.test.mjs","disposition":"targeted","reason":"Checks native migration boundaries and complete UX audit coverage; structural only, never installed-device acceptance."},
+    {"id":"native-kotlin-core-unit","match":"clients/native/core/src/test/**/*.kt","disposition":"targeted","reason":"Kotlin profile, source, persistence and onboarding invariants; execution requires the native Gradle test dependencies."},
+    {"id":"native-kotlin-core-smoke","match":"clients/native/core/src/smoke/**/*.kt","disposition":"targeted","reason":"Dependency-free Kotlin executable validates the core locally with cached compiler tooling, not UI, models or hardware."},
     {"id":"setup-settings-evidence","match":"scripts/setup-settings-evidence.test.mjs","disposition":"release","reason":"Setup, Home, Settings, provider, and device-install evidence must be current, source-fingerprinted, narrowly attributed, and must not manufacture security, visual, or hardware review."},
     {"id":"setup-settings-browser","match":"scripts/test-setup-settings-journey.mjs","disposition":"targeted","reason":"A source-fingerprinted browser journey must observe Home shelves, persist profile motion and density through the server and reload, and expose honest Help/status state."},
     {"id":"family-social-browser-matrix","match":"scripts/test-family-social-journey.mjs","disposition":"release","reason":"Day-0 Family, child exit, Kids Present, filtering, Companion truth, and Watch Together host/join/reconnect journeys must pass against a fresh isolated service with source-fingerprinted evidence."},

@@ -62,3 +62,7 @@ clients/android/.kotlin/
 clients/android/build/
 clients/android/app/build/
 clients/android/app/src/main/assets/reelos/
+clients/native/.gradle/
+clients/native/.kotlin/
+clients/native/**/build/
+clients/native/local.properties

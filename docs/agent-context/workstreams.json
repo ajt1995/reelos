@@ -6,15 +6,15 @@
   "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
   "active": [
     {
-      "id": "branch-reconciliation",
+      "id": "native-core-foundation",
       "owner": "codex",
-      "branch": "work/codex-cleanup-2026-09-22",
-      "checkpoint": "8e31fa9",
+      "branch": "work/codex-native-core-2026-09-23",
+      "checkpoint": "532ccee",
       "status": "active",
       "scope": [
-        "reconcile Antigravity decisions and source changes against approved ReelOS requirements",
-        "preserve native standalone platforms and actual measured local learning",
-        "prepare bounded integration slices from docs/agent-context/branch-reconciliation.md"
+        "implement shared Kotlin/Compose standalone native feasibility slice",
+        "lead owns build, UI, integration and persistent decisions; core worker owns clients/native/core/src and CORE-CONTRACT.md",
+        "independent UX worker owns docs/native-ui-ux-audit.md and docs/native-ui-ux-matrix.json; no overlapping edits"
       ],
       "currentFacts": [
         "19 active feature groups and 2 parked groups are registered",
@@ -25,15 +25,22 @@
         "owner confirmed authorized phone-to-computer storage-budget management",
         "no incoming application code merged; review is static, not device certification",
         "owner's seven-part decision list is reconciled in docs/agent-context/owner-requirements.md",
-        "Windows C# native and Android Kotlin/Compose are confirmed; Linux renderer remains to be selected",
+        "approved shared Kotlin/Compose replaces earlier C# split; Books excluded TV; no learning exports beyond Home",
+        "Windows .214 measured at 15.8 GiB; Fold USB authorized; TV ADB and HP SSH reachable but identity confirmation remains",
+        "native feasibility is not release acceptance; all 19 groups and 47 UI requirements remain mandatory",
+        "shared core compiles and dependency-free Kotlin smoke passes; independent 47-ID UX source audit exists",
+        "4 native structural checks pass; inventory classifies 282 test files, not 282 passing tests",
+        "Gradle native build blocked on missing cached plugin/dependencies; dependency download approval requested, no downloads performed",
+        "TV authenticated via ADB as Onn 4K Pro armeabi-v7a; Fold SM-F971U arm64; HP SSH key authentication rejected",
         "named ML skill files were not found; concrete ML rules are persistent repository requirements"
       ],
       "nextChecks": [
-        "audit critical foundations against owner-requirements.md and branch-reconciliation.md before integration",
+        "complete independent native UI/UX requirement audit and shared core tests",
         "npm run architecture:check",
         "npm run audit:features",
         "npm run audit:tests",
-        "run targeted native and service acceptance after each integrated slice"
+        "build native slice with approved cached/downloaded dependencies then verify all four actual platforms",
+        "do not overwrite installed household applications or signing keys with debug builds"
       ]
     },
     {

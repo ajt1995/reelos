@@ -9,10 +9,10 @@ const checkMode = process.argv.includes("--check");
 function walk(directory, files = []) {
   if (!existsSync(directory)) return files;
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (["node_modules", ".test-tmp", "dist", ".reelos-audit"].includes(entry.name)) continue;
+    if (["node_modules", ".test-tmp", "dist", ".reelos-audit", "build", ".gradle", ".kotlin"].includes(entry.name)) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) walk(path, files);
-    else if (/\.test\.(?:mjs|ts)$/.test(entry.name)) files.push(path);
+    else if (/\.test\.(?:mjs|ts)$/.test(entry.name) || (/\.kt$/.test(entry.name) && /[/\\]src[/\\](?:test|smoke)[/\\]/.test(path))) files.push(path);
   }
   return files;
 }
@@ -25,7 +25,7 @@ function globExpression(pattern) {
 export function buildTestInventory() {
   const policy = JSON.parse(readFileSync(policyPath, "utf8"));
   const rules = (policy.rules ?? []).map((rule) => ({ ...rule, expression: globExpression(rule.match) }));
-  const files = [...walk(join(root, "scripts")), ...walk(join(root, "src", "lib"))]
+  const files = [...walk(join(root, "scripts")), ...walk(join(root, "src", "lib")), ...walk(join(root, "clients", "native"))]
     .map((path) => relative(root, path).replaceAll("\\", "/"))
     .sort();
   const tests = files.map((file) => {
