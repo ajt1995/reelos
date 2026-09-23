@@ -12,7 +12,7 @@ function walk(directory, files = []) {
     if (["node_modules", ".test-tmp", "dist", ".reelos-audit", "build", ".gradle", ".kotlin"].includes(entry.name)) continue;
     const path = join(directory, entry.name);
     if (entry.isDirectory()) walk(path, files);
-    else if (/\.test\.(?:mjs|ts)$/.test(entry.name) || (/\.kt$/.test(entry.name) && /[/\\]src[/\\](?:test|smoke)[/\\]/.test(path))) files.push(path);
+    else if (/\.test\.(?:mjs|ts)$/.test(entry.name) || entry.name === "test-native-android-hardware.ps1" || (/\.(?:kt|java)$/.test(entry.name) && /[/\\]src[/\\](?:test|smoke|androidTest)[/\\]/.test(path))) files.push(path);
   }
   return files;
 }

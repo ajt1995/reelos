@@ -9,7 +9,11 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":shared-ui"))
     implementation(compose.desktop.currentOs)
+    // Cached approved dependency; LibVLC itself is supplied by the desktop host.
+    implementation("net.java.dev.jna:jna:5.6.0")
+    testImplementation(kotlin("test-junit"))
 }
+tasks.test { useJUnit() }
 compose.desktop {
     application { mainClass = "com.reelos.desktop.MainKt" }
 }

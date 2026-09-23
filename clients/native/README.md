@@ -9,7 +9,9 @@ implementation; `clients/android` and the web application remain migration refer
 - `core`: pure Kotlin/JVM state and source-availability policy shared with Android.
 - `shared-ui`: Compose Multiplatform UI, Android + desktop targets, no browser.
 - `presentation`: one Kotlin adapter compiled into both host applications.
-- `desktop`: Windows/Linux native-rendered JVM host. Desktop media decoding is not connected.
+- `desktop`: Windows/Linux native-rendered JVM host with a LibVLC local-media adapter.
+  Windows rendered real fixture bytes in a native video surface; Linux execution is not yet verified.
+  LibVLC is currently a separately installed host dependency, not bundled release media tooling.
 - `android`: isolated `com.reelos.nativepreview` local-media validation host using native Media3.
   It has no internet permission, does not replace `com.reelos`, and cannot produce a release.
 
@@ -49,10 +51,13 @@ does not reset data. The local snapshot is a feasibility store, not the finished
    (zero failures/skips), desktop Kotlin compilation and Android debug assembly. Both the Fold
    and 32-bit Onn TV installed and launched the isolated APK. This is launch/render evidence,
    not complete onboarding, playback, model or platform acceptance.
-2. Complete desktop media adapter, model-worker boundary and approved artwork/taste field;
+2. Complete model-worker boundary and approved artwork/taste field;
    then measure the actual native slice on all four targets before expanding remaining journeys.
-3. Complete interaction/media checks on Android TV (`armeabi-v7a`) and Fold ARM64. Windows .214 is 15.8 GiB,
-   not 64 GiB. HP SSH port is reachable but current key authentication failed.
+3. Android TV (`armeabi-v7a`) passed ten physical media checks; the script below
+   replaces evidence on each run and fails on missing checks. This is not full UI acceptance.
+   Fold ARM64 is currently disconnected. Windows .214 is 15.8 GiB, not 64 GiB.
+   HP password SSH verified Ubuntu 26.04.1 x86_64, about 3.2 GiB RAM and an active Wayland
+   desktop. Java and LibVLC are absent; installing those runtimes awaits owner approval.
 4. Preserve all 19 active feature groups / 47 UI requirements. Update their existing acceptance
    ledger only with current evidence; a core smoke pass is not a platform or UI pass.
 
@@ -60,3 +65,32 @@ No models were downloaded. Build dependencies were downloaded with owner approva
 dependency-free core smoke remains offline. No existing household application was
 uninstalled, household data wiped, or signing key replaced. A failed build must remain visible,
 not be replaced by a stale APK.
+
+## Physical media checks
+
+`scripts/test-native-android-hardware.ps1 -Device <authorized-adb-serial>` installs only
+`com.reelos.nativepreview` and its test APK, wakes the display, and requires every named
+test to finish within a bounded timeout. Build `:android:assembleDebug` and
+`:android:assembleDebugAndroidTest` first. Results, source/package hashes and scoped logs
+replace `.reelos-audit/native-hardware/<serial>/result.json`. The generated video lives
+only under `src/androidTest/assets`; it contains no personal data and must never enter
+the application APK/catalog. Tests cover integration, not a complete user journey.
+
+Desktop tests need `REELOS_DESKTOP_FIXTURE` pointing to a real local fixture and installed
+LibVLC. Without the fixture the decoder test is skipped, which is not release evidence.
+Run `:desktop:test`; separately operate native import/Play/pause/seek/resume/end controls.
+Open With accepts one absolute local file path and requires visible confirmation before
+adding it; it never imports a URL or starts playback automatically.
+
+Do not recompile desktop/core/shared-ui while Gradle `:desktop:run` is alive: its live
+classpath points to mutable build outputs and compilation can remove synthetic classes.
+Stop the validation process before the next desktop build. Android-only work may proceed
+only while shared dependencies remain unchanged. A class-loading failure caused by this
+testing collision is not evidence of an installed-package defect.
+
+Windows manual native checks on 2026-09-23 observed onboarding and restart persistence,
+confirmed Open With import, real video frames, pause, backward seek, resumed playback,
+end-of-video Replay and normal application exit. This uses a 30-second silent fixture,
+not a sustained feature film, audio/subtitle certification, OS file-picker certification,
+or an installer test. Seven desktop tests also passed with the real decoder fixture and
+zero skips. Neither this nor TV integration evidence completes the 19/47 release gates.

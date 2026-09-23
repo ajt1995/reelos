@@ -80,6 +80,39 @@ test("privacy boundary rejects credentials and disallowed specialist scopes", as
     { code: "inference_privacy_boundary" });
 });
 
+test("executor rejects export candidates before any adapter call while Home requests retain model gates", async () => {
+  const fx = fixture({ capabilityId: "shared-taste-intelligence" });
+  assert.deepEqual(CAPABILITY_SPECIALISTS["shared-taste-intelligence"].privacy, ["household_private"]);
+  let probes = 0;
+  fx.runtimeAdapter.eligible = () => { probes++; return { eligible: true }; };
+  const sharedRequest = request({ capabilityId: "shared-taste-intelligence", privacyClass: "export_candidate" });
+  await assert.rejects(() => fx.executor({ request: sharedRequest, modelSet: fx.active }),
+    { code: "inference_privacy_boundary" });
+  assert.equal(probes, 0);
+  assert.equal(fx.calls.length, 0);
+
+  const other = fixture();
+  let otherProbes = 0;
+  other.runtimeAdapter.eligible = () => { otherProbes++; return { eligible: true }; };
+  await assert.rejects(() => other.executor({ request: request({ privacyClass: "export_candidate" }), modelSet: other.active }),
+    { code: "inference_privacy_boundary" });
+  assert.equal(otherProbes, 0);
+  assert.equal(other.calls.length, 0);
+
+  const withinHome = await fx.executor({ request: { ...sharedRequest, privacyClass: "household_private" }, modelSet: fx.active });
+  assert.deepEqual(withinHome.result, ["two", "one"]);
+  assert.equal(probes, 1);
+  assert.equal(fx.calls.length, 1);
+  assert.equal(fx.calls[0].request.privacyClass, "household_private");
+
+  const inactive = createLocalModelExecutor({ registry: { getActive: () => null, getArtifact: () => null },
+    adapters: [fx.runtimeAdapter] });
+  assert.deepEqual(inactive.eligibility("shared-taste-intelligence").reasons, ["model_set_unavailable"]);
+  await assert.rejects(() => inactive({ request: { ...sharedRequest, privacyClass: "household_private" } }),
+    { code: "model_set_unavailable" });
+  assert.equal(probes, 1);
+});
+
 test("deadline and resource yield abort model work instead of publishing late output", async () => {
   const timeoutFx = fixture();
   timeoutFx.runtimeAdapter.execute = () => new Promise(() => {});

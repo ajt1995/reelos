@@ -13,6 +13,7 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1-native-validation"
+        testInstrumentationRunner = "com.reelos.nativepreview.NativeHardwareChecks"
     }
     sourceSets["main"].java.srcDir("../presentation/src/main/kotlin")
     buildFeatures { compose = true }

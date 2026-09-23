@@ -2,6 +2,10 @@
   "$schema": "https://reelos.local/schemas/test-inventory-policy/v1",
   "purpose": "Every test must have one deliberate release disposition. Rules are ordered; the first match wins.",
   "rules": [
+    {"id":"native-hardware-runner","match":"scripts/test-native-android-hardware.ps1","disposition":"targeted","reason":"Physical Android media runner requires every named check, bounded completion and source/package fingerprints; unavailable devices fail rather than skip."},
+    {"id":"native-android-fixture-provider","match":"clients/native/android/src/androidTest/**/*.java","disposition":"targeted","reason":"Read-only test asset provider serving non-personal generated media to physical decoder checks; absent from app APK."},
+    {"id":"native-android-hardware","match":"clients/native/android/src/androidTest/**/*.kt","disposition":"targeted","reason":"Physical-device local media import, decoder, seeking, resume, profile isolation and revocation checks with test-only fixture provider. Does not certify UI, audio or complete product acceptance."},
+    {"id":"native-desktop-media","match":"clients/native/desktop/src/test/**/*.kt","disposition":"targeted","reason":"Installed LibVLC local-file validation and failure tests. Rendering and real-device interaction require separate evidence."},
     {"id":"native-foundation-contract","match":"scripts/native-foundation.test.mjs","disposition":"targeted","reason":"Checks native migration boundaries and complete UX audit coverage; structural only, never installed-device acceptance."},
     {"id":"native-kotlin-core-unit","match":"clients/native/core/src/test/**/*.kt","disposition":"targeted","reason":"Kotlin profile, source, persistence and onboarding invariants; execution requires the native Gradle test dependencies."},
     {"id":"native-kotlin-core-smoke","match":"clients/native/core/src/smoke/**/*.kt","disposition":"targeted","reason":"Dependency-free Kotlin executable validates the core locally with cached compiler tooling, not UI, models or hardware."},

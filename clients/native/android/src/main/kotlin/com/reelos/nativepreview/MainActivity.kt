@@ -1,6 +1,7 @@
 package com.reelos.nativepreview
 
 import android.app.UiModeManager
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.Configuration
 import android.media.MediaMetadataRetriever
@@ -30,6 +31,7 @@ import androidx.lifecycle.lifecycleScope
 import com.reelos.core.*
 import com.reelos.presentation.NativeExperience
 import java.security.MessageDigest
+import java.util.ConcurrentModificationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,11 +42,26 @@ class MainActivity : ComponentActivity() {
     private var backRevision by mutableStateOf(0)
     private var handlesBack by mutableStateOf(false)
     private var hostMessage by mutableStateOf<String?>(null)
+    private var importRunning = false
     private val mediaPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) lifecycleScope.launch {
+        if (uri != null) acceptImport(uri)
+    }
+
+    private fun acceptImport(uri: Uri) {
+        if (importRunning) return
+        val importingProfileId = core.snapshot.activeProfileId
+        val kind = core.deviceKind
+        importRunning = true
+        lifecycleScope.launch {
             hostMessage = "Checking your video…"
-            val result = withContext(Dispatchers.IO) { runCatching { importVideo(uri) } }
-            hostMessage = if (result.isSuccess) null else "Couldn’t open this video. Your existing library is unchanged. Try another file."
+            val result = withContext(Dispatchers.IO) { runCatching { importVideo(uri, requireNotNull(importingProfileId), kind) } }
+            hostMessage = if (result.isSuccess) {
+                runCatching { ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), core.deviceKind) }
+                    .fold(onSuccess = { core = it; null }, onFailure = {
+                        "Video was imported, but your library could not be refreshed. Close and reopen ReelOS."
+                    })
+            } else "Couldn’t import this video. Check its format, file access and free storage, then try again."
+            importRunning = false
             hostRevision++
         }
     }
@@ -61,6 +78,7 @@ class MainActivity : ComponentActivity() {
             return
         }
         core = loaded.getOrThrow()
+        offerIncomingVideo(intent)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 BackHandler(enabled = handlesBack) { backRevision++ }
@@ -84,6 +102,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (::core.isInitialized) offerIncomingVideo(intent)
+    }
+
+    private fun offerIncomingVideo(incoming: Intent) {
+        val uri = incoming.data ?: return
+        if (incoming.action != Intent.ACTION_VIEW || uri.scheme != "content") return
+        val profile = core.snapshot.activeProfile
+        if (profile == null || !core.canEnterHome(profile.id)) {
+            hostMessage = "Finish setup, then open this video with ReelOS again."
+            return
+        }
+        // External intents cannot silently import, play, or bypass future profile authorization.
+        AlertDialog.Builder(this).setTitle("Add this video?")
+            .setMessage("ReelOS will check the selected video. If its file access is temporary, a private copy uses this device’s storage (up to 1 GB, leaving 256 MB free).")
+            .setPositiveButton("Add video") { _, _ -> acceptImport(uri) }
+            .setNegativeButton("Cancel", null).show()
+    }
+
     override fun onResume() {
         super.onResume()
         // A player activity can persist progress while this screen is stopped.
@@ -95,22 +134,64 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun importVideo(uri: Uri) {
+    private fun importVideo(uri: Uri) = importVideo(uri, requireNotNull(core.snapshot.activeProfileId), core.deviceKind)
+
+    private fun importVideo(uri: Uri, importingProfileId: String, kind: DeviceKind) {
         require(uri.scheme == "content")
-        contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        val metadata = MediaMetadataRetriever()
+        // Validate the exact bytes retained for playback; a content provider may change
+        // its stream between opens or grant only temporary access.
+        val retainedUri = LocalVideo.retain(this, uri)
+        var discardOnFailure = true
         try {
-            metadata.setDataSource(this, uri)
-            require(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes")
-            require((metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) > 0L)
-        } finally { metadata.release() }
-        val title = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
-            if (cursor.moveToFirst()) cursor.getString(0) else null
-        } ?: "Personal video"
-        val id = MessageDigest.getInstance("SHA-256").digest(uri.toString().toByteArray()).joinToString("") { "%02x".format(it) }
-        // Private mapping is never included in shared core/diagnostics. No arbitrary network URLs.
-        check(getSharedPreferences("local-media", MODE_PRIVATE).edit().putString(id, uri.toString()).commit())
-        core.putSource(SourceRecord(PERSONAL_SOURCE_ID, SourceKind.PERSONAL, SourceStatus.AVAILABLE))
-        core.putMedia(MediaRecord(id, title.take(512), PERSONAL_SOURCE_ID, MediaAvailability.READY))
+            LocalVideo.verifyFirstFrame(this, retainedUri)
+            val metadata = MediaMetadataRetriever()
+            try {
+                if (retainedUri.scheme == "file") metadata.setDataSource(requireNotNull(retainedUri.path))
+                else metadata.setDataSource(this, retainedUri)
+                require(metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_VIDEO) == "yes")
+                require((metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L) > 0L)
+            } finally { metadata.release() }
+            val title = contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            } ?: "Personal video"
+            val id = MessageDigest.getInstance("SHA-256").digest(uri.toString().toByteArray()).joinToString("") { "%02x".format(it) }
+            // Private mapping is never included in shared core/diagnostics. No arbitrary network URLs.
+            val mappings = getSharedPreferences("local-media", MODE_PRIVATE)
+            val prior = mappings.getString(id, null)
+            try {
+                check(mappings.edit().putString(id, retainedUri.toString()).commit())
+                commitImportedMedia(kind, importingProfileId, MediaRecord(id, title.take(512), PERSONAL_SOURCE_ID, MediaAvailability.READY))
+            } catch (failure: Exception) {
+                discardOnFailure = if (prior == null) mappings.edit().remove(id).commit()
+                    else mappings.edit().putString(id, prior).commit()
+                throw failure
+            }
+            if (prior != null && prior != retainedUri.toString()) {
+                runCatching { LocalVideo.discardPrivateCopy(this, Uri.parse(prior)) }
+            }
+        } catch (failure: Exception) {
+            if (discardOnFailure) runCatching { LocalVideo.discardPrivateCopy(this, retainedUri) }
+            throw failure
+        }
+    }
+
+    private fun commitImportedMedia(kind: DeviceKind, importingProfileId: String, item: MediaRecord) {
+        val store = FileCoreStore(filesDir.resolve("core.bin").toPath())
+        val source = SourceRecord(PERSONAL_SOURCE_ID, SourceKind.PERSONAL, SourceStatus.AVAILABLE)
+        var stale: ConcurrentModificationException? = null
+        repeat(3) {
+            val current = ReelCore(store, kind)
+            check(current.snapshot.activeProfileId == importingProfileId && current.canEnterHome(importingProfileId)) {
+                "The active profile changed during import"
+            }
+            try {
+                if (current.snapshot.sources[PERSONAL_SOURCE_ID] != source) current.putSource(source)
+                current.putMedia(item)
+                return
+            } catch (failure: ConcurrentModificationException) {
+                stale = failure
+            }
+        }
+        throw requireNotNull(stale)
     }
 }

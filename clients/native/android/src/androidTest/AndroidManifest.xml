@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Test APK only: exposes only the generated non-personal fixture assets. -->
+        <provider android:name="com.reelos.nativepreview.FixtureProvider"
+            android:authorities="com.reelos.nativepreview.test.fixture"
+            android:exported="true" />
+    </application>
+</manifest>

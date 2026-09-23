@@ -8,7 +8,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +47,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -251,7 +251,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         Text(media.title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(6.dp))
         Text(when (media.action) {
-            UiAction.PLAY -> "Ready to play"
+            UiAction.PLAY -> "On this device"
             UiAction.FIND -> "Title information only · no playable source"
             UiAction.PREPARING -> "Preparing · not ready to play"
             UiAction.UNAVAILABLE -> "Source unavailable"
@@ -260,6 +260,8 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         if (media.action == UiAction.PLAY) {
             ReelButton("Play", accent) { onEvent(UiEvent.Play(media.id)) }
             Spacer(Modifier.height(8.dp))
+        }
+        if (media.saved || media.action == UiAction.PLAY) {
             ReelButton(if (media.saved) "Remove from saved" else "Save", accent) { onEvent(UiEvent.Save(media.id, !media.saved)) }
         }
         listOf("LIKE" to "Like", "LOVE" to "Love", "COZY" to "Cozy", "LESS" to "Less", "DISMISS" to "Dismiss").forEach { (value, label) ->
@@ -284,8 +286,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
             .background(if (lit) Color.White else accent.copy(alpha = if (enabled) 0.34f else 0.12f), RoundedCornerShape(16.dp))
             .border(if (focused) 3.dp else 1.dp, if (focused) accent else Color.White.copy(alpha = 0.16f), RoundedCornerShape(16.dp))
             .onFocusChanged { focused = it.isFocused }
-            .clickable(enabled = enabled, onClick = onClick)
-            .focusable(enabled = enabled)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = if (lit) canvas else if (enabled) Color.White else muted, fontWeight = FontWeight.SemiBold) }

@@ -36,6 +36,19 @@ test("Android host declares system and keyboard insets inside a themed surface",
   assert.match(host, /Column\(Modifier\.safeDrawingPadding\(\)\.imePadding\(\)\)/);
 });
 
+test("shared native save control can remove unavailable saved titles", () => {
+  // Structural guard only; source revocation and remote input still need runtime tests.
+  const screen = read("clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/NativeScreen.kt");
+  const bridge = read("clients/native/presentation/src/main/kotlin/com/reelos/presentation/NativeExperience.kt");
+  assert.match(screen, /if \(media\.saved \|\| media\.action == UiAction\.PLAY\)/);
+  assert.match(screen, /if \(media\.action == UiAction\.PLAY\) \{\s*ReelButton\("Play"/);
+  assert.match(bridge, /if \(event\.saved\) \{\s*check\(core\.mediaAction\(event\.id\)/);
+  assert.match(bridge, /event\.id in core\.snapshot\.profiles\.getValue\(activeId\)\.savedMediaIds/);
+  assert.match(screen, /\.clickable\(enabled = enabled, role = Role\.Button, onClick = onClick\)/);
+  assert.doesNotMatch(screen, /\.focusable\(enabled = enabled\)/);
+  assert.match(screen, /UiAction\.PLAY -> "On this device"/);
+});
+
 test("validation Android app cannot replace household installation or claim release signing", () => {
   const build = read("clients/native/android/build.gradle.kts");
   assert.match(build, /applicationId = "com\.reelos\.nativepreview"/);

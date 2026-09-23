@@ -72,8 +72,13 @@ fun NativeExperience(
                     onPlay(event.id)
                 }
                 is UiEvent.Save -> {
-                    check(core.mediaAction(event.id).name == UiAction.PLAY.name) { "This title is not ready to save" }
-                    core.save(requireNotNull(profileId), event.id, event.saved)
+                    val activeId = requireNotNull(profileId)
+                    if (event.saved) {
+                        check(core.mediaAction(event.id).name == UiAction.PLAY.name) { "This title is not available to save" }
+                    } else {
+                        check(event.id in core.snapshot.profiles.getValue(activeId).savedMediaIds) { "This title is not saved" }
+                    }
+                    core.save(activeId, event.id, event.saved)
                 }
                 is UiEvent.React -> core.setReaction(requireNotNull(profileId), event.id, event.reaction?.let(ReactionKind::valueOf))
             }

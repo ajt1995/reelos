@@ -20,7 +20,7 @@ export const CAPABILITY_SPECIALISTS = Object.freeze({
   "storage-optimization": Object.freeze({ specialist: "storage-value-forecaster", task: "forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
   "machine-protection": Object.freeze({ specialist: "machine-pressure-predictor", task: "telemetry-forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
   "interface-protection": Object.freeze({ specialist: "interaction-health-monitor", task: "latency-forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
-  "shared-taste-intelligence": Object.freeze({ specialist: "anonymous-taste-sketch", task: "privacy-preserving-aggregation", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private", "export_candidate"]) }),
+  "shared-taste-intelligence": Object.freeze({ specialist: "anonymous-taste-sketch", task: "privacy-preserving-aggregation", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
   "release-ranking": Object.freeze({ specialist: "source-release-ranker", task: "ranking", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
 });
 
@@ -131,6 +131,10 @@ export class LocalModelExecutor {
 
   async execute({ request, modelSet, lease = null } = {}) {
     if (!object(request) || typeof request.capabilityId !== "string") fail("model_request_invalid", "A validated inference request is required.");
+    // Cross-Home learning export is retired; reject even before probing a runtime adapter.
+    if (request.privacyClass === "export_candidate") {
+      fail("inference_privacy_boundary", "Local model execution cannot process learning export candidates.");
+    }
     const loaded = this.loadModelSet(request.capabilityId, modelSet);
     const status = this.eligibility(request.capabilityId, modelSet);
     if (!status.eligible) fail(status.reasons[0], "The local specialist is not eligible on this machine.");

@@ -35,7 +35,7 @@ This compact record incorporates the owner's approved native completion/release 
 | Windows computer | LAPTOP-8J93FFJH; 15.8 GiB measured; 192.168.1.214 | Verify current identity/resources and native install, onboarding, playback, yielding, update/recovery. Earlier 64GB inventory was incorrect. |
 | Living Room Onn 4K Pro | Android TV; 192.168.1.95:5555 | Verify device identity, native UI/motion, remote navigation, playback and update. |
 | Samsung Galaxy Z Fold | USB serial R5GL64PC0CF | Verify serial/model, folded/unfolded layout, touch, standalone operation, Home sync and remote storage control. |
-| HP appliance | Debian 12 Minimal expected; 192.168.1.234 | Verify actual OS/hardware and native display. Non-destructive isolated feasibility is approved; final installation imports no old state. Exact wipe scope still needs authorization. |
+| HP appliance | 192.168.1.234; Ubuntu 26.04.1 x86_64, ~3.2 GiB RAM measured over authenticated SSH | Active Wayland desktop verified; prior Debian inventory was stale. Java/LibVLC installation awaits approval. Non-destructive isolated feasibility is approved; final installation imports no old state. Exact wipe scope still needs authorization. |
 
 Addresses are expected locators, not authenticated identity or proof of availability. Unit tests and simulations supplement physical tests; they cannot certify the fleet. Previous wipe instructions do not identify a current disk for destruction.
 
