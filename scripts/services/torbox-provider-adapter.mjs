@@ -59,9 +59,10 @@ function episodeMatches(file, requestedMedia) {
 }
 
 export class TorBoxProviderAdapter {
-  constructor({ apiKey = "", accountScope = "", fetchImpl = fetch, rateLimiter = torBoxRateLimiter, pollIntervalMs = 5_000, maxWaitMs = 10 * 60_000 } = {}) {
+  constructor({ apiKey = "", accountScope = "", authorize = null, fetchImpl = fetch, rateLimiter = torBoxRateLimiter, pollIntervalMs = 5_000, maxWaitMs = 10 * 60_000 } = {}) {
     this.apiKey = String(apiKey || "").trim();
     this.accountScope = accountScope;
+    this.authorize = authorize;
     this.fetch = fetchImpl;
     this.rateLimiter = rateLimiter;
     this.pollIntervalMs = pollIntervalMs;
@@ -76,6 +77,7 @@ export class TorBoxProviderAdapter {
   async request(path, { method = "GET", body, signal, cacheKey, bypassCache = false } = {}) {
     this.requireKey();
     const call = async () => {
+      this.authorize?.();
       const response = await this.fetch(`${API}${path}`, {
         method,
         headers: {
@@ -105,7 +107,9 @@ export class TorBoxProviderAdapter {
   async checkAvailability(candidate, { signal } = {}) {
     const hash = candidateHash(candidate);
     if (!hash) return { available: false, cached: false, reason: "missing_infohash" };
-    const checked = await checkCachedTorrents([hash], this.apiKey, { provider: "torbox", accountScope: this.accountScope, fetchImpl: this.fetch, signal });
+    const checked = await checkCachedTorrents([hash], this.apiKey, { provider: "torbox",
+      accountScope: this.accountScope, signal,
+      fetchImpl: (url, options) => { this.authorize?.(); return this.fetch(url, options); } });
     return { available: true, hash, ...(checked[hash] || { cached: false }) };
   }
 
@@ -168,7 +172,8 @@ export class TorBoxProviderAdapter {
         provider: "torbox",
         verified: true,
         verifiedAt: Date.now(),
-        binding: { infohash: hash, torrentId: torrent.id ?? acquired.torrentId, fileId: file.id, sizeBytes: Number(file.size || 0) },
+        binding: { infohash: hash, torrentId: torrent.id ?? acquired.torrentId, fileId: file.id,
+          sizeBytes: Number(file.size || 0), accountScope: this.accountScope },
       },
     };
   }

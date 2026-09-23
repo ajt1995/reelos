@@ -1,6 +1,6 @@
 import { resolveVerifiedLocalOriginal } from "./media-retention-service.mjs";
 
-const privateSourceFields = ["sourceKind", "sourceVerified", "source", "path", "Path", "file", "fileVersion", "pins", "retentionReceipt", "preparationReceipt"];
+const privateSourceFields = ["sourceKind", "sourceVerified", "source", "accountScope", "path", "Path", "file", "fileVersion", "pins", "retentionReceipt", "preparationReceipt"];
 
 /**
  * Request-scoped annotation after library access filtering. Catalog/cache claims

@@ -20,6 +20,7 @@ import { Readable } from "node:stream";
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import { NativeMediaRegistry } from "./native-media-registry.mjs";
+import { createProviderValidation, writeProviderValidation } from "./source-access-policy.mjs";
 
 const identity = createPlaybackFixture();
 const handleStreamRequest = (req, res, options = {}) => rawStreamRequest(req, res, { ...identity.options, ...options });
@@ -121,7 +122,7 @@ test("native provider playback uses the registry item and its exact torrent file
   const item = registry.register({ itemId: "native-episode", workId: "series-a", editionId: "cut-1",
     mediaType: "episode", season: 1, episode: 2,
     source: { id: "torbox-31-file-5", kind: "provider_stream", provider: "torbox", verified: true,
-      binding: { infohash: hash, torrentId: 31, fileId: 5, sizeBytes: 100 } } });
+      binding: { infohash: hash, torrentId: 31, fileId: 5, sizeBytes: 100, accountScope: who.providerScope } } });
   who.writeLibrary([{ id: item.itemId, sourceKind: "personal_import" }]);
   who.setProvider(true);
   const calls = [];
@@ -138,6 +139,23 @@ test("native provider playback uses the registry item and its exact torrent file
   assert.ok(calls.every((url) => !url.includes("torrent_id=undefined")));
 });
 
+test("provider byte route never queries account B for account A's registered source", async () => {
+  const who = createPlaybackFixture();
+  const registry = new NativeMediaRegistry({ stateDir: who.stateDir });
+  registry.register({ itemId: "account-film", workId: "account-film", editionId: "cut-one",
+    source: { id: "account-a", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { infohash: "a".repeat(40), torrentId: 10, fileId: 1, accountScope: who.providerScope } } });
+  who.setProvider(true);
+  fs.writeFileSync(path.join(who.stateDir, "answers.json"), JSON.stringify({ source: "torbox", apiKey: "fixture-key-B" }));
+  writeProviderValidation(who.stateDir, createProviderValidation("torbox", "fixture-key-B", "fixture-account-B"));
+  let calls = 0;
+  const result = await byteRequest(who, "/api/stream/item/account-film", { options: {
+    fetchImpl: async () => { calls++; throw new Error("old source must not reach provider"); },
+  } });
+  assert.equal(result.statusCode, 404);
+  assert.equal(calls, 0);
+});
+
 test("provider disable denies mapped disk cache and hash RAM cache on the next Range request", async () => {
   const { neuroCache } = await import("./neuro-cache.mjs");
   const who = createPlaybackFixture();
@@ -146,7 +164,8 @@ test("provider disable denies mapped disk cache and hash RAM cache on the next R
   fs.mkdirSync(cache);
   const file = path.join(cache, `${hash}.mp4`);
   fs.writeFileSync(file, Buffer.alloc(128, 0x66));
-  who.writeLibrary([{ id: "provider-title", infohash: hash, path: file, sourceKind: "debrid" }]);
+  who.writeLibrary([{ id: "provider-title", infohash: hash, path: file, sourceKind: "debrid",
+    source: { provider: "torbox", accountScope: who.providerScope } }]);
   neuroCache.setPrewarmedBuffer(hash, Buffer.alloc(128, 0x77));
   try {
     who.setProvider(true);
@@ -213,7 +232,8 @@ test("public playback resolves only a server catalog identity and forwards Range
 test("provider resolution never substitutes another torrent/file or outlives provider revocation", async () => {
   const who = createPlaybackFixture();
   const hash = "cccccccccccccccccccccccccccccccccccccccc";
-  const item = { id: "provider-selected", infohash: hash, sourceKind: "debrid", torrentId: 5, providerFileId: 9 };
+  const item = { id: "provider-selected", infohash: hash, sourceKind: "debrid", torrentId: 5, providerFileId: 9,
+    source: { provider: "torbox", accountScope: who.providerScope } };
   who.writeLibrary([item]);
   who.setProvider(true);
   const calls = [];
@@ -244,7 +264,8 @@ test("provider byte route requires exact stored torrent, ready state and episode
   const who = createPlaybackFixture();
   const hash = "dddddddddddddddddddddddddddddddddddddddd";
   const item = { id: "episode-one", workId: "series", editionId: "cut-one", mediaType: "episode", season: 1, episode: 1,
-    infohash: hash, sourceKind: "debrid", torrentId: 21, providerFileId: 3 };
+    infohash: hash, sourceKind: "debrid", torrentId: 21, providerFileId: 3,
+    source: { provider: "torbox", accountScope: who.providerScope } };
   who.writeLibrary([item]);
   who.setProvider(true);
   const checked = [];
@@ -613,6 +634,45 @@ test("provider proxy pins public DNS, forwards Range, and allows signed CDN leas
   assert.equal(contacts[0].options.agent, false);
 });
 
+test("provider proxy rechecks authority after DNS before opening the CDN transport", async () => {
+  let authorized = true;
+  let transports = 0;
+  const result = await providerProxyRequest("https://cdn.example/video", {
+    providerLookup: async () => {
+      authorized = false;
+      return [{ address: "8.8.8.8", family: 4 }];
+    },
+    providerAuthorize: () => authorized,
+    providerHttpsRequest: () => { transports++; throw new Error("transport must not open"); },
+  });
+  assert.equal(result.statusCode, 502);
+  assert.equal(transports, 0);
+});
+
+test("provider proxy stops a redirected CDN hop after account revocation", async () => {
+  let authorized = true;
+  let transports = 0;
+  const result = await providerProxyRequest("https://cdn.example/start", {
+    providerLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+    providerAuthorize: () => authorized,
+    providerHttpsRequest: (_url, _options, respond) => {
+      transports++;
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => {
+        authorized = false;
+        const upstream = Readable.from([]);
+        upstream.statusCode = 302;
+        upstream.headers = { location: "https://cdn.example/next" };
+        respond(upstream);
+      };
+      return outgoing;
+    },
+  });
+  assert.equal(result.statusCode, 502);
+  assert.equal(transports, 1);
+});
+
 test("provider proxy validates every redirect and bounds redirect chains", async () => {
   for (const target of ["http://cdn.example/insecure", "https://127.0.0.1/private", "https://metadata.example/private"]) {
     let contacts = 0;
@@ -819,7 +879,8 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
       fetchImpl: mockFetchWithServer,
       apiKey: "test-api-key",
       providerEnabled: true,
-      libraryItems: [{ id: "mapped-provider", infohash: testHash, sourceKind: "debrid", torrentId: 9988, providerFileId: 1 }],
+      libraryItems: [{ id: "mapped-provider", infohash: testHash, sourceKind: "debrid", torrentId: 9988, providerFileId: 1,
+        source: { provider: "torbox", accountScope: identity.providerScope } }],
       providerRemoteOptions: {
         providerLookup: async () => [{ address: "8.8.8.8", family: 4 }],
         providerHttpsRequest: (url, requestOptions, respond) => {

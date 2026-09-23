@@ -12,6 +12,7 @@ const fixture = () => {
 };
 test.after(() => fixtures.forEach((dir) => fs.rmSync(dir, { recursive: true, force: true })));
 const receipt = { sizeBytes: 42, fingerprint: "a".repeat(64) };
+const accountScope = "f".repeat(64);
 
 test("native registry publishes only verified exact sources", () => {
   const registry = new NativeMediaRegistry({ stateDir: fixture() });
@@ -25,11 +26,25 @@ test("native registry publishes only verified exact sources", () => {
 test("provider revocation hides only provider projections", () => {
   const registry = new NativeMediaRegistry({ stateDir: fixture() });
   const item = registry.register({ workId: "tmdb-2", editionId: "edition-b", source: { id: "provider-a", kind: "provider_stream", provider: "torbox", verified: true,
-    binding: { infohash: "b".repeat(40), torrentId: 9, fileId: 2 } } });
+    binding: { infohash: "b".repeat(40), torrentId: 9, fileId: 2, accountScope } } });
   assert.equal(registry.publicProjection(item, { canAccessProvider: () => true }).ready, true);
   assert.equal(registry.revokeProvider("torbox"), 1);
   const revoked = registry.get(item.itemId);
   assert.equal(registry.publicProjection(revoked, { canAccessProvider: () => true }).ready, false);
+});
+
+test("new TorBox registrations require account scope and isolate provider identities per account", () => {
+  const registry = new NativeMediaRegistry({ stateDir: fixture() });
+  const binding = { infohash: "b".repeat(40), torrentId: 9, fileId: 2 };
+  assert.throws(() => registry.register({ workId: "unscoped", editionId: "cut",
+    source: { id: "legacy", kind: "provider_stream", provider: "torbox", verified: true, binding } }),
+  (error) => error.code === "provider_binding_invalid");
+  registry.register({ workId: "account-a", editionId: "cut",
+    source: { id: "a", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { ...binding, accountScope } } });
+  assert.doesNotThrow(() => registry.register({ workId: "account-b", editionId: "cut",
+    source: { id: "b", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { ...binding, accountScope: "e".repeat(64) } } }));
 });
 
 test("registry refuses alias ambiguity", () => {
@@ -42,7 +57,7 @@ test("registry refuses alias ambiguity", () => {
 test("registry pins a provider file to one canonical episode", () => {
   const registry = new NativeMediaRegistry({ stateDir: fixture() });
   const source = { id: "episode-file", kind: "provider_stream", provider: "torbox", verified: true,
-    binding: { infohash: "c".repeat(40), torrentId: 17, fileId: 4 } };
+    binding: { infohash: "c".repeat(40), torrentId: 17, fileId: 4, accountScope } };
   assert.throws(() => registry.register({ workId: "series", editionId: "cut", mediaType: "episode", source }),
     (error) => error.code === "episode_identity_invalid");
   const item = registry.register({ workId: "series", editionId: "cut", mediaType: "episode", season: 1, episode: 2, source });
@@ -59,10 +74,10 @@ test("reacquiring the same edition replaces the stale provider torrent binding",
   const registry = new NativeMediaRegistry({ stateDir: fixture() });
   const first = registry.register({ workId: "series", editionId: "episode-cut", mediaType: "episode", season: 1, episode: 2,
     source: { id: "old-torrent", kind: "provider_stream", provider: "torbox", verified: true,
-      binding: { infohash: "d".repeat(40), torrentId: 10, fileId: 2 } } });
+      binding: { infohash: "d".repeat(40), torrentId: 10, fileId: 2, accountScope } } });
   registry.register({ workId: "series", editionId: "episode-cut", mediaType: "episode", season: 1, episode: 2,
     source: { id: "new-torrent", kind: "provider_stream", provider: "torbox", verified: true,
-      binding: { infohash: "d".repeat(40), torrentId: 11, fileId: 2 } } });
+      binding: { infohash: "d".repeat(40), torrentId: 11, fileId: 2, accountScope } } });
   const sources = registry.get(first.itemId).sources;
   assert.equal(sources.find((source) => source.id === "old-torrent").accessState, "revoked");
   assert.equal(sources.filter((source) => source.accessState === "active").length, 1);

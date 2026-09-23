@@ -102,13 +102,23 @@ function requestCapabilityValidation(ledger, record) {
 
 async function launchAcquisition(ctx, job) {
   const policy = sourcePolicy(ctx.stateDir);
+  const assertProviderAuthority = () => {
+    const current = sourcePolicy(ctx.stateDir);
+    if (!current.connected || current.provider !== policy.provider || current.accountScope !== policy.accountScope) {
+      throw Object.assign(new Error("The provider connection changed during acquisition."), { code: "provider_connection_changed" });
+    }
+  };
   const settings = sourceSettings(ctx.stateDir);
   const roster = loadOwnerIndexerPresets();
   return ctx.acquisitions.run(job.id, {
+    assertProviderAuthority,
     discover: (current, { signal }) => searchAndScoreReleases({
       title: current.title, year: current.year, season: current.season, episode: current.episode,
     }, {
-      fetchImpl: (url, options = {}) => fetch(url, { ...options, signal: options.signal || signal }),
+      fetchImpl: (url, options = {}) => {
+        assertProviderAuthority();
+        return fetch(url, { ...options, signal: options.signal || signal });
+      },
       provider: policy.provider, apiKey: policy.connected ? policy.apiKey : "", accountScope: policy.accountScope,
       enabledIndexerIds: settings.enabledIndexerIds, indexerRoster: roster,
       qualityFloor: settings.qualityFloor, preferHdr: settings.preferHdr,
@@ -118,9 +128,11 @@ async function launchAcquisition(ctx, job) {
       magnet: candidate.magnet || `magnet:?xt=urn:btih:${candidate.infoHash}&dn=${encodeURIComponent(candidate.title || current.title)}` }))),
     rank: async (_current, candidates) => candidates[0] || null,
     resolveProvider: async () => {
-      const current = sourcePolicy(ctx.stateDir);
-      if (!current.connected || current.provider !== "torbox" || current.accountScope !== policy.accountScope) return null;
-      return { id: "torbox", adapter: new TorBoxProviderAdapter({ apiKey: current.apiKey, accountScope: current.accountScope }) };
+      assertProviderAuthority();
+      if (policy.provider !== "torbox") return null;
+      return { id: "torbox", adapter: new TorBoxProviderAdapter({
+        apiKey: policy.apiKey, accountScope: policy.accountScope, authorize: assertProviderAuthority,
+      }) };
     },
     registry: ctx.registry,
   });
@@ -167,7 +179,8 @@ export async function handleNativeControlPlaneRoute(req, res, options = {}) {
     if (pathname === "/api/library" && method === "GET") {
       const policy = sourcePolicy(ctx.stateDir);
       const titles = ctx.registry.list().map((item) => ctx.registry.publicProjection(item, {
-        canAccessProvider: (provider) => policy.connected && provider === policy.provider,
+        canAccessProvider: (provider, accountScope) => policy.connected && provider === policy.provider
+          && accountScope === policy.accountScope,
       })).filter((item) => item?.ready);
       return send(res, 200, { ok: true, engine: "native", titles });
     }

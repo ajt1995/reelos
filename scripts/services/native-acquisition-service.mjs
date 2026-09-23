@@ -238,6 +238,8 @@ export class NativeAcquisitionService {
         state.jobs[id].updatedAt = Date.now();
         this.write(state);
       } });
+      stop();
+      adapters.assertProviderAuthority?.();
       if (!verified?.source || verified.source.verified !== true) fail("The provider source could not be verified.", "source_unverified");
       let source = verified.source;
       if (typeof adapters.prepare === "function") {
@@ -245,6 +247,8 @@ export class NativeAcquisitionService {
         source = await adapters.prepare(job, verified.source, { signal });
         if (!source?.verified) fail("The prepared source did not pass validation.", "prepared_source_unverified");
       }
+      stop();
+      adapters.assertProviderAuthority?.();
       const item = adapters.registry.register({
         workId: job.workId, editionId: verified.editionId, title: job.title, year: job.year,
         mediaType: job.mediaType, season: job.season, episode: job.episode,

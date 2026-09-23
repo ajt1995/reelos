@@ -27,7 +27,8 @@ describe("authoritative original annotations on public library metadata", () => 
 
   it("annotates only independently resolved authorized local originals without exposing paths or receipts", () => {
     const input = { id: item.id, title: "Original", jellyfinId: "file-a", sourceKind: "forged", sourceVerified: true,
-      path: "private path", Path: "another private path", source: { path: "private source path" }, file: { ino: "private receipt" }, fileVersion: "private fingerprint", pins: { owner: true } };
+      path: "private path", Path: "another private path", source: { path: "private source path" },
+      accountScope: "private-account-scope", file: { ino: "private receipt" }, fileVersion: "private fingerprint", pins: { owner: true } };
     assert.deepEqual(annotateVerifiedLibraryOriginals(req, [input], options), [{
       id: item.id, title: "Original", jellyfinId: "file-a", sourceKind: "personal_import", sourceVerified: true,
     }]);

@@ -603,6 +603,9 @@ async function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle
     const destination = await providerDestination(remoteUrl, options);
     pinnedLookup = destination.lookup;
     if (lifecycle.isClosed()) return;
+    if (options.providerAuthorize && options.providerAuthorize() !== true) {
+      throw new Error("Provider playback authority changed.");
+    }
   }
   const isHttps = urlObj.protocol === "https:";
   const client = isHttps ? { request: options.providerHttpsRequest || https.request } : http;
@@ -780,17 +783,27 @@ export async function handleStreamRequest(req, res, options = {}) {
   const torrentId = item?.source?.torrentId ?? item?.torrentId;
   const hash = String(item?.infohash || item?.source?.infohash || "").toLowerCase();
   const policy = access.sourcePolicy;
-  const providerScope = createHash("sha256").update(policy.apiKey || "").digest("hex");
+  const providerScope = policy.accountScope || createHash("sha256").update(policy.apiKey || "").digest("hex");
+  const assertCurrentProvider = () => {
+    const currentItem = resolvePlaybackItem({ kind: "item", value: playbackItemId(item) }, options);
+    const current = authorizePlaybackItem(req, currentItem, options);
+    if (!current.ok || JSON.stringify(currentItem) !== JSON.stringify(item)
+        || current.sourcePolicy.accountScope !== policy.accountScope
+        || current.sourcePolicy.apiKey !== policy.apiKey || current.sourcePolicy.provider !== policy.provider
+        || current.profile.id !== access.profile.id) throw new Error("Provider playback authority changed.");
+  };
   if (access.sourceKind === "debrid" && policy.connected && policy.provider === "torbox"
       && providerFileId != null && torrentId != null && /^[A-Za-z0-9_-]+$/.test(String(torrentId))
       && /^[a-f0-9]{40}$/.test(hash) && playbackItemId(item)) {
     try {
       const fetchImpl = options.fetchImpl || globalThis.fetch;
-      const { data } = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:streamlink:${torrentId}`, () =>
-        fetchImpl(`https://api.torbox.app/v1/api/torrents/mylist?id=${encodeURIComponent(torrentId)}`, {
+      const { data } = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:streamlink:${torrentId}`, () => {
+        assertCurrentProvider();
+        return fetchImpl(`https://api.torbox.app/v1/api/torrents/mylist?id=${encodeURIComponent(torrentId)}`, {
           headers: { Authorization: `Bearer ${policy.apiKey}` },
           signal: AbortSignal.timeout(5000),
-        }), { bypassCache: true });
+        });
+      }, { bypassCache: true });
       const raw = data?.data || data;
       const torrents = Array.isArray(raw) ? raw : [raw];
       const matches = torrents.filter((torrent) => String(torrent?.id ?? "") === String(torrentId)
@@ -807,20 +820,24 @@ export async function handleStreamRequest(req, res, options = {}) {
         const current = authorizePlaybackItem(req, freshItem, options);
         if (!current.ok) return sendPlaybackFailure(res, current);
         if (JSON.stringify(freshItem) !== JSON.stringify(item) || current.sourcePolicy.apiKey !== policy.apiKey
+            || current.sourcePolicy.accountScope !== policy.accountScope
             || current.sourcePolicy.provider !== policy.provider || current.profile.id !== access.profile.id) {
           return sendPlaybackFailure(res, { ok: false, status: 403, code: "playback_source_changed", error: "The playback source changed. Start playback again." });
         }
-        const download = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:reqdl:${torrent.id}:${providerFileId}`, () =>
-          fetchImpl(`https://api.torbox.app/v1/api/torrents/requestdl?token=${encodeURIComponent(policy.apiKey)}&torrent_id=${encodeURIComponent(torrent.id)}&file_id=${encodeURIComponent(providerFileId)}&redirect=false`, {
+        const download = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:reqdl:${torrent.id}:${providerFileId}`, () => {
+          assertCurrentProvider();
+          return fetchImpl(`https://api.torbox.app/v1/api/torrents/requestdl?token=${encodeURIComponent(policy.apiKey)}&torrent_id=${encodeURIComponent(torrent.id)}&file_id=${encodeURIComponent(providerFileId)}&redirect=false`, {
             headers: { Authorization: `Bearer ${policy.apiKey}` },
             signal: AbortSignal.timeout(5000),
-          }), { bypassCache: true });
+          });
+        }, { bypassCache: true });
         const value = download?.data;
         const streamUrl = typeof value?.data === "string" ? value.data : value?.data?.url || value?.data?.stream_url || (typeof value === "string" ? value : null);
         const latestItem = resolvePlaybackItem(itemSelector, options);
         const latest = authorizePlaybackItem(req, latestItem, options);
         if (!latest.ok) return sendPlaybackFailure(res, latest);
         if (JSON.stringify(latestItem) !== JSON.stringify(item) || latest.sourcePolicy.apiKey !== policy.apiKey
+            || latest.sourcePolicy.accountScope !== policy.accountScope
             || latest.sourcePolicy.provider !== policy.provider || latest.profile.id !== access.profile.id) {
           return sendPlaybackFailure(res, { ok: false, status: 403, code: "playback_source_changed", error: "The playback source changed. Start playback again." });
         }
@@ -829,6 +846,7 @@ export async function handleStreamRequest(req, res, options = {}) {
             ...options.providerRemoteOptions,
             remotePolicy: "provider",
             providerSecret: policy.apiKey,
+            providerAuthorize: () => { assertCurrentProvider(); return true; },
           });
           return true;
         }

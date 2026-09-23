@@ -1,6 +1,6 @@
 /**
  * ReelFlow Dispatcher
- * Submits torrents/magnets to Decypharr qBittorrent bridge (:8282) or directly to TorBox debrid.
+ * Submits torrents/magnets through the exact validated TorBox account.
  */
 
 import { providerCacheScope } from "./cache-checker.mjs";
@@ -9,7 +9,7 @@ import { torBoxRateLimiter } from "../services/debrid-service.mjs";
 const DECYPHARR_API = process.env.DECYPHARR_API || "http://127.0.0.1:8282";
 
 /**
- * Dispatches a torrent / magnet link to Decypharr qBittorrent bridge.
+ * Dispatches a torrent / magnet link to the validated TorBox account.
  * @param {string} magnetOrUrl - Magnet URI or torrent file URL
  * @param {Object} [options]
  * @param {string} [options.category="movies"] - "movies" | "tv"
@@ -19,9 +19,9 @@ const DECYPHARR_API = process.env.DECYPHARR_API || "http://127.0.0.1:8282";
  */
 export async function dispatchTorrent(magnetOrUrl, options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
-  const category = options.category || "movies";
   const apiKey = String(options.apiKey || "").trim();
-  if (!apiKey || !/^[a-f0-9]{64}$/.test(String(options.accountScope || ""))) {
+  if (!apiKey || !/^[a-f0-9]{64}$/.test(String(options.accountScope || ""))
+      || typeof options.authorize !== "function") {
     return { ok: false, error: "Connect and validate a provider before dispatching." };
   }
 
@@ -36,33 +36,11 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
     hash = hashMatch[1].toLowerCase();
   }
 
-  // Step 1: Submit to Decypharr (:8282)
-  try {
-    const formData = new URLSearchParams();
-    formData.append("urls", magnetOrUrl);
-    formData.append("category", category);
-    if (options.savePath) {
-      formData.append("savepath", options.savePath);
-    }
-
-    const res = await fetchImpl(`${DECYPHARR_API}/api/v2/torrents/add`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent": "ReelOS/2.0 (ReelFlow)",
-      },
-      body: formData.toString(),
-      signal: AbortSignal.timeout(6000),
-    });
-
-    if (res.ok) {
-      return { ok: true, hash, method: "decypharr" };
-    }
-  } catch (err) {
-    // Decypharr call failed, fall through to TorBox native fallback
+  // The retired local bridge has no account-attestation boundary. Never send
+  // a validated provider request through an unknown configured account.
+  if ((options.provider || "torbox") !== "torbox") {
+    return { ok: false, error: "This provider has no account-bound native dispatch path." };
   }
-
-  // Step 2: Fallback to TorBox Native API if Decypharr is unavailable
   if ((options.provider || "torbox") === "torbox" && apiKey && hash) {
     try {
       const tbForm = new URLSearchParams();
@@ -70,6 +48,7 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
 
       const cacheKey = `createtorrent:${providerCacheScope("torbox", apiKey, options.accountScope)}:${hash}`;
       const { data } = await torBoxRateLimiter.executeRequest(cacheKey, async () => {
+        if (options.authorize() !== true) throw new Error("Provider authority changed.");
         return fetchImpl("https://api.torbox.app/v1/api/torrents/createtorrent", {
           method: "POST",
           headers: {
@@ -82,7 +61,7 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
         });
       }, { bypassCache: true });
 
-      if (data) {
+      if (data && data.success !== false && !data.error) {
         return { ok: true, hash, method: "torbox_native", data: data?.data || data };
       }
     } catch {
@@ -90,7 +69,7 @@ export async function dispatchTorrent(magnetOrUrl, options = {}) {
     }
   }
 
-  return { ok: false, error: `Failed to dispatch torrent through Decypharr${(options.provider || "torbox") === "torbox" ? " or TorBox" : ""}` };
+  return { ok: false, error: "TorBox could not accept this source." };
 }
 
 /**

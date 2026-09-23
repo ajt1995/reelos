@@ -69,6 +69,10 @@ test("legacy connected, changed key, provider, and environment override require 
   assert.equal(policy({ uiSettings: { ...uiSettings, debridProvider: "real-debrid" } }).connected, false);
   assert.equal(policy({ uiSettings: { ...uiSettings, debridEnabled: false } }).connected, false);
   assert.equal(policy({ uiSettings: { ...uiSettings, debridConnection: { enabled: false, status: "connected", provider: "torbox" } } }).connected, false);
+  assert.equal(policy({ uiSettings: { ...uiSettings, debridEnabled: false,
+    debridConnection: { enabled: true, status: "connected", provider: "torbox" } } }).connected, false);
+  assert.equal(policy({ uiSettings: { ...uiSettings,
+    debridConnection: { enabled: true, status: "failed", provider: "torbox" } } }).connected, false);
   assert.equal(policy({ env: { TORBOX_API_KEY: "old-secret" } }).connected, true);
   const publicView = JSON.stringify(publicSourcePolicy(policy()));
   assert.doesNotMatch(publicView, /secret|accountFingerprint|credentialFingerprint|accountScope/);
@@ -108,7 +112,9 @@ test("library projections hide debrid symlinks when the provider is off", () => 
   const items = [
     { id: "personal", path: "/media/family/home-video.mp4" },
     { id: "public", path: "/var/lib/reelos/sample-library/charade.mp4" },
-    { id: "provider", path: "/mnt/symlinks/radarr/Batman/movie.mkv" },
+    { id: "provider", path: "/mnt/symlinks/radarr/Batman/movie.mkv",
+      source: { provider: "torbox", accountScope: "f".repeat(64) } },
+    { id: "legacy", path: "/mnt/symlinks/radarr/Old/movie.mkv" },
     { id: "unknown", path: "" },
   ];
   assert.equal(libraryItemSourceKind(items[2]), "debrid");
@@ -117,7 +123,11 @@ test("library projections hide debrid symlinks when the provider is off", () => 
     ["personal", "public"],
   );
   assert.deepEqual(
-    filterAccessibleLibraryItems(items, { connected: true }).map((item) => item.id),
+    filterAccessibleLibraryItems(items, { connected: true, provider: "torbox", accountScope: "f".repeat(64) }).map((item) => item.id),
     ["personal", "public", "provider"],
+  );
+  assert.deepEqual(
+    filterAccessibleLibraryItems(items, { connected: true, provider: "torbox", accountScope: "e".repeat(64) }).map((item) => item.id),
+    ["personal", "public"],
   );
 });

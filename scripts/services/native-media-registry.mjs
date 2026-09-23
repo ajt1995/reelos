@@ -45,8 +45,9 @@ function validateSource(source) {
     const binding = source.binding;
     if (!/^[a-f0-9]{40}$/i.test(String(binding?.infohash || ""))
         || !/^[A-Za-z0-9_-]+$/.test(String(binding?.torrentId ?? ""))
-        || !/^[A-Za-z0-9_-]+$/.test(String(binding?.fileId ?? ""))) {
-      fail("TorBox sources require exact torrent, hash, and file identities.", "provider_binding_invalid");
+        || !/^[A-Za-z0-9_-]+$/.test(String(binding?.fileId ?? ""))
+        || !/^[a-f0-9]{64}$/.test(String(binding?.accountScope || ""))) {
+      fail("TorBox sources require exact torrent, hash, file, and account identities.", "provider_binding_invalid");
     }
   }
   if (["personal_import", "retained_local", "prepared_rendition"].includes(source.kind)) {
@@ -113,6 +114,7 @@ export class NativeMediaRegistry {
       for (const other of Object.values(state.items)) {
         if (other.itemId === itemId) continue;
         if (other.sources.some((entry) => entry.kind === "provider_stream" && entry.provider === "torbox"
+          && entry.binding?.accountScope === binding.accountScope
           && String(entry.binding?.torrentId) === String(binding.torrentId)
           && String(entry.binding?.fileId) === String(binding.fileId)
           && String(entry.binding?.infohash).toLowerCase() === String(binding.infohash).toLowerCase())) {
@@ -181,7 +183,7 @@ export class NativeMediaRegistry {
   publicProjection(item, { canAccessProvider = () => false } = {}) {
     if (!item) return null;
     const playableSources = item.sources.filter((source) => source.accessState === "active" && (
-      source.kind !== "provider_stream" || canAccessProvider(source.provider)
+      source.kind !== "provider_stream" || canAccessProvider(source.provider, source.binding?.accountScope, source)
     ));
     const primarySource = playableSources.find((source) => source.kind !== "provider_stream") || playableSources[0] || null;
     return {

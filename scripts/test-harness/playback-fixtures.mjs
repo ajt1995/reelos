@@ -4,7 +4,14 @@ import { after } from "node:test";
 import { saveProfile } from "../services/profile-service.mjs";
 import { getGateSecret, registerAuthorizedDevice, signDeviceToken } from "../services/reelos-gate-service.mjs";
 import { replaceProfileSession } from "../services/profile-session-service.mjs";
-import { createProviderValidation, writeProviderValidation } from "../services/source-access-policy.mjs";
+import { createProviderValidation, sourcePolicyFromState, writeProviderValidation } from "../services/source-access-policy.mjs";
+
+const fixtureValidation = createProviderValidation("torbox", "fixture-key", "fixture-account");
+export const FIXTURE_PROVIDER_SCOPE = sourcePolicyFromState({
+  answers: { source: "torbox", apiKey: "fixture-key" },
+  uiSettings: { debridEnabled: true, debridProvider: "torbox", debridStatus: "connected" },
+  validation: fixtureValidation,
+}).accountScope;
 
 // Real device and profile credentials, isolated from household state. Tests must
 // opt in explicitly; ordinary mock requests remain unauthenticated.
@@ -20,11 +27,11 @@ export function createPlaybackFixture({ items = [], profile = { id: "adult", nam
   const setProvider = (enabled) => {
     fs.writeFileSync(path.join(stateDir, "answers.json"), JSON.stringify({ apiKey: "fixture-key", source: "torbox" }));
     fs.writeFileSync(path.join(stateDir, "ui-settings.json"), JSON.stringify({ debridConnection: { provider: "torbox", enabled, status: enabled ? "connected" : "disabled" } }));
-    if (enabled) writeProviderValidation(stateDir, createProviderValidation("torbox", "fixture-key", "fixture-account"));
+    if (enabled) writeProviderValidation(stateDir, fixtureValidation);
   };
   writeLibrary(items);
   const options = { stateDir, profilesDir, presenceService: { roomPresence: new Map() } };
   after(() => fs.rmSync(stateDir, { recursive: true, force: true }));
-  return { stateDir, profilesDir, options, cookie, device, writeLibrary, setProvider,
+  return { stateDir, profilesDir, options, cookie, device, writeLibrary, setProvider, providerScope: FIXTURE_PROVIDER_SCOPE,
     authorize(req) { req.headers.cookie = cookie; return req; } };
 }

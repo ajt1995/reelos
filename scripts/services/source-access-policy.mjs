@@ -63,22 +63,30 @@ export function sourcePolicyFromState({
   validation = null,
 } = {}) {
   const connection = uiSettings?.debridConnection || {};
-  const enabled = typeof connection.enabled === "boolean" ? connection.enabled : uiSettings?.debridEnabled === true;
+  const topEnabled = typeof uiSettings?.debridEnabled === "boolean" ? uiSettings.debridEnabled : null;
+  const nestedEnabled = typeof connection.enabled === "boolean" ? connection.enabled : null;
+  const enabled = (topEnabled === true || nestedEnabled === true)
+    && topEnabled !== false && nestedEnabled !== false;
+  const providerConflict = Boolean(connection.provider && uiSettings?.debridProvider
+    && String(connection.provider).toLowerCase() !== String(uiSettings.debridProvider).toLowerCase());
   const provider = String(
-    connection.provider ||
-      uiSettings?.debridProvider ||
+    uiSettings?.debridProvider ||
+      connection.provider ||
       answers?.source ||
       DEFAULT_DEBRID_PROVIDER,
   ).toLowerCase();
+  const statusConflict = Boolean(connection.status && uiSettings?.debridStatus
+    && String(connection.status).toLowerCase() !== String(uiSettings.debridStatus).toLowerCase());
   const savedStatus = String(
-    connection.status || uiSettings?.debridStatus || "disabled",
+    uiSettings?.debridStatus || connection.status || "disabled",
   ).toLowerCase();
   const apiKey = effectiveProviderKey(provider, answers, env);
   const supported = SUPPORTED_DEBRID_PROVIDERS.has(provider);
   const validated = validation?.schemaVersion === VALIDATION_SCHEMA && validation.provider === provider
     && DIGEST.test(validation.credentialFingerprint) && DIGEST.test(validation.accountFingerprint)
     && validation.credentialFingerprint === digest(`${provider}\0${apiKey}`);
-  const connected = enabled && supported && savedStatus === "connected" && apiKey.length > 0 && validated;
+  const connected = enabled && supported && !providerConflict && !statusConflict
+    && savedStatus === "connected" && apiKey.length > 0 && validated;
   const status = enabled && savedStatus === "connected" && !connected ? "validating" : savedStatus;
 
   return {
@@ -155,7 +163,9 @@ export function libraryItemSourceKind(item = {}) {
 
 export function libraryItemIsAccessible(item, policy) {
   const kind = libraryItemSourceKind(item);
-  if (kind === "debrid") return policy?.connected === true;
+  if (kind === "debrid") return policy?.connected === true && Boolean(policy.accountScope)
+    && item?.source?.provider === policy.provider
+    && item?.source?.accountScope === policy.accountScope;
   return (
     kind === "public_domain" ||
     kind === "personal_import" ||

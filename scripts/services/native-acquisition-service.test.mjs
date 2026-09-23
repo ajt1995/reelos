@@ -24,7 +24,7 @@ test("native acquisition is idempotent and publishes only after source verificat
     resolveProvider: async () => ({ id: "torbox", adapter: {
       acquire: async () => ({ receipt: { providerJobId: "opaque" } }),
       verify: async () => ({ editionId: "tmdb-550-cut-1999", source: { id: "tb-file-a", kind: "provider_stream", provider: "torbox", verified: true,
-        binding: { infohash: "a".repeat(40), torrentId: 7, fileId: 3 } } }),
+        binding: { infohash: "a".repeat(40), torrentId: 7, fileId: 3, accountScope: "f".repeat(64) } } }),
     } }),
     registry,
   });
@@ -44,6 +44,32 @@ test("native acquisition fails closed when provider verification is absent", asy
   assert.equal(registry.list().length, 0);
 });
 
+test("native acquisition never publishes after validated account authority changes", async () => {
+  const { service, registry } = setup();
+  const { job } = service.create({ profileId: "adult-a", workId: "account-race", mediaType: "movie" });
+  let authorized = true;
+  const failed = await service.run(job.id, {
+    discover: async () => [{ id: "candidate-a" }],
+    rank: async (_job, candidates) => candidates[0],
+    resolveProvider: async () => ({ id: "torbox", adapter: {
+      acquire: async () => ({}),
+      verify: async () => {
+        authorized = false;
+        return { editionId: "cut-one", source: { id: "stale-account", kind: "provider_stream",
+          provider: "torbox", verified: true, binding: {
+            infohash: "a".repeat(40), torrentId: 10, fileId: 1, accountScope: "f".repeat(64),
+          } } };
+      },
+    } }),
+    assertProviderAuthority: () => {
+      if (!authorized) throw Object.assign(new Error("Changed account"), { code: "provider_connection_changed" });
+    },
+    registry,
+  });
+  assert.equal(failed.status, "failed");
+  assert.equal(registry.list().length, 0);
+});
+
 test("acquisition passes the canonical episode to the provider", async () => {
   const { service, registry } = setup();
   const { job } = service.create({ profileId: "adult-a", workId: "series-a", mediaType: "episode", season: 2, episode: 4 });
@@ -54,7 +80,7 @@ test("acquisition passes the canonical episode to the provider", async () => {
     resolveProvider: async () => ({ id: "torbox", adapter: {
       acquire: async (_candidate, options) => { requestedMedia = options.requestedMedia; return {}; },
       verify: async () => ({ editionId: "series-a-s02e04", source: { id: "episode-file", kind: "provider_stream", provider: "torbox",
-        verified: true, binding: { infohash: "d".repeat(40), torrentId: 12, fileId: 4 } } }),
+        verified: true, binding: { infohash: "d".repeat(40), torrentId: 12, fileId: 4, accountScope: "f".repeat(64) } } }),
     } }),
     registry,
   });

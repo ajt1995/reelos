@@ -4,6 +4,7 @@ import { TorBoxProviderAdapter, torBoxFileSelector } from "./torbox-provider-ada
 
 const limiter = { executeRequest: async (_key, call) => ({ data: await call() }) };
 const response = (status, json) => ({ ok: status >= 200 && status < 300, status, json: async () => json });
+const accountScope = "f".repeat(64);
 
 test("TorBox adapter validates, acquires, and verifies one exact file", async () => {
   const calls = [];
@@ -32,9 +33,24 @@ test("TorBox adapter refuses unauthorized and ambiguous files", async () => {
   assert.equal(torBoxFileSelector([{ id: 1, name: "a.mkv", size: 100 }], 2), null);
 });
 
+test("TorBox refuses another provider operation after account authority changes", async () => {
+  let allowed = true;
+  let calls = 0;
+  const adapter = new TorBoxProviderAdapter({ apiKey: "synthetic-key", accountScope,
+    rateLimiter: limiter, authorize: () => {
+      if (!allowed) throw Object.assign(new Error("Changed account"), { code: "provider_connection_changed" });
+    },
+    fetchImpl: async () => { calls++; return response(200, { data: { id: 1 } }); },
+  });
+  await adapter.validate();
+  allowed = false;
+  await assert.rejects(() => adapter.validate(), (error) => error.code === "provider_connection_changed");
+  assert.equal(calls, 1);
+});
+
 test("TorBox adapter binds the returned torrent id, hash, file and episode", async () => {
   const hash = "d".repeat(40);
-  const adapter = new TorBoxProviderAdapter({ apiKey: "secret", rateLimiter: limiter, fetchImpl: async (url) => {
+  const adapter = new TorBoxProviderAdapter({ apiKey: "secret", accountScope, rateLimiter: limiter, fetchImpl: async (url) => {
     if (url.includes("createtorrent")) return response(200, { data: { torrent_id: 11 } });
     if (url.includes("mylist")) return response(200, { data: [{ id: 11, hash, download_state: "completed", files: [
       { id: 1, name: "Series.S01E01.mkv", size: 100 }, { id: 2, name: "Series.S01E02.mkv", size: 200 },
@@ -44,7 +60,7 @@ test("TorBox adapter binds the returned torrent id, hash, file and episode", asy
   const candidate = { hash, magnet: `magnet:?xt=urn:btih:${hash}`, fileId: 1 };
   const acquired = await adapter.acquire(candidate, { requestedMedia: { mediaType: "episode", season: 1, episode: 1 } });
   const verified = await adapter.verify(acquired);
-  assert.deepEqual(verified.source.binding, { infohash: hash, torrentId: 11, fileId: 1, sizeBytes: 100 });
+  assert.deepEqual(verified.source.binding, { infohash: hash, torrentId: 11, fileId: 1, sizeBytes: 100, accountScope });
   await assert.rejects(() => adapter.verify({ ...acquired, requestedFileId: 2 }), (error) => error.code === "provider_episode_mismatch");
   const selected = await adapter.verify({ ...acquired, requestedFileId: null });
   assert.equal(selected.source.binding.fileId, 1);

@@ -44,7 +44,8 @@ export async function autoHealDeadSymlinks(mediaRootDir = "/srv/media", options 
       if (best && best.infoHash) {
         const magnet = `magnet:?xt=urn:btih:${best.infoHash}&dn=${encodeURIComponent(best.title)}`;
         const category = parsed.season !== null ? "tv" : "movies";
-        await dispatchTorrent(magnet, { category, ...options });
+        const dispatched = await dispatchTorrent(magnet, { category, ...options });
+        if (!dispatched.ok) continue;
         healed.push({
           title: parsed.cleanTitle,
           originalPath: item.symlinkPath,

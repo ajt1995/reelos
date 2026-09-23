@@ -23,14 +23,19 @@ export function readPlaybackLibraryItems(options = {}) {
   const stateDir = playbackStateDir(options);
   const registryFile = path.join(stateDir, "native-media-registry.json");
   let nativeItems = [];
+  const nativeOwnedIds = new Set();
   if (fs.existsSync(registryFile)) {
     const policy = readPlaybackSourcePolicy(options);
     const registry = new NativeMediaRegistry({ stateDir });
     const registryState = registry.read();
+    for (const item of Object.values(registryState.items)) {
+      for (const id of [item.itemId, ...(item.aliases || [])]) if (id) nativeOwnedIds.add(String(id));
+    }
     nativeItems = Object.values(registryState.items).flatMap((item) => {
       const active = item.sources.filter((source) => source.accessState === "active");
       const local = active.find((source) => ["public_domain", "personal_import", "retained_local", "prepared_rendition"].includes(source.kind));
-      const provider = active.find((source) => source.kind === "provider_stream" && policy.connected && source.provider === policy.provider);
+      const provider = active.find((source) => source.kind === "provider_stream" && policy.connected
+        && source.provider === policy.provider && source.binding?.accountScope === policy.accountScope);
       const source = local || provider;
       if (!source) return [];
       const binding = source.binding && typeof source.binding === "object" ? source.binding : {};
@@ -54,6 +59,7 @@ export function readPlaybackLibraryItems(options = {}) {
           torrentId: binding.torrentId,
           fileId: binding.fileId,
           sizeBytes: binding.sizeBytes,
+          accountScope: binding.accountScope,
         },
         infohash: binding.infohash,
         torrentId: binding.torrentId,
@@ -71,10 +77,9 @@ export function readPlaybackLibraryItems(options = {}) {
   // presence must not make separately verified personal imports disappear.
   // This merge is also the migration seam while legacy shelf records are
   // progressively registered natively.
-  const owned = new Set(nativeItems.flatMap((item) => [item.id, ...(item.aliases || [])].filter(Boolean).map(String)));
   return [...nativeItems, ...shelfItems.filter((item) => {
     const ids = [item.id, item.jellyfinId, item.Id, ...(Array.isArray(item.ids) ? item.ids : [])].filter(Boolean).map(String);
-    return !ids.some((id) => owned.has(id));
+    return !ids.some((id) => nativeOwnedIds.has(id));
   })];
 }
 
@@ -126,6 +131,10 @@ export function authorizePlaybackItem(req, item, options = {}) {
   if (!libraryItemIsAccessible(item, sourcePolicy)) return failure(403, "source_unavailable", "This title's source is not currently available.");
   if (sourceKind === "debrid" && item.source?.provider && item.source.provider !== sourcePolicy.provider) {
     return failure(403, "source_unavailable", "This title's provider is not currently connected.");
+  }
+  if (sourceKind === "debrid" && (!sourcePolicy.accountScope
+      || String(item.source?.accountScope || "") !== sourcePolicy.accountScope)) {
+    return failure(403, "source_unavailable", "This provider source belongs to a different validated account.");
   }
   try {
     const presenceService = options.presenceService || childProfileService;
@@ -184,6 +193,8 @@ export function projectPlaybackSources(item, access) {
     : sourceKind === "debrid"
       ? access.sourcePolicy?.connected === true
         && String(item.source?.provider || "") === String(access.sourcePolicy?.provider || "")
+        && Boolean(access.sourcePolicy.accountScope)
+        && String(item.source?.accountScope || "") === access.sourcePolicy.accountScope
         && Boolean(item.source?.infohash || item.infohash)
         && item.source?.torrentId != null
         && (item.source?.fileId != null || item.providerFileId != null)

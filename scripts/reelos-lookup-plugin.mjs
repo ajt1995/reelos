@@ -2991,6 +2991,13 @@ async function triggerReelFlowFulfill({
       validation: currentProviderValidation(),
     });
     if (!providerPolicy.connected) return { ok: false, reason: "provider_not_connected" };
+    const authorizeProvider = () => {
+      const current = sourcePolicyFromState({
+        answers: answers(), uiSettings: readUiSettings(), env: process.env,
+        validation: currentProviderValidation(),
+      });
+      return current.connected && current.accountScope === providerPolicy.accountScope;
+    };
     note(
       `reelflow fulfill start: ${title} (${year || ""}) type=${mediaType} season=${season ?? ""}`,
     );
@@ -3005,6 +3012,10 @@ async function triggerReelFlowFulfill({
         provider: providerPolicy.provider,
         apiKey: providerPolicy.apiKey,
         accountScope: providerPolicy.accountScope,
+        fetchImpl: (url, options) => {
+          if (!authorizeProvider()) throw new Error("Provider connection changed.");
+          return fetch(url, options);
+        },
         enabledIndexerIds: sourceSettings.enabledIndexerIds || [],
       },
     );
@@ -3032,6 +3043,7 @@ async function triggerReelFlowFulfill({
       provider: currentPolicy.provider,
       apiKey: currentPolicy.apiKey,
       accountScope: currentPolicy.accountScope,
+      authorize: authorizeProvider,
     });
 
     if (!dispatchRes.ok) {
@@ -4745,6 +4757,9 @@ async function handleSettings(req, res) {
       ("debridProvider" in body ? body.debridProvider : cur.debridProvider) === "real-debrid" ? "real-debrid" : "torbox";
     next.debridEnabled = enable;
     next.debridProvider = provider;
+    // The owner settings writer uses top-level fields. Drop a stale nested
+    // connection so it cannot override a later disable or provider change.
+    delete next.debridConnection;
     next.debridStatus = enable ? "validating" : "disabled";
     next.debridValidatedAt = null;
     next.debridValidationAttempt = enable ? randomUUID() : null;

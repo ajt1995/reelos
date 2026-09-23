@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPlaybackFixture } from "../test-harness/playback-fixtures.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { createPlaybackFixture, FIXTURE_PROVIDER_SCOPE } from "../test-harness/playback-fixtures.mjs";
 import { createMockRequest, createMockResponse } from "../test-harness/harness-utils.mjs";
 import { NativeMediaRegistry } from "./native-media-registry.mjs";
 import { NativeAcquisitionService } from "./native-acquisition-service.mjs";
 import { CapabilityLedger } from "./capability-ledger.mjs";
 import { handleNativeControlPlaneRoute } from "./native-control-plane-routes.mjs";
+import { createProviderValidation, writeProviderValidation } from "./source-access-policy.mjs";
 
 function fixture() {
   const who = createPlaybackFixture({ profile: { id: "owner", name: "Owner", role: "owner" } });
@@ -39,7 +42,7 @@ test("native control plane exposes safe library and capability projections", asy
     editionId: "edition-10",
     title: "Visible",
     source: { id: "provider-10", kind: "provider_stream", provider: "torbox", verified: true,
-      binding: { torrentId: "10", fileId: "1", infohash: "a".repeat(40), private: true } },
+      binding: { torrentId: "10", fileId: "1", infohash: "a".repeat(40), accountScope: FIXTURE_PROVIDER_SCOPE, private: true } },
   });
   const library = await request(who, context, "/api/library");
   assert.equal(library.statusCode, 200);
@@ -47,6 +50,20 @@ test("native control plane exposes safe library and capability projections", asy
   assert.equal(JSON.stringify(library.json).includes("binding"), false);
   const capabilities = await request(who, context, "/api/capabilities");
   assert.equal(capabilities.json.capabilities[0].state, "installed");
+});
+
+test("native library omits old-account provider source after validation switches", async () => {
+  const { who, context } = fixture();
+  context.registry.register({
+    itemId: "account-film", workId: "account-film", editionId: "cut-one",
+    source: { id: "account-a", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { torrentId: 10, fileId: 1, infohash: "a".repeat(40), accountScope: who.providerScope } },
+  });
+  who.setProvider(true);
+  assert.equal((await request(who, context, "/api/library")).json.titles.length, 1);
+  fs.writeFileSync(path.join(who.stateDir, "answers.json"), JSON.stringify({ source: "torbox", apiKey: "fixture-key-B" }));
+  writeProviderValidation(who.stateDir, createProviderValidation("torbox", "fixture-key-B", "fixture-account-B"));
+  assert.equal((await request(who, context, "/api/library")).json.titles.length, 0);
 });
 
 test("owner capability controls are idempotent and revalidate safely", async () => {
