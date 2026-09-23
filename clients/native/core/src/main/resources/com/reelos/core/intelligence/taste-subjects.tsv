@@ -1,0 +1,115 @@
+# Taste-only names. No availability, artwork, stream URL, rating, or model output.
+# Provenance: src/lib/catalog.ts TITLES (five real TMDB records only).
+# Provenance: src/experience/experience-catalog.ts EXTRAS, PUBLIC_DOMAIN_TITLES, TASTE_ITEMS.
+# Provenance: scripts/books-catalog.mjs FEATURED_OPEN_BOOKS (book titles/IDs only).
+# Moods below are manually curated from EXTRAS mood tags with examples named in this resource.
+# Columns: kind, id, title, example title names separated by |
+movie	tmdb-movie-693134	Dune: Part Two	
+movie	tmdb-movie-335984	Blade Runner 2049	
+movie	tmdb-movie-872585	Oppenheimer	
+movie	tmdb-movie-157336	Interstellar	
+movie	tmdb-movie-129	Spirited Away	
+movie	inception	Inception	
+movie	dark-knight	The Dark Knight	
+movie	pulp-fiction	Pulp Fiction	
+movie	fight-club	Fight Club	
+series	severance	Severance	
+series	the-bear	The Bear	
+series	shogun	Shōgun	
+series	fallout	Fallout	
+series	arcane	Arcane	
+movie	jurassic-park	Jurassic Park	
+movie	alien	Alien	
+movie	john-wick	John Wick	
+movie	toy-story	Toy Story	
+movie	finding-nemo	Finding Nemo	
+movie	lion-king	The Lion King	
+movie	spider-verse	Spider-Man: Into the Spider-Verse	
+movie	frozen	Frozen	
+movie	moana	Moana	
+movie	wall-e	WALL-E	
+movie	paddington-2	Paddington 2	
+movie	parasite	Parasite	
+movie	everything-everywhere	Everything Everywhere All at Once	
+movie	mad-max-fury-road	Mad Max: Fury Road	
+movie	arrival	Arrival	
+movie	ex-machina	Ex Machina	
+movie	her	Her	
+movie	moonlight	Moonlight	
+movie	la-la-land	La La Land	
+movie	whiplash	Whiplash	
+movie	grand-budapest	The Grand Budapest Hotel	
+movie	eternal-sunshine	Eternal Sunshine of the Spotless Mind	
+movie	portrait-lady-fire	Portrait of a Lady on Fire	
+movie	aftersun	Aftersun	
+movie	past-lives	Past Lives	
+movie	holdovers	The Holdovers	
+movie	the-shining	The Shining	
+movie	midsommar	Midsommar	
+movie	get-out	Get Out	
+movie	hereditary	Hereditary	
+movie	the-witch	The Witch	
+movie	nope	Nope	
+movie	social-network	The Social Network	
+movie	zodiac	Zodiac	
+movie	gone-girl	Gone Girl	
+movie	prisoners	Prisoners	
+movie	sicario	Sicario	
+movie	the-prestige	The Prestige	
+movie	tenet	Tenet	
+movie	2001-space-odyssey	2001: A Space Odyssey	
+movie	goodfellas	Goodfellas	
+movie	taxi-driver	Taxi Driver	
+movie	godfather	The Godfather	
+movie	big-lebowski	The Big Lebowski	
+movie	fargo	Fargo	
+movie	casablanca	Casablanca	
+movie	rear-window	Rear Window	
+movie	vertigo	Vertigo	
+movie	seven-samurai	Seven Samurai	
+movie	pans-labyrinth	Pan's Labyrinth	
+movie	shape-of-water	The Shape of Water	
+movie	amelie	Amélie	
+movie	in-the-mood-for-love	In the Mood for Love	
+movie	princess-mononoke	Princess Mononoke	
+movie	my-neighbor-totoro	My Neighbor Totoro	
+movie	howls-moving-castle	Howl's Moving Castle	
+movie	ratatouille	Ratatouille	
+movie	fantastic-mr-fox	Fantastic Mr. Fox	
+movie	truman-show	The Truman Show	
+movie	shawshank	The Shawshank Redemption	
+movie	green-mile	The Green Mile	
+movie	night-of-the-living-dead-1968	Night of the Living Dead	
+movie	charade-1963	Charade	
+movie	his-girl-friday-1940	His Girl Friday	
+movie	a-star-is-born-1937	A Star Is Born	
+book	se-featured-the-adventures-of-sherlock-holmes	The Adventures of Sherlock Holmes	
+book	se-featured-the-hound-of-the-baskervilles	The Hound of the Baskervilles	
+book	se-featured-dracula	Dracula	
+book	se-featured-frankenstein	Frankenstein	
+book	se-featured-pride-and-prejudice	Pride and Prejudice	
+book	se-featured-alices-adventures-in-wonderland	Alice's Adventures in Wonderland	
+book	se-featured-the-war-of-the-worlds	The War of the Worlds	
+book	se-featured-moby-dick	Moby Dick	
+book	se-featured-jane-eyre	Jane Eyre	
+book	se-featured-treasure-island	Treasure Island	
+book	se-featured-the-picture-of-dorian-gray	The Picture of Dorian Gray	
+book	se-featured-a-tale-of-two-cities	A Tale of Two Cities	
+person	florence-pugh	Florence Pugh	Midsommar|Oppenheimer|Dune: Part Two
+person	ayo-edebiri	Ayo Edebiri	The Bear
+person	pedro-pascal	Pedro Pascal	
+person	viola-davis	Viola Davis	
+person	ryan-gosling	Ryan Gosling	La La Land
+person	zendaya	Zendaya	Dune: Part Two
+person	person-keanu-reeves	Keanu Reeves	John Wick
+person	person-michelle-yeoh	Michelle Yeoh	Everything Everywhere All at Once
+person	person-emma-stone	Emma Stone	La La Land
+person	person-sigourney-weaver	Sigourney Weaver	Alien
+person	person-tom-hanks	Tom Hanks	Toy Story|The Green Mile
+person	person-samuel-l-jackson	Samuel L. Jackson	Pulp Fiction
+mood	slow-rain	Slow rain & neon	Blade Runner 2049|Zodiac
+mood	sunday-comfort	Sunday comfort	The Holdovers|Paddington 2
+mood	big-feelings	Big feelings	Everything Everywhere All at Once|Interstellar
+mood	quietly-strange	Quietly strange	Arrival|Severance|Her
+mood	warm-familiar	Warm & familiar	Toy Story|Finding Nemo
+mood	tense-cerebral	Tense & cerebral	The Prestige|Ex Machina
