@@ -9,7 +9,7 @@
       "id": "branch-reconciliation",
       "owner": "codex",
       "branch": "work/codex-cleanup-2026-09-22",
-      "checkpoint": "5f039fd",
+      "checkpoint": "8e31fa9",
       "status": "active",
       "scope": [
         "reconcile Antigravity decisions and source changes against approved ReelOS requirements",
@@ -24,10 +24,12 @@
         "all 19 feature-group and 47 UI acceptance IDs and evidence requirements survived the incoming branch",
         "owner confirmed authorized phone-to-computer storage-budget management",
         "no incoming application code merged; review is static, not device certification",
-        "awaiting the owner's decision list from the other conversation before affected integration"
+        "owner's seven-part decision list is reconciled in docs/agent-context/owner-requirements.md",
+        "Windows C# native and Android Kotlin/Compose are confirmed; Linux renderer remains to be selected",
+        "named ML skill files were not found; concrete ML rules are persistent repository requirements"
       ],
       "nextChecks": [
-        "reconcile supplied owner decisions with branch-reconciliation.md",
+        "audit critical foundations against owner-requirements.md and branch-reconciliation.md before integration",
         "npm run architecture:check",
         "npm run audit:features",
         "npm run audit:tests",
@@ -42,7 +44,7 @@
       "status": "waiting",
       "scope": ["preserved source for central review; do not merge wholesale"],
       "currentFacts": ["source inspected from remote ref; original branch remains unchanged"],
-      "nextChecks": ["supply explicit owner decisions; integrate reviewed source changes centrally"]
+      "nextChecks": ["integrate reviewed source changes under the reconciled owner requirements"]
     }
   ]
 }

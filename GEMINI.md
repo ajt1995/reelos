@@ -4,6 +4,7 @@ This file is deliberately small. It exists only for tools that automatically
 read `GEMINI.md`.
 
 1. Read [`AGENTS.md`](AGENTS.md) completely.
+   Apply [`owner-requirements.md`](docs/agent-context/owner-requirements.md) on every implementation task, including the ML and native-platform rules.
 2. Run `npm run context:brief` and inspect
    [`docs/agent-context/workstreams.json`](docs/agent-context/workstreams.json).
 3. Use code/tests as evidence of what exists. The owner's latest explicit

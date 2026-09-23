@@ -6,6 +6,8 @@ This is the first file a fresh engineering agent should read. It is intentionall
 
 ## Resume in under a minute
 
+Read `docs/agent-context/owner-requirements.md` before any implementation. It preserves the owner's platform, ML, workflow and physical-acceptance requirements across tools, including C# native Windows and Kotlin/Compose Android. The named ML skills are not installed here; follow the recorded rules without claiming otherwise. Audit neural systems, UI contracts and feature coverage before changing critical foundations.
+
 1. Run `npm run context:brief`.
 2. Read `docs/agent-context/workstreams.json`, then only the file(s) named for
    the task in the brief's **Start here** section.
@@ -50,6 +52,7 @@ Do not treat `GROUND-TRUTH.md`, `STATUS.md`, `PROJECT.md`, `GEMINI.md`, or broad
 - Keep `neural-capabilities.json` aligned with the runtime registry. `context:check` fails when a registered capability lacks lifecycle, inputs, outputs, fallback, privacy, resource, coordinator, test, or evidence metadata. A reported `not-connected` route is an honest blocker, not permission to imply that the specialist is wired.
 - Keep `legacy-retirement.json` concise. It classifies boundaries; it does not authorize deletion. Retired code is removed only after replacement and retirement evidence exist.
 - Never present preview, simulated, or unverified service behavior as verified release functionality.
+- On owner request, stop active test loops promptly, checkpoint attributable work, push the workstream and yield. Do not revive retired agent personas; use owner instructions and repository evidence.
 
 ## Useful commands
 

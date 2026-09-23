@@ -41,13 +41,13 @@ The incoming workstream names checkpoint `2737a22`, which is not the fetched bra
 2. Integrate Android native components with canonical catalog/source contracts. Remove fake streams and browser packaging, fix profile isolation, and verify standalone startup, taste-to-Home and real playback on phone and TV.
 3. Integrate remote storage policy with explicit household-manager authorization, target identity and applied/pending state. Test authorized phone-to-computer changes, denied guest/child changes, offline targets and playback-safe budget reduction.
 4. Integrate and evaluate useful SGD/LinUCB changes; restore honest fallback labels. Wire ambient sessions and shared resource budgeting before enabling new background workloads. Neural adapters require real runtime evidence and the existing privacy boundary.
-5. Choose the shared native presentation/runtime approach after a bounded Windows/Linux feasibility check; current Android-only Compose screens do not settle that architecture. Reuse approved visuals and shared contracts. No browser wrapper qualifies as completion.
+5. Implement the confirmed C# native Windows and Kotlin/Compose Android direction over shared behavior and engine contracts. Select Linux native presentation after a bounded feasibility check. Reuse approved visuals. Current Android-only screens and desktop browser launchers do not establish full platform parity.
 6. Run targeted tests per slice, then native device journeys and release gates. Refresh all 19/47 evidence records only from actual runs; no UI or release claims based on registered routes alone.
 
 ## Worker policy
 
 Lead owns architecture, integration and final verification. Use Sol for bounded implementation/review and Luna for mechanical inventories when slots permit. Supply only relevant files and decisions; avoid full chat forks. Keep edit ownership disjoint, verify worker findings centrally, and use deterministic scripts for routine checks. This review used two Sol workers and local inventory; the third worker could not start due to the environment thread limit.
 
-## Still needed from outside Git
+## Owner decision list received
 
-This report covers committed artifacts and decisions stated in this conversation. Choices made only in another conversation cannot be reconstructed reliably. Preserve unresolved differences for a short owner decision round before affected implementation; do not infer agreement from generated code or legal assertions.
+The owner supplied seven decision groups on 2026-09-23: branch/stop workflow, full-node parity and unified onboarding, native UI/toolkits and TV legibility, real ML/512D embeddings, four physical acceptance targets, provider neutrality, and audits/persona retirement. They are now reconciled in `owner-requirements.md`, active decisions, agent entrypoints and feature acceptance text. This supersedes the earlier pending request for that list. C# on Windows is settled; Linux native toolkit, Books-on-TV and exact cache/charging defaults remain unsettled. No generated legal assertion is promoted to legal certainty.

@@ -3,6 +3,24 @@
   "purpose": "Active durable decisions only. Replace obsolete entries; do not append a history.",
   "decisions": [
     {
+      "id": "native-platform-and-first-run",
+      "decision": "One standalone ReelOS product uses Kotlin/Jetpack Compose on Android/TV, C# native presentation on Windows, and a native Linux appliance presentation. Only iOS may use browser/PWA presentation. All platforms share onboarding behavior: identity, personal atmosphere, curator, taste constellation and mesh topology, preserving source/access steps. Fresh nodes must onboard before the cinema stage; Home membership is optional. TV uses hardware-friendly gradients and high-contrast D-pad focus.",
+      "rationale": "Owner supplied these choices explicitly on 2026-09-23. Shared core/contracts preserve parity while input and layout adapt. Existing web launchers and platform-specific divergent flows remain migration gaps, not implementation authority.",
+      "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-register.json"]
+    },
+    {
+      "id": "measured-ml-implementation",
+      "decision": "Use actual learned 512D Float32 production embeddings, with versioned provenance and quality evaluation; do not substitute hashes, padded fixtures or regex and claim semantic learning. Algorithm updates must be valid: Sherman-Morrison applies to the relevant inverse-matrix update, not all embeddings. Keep fallbacks explicit and verify persistence, profile isolation and end-to-end model use.",
+      "rationale": "Owner requires real ML throughout the neural architecture. Dimensions, coordinator registration and mathematical vocabulary alone are not model evidence. Named ML skills were not located; concrete requirements persist in repository instructions instead.",
+      "sources": ["docs/agent-context/owner-requirements.md", "docs/agent-context/neural-capabilities.json"]
+    },
+    {
+      "id": "physical-platform-acceptance",
+      "decision": "Release acceptance requires physical tests on the owner's Windows workstation at 192.168.1.214, Onn TV at 192.168.1.95:5555, Galaxy Z Fold serial R5GL64PC0CF, and HP Debian 12 Minimal appliance at 192.168.1.234. Verify live identities and resources; source/unit/simulation checks alone do not establish completion.",
+      "rationale": "The owner supplied the fleet on 2026-09-23. Test runs must record actual device/build identity and results. The HP remains reserved for final candidate testing and no old-state import; destructive disk targets still require exact verification.",
+      "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-acceptance.json"]
+    },
+    {
       "id": "personal-world-ui",
       "decision": "ReelOS is a calm, art-led personal cinema and books experience, not a dashboard.",
       "rationale": "Personal taste, artwork, a favorite-color atmosphere, and restrained motion carry its character while navigation stays predictable.",
