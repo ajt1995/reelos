@@ -36,11 +36,12 @@ object NativeTasteCatalog {
                     if (line.isBlank() || line.startsWith("#")) return@forEachLine
                     require(result.size < 256) { "Taste subject limit" }
                     val fields = line.split('\t', limit = 4)
-                    require(fields.size == 4) { "Malformed taste subject" }
+                    require(fields.size in 3..4) { "Malformed taste subject" }
                     val kind = fields[0]
                     val id = fields[1]
                     val title = fields[2]
-                    val examples = if (fields[3].isEmpty()) emptyList() else fields[3].split('|').map(String::trim)
+                    val examples = fields.getOrNull(3)?.takeIf(String::isNotEmpty)
+                        ?.split('|')?.map(String::trim) ?: emptyList()
                     require(kind in setOf("movie", "series", "book", "person", "mood"))
                     require(id.matches(Regex("[a-z0-9][a-z0-9-]{0,127}")) && ids.add(id))
                     require(validLabel(title) && title.length <= 256)
