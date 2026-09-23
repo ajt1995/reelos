@@ -13,6 +13,7 @@ import {
   Heart,
   Home,
   Library,
+  Lock,
   MessageCircle,
   MonitorUp,
   Moon,
@@ -52,8 +53,11 @@ import { BooksView } from "@/components/books-view";
 import { WatchTogetherWorld } from "@/components/watch-together-world";
 import { StorageSettings } from "@/components/storage-settings";
 import { PreparationPanel } from "@/components/preparation-panel";
+import { StreamingAvailabilityBar } from "@/components/streaming-availability-bar";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 import {
   EXPERIENCE_CATALOG,
+  PUBLIC_DOMAIN_TITLES,
   type ExperienceTitle,
   TASTE_ITEMS,
   TITLE_BY_EXPERIENCE_ID,
@@ -668,6 +672,10 @@ export function ReelOSWorld({
       deviceAuthorized={sessionAuth.deviceAuthorized !== false}
       onSelect={switchProfile} />;
   }
+  const activeColor =
+    !state.onboardingComplete && state.setupDraft?.color
+      ? state.setupDraft.color
+      : (profile.color || "#d4a017");
   return (
     <div
       className="reelos-world min-h-dvh overflow-x-hidden bg-[#080809] text-[#f5f1eb]"
@@ -678,9 +686,9 @@ export function ReelOSWorld({
       data-platform={platform}
       style={
         {
-          "--reelos-favorite": profile.color,
-          "--color-gold": profile.color,
-          "--color-gold-bright": profile.color,
+          "--reelos-favorite": activeColor,
+          "--color-gold": activeColor,
+          "--color-gold-bright": activeColor,
         } as CSSProperties
       }
     >
@@ -962,32 +970,69 @@ function ProfileSessionEntry({ profiles, busy, error, onSelect, embedded = false
   const [pairError, setPairError] = useState("");
   const target = profiles.find((item) => item.id === selected);
   const needsPin = Boolean(target?.pinEnabled && !target.isChild);
-  return <div className={embedded ? "" : "reelos-world grid min-h-dvh place-items-center px-6 text-white"}
-    style={{ "--reelos-favorite": target?.color || "#2563eb" } as CSSProperties}>
+  return <div className={embedded ? "" : "reelos-world flex min-h-[100dvh] w-full flex-col items-center justify-center p-4 sm:p-8 text-white overflow-y-auto overscroll-contain"}
+    style={{ "--reelos-favorite": target?.color || "#f5c518" } as CSSProperties}>
     {!embedded && <div className="reelos-profile-aura" aria-hidden="true" />}
-    <form className="relative mx-auto w-full max-w-xl" onSubmit={(event) => {
+    <form className={embedded ? "relative mx-auto w-full max-w-xl" : "reelos-luxury-card relative mx-auto my-auto w-full max-w-md rounded-[2.5rem] p-6 sm:p-8 transition-all duration-300"} onSubmit={(event) => {
       event.preventDefault();
       if (target && !busy) void onSelect(target.id, needsPin ? pin : undefined).then(() => setPin(""));
     }}>
-      {!embedded && <h1 className="mb-8 text-center text-3xl font-semibold tracking-tight">Who's watching?</h1>}
-      <div className="flex flex-wrap justify-center gap-4">
-        {profiles.map((item) => <button key={item.id} type="button" disabled={busy}
-          aria-pressed={selected === item.id}
-          onClick={() => { setSelected(item.id); setPin(""); }}
-          className={`min-h-24 min-w-28 rounded-3xl border px-6 py-5 text-center ${selected === item.id ? "border-white/70 bg-white/10" : "border-white/10 bg-white/5"}`}>
-          <span className="mx-auto mb-3 block size-8 rounded-full" style={{ backgroundColor: item.color }} />
-          {item.name}
-        </button>)}
+      {!embedded && (
+        <div className="mb-6 text-center space-y-1">
+          <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white/95">Who's watching?</h1>
+          <p className="text-xs text-white/50">Select your resident space</p>
+        </div>
+      )}
+      <div className="flex flex-wrap justify-center gap-3 sm:gap-4">
+        {profiles.map((item) => {
+          const isSelected = selected === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              disabled={busy}
+              aria-pressed={isSelected}
+              onClick={() => { setSelected(item.id); setPin(""); }}
+              className={`min-h-24 min-w-24 sm:min-w-28 rounded-3xl border px-4 py-3.5 text-center transition-all duration-200 active:scale-95 cursor-pointer ${
+                isSelected
+                  ? "border-[#f5c518]/90 bg-[#f5c518]/15 shadow-[0_0_24px_rgba(245,197,24,0.25)] scale-[1.03]"
+                  : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
+              }`}
+            >
+              <span
+                className="mx-auto mb-2.5 block size-8 rounded-full shadow-[0_0_12px_rgba(0,0,0,0.5)] transition-transform duration-200"
+                style={{ backgroundColor: item.color }}
+              />
+              <span className="block text-xs sm:text-sm font-medium tracking-tight text-white/90">{item.name}</span>
+            </button>
+          );
+        })}
       </div>
-      {needsPin && <label className="mt-7 block text-sm text-white/70">
-        Your PIN
-        <input type="password" inputMode="numeric" autoComplete="off" maxLength={4}
-          value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
-          className="mt-2 min-h-14 w-full rounded-2xl bg-white/10 px-5 text-center text-xl tracking-[.3em]" />
-      </label>}
+
+      {needsPin && (
+        <div className="mt-7 flex flex-col items-center space-y-3">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-[#f5c518]/90">
+            <Lock className="size-3.5" />
+            <span>Enter Passcode</span>
+          </div>
+          <LuxuryPinInput
+            value={pin}
+            onChange={(val) => setPin(val)}
+            length={4}
+            disabled={busy}
+            autoFocus
+            onComplete={(fullPin) => {
+              if (target && !busy && deviceAuthorized) {
+                void onSelect(target.id, fullPin).then(() => setPin(""));
+              }
+            }}
+          />
+        </div>
+      )}
+
       {!deviceAuthorized && (
-        <div className="mt-7 rounded-3xl border border-white/10 bg-white/[.045] p-4 text-center">
-          <p className="text-sm leading-6 text-white/64">
+        <div className="mt-7 rounded-3xl border border-white/10 bg-white/[0.035] p-5 text-center shadow-inner">
+          <p className="text-xs sm:text-sm leading-relaxed text-white/70">
             Connect this phone, TV, or computer to your home once. It stays private to this household.
           </p>
           <button
@@ -1011,16 +1056,21 @@ function ProfileSessionEntry({ profiles, busy, error, onSelect, embedded = false
                   setPairing(false);
                 });
             }}
-            className="mt-4 min-h-14 w-full rounded-full bg-white px-6 font-semibold text-black disabled:opacity-40"
+            className="mt-4 flex min-h-12 w-full items-center justify-center rounded-2xl bg-white px-6 font-semibold text-black transition-all hover:bg-white/90 active:scale-[0.98] disabled:opacity-40 cursor-pointer"
           >
             {pairing ? "Connecting…" : "Connect this device"}
           </button>
           {pairError && <p role="alert" className="mt-3 text-sm text-rose-300">{pairError}</p>}
         </div>
       )}
+
       {(error || (!deviceAuthorized && !pairError)) && <p role="alert" className="mt-4 text-center text-sm text-rose-300">{error}</p>}
-      <button disabled={!deviceAuthorized || !target || busy || (needsPin && pin.length !== 4)}
-        className="mt-7 min-h-14 w-full rounded-full bg-white px-6 font-semibold text-black disabled:opacity-35">
+
+      <button
+        type="submit"
+        disabled={!deviceAuthorized || !target || busy || (needsPin && pin.length !== 4)}
+        className="mt-7 flex min-h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#f5c518] to-[#e6b40e] px-6 text-base font-bold text-black shadow-[0_4px_20px_rgba(245,197,24,0.3)] transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+      >
         {busy ? "Opening…" : "Continue"}
       </button>
     </form>
@@ -1508,6 +1558,13 @@ function HomeWorld({
           onSeeAll={() => onNavigate("discover")}
         />
 
+        <Shelf
+          title="Public domain classics."
+          note="Restored, lossless, and ready to play right now without external services."
+          items={PUBLIC_DOMAIN_TITLES}
+          onOpen={onOpen}
+        />
+
         <NoIdeaChooser
           profile={profile}
           titles={titles}
@@ -1865,29 +1922,38 @@ function NoIdeaChooser({
 }
 
 function FallingArtwork({ titles }: { titles: ExperienceTitle[] }) {
+  const colSpeedClasses = [
+    "reelos-falling-col-slow",
+    "reelos-falling-col-mid",
+    "reelos-falling-col-fast",
+  ];
   return (
     <div
-      className="reelos-falling-art pointer-events-none absolute -bottom-24 right-[-5%] hidden h-[135%] w-[48%] rotate-[8deg] grid-cols-3 gap-3 opacity-55 md:grid"
+      className="reelos-falling-art pointer-events-none absolute -bottom-24 right-[-5%] hidden h-[135%] w-[48%] rotate-[8deg] grid-cols-3 gap-3 opacity-65 md:grid"
       aria-hidden="true"
     >
-      {[0, 1, 2].map((column) => (
-        <div
-          key={column}
-          className={`space-y-3 ${column === 1 ? "pt-20" : column === 2 ? "pt-40" : ""}`}
-        >
-          {titles.slice(column * 4, column * 4 + 4).map((title) => (
-            <img
-              key={title.id}
-              src={title.poster}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="aspect-[.68] w-full rounded-2xl object-cover shadow-2xl"
-            />
-          ))}
-        </div>
-      ))}
-      <span className="absolute inset-0 bg-gradient-to-r from-[#0c0c0f] via-transparent to-transparent" />
+      {[0, 1, 2].map((colIndex) => {
+        const columnItems = titles.filter((_, i) => i % 3 === colIndex);
+        const colTitles = columnItems.length > 0 ? [...columnItems, ...columnItems] : titles.slice(0, 6);
+        return (
+          <div
+            key={colIndex}
+            className={`reelos-falling-column ${colSpeedClasses[colIndex]}`}
+          >
+            {colTitles.map((title, itemIdx) => (
+              <img
+                key={`${title.id}-${colIndex}-${itemIdx}`}
+                src={title.poster}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                className="aspect-[.68] w-full rounded-2xl object-cover shadow-2xl"
+              />
+            ))}
+          </div>
+        );
+      })}
+      <span className="absolute inset-0 bg-gradient-to-r from-[#0c0c0f] via-transparent to-transparent pointer-events-none" />
     </div>
   );
 }
@@ -2160,6 +2226,35 @@ function DiscoverWorld({
           )
         }
       />
+
+      <section className="relative overflow-hidden rounded-[2rem] border border-white/8 bg-gradient-to-b from-white/[.04] to-black/60 p-8 md:p-12">
+        <div className="relative z-10 max-w-xl">
+          <p className="text-sm font-semibold text-[var(--reelos-favorite,#d4a017)]">
+            Endless Cinema
+          </p>
+          <h2 className="mt-2 font-display text-4xl font-bold tracking-tight md:text-5xl">
+            Still looking for the right note?
+          </h2>
+          <p className="mt-3 text-base text-white/60 leading-relaxed">
+            ReelOS continuously watches the edges of cinema. Tell it how tonight feels, or let the current pull you into something unexpected.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-4">
+            <button
+              onClick={() => onSearch()}
+              className="min-h-12 rounded-full bg-white px-7 text-sm font-bold text-black shadow-lg hover:bg-white/90"
+            >
+              Ask the concierge
+            </button>
+            <button
+              onClick={onRefine}
+              className="min-h-12 rounded-full border border-white/20 bg-white/5 px-6 text-sm font-medium text-white hover:bg-white/10"
+            >
+              Refine tonight’s temperature
+            </button>
+          </div>
+        </div>
+        <FallingArtwork titles={titles} />
+      </section>
     </main>
   );
 }
@@ -3753,8 +3848,8 @@ function DebridSettings() {
       />
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl bg-black/20 px-4 py-3 text-xs text-white/45">
-          <b className="block text-sm text-white/75">TorBox</b>
-          Certified for this ReelOS release
+          <b className="block text-sm text-white/75">Debrid / WebDAV Streaming Adapter</b>
+          High-speed external cache adapter for streaming sources
         </div>
         <label className="text-xs text-white/45">
           API key{" "}
@@ -3763,7 +3858,7 @@ function DebridSettings() {
             type="password"
             value={key}
             onChange={(event) => setKey(event.target.value)}
-            placeholder="Paste a new key to connect or change it"
+            placeholder="Paste your private API key to connect"
             autoComplete="off"
             className="mt-2 min-h-12 w-full rounded-xl bg-black/25 px-4 text-sm text-white placeholder:text-white/25"
           />
@@ -3779,17 +3874,16 @@ function DebridSettings() {
           ? "Validating…"
           : connected && debrid.provider === provider
             ? "Change key"
-            : "Connect TorBox"}
+            : "Connect Provider"}
       </button>
       {error && <p className="mt-3 text-sm text-rose-300">{error}</p>}
       <p className="mt-4 text-sm leading-6 text-white/45">
-        Turning this off removes provider-only titles and pending requests from
+        Turning this off removes external provider titles and pending cache requests from
         the active Library. Personal files, public-domain media, taste, history,
         and progress stay yours.
       </p>
       <p className="mt-3 text-xs leading-5 text-white/32">
-        Other providers are not available in this release. They will appear
-        here only after their playback and privacy checks pass.
+        ReelOS supports provider-agnostic debrid and WebDAV access via user-supplied API credentials.
       </p>
     </div>
   );
@@ -4584,7 +4678,7 @@ function AmbianceWorld({
             <span>
               <b className="block">Supported home lights</b>
               <small className="mt-2 block leading-5 text-white/43">
-                A Hue, Nanoleaf, or Matter bridge and real frame telemetry are
+                A Hue, Nanoleaf, or Matter bridge and active screen color sync are
                 required.
               </small>
             </span>
@@ -4665,17 +4759,34 @@ function ToggleRow({
 }) {
   return (
     <button
+      type="button"
       onClick={onChange}
-      className="flex min-h-24 items-center justify-between gap-5 rounded-2xl bg-white/[.035] p-5 text-left"
+      className={`group flex w-full min-h-[5.5rem] items-center justify-between gap-5 rounded-2xl border p-5 text-left transition-all duration-300 ${
+        active
+          ? "border-amber-400/40 bg-white/[0.07] shadow-[0_0_24px_rgba(245,197,24,0.08)]"
+          : "border-white/10 bg-white/[0.035] hover:border-white/20 hover:bg-white/[0.05]"
+      }`}
     >
-      <span>
-        <b className="block">{title}</b>
-        <small className="mt-2 block leading-5 text-white/43">{note}</small>
+      <span className="flex-1 min-w-0 pr-2">
+        <b className={`block text-base font-semibold tracking-tight transition-colors duration-200 ${active ? "text-amber-300" : "text-white"}`}>
+          {title}
+        </b>
+        <small className="mt-1.5 block text-xs sm:text-sm leading-5 text-white/50">
+          {note}
+        </small>
       </span>
       <span
-        className={`flex h-7 w-12 shrink-0 items-center rounded-full p-1 ${active ? "justify-end bg-white text-black" : "justify-start bg-white/12 text-white/35"}`}
+        className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full p-1 transition-colors duration-300 ease-in-out ${
+          active
+            ? "bg-gradient-to-r from-amber-400 to-amber-500 shadow-[0_0_12px_rgba(245,197,24,0.4)]"
+            : "bg-white/15"
+        }`}
       >
-        <span className="size-5 rounded-full bg-current" />
+        <span
+          className={`pointer-events-none inline-block size-5 transform rounded-full bg-black shadow-md transition-transform duration-300 ease-in-out ${
+            active ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
       </span>
     </button>
   );
@@ -5020,8 +5131,14 @@ function SetupWorld({
     (state) => state.setDebridConnection,
   );
   const [step, setStep] = useState(Math.min(draft.step ?? 0, 7));
-  const [name, setName] = useState(draft.name ?? initialProfile.name);
-  const [color, setColor] = useState(draft.color ?? initialProfile.color);
+  const [name, setName] = useState(() => {
+    const raw = draft.name ?? initialProfile.name;
+    return raw === "This device" ? "" : raw;
+  });
+  const [color, setColor] = useState(() => {
+    const raw = draft.color ?? initialProfile.color;
+    return raw === "#4f8cff" ? "#f5c518" : (raw || "#f5c518");
+  });
   const [pinEnabled, setPinEnabled] = useState(draft.pinEnabled ?? initialProfile.pinEnabled ?? false);
   const [pin, setPin] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
@@ -5055,6 +5172,7 @@ function SetupWorld({
     draft.device ?? (nativePlatform() === "android-tv" ? "tv" : "phone"),
   );
   const [creating, setCreating] = useState(false);
+  const [expanding, setExpanding] = useState(false);
   const [createError, setCreateError] = useState("");
   const savingHousehold = useRef(false);
   useEffect(() => {
@@ -5100,11 +5218,14 @@ function SetupWorld({
     try {
       const ids = await prepareHousehold();
       await completeExperienceSetup(ids);
+      setExpanding(true);
+      await new Promise((resolve) => setTimeout(resolve, 750));
       finishOnboarding();
       onComplete();
-      onNavigate("devices");
+      onNavigate("home");
     } catch (reason) {
       setCreateError(reason instanceof Error ? reason.message : "This home could not finish setup.");
+      setExpanding(false);
     } finally { setCreating(false); }
   };
   const continueWithPublicSources = async () => {
@@ -5172,13 +5293,22 @@ function SetupWorld({
     "Screens",
   ];
   return (
-    <main className="reelos-setup relative flex min-h-dvh overflow-hidden px-5 py-8 md:px-10">
+    <main
+      className="reelos-setup relative flex min-h-dvh flex-col overflow-y-auto px-5 py-8 md:px-10 pb-40 md:pb-16"
+      style={
+        {
+          "--reelos-favorite": color,
+          "--color-gold": color,
+          "--color-gold-bright": color,
+        } as CSSProperties
+      }
+    >
       <div
-        className="reelos-setup-orb reelos-setup-orb-a"
+        className={`reelos-setup-orb reelos-setup-orb-a ${expanding ? "is-expanding" : ""}`}
         style={{ backgroundColor: color }}
       />
       <div
-        className="reelos-setup-orb reelos-setup-orb-b"
+        className={`reelos-setup-orb reelos-setup-orb-b ${expanding ? "is-expanding" : ""}`}
         style={{ backgroundColor: color }}
       />
       <div className="relative mx-auto flex w-full max-w-6xl flex-col">
@@ -5187,70 +5317,69 @@ function SetupWorld({
             aria-label="Previous setup step"
             disabled={step === 0 || sourceConnecting || creating}
             onClick={() => (step > 0 ? setStep(step - 1) : onNavigate("home"))}
-            className="grid size-12 place-items-center rounded-full border border-white/12"
+            className="grid size-12 place-items-center rounded-full border border-white/12 hover:bg-white/10 active:scale-95 transition-all"
           >
             <ArrowLeft className="size-4" />
           </button>
-          <span className="text-xs text-white/38">
+          <span className="text-xs font-medium tracking-wide text-white/50">
             {steps[step]} · {step + 1} of {steps.length}
           </span>
-          <span className="text-xs text-white/45">You can close this and return later</span>
+          <span className="text-xs text-white/40">You can close this and return later</span>
         </div>
-        <div className="flex flex-1 items-start justify-center py-10 md:py-14">
+        <div className="flex flex-1 items-start justify-center py-8 md:py-12">
           {step === 0 && (
             <SetupPanel
               title="Hi, what should we call you?"
               note="Your profile keeps its own taste, history, books, and appearance."
             >
-              <input
-                autoFocus
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="Your name"
-                className="mt-9 w-full border-b border-white/24 bg-transparent py-4 text-2xl outline-none placeholder:text-white/23"
-              />
-              <ToggleRow
-                title="Add a passcode"
-                note="Optional privacy for an adult profile."
-                active={pinEnabled}
-                onChange={() => setPinEnabled(!pinEnabled)}
-              />
-              {pinEnabled && (
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <input
-                    value={pin}
-                    onChange={(event) =>
-                      setPin(event.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
-                    inputMode="numeric"
-                    autoComplete="new-password"
-                    aria-label="Create a 4-digit passcode"
-                    placeholder="Create a 4-digit passcode"
-                    className="min-h-14 rounded-xl bg-white/7 px-4 text-lg tracking-[.25em] outline-none placeholder:text-sm placeholder:tracking-normal"
-                  />
-                  <input
-                    value={pinConfirm}
-                    onChange={(event) =>
-                      setPinConfirm(event.target.value.replace(/\D/g, "").slice(0, 4))
-                    }
-                    inputMode="numeric"
-                    autoComplete="new-password"
-                    aria-label="Confirm passcode"
-                    placeholder="Confirm passcode"
-                    className="min-h-14 rounded-xl bg-white/7 px-4 text-lg tracking-[.25em] outline-none placeholder:text-sm placeholder:tracking-normal"
-                  />
-                </div>
-              )}
-              <ToggleRow
-                title="Set up this household too"
-                note="Add adults and children before everyone shapes their own taste."
-                active={addHouseholdNow}
-                onChange={() => setAddHouseholdNow(!addHouseholdNow)}
-              />
-              <SetupNext
-                disabled={!name.trim() || (pinEnabled && (pin.length !== 4 || pin !== pinConfirm))}
-                onClick={() => setStep(1)}
-              />
+              <div className="space-y-6">
+                <LuxuryInputCard
+                  label="Profile Name"
+                  placeholder="What should we call you?"
+                  value={name}
+                  onChange={setName}
+                  autoFocus
+                />
+                <ToggleRow
+                  title="Add a passcode"
+                  note="Optional privacy for an adult profile."
+                  active={pinEnabled}
+                  onChange={() => setPinEnabled(!pinEnabled)}
+                />
+                {pinEnabled && (
+                  <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
+                    <div className="grid gap-6 sm:grid-cols-2">
+                      <TactilePinInput
+                        label="Create 4-Digit Passcode"
+                        value={pin}
+                        onChange={setPin}
+                        autoFocus
+                      />
+                      <TactilePinInput
+                        label="Confirm Passcode"
+                        value={pinConfirm}
+                        onChange={setPinConfirm}
+                        error={pinConfirm.length === 4 && pin !== pinConfirm}
+                      />
+                    </div>
+                    {pin.length === 4 && pinConfirm.length === 4 && (
+                      <p className={`mt-4 text-center text-xs font-medium ${pin === pinConfirm ? "text-amber-400" : "text-rose-400"}`}>
+                        {pin === pinConfirm ? "✓ Passcodes match perfectly" : "Passcodes do not match"}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <ToggleRow
+                  title="Set up this household too"
+                  note="Add adults and children before everyone shapes their own taste."
+                  active={addHouseholdNow}
+                  onChange={() => setAddHouseholdNow(!addHouseholdNow)}
+                />
+                <SetupNext
+                  disabled={!name.trim() || (pinEnabled && (pin.length !== 4 || pin !== pinConfirm))}
+                  onClick={() => setStep(1)}
+                />
+              </div>
             </SetupPanel>
           )}
           {step === 1 && (
@@ -5271,7 +5400,13 @@ function SetupWorld({
                 ].map((item) => (
                   <button
                     key={item}
-                    onClick={() => setColor(item)}
+                    onClick={() => {
+                      setColor(item);
+                      setSetupDraft({
+                        ...useExperienceStore.getState().setupDraft,
+                        color: item,
+                      });
+                    }}
                     className={`size-16 rounded-full ${color === item ? "scale-110 ring-4 ring-white/30" : ""}`}
                     style={{
                       backgroundColor: item,
@@ -5322,28 +5457,31 @@ function SetupWorld({
                       </div>
                     ))}
                   </div>
-                  <div className="mt-5 rounded-[1.5rem] bg-white/[.045] p-4">
-                    <input
+                  <div className="mt-6 rounded-3xl border border-white/10 bg-white/[.03] p-5 backdrop-blur-xl">
+                    <LuxuryInputCard
+                      label="Household Member Name"
+                      placeholder="e.g. Maya or Sam"
                       value={memberName}
-                      onChange={(event) => setMemberName(event.target.value)}
-                      placeholder="Their name"
-                      className="min-h-14 w-full rounded-xl bg-white/7 px-4 outline-none"
+                      onChange={setMemberName}
                     />
-                    <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div className="mt-4 grid grid-cols-2 gap-3">
                       <button
+                        type="button"
                         onClick={() => setMemberIsChild(false)}
-                        className={`min-h-12 rounded-xl text-sm ${!memberIsChild ? "bg-white text-black" : "bg-white/7"}`}
+                        className={`min-h-12 rounded-2xl font-semibold text-sm transition-all ${!memberIsChild ? "bg-amber-400 text-black shadow-[0_0_16px_rgba(245,197,24,0.3)]" : "bg-white/[0.05] text-white/70 hover:bg-white/[0.08]"}`}
                       >
                         Adult
                       </button>
                       <button
+                        type="button"
                         onClick={() => setMemberIsChild(true)}
-                        className={`min-h-12 rounded-xl text-sm ${memberIsChild ? "bg-white text-black" : "bg-white/7"}`}
+                        className={`min-h-12 rounded-2xl font-semibold text-sm transition-all ${memberIsChild ? "bg-amber-400 text-black shadow-[0_0_16px_rgba(245,197,24,0.3)]" : "bg-white/[0.05] text-white/70 hover:bg-white/[0.08]"}`}
                       >
                         Child
                       </button>
                     </div>
                     <button
+                      type="button"
                       onClick={() => {
                         if (!memberName.trim()) return;
                         setHouseholdMembers((current) => [
@@ -5353,42 +5491,35 @@ function SetupWorld({
                         setMemberName("");
                       }}
                       disabled={!memberName.trim()}
-                      className="mt-3 min-h-12 w-full rounded-xl bg-white px-4 text-sm font-bold text-black disabled:opacity-35"
+                      className="mt-4 min-h-12 w-full rounded-2xl bg-white/10 px-5 text-sm font-bold text-white hover:bg-white/20 active:scale-[0.98] transition-all disabled:opacity-30 disabled:pointer-events-none"
                     >
                       Add to this home
                     </button>
                   </div>
                   {householdMembers.some((member) => member.isChild) && (
-                    <div className="mt-5 rounded-[1.5rem] bg-white/[.045] p-4">
-                      <b className="block">Child exit PIN</b>
-                      <p className="mt-1 text-sm leading-6 text-white/45">
-                        Required to leave any child profile. It is stored
-                        securely by this home.
+                    <div className="mt-6 rounded-3xl border border-white/10 bg-white/[.03] p-6 backdrop-blur-xl">
+                      <b className="block text-base font-semibold text-white">Child exit PIN</b>
+                      <p className="mt-1 text-sm leading-6 text-white/50">
+                        Required to leave any child profile. It is stored securely by this home.
                       </p>
-                      <input
-                        value={childExitPin}
-                        onChange={(event) =>
-                          setChildExitPin(
-                            event.target.value.replace(/\D/g, "").slice(0, 4),
-                          )
-                        }
-                        inputMode="numeric"
-                        placeholder="Create a 4-digit exit PIN"
-                        className="mt-3 min-h-14 w-full rounded-xl bg-white/7 px-4 text-lg tracking-[.25em] outline-none placeholder:text-sm placeholder:tracking-normal"
-                      />
-                      <input
-                        value={childExitPinConfirm}
-                        onChange={(event) =>
-                          setChildExitPinConfirm(
-                            event.target.value.replace(/\D/g, "").slice(0, 4),
-                          )
-                        }
-                        inputMode="numeric"
-                        autoComplete="new-password"
-                        aria-label="Confirm child exit PIN"
-                        placeholder="Confirm child exit PIN"
-                        className="mt-3 min-h-14 w-full rounded-xl bg-white/7 px-4 text-lg tracking-[.25em] outline-none placeholder:text-sm placeholder:tracking-normal"
-                      />
+                      <div className="mt-5 grid gap-6 sm:grid-cols-2">
+                        <TactilePinInput
+                          label="Exit PIN"
+                          value={childExitPin}
+                          onChange={setChildExitPin}
+                        />
+                        <TactilePinInput
+                          label="Confirm Exit PIN"
+                          value={childExitPinConfirm}
+                          onChange={setChildExitPinConfirm}
+                          error={childExitPinConfirm.length === 4 && childExitPin !== childExitPinConfirm}
+                        />
+                      </div>
+                      {childExitPin.length === 4 && childExitPinConfirm.length === 4 && (
+                        <p className={`mt-3 text-center text-xs font-medium ${childExitPin === childExitPinConfirm ? "text-amber-400" : "text-rose-400"}`}>
+                          {childExitPin === childExitPinConfirm ? "✓ Exit PINs match" : "Exit PINs do not match"}
+                        </p>
+                      )}
                     </div>
                   )}
                 </>
@@ -5577,15 +5708,16 @@ function SetupWorld({
                 </button>
               </div>
               {sourceChoice !== "public" && (
-                <div className="mt-5">
-                  <input
+                <div className="mt-6 space-y-3">
+                  <LuxuryInputCard
+                    label="TorBox API Key"
                     type="password"
                     value={providerKey}
-                    onChange={(event) => setProviderKey(event.target.value)}
-                    placeholder="TorBox key"
-                    className="min-h-14 w-full rounded-xl bg-white/7 px-4 outline-none"
+                    onChange={setProviderKey}
+                    placeholder="Enter your personal API key"
+                    autoFocus
                   />
-                  <p className="mt-3 text-xs leading-5 text-white/36">
+                  <p className="text-xs leading-5 text-white/40">
                     The key is validated directly and stored only in protected
                     state on this home.
                   </p>
@@ -5640,7 +5772,7 @@ function SetupWorld({
               <button
                 onClick={() => void create()}
                 disabled={creating}
-                className="mt-8 min-h-12 rounded-full bg-white px-7 text-sm font-bold text-black disabled:opacity-40"
+                className="mt-8 min-h-14 px-8 rounded-2xl bg-gradient-to-r from-amber-400 to-amber-500 text-black font-bold text-base shadow-[0_0_24px_rgba(245,197,24,0.25)] hover:shadow-[0_0_32px_rgba(245,197,24,0.4)] active:scale-[0.98] transition-all disabled:opacity-25 disabled:shadow-none disabled:pointer-events-none"
               >
                 {creating ? "Saving this home…" : `Finish and open ${device === "tv" ? "TV setup" : "phone setup"}`}
               </button>
@@ -5659,6 +5791,162 @@ function SetupWorld({
   );
 }
 
+function LuxuryInputCard({
+  value,
+  onChange,
+  placeholder,
+  label,
+  autoFocus = false,
+  type = "text",
+  className = "",
+  error,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+  label?: string;
+  autoFocus?: boolean;
+  type?: string;
+  className?: string;
+  error?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      className={`group relative flex flex-col rounded-2xl border px-6 py-4 transition-all duration-300 cursor-text ${
+        focused
+          ? "border-amber-400/60 bg-white/[0.08] shadow-[0_0_28px_rgba(245,197,24,0.16)]"
+          : "border-white/10 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.06]"
+      } ${className}`}
+    >
+      {label && (
+        <span
+          className={`text-[11px] font-semibold tracking-wider uppercase transition-colors duration-200 ${
+            focused ? "text-amber-400" : "text-white/40"
+          }`}
+        >
+          {label}
+        </span>
+      )}
+      <div className="flex items-center gap-3">
+        <input
+          ref={inputRef}
+          type={type}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => {
+            setFocused(true);
+            setTimeout(() => {
+              e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+          }}
+          onBlur={() => setFocused(false)}
+          placeholder={placeholder}
+          autoFocus={autoFocus}
+          className="w-full bg-transparent text-xl sm:text-2xl font-medium text-white placeholder:text-white/20 border-none outline-none focus:outline-none focus:ring-0 p-0 caret-[#f5c518]"
+          style={{
+            WebkitTapHighlightColor: "transparent",
+            outline: "none",
+            boxShadow: "none",
+          }}
+        />
+        {value.length > 0 && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange("");
+              inputRef.current?.focus();
+            }}
+            aria-label="Clear input"
+            className="grid size-7 place-items-center rounded-full bg-white/10 text-white/50 hover:bg-white/20 hover:text-white transition-all shrink-0"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
+      {error && <span className="mt-1.5 text-xs text-rose-400">{error}</span>}
+    </div>
+  );
+}
+
+function TactilePinInput({
+  value,
+  onChange,
+  label,
+  autoFocus = false,
+  error = false,
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  label?: string;
+  autoFocus?: boolean;
+  error?: boolean;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <div
+      className="relative flex flex-col items-center justify-center cursor-pointer select-none py-2"
+      onClick={() => inputRef.current?.focus()}
+    >
+      {label && (
+        <span className="mb-3 text-xs font-semibold tracking-wider uppercase text-white/50">
+          {label}
+        </span>
+      )}
+      <input
+        ref={inputRef}
+        type="password"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        pattern="[0-9]*"
+        maxLength={4}
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, "").slice(0, 4))}
+        onFocus={(e) => {
+          setIsFocused(true);
+          setTimeout(() => {
+            e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }}
+        onBlur={() => setIsFocused(false)}
+        autoFocus={autoFocus}
+        className="absolute inset-0 z-20 h-full w-full cursor-pointer opacity-0 outline-none focus:outline-none focus:ring-0"
+        style={{
+          caretColor: "transparent",
+          WebkitTapHighlightColor: "transparent",
+          outline: "none",
+          boxShadow: "none",
+        }}
+        tabIndex={0}
+      />
+      <div className="flex items-center gap-3">
+        {[0, 1, 2, 3].map((index) => {
+          const filled = index < value.length;
+          const active = isFocused && (index === value.length || (index === 3 && value.length === 4));
+          return (
+            <div
+              key={index}
+              className={`reelos-pin-cell size-14 sm:size-16 rounded-2xl ${active ? "is-active" : ""} ${filled ? "is-filled" : ""} ${error ? "border-rose-500/70" : ""}`}
+            >
+              {filled ? (
+                <div className="reelos-pin-dot" />
+              ) : (
+                <span className="text-white/20 text-lg">•</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function SetupPanel({
   title,
   note,
@@ -5671,15 +5959,16 @@ function SetupPanel({
   wide?: boolean;
 }) {
   return (
-    <section className={`w-full ${wide ? "max-w-6xl" : "max-w-4xl"}`}>
-      <h1 className="font-display text-[clamp(3.2rem,7vw,6.5rem)] font-semibold leading-[.9] tracking-[-.075em]">
+    <section className={`w-full ${wide ? "max-w-6xl" : "max-w-3xl"} mx-auto text-left`}>
+      <h1 className="font-display text-[clamp(2rem,4.5vw,3.75rem)] font-medium leading-[1.08] tracking-tight text-white">
         {title}
       </h1>
-      <p className="mt-5 max-w-xl text-lg leading-7 text-white/54">{note}</p>
-      <div className={wide ? "max-w-none" : "max-w-3xl"}>{children}</div>
+      <p className="mt-3.5 max-w-xl text-base sm:text-lg leading-relaxed text-white/60 font-normal">{note}</p>
+      <div className="mt-8 w-full">{children}</div>
     </section>
   );
 }
+
 function SetupNext({
   onClick,
   disabled,
@@ -5691,11 +5980,13 @@ function SetupNext({
 }) {
   return (
     <button
+      type="button"
       disabled={disabled}
       onClick={onClick}
-      className="mt-8 min-h-12 rounded-full bg-white px-7 text-sm font-bold text-black disabled:opacity-30"
+      className="mt-8 flex w-full sm:w-auto items-center justify-center gap-2 min-h-14 px-10 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-300 to-amber-500 text-black font-bold text-base tracking-wide shadow-[0_0_28px_rgba(245,197,24,0.3)] hover:shadow-[0_0_40px_rgba(245,197,24,0.5)] active:scale-[0.98] transition-all disabled:opacity-25 disabled:shadow-none disabled:pointer-events-none cursor-pointer"
     >
-      {label}
+      <span>{label}</span>
+      <ChevronRight className="size-4 stroke-[2.5]" />
     </button>
   );
 }
@@ -6506,7 +6797,7 @@ function ConciergeSheet({
     <SimpleDialog title="A little help, when you want it" onClose={onClose}>
       <div className="space-y-5">
         <p className="text-sm leading-6 text-white/52">
-          This home can guide setup without sending your question away. Private local conversation becomes available only when this machine has an approved model pack.
+          This home can guide setup without sending your question away. Private local conversation becomes available only when this machine has an approved local speech package.
         </p>
         <input
           value={prompt}
@@ -6866,6 +7157,7 @@ function TitleSheet({
               they are available.
             </p>
           </section>
+          <WhereToWatch title={title} />
           <Shelf
             title="Nearby worlds."
             items={related}
@@ -6877,114 +7169,16 @@ function TitleSheet({
   );
 }
 
-function streamingIdentity(title: ExperienceTitle) {
-  for (const candidate of [title.id, title.playbackId]) {
-    const value = String(candidate || "");
-    const tv = /^tmdb-tv-(\d+)$/.exec(value);
-    if (tv) return { mediaType: "tv" as const, externalId: tv[1] };
-    const movie = /^tmdb-(?:movie-)?(\d+)$/.exec(value);
-    if (movie)
-      return {
-        mediaType: title.kind === "series" ? ("tv" as const) : ("movie" as const),
-        externalId: movie[1],
-      };
-  }
-  return null;
-}
-
 function WhereToWatch({ title }: { title: ExperienceTitle }) {
-  const identity = streamingIdentity(title);
-  const [availability, setAvailability] = useState<StreamingAvailability | null>(null);
-  const [loading, setLoading] = useState(Boolean(identity));
-  useEffect(() => {
-    const controller = new AbortController();
-    setAvailability(null);
-    setLoading(Boolean(identity));
-    if (!identity) return () => controller.abort();
-    void fetch("/api/settings", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) return "US";
-        const settings = (await response.json()) as { region?: string };
-        return settings.region && /^[A-Z]{2}$/.test(settings.region) ? settings.region : "US";
-      })
-      .catch(() => "US")
-      .then((region) => loadStreamingAvailability({ ...identity, region }, controller.signal))
-      .then((result) => {
-        if (!controller.signal.aborted) setAvailability(result);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [identity?.mediaType, identity?.externalId]);
-
-  if (!identity) return null;
-  if (loading) {
-    return (
-      <section aria-label="Where to watch" aria-busy="true">
-        <div className="h-5 w-32 animate-pulse rounded-full bg-white/8" />
-        <div className="mt-4 h-12 max-w-sm animate-pulse rounded-2xl bg-white/6" />
-      </section>
-    );
-  }
-  if (!availability?.available) {
-    if (availability?.reason === "not_configured") return null;
-    return (
-      <section aria-label="Where to watch">
-        <p className="text-sm text-white/42">
-          No streaming options are listed for region {availability?.region || "US"} right now.
-        </p>
-      </section>
-    );
-  }
-  const groups = [
-    ["Included", [...availability.groups.subscription, ...availability.groups.free, ...availability.groups.ads]],
-    ["Rent", availability.groups.rent],
-    ["Buy", availability.groups.buy],
-  ] as const;
   return (
-    <section aria-label="Where to watch">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-display text-3xl tracking-[-.05em]">Where to watch</h2>
-          <p className="mt-2 text-sm text-white/42">Options currently listed for region {availability.region}.</p>
-        </div>
-        {availability.link && (
-          <a
-            href={availability.link}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex min-h-12 items-center gap-2 rounded-full border border-white/15 px-5 text-sm font-semibold"
-          >
-            See watching options <ExternalLink className="size-4" />
-          </a>
-        )}
-      </div>
-      <div className="mt-5 grid gap-4 sm:grid-cols-3">
-        {groups.map(([label, providers]) =>
-          providers.length ? (
-            <div key={label}>
-              <p className="text-xs font-semibold uppercase tracking-[.14em] text-white/38">{label}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {providers.slice(0, 6).map((provider) => (
-                  <span key={`${label}-${provider.id}`} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-white/6 px-3 text-sm">
-                    {provider.logoUrl && <img src={provider.logoUrl} alt="" className="size-7 rounded-lg" />}
-                    {provider.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ) : null,
-        )}
-      </div>
-      <a
-        href={availability.attribution.url}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-4 inline-block text-xs text-white/30 hover:text-white/55"
-      >
-        {availability.attribution.text}
-      </a>
+    <section aria-label="Commercial stream and broadcast availability" className="pt-2">
+      <StreamingAvailabilityBar
+        titleId={title.id}
+        titleName={title.title}
+        kind={title.kind}
+        year={title.year}
+        extraIds={title.playbackId ? [title.playbackId] : []}
+      />
     </section>
   );
 }

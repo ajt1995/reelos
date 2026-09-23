@@ -72,7 +72,7 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
       aria-checked={on}
       onClick={() => onChange(!on)}
       className={cn(
-        "relative h-6 w-11 rounded-full transition-colors",
+        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold after:absolute after:-inset-2.5 after:content-['']",
         on ? "bg-gold" : "bg-card-2",
       )}
     >

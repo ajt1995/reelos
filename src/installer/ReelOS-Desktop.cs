@@ -341,7 +341,7 @@ namespace ReelOSInstaller
 
             activePort = FindAvailablePort(8080, 71);
             // Safe cleanup: only terminate previous ReelOS node processes on default ports
-            KillProcessOnPort(5555);
+            KillProcessOnPort(8080);
 
             string nodeExe = FindNodeExecutable();
             File.AppendAllText(logFile, string.Format("[{0}] Found Node executable: {1} (Port: {2})\r\n", DateTime.Now, nodeExe, activePort));
@@ -507,6 +507,9 @@ namespace ReelOSInstaller
                     Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Google\\Chrome\\Application\\chrome.exe")
                 };
 
+                string profileDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ReelOS", "cinema-profile");
+                try { Directory.CreateDirectory(profileDir); } catch { }
+
                 foreach (string browserPath in candidateBrowsers)
                 {
                     if (File.Exists(browserPath))
@@ -514,7 +517,7 @@ namespace ReelOSInstaller
                         Process.Start(new ProcessStartInfo
                         {
                             FileName = browserPath,
-                            Arguments = "--app=\"" + targetUrl + "\" --class=ReelOS.Cinema --window-name=\"ReelOS Cinema\" --disable-features=Translate,OptimizationHints --disable-extensions",
+                            Arguments = "--app=\"" + targetUrl + "\" --user-data-dir=\"" + profileDir + "\" --class=ReelOS.Cinema --window-name=\"ReelOS Cinema\" --start-maximized --disable-features=Translate,OptimizationHints --disable-extensions",
                             UseShellExecute = false
                         });
                         return;
@@ -569,7 +572,6 @@ namespace ReelOSInstaller
             }
             catch { }
             KillProcessOnPort(8080);
-            KillProcessOnPort(5555);
         }
 
         private static void KillProcessOnPort(int port)
@@ -709,7 +711,6 @@ namespace ReelOSInstaller
             {
                 // Terminate previous running backend instances before unpacking and updating
                 KillProcessOnPort(8080);
-                KillProcessOnPort(5555);
 
                 // Force TLS 1.2 protocol for modern HTTPS
                 try { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls; } catch { }
@@ -964,7 +965,6 @@ namespace ReelOSInstaller
             if (r != DialogResult.OK) return;
 
             KillProcessOnPort(8080);
-            KillProcessOnPort(5555);
 
             try
             {
@@ -986,19 +986,45 @@ namespace ReelOSInstaller
         // ── AppData-aware ResolveBasePath ──────────────────────────────────
         private static string ResolveBasePath()
         {
-            // Dev mode
+            // 1. Current executable directory (when running from local repo or portable bundle)
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            if (File.Exists(Path.Combine(exeDir, "scripts", "reelos-box.mjs"))) return exeDir;
+
+            // 2. Current working directory
+            string curDir = Directory.GetCurrentDirectory();
+            if (File.Exists(Path.Combine(curDir, "scripts", "reelos-box.mjs"))) return curDir;
+
+            // 3. Parent directory of exe (e.g. if exe is located in a build or tools subfolder)
+            try
+            {
+                string parentDir = Path.GetFullPath(Path.Combine(exeDir, ".."));
+                if (File.Exists(Path.Combine(parentDir, "scripts", "reelos-box.mjs"))) return parentDir;
+            }
+            catch { }
+
+            // 4. Dev mode override file
             string devFile = Path.Combine(AppDataRoot, "_dev_source.txt");
             if (File.Exists(devFile))
             {
-                string devSrc = File.ReadAllText(devFile).Trim();
-                foreach (string c in new[] { devSrc, Path.GetFullPath(Path.Combine(devSrc, "..")), Path.GetFullPath(Path.Combine(devSrc, "..", "..")) })
-                    if (File.Exists(Path.Combine(c, "scripts", "reelos-box.mjs"))) return c;
+                try
+                {
+                    string devSrc = File.ReadAllText(devFile).Trim();
+                    foreach (string c in new[] { devSrc, Path.GetFullPath(Path.Combine(devSrc, "..")), Path.GetFullPath(Path.Combine(devSrc, "..", "..")) })
+                        if (File.Exists(Path.Combine(c, "scripts", "reelos-box.mjs"))) return c;
+                }
+                catch { }
             }
+
+            // 5. Standard AppData installation
             if (File.Exists(Path.Combine(AppDataRoot, "scripts", "reelos-box.mjs"))) return AppDataRoot;
+
+            // 6. Environment variable overrides
             string envHome = Environment.GetEnvironmentVariable("REELOS_HOME") ?? Environment.GetEnvironmentVariable("REELOS_ROOT");
             if (!string.IsNullOrEmpty(envHome) && File.Exists(Path.Combine(envHome, "scripts", "reelos-box.mjs"))) return envHome;
+
             string userReelOs = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "reelos");
             if (File.Exists(Path.Combine(userReelOs, "scripts", "reelos-box.mjs"))) return userReelOs;
+
             return AppDataRoot;
         }
 
@@ -1022,6 +1048,10 @@ namespace ReelOSInstaller
             string installedExe = Path.Combine(AppDataRoot, "ReelOS.exe");
             bool isExternalInstaller = !string.Equals(thisExe, installedExe, StringComparison.OrdinalIgnoreCase);
 
+            string exeDir = AppDomain.CurrentDomain.BaseDirectory;
+            bool isRunningFromLocalSource = File.Exists(Path.Combine(exeDir, "scripts", "reelos-box.mjs")) ||
+                                           File.Exists(Path.Combine(Directory.GetCurrentDirectory(), "scripts", "reelos-box.mjs"));
+
             string failFlag = Path.Combine(AppDataRoot, ".launch-failed");
             bool forceUpdate = args.Length > 0 && (args[0].ToLowerInvariant().Contains("update") || 
                                                    args[0].ToLowerInvariant().Contains("repair") ||
@@ -1039,7 +1069,7 @@ namespace ReelOSInstaller
                 catch { }
             }
 
-            bool needsInstallOrRepair = isExternalInstaller || !IsInstalled() || File.Exists(failFlag) || forceUpdate || cleanSlate;
+            bool needsInstallOrRepair = (!isRunningFromLocalSource && isExternalInstaller) || (!isRunningFromLocalSource && !IsInstalled()) || File.Exists(failFlag) || forceUpdate || cleanSlate;
 
             if (needsInstallOrRepair)
             {

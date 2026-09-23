@@ -22,6 +22,10 @@ export const CAPABILITY_SPECIALISTS = Object.freeze({
   "interface-protection": Object.freeze({ specialist: "interaction-health-monitor", task: "latency-forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
   "shared-taste-intelligence": Object.freeze({ specialist: "anonymous-taste-sketch", task: "privacy-preserving-aggregation", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private", "export_candidate"]) }),
   "release-ranking": Object.freeze({ specialist: "source-release-ranker", task: "ranking", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
+  "distributed-workload-scheduler": Object.freeze({ specialist: "cluster-rhythm-predictor", task: "scheduling-forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
+  "in-flight-media-distillation": Object.freeze({ specialist: "frame-feature-distiller", task: "multimodal-analysis", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
+  "ambient-presence-governor": Object.freeze({ specialist: "viewing-engagement-classifier", task: "advisory-classification", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
+  "predictive-cache-oracle": Object.freeze({ specialist: "cache-horizon-ranker", task: "forecasting", runtimes: Object.freeze(["onnxruntime"]), privacy: Object.freeze(["household_private"]) }),
 });
 
 function boundedJson(value, maximum, code) {

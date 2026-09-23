@@ -4,6 +4,14 @@ This is the first file a fresh engineering agent should read. It is intentionall
 
 > **Architectural identity:** ReelOS is one end-to-end local neural system—not an ARR stack, a Jellyfin fork, or a conventional media manager with AI features attached. Search, taste, preparation, playback, storage, machine health, interface adaptation, scene understanding, family analysis, and recovery share one event and feature spine. Deterministic policy remains authoritative for access, credentials, PINs, destructive actions, updates, and resource safety. Jellyfin exists only as an optional client-protocol compatibility shim.
 
+> **Non-Negotiable System Invariants (.agents/rules/):**
+> 1. **Sovereign Node Parity (.exe == .apk):** Every target build (.exe on Windows, .apk on Android, Linux binary) is the EXACT SAME full ReelOS program compiled for that hardware. Android is a full standalone peer node (local storage, embedded engine, player, UI), NOT a remote control or thin client. Nodes discover each other via mDNS as peer equals.
+> 2. **Pure Native Execution (No Browser Wrappers):** Zero WebViews, zero Chromium wrappers on Android and Desktop. Only iOS receives web/PWA treatment. Android TV and Fold are 100% pure native Kotlin with Jetpack Compose (and TV Compose for 10-foot remote). Video decodes directly via AndroidX Media3 / ExoPlayer.
+> 3. **TV Hardware Shader Safety:** Never run multi-pass CSS blur or heavy software RenderEffect on TV hardware (>200px) that drops to solid shapes on Mali GPUs. Ambient lighting must use pre-blended hardware radial gradients.
+> 4. **Provider-Agnostic Core:** Core distribution contains ZERO hardcoded commercial debrid branding ("TorBox", "Certified"). Personal local media and public domain are default; external debrid/WebDAV is an agnostic user-configured adapter.
+> 5. **The Same OS on Different Glass:** ReelOS is one end-to-end operating system adapting to the physical glass it inhabits (TV, Fold, Laptop, Desktop, Mac). Every device with a display illuminates its interface on boot by default (including Books and Cinema). Storage on all nodes participates in high-density in-RAM transcoding for the household mesh. Bare-metal Linux is our custom zero-bloat Debian 12 minimal appliance, never stock bloated Ubuntu.
+
+
 ## Resume in under a minute
 
 1. Run `npm run context:brief`.

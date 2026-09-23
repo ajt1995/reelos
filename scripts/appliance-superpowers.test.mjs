@@ -222,7 +222,7 @@ test("reelos-lookup-plugin.mjs registers battery, benchmark, usb, and prefetch e
   assert.match(plugin, /\/api\/stream\/prefetch-status/);
 });
 
-test("daemon and install/bin twin scripts for battery-guardian and usb-automount are identical", () => {
+test("daemon and install/bin twin scripts for battery-guardian, usb-automount, and hotspot are identical", () => {
   const batDaemon = readFileSync("daemon/reelos-battery-guardian.sh", "utf8");
   const batInstall = readFileSync("install/bin/reelos-battery-guardian.sh", "utf8");
   assert.equal(batDaemon, batInstall);
@@ -230,4 +230,14 @@ test("daemon and install/bin twin scripts for battery-guardian and usb-automount
   const usbDaemon = readFileSync("daemon/reelos-usb-automount.sh", "utf8");
   const usbInstall = readFileSync("install/bin/reelos-usb-automount.sh", "utf8");
   assert.equal(usbDaemon, usbInstall);
+
+  const hotspotDaemon = readFileSync("daemon/reelos-hotspot.sh", "utf8");
+  const hotspotInstall = readFileSync("install/bin/reelos-hotspot.sh", "utf8");
+  assert.equal(hotspotDaemon, hotspotInstall);
+});
+
+test("appliance packager includes hotspot daemon and systemd service for captive headless setup", async () => {
+  const { NATIVE_INSTALL_FILES } = await import("./pack-appliance.mjs");
+  assert.ok(NATIVE_INSTALL_FILES.includes("bin/reelos-hotspot.sh"));
+  assert.ok(NATIVE_INSTALL_FILES.includes("systemd/reelos-hotspot.service"));
 });

@@ -247,7 +247,7 @@ export function SovereignOnboardingWizard() {
     setProvisioned(true);
     setPhase("ready");
     openReelOS();
-    showToast("✨ Welcome to ReelOS Cinema Lounge!");
+    showToast("Welcome to ReelOS Cinema Lounge!");
     if (typeof window !== "undefined") {
       window.location.href = "/";
     }

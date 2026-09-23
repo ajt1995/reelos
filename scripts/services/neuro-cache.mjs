@@ -1,7 +1,30 @@
+import os from 'node:os';
 import { getMediaStrategy, inspectStorageSpace } from './media-strategy-service.mjs';
 
 const MAX_PREWARMED_ENTRIES = 3;
-const MAX_PREWARMED_BYTES = 150 * 1024 * 1024; // 150MB total buffer memory cap
+
+/**
+ * Dynamically scales prewarmed RAM cache based on available system memory.
+ * - Low-end appliances (<= 4GB): 64MB
+ * - Standard appliances (8GB): 256MB
+ * - Mid tier (16GB): 512MB
+ * - High-end workstations (32GB+, e.g. Austin's 64GB rig): up to 10% total RAM, capped at 2GB
+ */
+export function calculateDynamicPrewarmedBytes(totalMemBytes = os.totalmem()) {
+  const totalMb = Math.round(totalMemBytes / (1024 * 1024));
+  if (totalMb <= 4600) {
+    return 64 * 1024 * 1024;
+  }
+  if (totalMb <= 12000) {
+    return 256 * 1024 * 1024;
+  }
+  if (totalMb <= 24000) {
+    return 512 * 1024 * 1024;
+  }
+  return Math.min(2 * 1024 * 1024 * 1024, Math.round(totalMemBytes * 0.10));
+}
+
+export const MAX_PREWARMED_BYTES = calculateDynamicPrewarmedBytes();
 const MAX_STAGED = 64;
 const MAX_EVICTED = 256;
 const MAX_WATCH_KEYS = 512;
@@ -15,7 +38,9 @@ function capSet(set, max) {
 }
 
 export class NeuroCache {
-  constructor() {
+  constructor(options = {}) {
+    this.maxPrewarmedBytes = options.maxPrewarmedBytes || calculateDynamicPrewarmedBytes();
+    this.maxPrewarmedEntries = options.maxPrewarmedEntries || (os.totalmem() > 16 * 1024 * 1024 * 1024 ? 6 : MAX_PREWARMED_ENTRIES);
     this.pinned = new Set();
     this.staged = new Set();
     this.evicted = new Set();
@@ -32,8 +57,8 @@ export class NeuroCache {
       if (item?.buffer) totalBytes += item.buffer.length;
     }
 
-    // Evict oldest entries if exceeding count or byte limits
-    while ((this.prewarmed.size > MAX_PREWARMED_ENTRIES || totalBytes > MAX_PREWARMED_BYTES) && this.prewarmed.size > 0) {
+    // Evict oldest entries if exceeding count or dynamic byte limits
+    while ((this.prewarmed.size > this.maxPrewarmedEntries || totalBytes > this.maxPrewarmedBytes) && this.prewarmed.size > 0) {
       const oldestKey = this.prewarmed.keys().next().value;
       if (!oldestKey) break;
       const oldestItem = this.prewarmed.get(oldestKey);

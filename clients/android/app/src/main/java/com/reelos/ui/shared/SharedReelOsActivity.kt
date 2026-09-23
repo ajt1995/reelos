@@ -23,7 +23,9 @@ import java.net.URLConnection
 
 abstract class SharedReelOsActivity : ComponentActivity() {
     protected open val tvMode: Boolean = false
-    private lateinit var webView: WebView
+    protected lateinit var webView: WebView
+    protected val isWebViewInitialized: Boolean
+        get() = ::webView.isInitialized
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var nodeApi: StandaloneNodeApi
 

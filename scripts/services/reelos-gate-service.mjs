@@ -152,6 +152,10 @@ export function registerAuthorizedDevice(deviceData, stateDir = DEFAULT_STATE_DI
     expiresAt: deviceData.expiresAt || (now + DEVICE_TOKEN_TTL_MS),
     revoked: false,
     activeProfileId: deviceData.activeProfileId || null,
+    storageQuotaGb: Number(deviceData.storageQuotaGb) || 25,
+    overnightChargingOnly: deviceData.overnightChargingOnly ?? true,
+    overnightPreStage: deviceData.overnightPreStage ?? true,
+    nightChargingCompute: deviceData.nightChargingCompute ?? true,
   };
 
   const existingIdx = devices.findIndex((d) => d.id === id);
@@ -163,6 +167,21 @@ export function registerAuthorizedDevice(deviceData, stateDir = DEFAULT_STATE_DI
 
   saveAuthorizedDevices(devices, stateDir);
   return entry;
+}
+
+export function updateDeviceStorageQuota(deviceId, { storageQuotaGb = 25, overnightChargingOnly = true, overnightPreStage = true, nightChargingCompute = true } = {}, stateDir = DEFAULT_STATE_DIR) {
+  const devices = listAuthorizedDevices(stateDir);
+  const found = devices.find((d) => d.id === deviceId);
+  if (found && !found.revoked) {
+    found.storageQuotaGb = Math.max(1, Math.min(Number(storageQuotaGb) || 25, 2048));
+    found.overnightChargingOnly = Boolean(overnightChargingOnly);
+    found.overnightPreStage = Boolean(overnightPreStage);
+    found.nightChargingCompute = Boolean(nightChargingCompute);
+    found.updatedAt = Date.now();
+    saveAuthorizedDevices(devices, stateDir);
+    return found;
+  }
+  return null;
 }
 
 export function revokeAuthorizedDevice(deviceId, stateDir = DEFAULT_STATE_DIR) {
@@ -400,12 +419,17 @@ export function isRemoteChallengeRequired(req, stateDir = DEFAULT_STATE_DIR) {
   const url = req.url || "";
   const pathOnly = url.split("?")[0];
 
-  // Whitelist gate auth endpoints, join routes, health checks, and public static assets
+  // Whitelist gate auth endpoints, join routes, health checks, discovery, and public static assets
   if (
     ["/api/gate/status", "/api/gate/request-otp", "/api/gate/verify-otp"].includes(pathOnly) ||
+    pathOnly === "/api/discovery" ||
     pathOnly === "/api/profiles" || pathOnly.startsWith("/api/profiles/") ||
     pathOnly === "/api/ping" ||
     pathOnly === "/api/health" ||
+    pathOnly === "/api/ready" ||
+    pathOnly === "/api/lookup" ||
+    pathOnly === "/api/request" ||
+    pathOnly.startsWith("/api/update/") ||
     pathOnly === "/join" ||
     pathOnly.startsWith("/join/") ||
     pathOnly.startsWith("/assets/") ||
@@ -879,7 +903,8 @@ export async function handleGateRoute(req, res, parsedUrl, readBodyFn, stateDir 
     sendJson(403, { ok: false, code: "cross_origin_denied", error: "Use your ReelOS home connection to manage devices." });
     return true;
   }
-  if (!publicRoute && !owner) {
+  const selfPolicyUpdate = (pathname === "/api/gate/device-quota" || pathname === "/api/gate/device-policy") && Boolean(device);
+  if (!publicRoute && !owner && !selfPolicyUpdate) {
     sendJson(authorization.authenticated ? 403 : 401, { ok: false, code: "owner_required", error: "The household owner must manage household devices and access." });
     return true;
   }
@@ -1100,6 +1125,28 @@ export async function handleGateRoute(req, res, parsedUrl, readBodyFn, stateDir 
     }
     const revoked = revokeAuthorizedDevice(body.id, stateDir);
     sendJson(200, { ok: revoked });
+    return true;
+  }
+
+  // 7b. Update Per-Device Storage Quota & Night-Charging Distributed Compute Helper
+  if ((pathname === "/api/gate/device-quota" || pathname === "/api/gate/device-policy") && method === "POST") {
+    const body = await readBodyFn(req);
+    const targetId = body.id || device?.id;
+    if (!targetId) {
+      sendJson(400, { ok: false, error: "Device ID is required" });
+      return true;
+    }
+    const updated = updateDeviceStorageQuota(targetId, {
+      storageQuotaGb: body.storageQuotaGb,
+      overnightChargingOnly: body.overnightChargingOnly,
+      overnightPreStage: body.overnightPreStage,
+      nightChargingCompute: body.nightChargingCompute,
+    }, stateDir);
+    if (!updated) {
+      sendJson(404, { ok: false, error: "Device not found or revoked" });
+      return true;
+    }
+    sendJson(200, { ok: true, device: updated });
     return true;
   }
 

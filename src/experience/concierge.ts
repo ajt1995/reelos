@@ -37,8 +37,8 @@ export function inferConciergeIntent(value: string): ConciergeIntent {
 export function conciergeCapability({ totalMemoryMb, freeMemoryMb, modelInstalled = false }: { totalMemoryMb: number; freeMemoryMb: number; modelInstalled?: boolean }): ConciergeCapability {
   const eligible = totalMemoryMb >= 12 * 1024 && freeMemoryMb >= 6 * 1024;
   if (eligible && modelInstalled) return { mode: "local-model", eligible: true, reason: "Local private help is ready." };
-  if (eligible) return { mode: "deterministic", eligible: true, reason: "Guided help is ready; no local model pack is installed." };
-  return { mode: "deterministic", eligible: false, reason: "Guided help stays available without a local model on this machine." };
+  if (eligible) return { mode: "deterministic", eligible: true, reason: "Guided concierge help is ready; conversational dialogue assistant is optional." };
+  return { mode: "deterministic", eligible: false, reason: "Guided concierge help stays available offline on this machine." };
 }
 
 export function conciergeGuidance(intent: ConciergeIntent) {

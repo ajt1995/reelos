@@ -19,6 +19,8 @@ export const REEL_INTELLIGENCE_CAPABILITIES = Object.freeze([
   ["predictive-preparation", "home"], ["storage-optimization", "home"],
   ["machine-protection", "device"], ["interface-protection", "device"],
   ["shared-taste-intelligence", "home"], ["release-ranking", "home"],
+  ["distributed-workload-scheduler", "home"], ["in-flight-media-distillation", "home"],
+  ["ambient-presence-governor", "device"], ["predictive-cache-oracle", "home"],
 ]);
 
 function diskSample(root) {

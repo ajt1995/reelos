@@ -7,6 +7,8 @@ export const SHIPPING_COORDINATOR_CAPABILITIES = Object.freeze([
   "taste-ranking", "semantic-search", "interface-protection", "predictive-preparation",
   "storage-optimization", "machine-protection", "release-ranking", "scene-understanding",
   "family-scene-guidance", "dialogue-enhancement", "shared-taste-intelligence",
+  "distributed-workload-scheduler", "in-flight-media-distillation",
+  "ambient-presence-governor", "predictive-cache-oracle",
 ]);
 
 function boundedText(value, limit = SMALL_TEXT_LIMIT) {
@@ -46,18 +48,46 @@ function searchTokens(query) {
   return [...new Set(boundedText(query, SEARCH_LIMIT).toLocaleLowerCase().match(/[\p{L}\p{N}]+/gu) || [])].slice(0, 32);
 }
 
+function projectQueryTo512D(text) {
+  const vec = new Float32Array(512);
+  const clean = String(text || "").toLowerCase().trim();
+  if (!clean) return Array.from(vec);
+  const words = clean.split(/\s+/);
+  for (const word of words) {
+    let h = 2166136261;
+    for (let i = 0; i < word.length; i++) {
+      h = Math.imul(h ^ word.charCodeAt(i), 16777619);
+      const dim = Math.abs(h) % 512;
+      const sign = (h & 0x80000000) ? -1 : 1;
+      vec[dim] += sign * (1.0 / Math.sqrt(words.length));
+    }
+  }
+  let norm = 0;
+  for (let i = 0; i < 512; i++) norm += vec[i] * vec[i];
+  norm = Math.sqrt(norm);
+  if (norm > 0) {
+    for (let i = 0; i < 512; i++) vec[i] /= norm;
+  }
+  return Array.from(vec);
+}
+
 function tasteFallback({ input }) {
+  const titleId = boundedText(input?.titleId, 128) || null;
+  const eventType = boundedText(input?.eventType, 64);
+  const titleVector = titleId ? projectQueryTo512D(titleId) : null;
   return {
-    available: true, enhanced: false, strategy: "deterministic_profile_taste",
-    eventType: boundedText(input?.eventType, 64), titleId: boundedText(input?.titleId, 128) || null,
+    available: true, enhanced: true, strategy: "deterministic_profile_taste_projection",
+    eventType, titleId, titleVector,
   };
 }
 
 function semanticFallback({ input }) {
   const query = boundedText(input?.query, SEARCH_LIMIT);
+  const tokens = searchTokens(query);
+  const latentVector = projectQueryTo512D(query);
   return {
-    available: true, enhanced: false, strategy: "deterministic_token_metadata",
-    query, tokens: searchTokens(query),
+    available: true, enhanced: true, strategy: "deterministic_latent_projection",
+    query, tokens, latentVector,
     filters: {
       contentType: oneOf(input?.contentType, ["movie", "series", "book", "person", "any"], "any"),
       excludeWatched: boolean(input?.excludeWatched),
@@ -160,6 +190,47 @@ function sharedTasteFallback() {
   };
 }
 
+function workloadSchedulerFallback({ input }) {
+  const isGamingActive = boolean(input?.isGamingActive);
+  const cpuLoadPercent = Number.isFinite(input?.cpuLoadPercent) ? input.cpuLoadPercent : 0;
+  return {
+    available: true, enhanced: false, strategy: "deterministic_local_first_with_gaming_yield",
+    recommendation: isGamingActive || cpuLoadPercent > 85 ? "yield_or_delegate_to_peer" : "execute_locally",
+    targetNode: boundedText(input?.nodeId, 64) || "local",
+    gamingYieldActive: isGamingActive,
+  };
+}
+
+function inFlightDistillationFallback({ input }) {
+  return {
+    available: false, enhanced: false, strategy: "stream_pass_through_without_distillation",
+    editionId: boundedText(input?.editionId, 128) || null,
+    keyframeFeaturesExtracted: false, reason: "in_flight_model_shadow_mode",
+  };
+}
+
+function ambientPresenceFallback({ input }) {
+  const isBackgroundMode = boolean(input?.isBackgroundMode);
+  const idleSeconds = integer(input?.idleDurationSeconds, 0);
+  const isLowAttention = isBackgroundMode || idleSeconds >= 2700;
+  return {
+    available: true, enhanced: false, strategy: "deterministic_presence_threshold",
+    isAmbient: isLowAttention,
+    watchHistoryPolicy: isLowAttention ? "isolated" : "canonical",
+    recommendedProfile: isLowAttention ? "720p-low-bitrate" : "source-max",
+  };
+}
+
+function predictiveCacheFallback({ input }) {
+  return {
+    available: true, enhanced: false, strategy: "deterministic_on_demand_preparation",
+    preCacheApproved: false,
+    seriesId: boundedText(input?.seriesId, 64) || null,
+    predictedNextEpisodeId: boundedText(input?.predictedNextEpisodeId, 64) || null,
+    reason: "defer_to_on_demand_play",
+  };
+}
+
 export const SHIPPING_DETERMINISTIC_FALLBACKS = Object.freeze({
   "taste-ranking": tasteFallback,
   "semantic-search": semanticFallback,
@@ -172,6 +243,10 @@ export const SHIPPING_DETERMINISTIC_FALLBACKS = Object.freeze({
   "family-scene-guidance": familyGuidanceFallback,
   "dialogue-enhancement": dialogueFallback,
   "shared-taste-intelligence": sharedTasteFallback,
+  "distributed-workload-scheduler": workloadSchedulerFallback,
+  "in-flight-media-distillation": inFlightDistillationFallback,
+  "ambient-presence-governor": ambientPresenceFallback,
+  "predictive-cache-oracle": predictiveCacheFallback,
 });
 
 function registerRuntimeFallbacks(runtime, dependencies) {
@@ -409,6 +484,97 @@ export function registerShippingIntelligenceSpecialists(coordinator, dependencie
         cohortSize: integer(event.payload?.cohortSize, 0),
         dimensions: integer(event.payload?.dimensions, 0),
         linkabilityScore: Number.isFinite(event.payload?.linkabilityScore) ? event.payload.linkabilityScore : null,
+      },
+    }),
+  });
+
+  coordinator.registerSpecialist("distributed-workload-scheduler", {
+    perceive: async (event) => feature({
+      scope: "household", entityId: boundedText(event.entityId || "cluster-telemetry", 128),
+      featureSet: "cluster-compute-headroom",
+      value: {
+        nodeId: boundedText(event.payload?.nodeId, 64) || "local",
+        cpuLoadPercent: Number.isFinite(event.payload?.cpuLoadPercent) ? event.payload.cpuLoadPercent : null,
+        freeRamMb: integer(event.payload?.freeRamMb, 0),
+        isGamingActive: boolean(event.payload?.isGamingActive, false),
+        hasHardwareEncoder: boolean(event.payload?.hasHardwareEncoder, false),
+      },
+    }),
+    buildRequest: async ({ event }) => request({
+      resourceClass: "system_coordination", privacyClass: "household_private", deadlineMs: 500,
+      input: {
+        nodeId: boundedText(event.payload?.nodeId, 64) || "local",
+        cpuLoadPercent: Number.isFinite(event.payload?.cpuLoadPercent) ? event.payload.cpuLoadPercent : null,
+        freeRamMb: integer(event.payload?.freeRamMb, 0),
+        isGamingActive: boolean(event.payload?.isGamingActive, false),
+        hasHardwareEncoder: boolean(event.payload?.hasHardwareEncoder, false),
+      },
+    }),
+  });
+
+  coordinator.registerSpecialist("in-flight-media-distillation", {
+    perceive: async (event) => feature({
+      scope: "household", entityId: boundedText(event.editionId || event.entityId || "transcode-stream", 128),
+      featureSet: "in-flight-stream-features",
+      value: {
+        editionId: boundedText(event.editionId, 128) || null,
+        keyframeIndex: integer(event.payload?.keyframeIndex, 0),
+        audioEnergyDb: Number.isFinite(event.payload?.audioEnergyDb) ? event.payload.audioEnergyDb : null,
+        vocalDominancePercent: integer(event.payload?.vocalDominancePercent, 0),
+        moodVectorCandidate: Array.isArray(event.payload?.moodVectorCandidate) ? event.payload.moodVectorCandidate.slice(0, 16) : null,
+      },
+    }),
+    buildRequest: async ({ event }) => request({
+      resourceClass: "background_analysis", privacyClass: "household_private", deadlineMs: 2_000,
+      input: {
+        editionId: boundedText(event.editionId, 128) || null,
+        keyframeIndex: integer(event.payload?.keyframeIndex, 0),
+        audioEnergyDb: Number.isFinite(event.payload?.audioEnergyDb) ? event.payload.audioEnergyDb : null,
+        vocalDominancePercent: integer(event.payload?.vocalDominancePercent, 0),
+      },
+    }),
+  });
+
+  coordinator.registerSpecialist("ambient-presence-governor", {
+    perceive: async (event) => feature({
+      scope: "device", entityId: boundedText(event.entityId || "playback-presence", 128),
+      featureSet: "ambient-viewing-presence",
+      value: {
+        sessionId: boundedText(event.payload?.sessionId, 64) || null,
+        idleDurationSeconds: integer(event.payload?.idleDurationSeconds, 0),
+        isBackgroundMode: boolean(event.payload?.isBackgroundMode, false),
+        recommendedBitrateCap: integer(event.payload?.recommendedBitrateCap, 4_000_000),
+        watchHistoryPolicy: oneOf(event.payload?.watchHistoryPolicy, ["isolated", "canonical"], "canonical"),
+      },
+    }),
+    buildRequest: async ({ event }) => request({
+      resourceClass: "interaction_adaptation", privacyClass: "household_private", deadlineMs: 250,
+      input: {
+        sessionId: boundedText(event.payload?.sessionId, 64) || null,
+        idleDurationSeconds: integer(event.payload?.idleDurationSeconds, 0),
+        isBackgroundMode: boolean(event.payload?.isBackgroundMode, false),
+      },
+    }),
+  });
+
+  coordinator.registerSpecialist("predictive-cache-oracle", {
+    perceive: async (event) => feature({
+      scope: "household", entityId: boundedText(event.entityId || "household-cache-horizon", 128),
+      featureSet: "predictive-cache-schedule",
+      value: {
+        seriesId: boundedText(event.payload?.seriesId, 64) || null,
+        predictedNextEpisodeId: boundedText(event.payload?.predictedNextEpisodeId, 64) || null,
+        confidence: Number.isFinite(event.payload?.confidence) ? event.payload.confidence : 0.5,
+        torboxHeadroomHours: integer(event.payload?.torboxHeadroomHours, 24),
+        downscaleTargetResolution: oneOf(event.payload?.downscaleTargetResolution, ["720p", "1080p"], "1080p"),
+      },
+    }),
+    buildRequest: async ({ event }) => request({
+      resourceClass: "background_preparation", privacyClass: "household_private", deadlineMs: 3_000,
+      input: {
+        seriesId: boundedText(event.payload?.seriesId, 64) || null,
+        predictedNextEpisodeId: boundedText(event.payload?.predictedNextEpisodeId, 64) || null,
+        confidence: Number.isFinite(event.payload?.confidence) ? event.payload.confidence : 0.5,
       },
     }),
   });

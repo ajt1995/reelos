@@ -1,0 +1,1 @@
+import{o as e}from"./useStore-CP8wJgJA.js";import{t}from"./reelos-world-ReWf50bh.js";import{r as n}from"./index-CsomOHJh.js";var r=e();function i(){let{id:e}=n.useParams(),{name:i}=n.useSearch();return(0,r.jsx)(t,{initialDestination:{type:`person`,id:e,name:i}})}export{i as component};

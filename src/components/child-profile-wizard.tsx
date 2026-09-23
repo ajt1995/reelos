@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { createClientId } from "@/lib/client-id";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 
 interface BoundaryCard {
   id: string;
@@ -297,25 +298,23 @@ export function ChildProfileWizard({
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-foreground">4-Digit Exit PIN</label>
-              <input
-                type="password"
-                maxLength={4}
+          <div className="space-y-4">
+            <div className="flex flex-col items-center space-y-2 py-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-amber-400">4-Digit Exit Passcode</label>
+              <LuxuryPinInput
                 value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-mono text-center tracking-widest text-foreground focus:outline-none focus:border-amber-400"
-                placeholder="1234"
+                onChange={(val) => setPin(val)}
+                length={4}
+                autoFocus
               />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1.5 pt-2 border-t border-white/5">
               <label className="text-xs font-medium text-foreground">Bedtime Curfew</label>
               <input
                 type="time"
                 value={curfew}
                 onChange={(e) => setCurfew(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-sm font-mono text-center text-foreground focus:outline-none focus:border-amber-400"
+                className="w-full h-11 px-3 rounded-xl bg-white/5 border border-white/10 text-sm font-mono text-center text-foreground focus:outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
               />
             </div>
           </div>

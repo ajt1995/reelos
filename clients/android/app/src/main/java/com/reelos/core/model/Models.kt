@@ -45,3 +45,12 @@ sealed interface ClientResult<out T> {
     data class Success<T>(val value: T) : ClientResult<T>
     data class Failure(val message: String, val code: String? = null) : ClientResult<Nothing>
 }
+
+data class AmbientChannel(
+    val id: String,
+    val name: String,
+    val tagline: String = "",
+    val vibe: String = "",
+    val curatorNote: String = "",
+    val streamUrl: String = "",
+)

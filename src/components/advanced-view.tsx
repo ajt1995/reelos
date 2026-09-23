@@ -244,7 +244,7 @@ export function AdvancedView({ embedded = false }: { embedded?: boolean }) {
             ["Room ambiance", "Connected lights and phone-guided room sound tuning are not available in this release."],
             ["Commercial streaming handoff", "Opening titles in commercial streaming apps is not available in this release."],
             ["Additional computer platforms", "The household release currently targets Windows and Linux hosts; other computer platforms remain unverified."],
-            ["Experimental local abilities", "Evaluation-only model packs stay disconnected until their privacy, quality, and resource checks pass."],
+            ["Experimental local abilities", "Evaluation-only experimental abilities stay disconnected until their privacy, quality, and resource checks pass."],
           ].map(([name, detail]) => (
             <article key={name} className="rounded-2xl border border-white/7 bg-black/10 p-5">
               <div className="flex items-start justify-between gap-4">

@@ -1545,6 +1545,26 @@ var Shield = createLucideIcon("shield", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var ShoppingBag = createLucideIcon("shopping-bag", [
+	["path", {
+		d: "M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z",
+		key: "hou9p0"
+	}],
+	["path", {
+		d: "M3 6h18",
+		key: "d0wm0j"
+	}],
+	["path", {
+		d: "M16 10a4 4 0 0 1-8 0",
+		key: "1ltviw"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var SlidersHorizontal = createLucideIcon("sliders-horizontal", [
 	["line", {
 		x1: "21",
@@ -1881,6 +1901,22 @@ var Sun = createLucideIcon("sun", [
 		key: "1shlcs"
 	}]
 ]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Tag = createLucideIcon("tag", [["path", {
+	d: "M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z",
+	key: "vktsd0"
+}], ["circle", {
+	cx: "7.5",
+	cy: "7.5",
+	r: ".5",
+	fill: "currentColor",
+	key: "kqv944"
+}]]);
 /**
 * @license lucide-react v0.510.0 - ISC
 *
@@ -2280,4 +2316,4 @@ var Zap = createLucideIcon("zap", [["path", {
 	key: "1xq2db"
 }]]);
 //#endregion
-export { Lock as $, Send as A, ChevronRight as At, Play as B, BookOpen as Bt, Smile as C, Cloud as Ct, Shield as D, CircleHelp as Dt, SlidersHorizontal as E, Clapperboard as Et, RefreshCw as F, Captions as Ft, MonitorUp as G, PartyPopper as H, ArrowRight as Ht, Radio as I, Calendar as It, Minimize as J, MonitorSmartphone as K, QrCode as L, BrainCircuit as Lt, RotateCw as M, ChevronDown as Mt, RotateCcw as N, Check as Nt, ShieldCheck as O, CircleCheck as Ot, Rewind as P, Cast as Pt, Maximize2 as Q, Popcorn as R, Bookmark as Rt, Sparkles as S, Coffee as St, SlidersVertical as T, Clock3 as Tt, Palette as U, ArrowLeft as Ut, Pause as V, AudioLines as Vt, Moon as W, MessageCircle as X, Minimize2 as Y, Maximize as Z, ThumbsUp as _, ExternalLink as _t, VolumeX as a, KeyRound as at, SunMedium as b, Copy as bt, UsersRound as c, House as ct, Usb as d, Gauge as dt, LoaderCircle as et, Upload as f, Gamepad2 as ft, Trash2 as g, FastForward as gt, TriangleAlert as h, Film as ht, WandSparkles as i, Key as it, Search as j, ChevronLeft as jt, Settings as k, ChevronUp as kt, User as l, Heart as lt, Tv as m, Flame as mt, X as n, Library as nt, Volume2 as o, Info as ot, Type as p, FolderSymlink as pt, MonitorPlay as q, Wifi as r, Laptop as rt, Users as s, Image as st, Zap as t, ListTree as tt, UserRound as u, HardDrive as ut, ThumbsDown as v, Download as vt, Smartphone as w, Clock as wt, Speaker as x, Compass as xt, Sun as y, Crown as yt, Plus as z, BookmarkCheck as zt };
+export { Maximize as $, ShieldCheck as A, CircleCheck as At, Popcorn as B, Bookmark as Bt, Sparkles as C, Compass as Ct, SlidersHorizontal as D, Clock3 as Dt, SlidersVertical as E, Clock as Et, RotateCcw as F, Check as Ft, Palette as G, ArrowLeft as Gt, Play as H, BookOpen as Ht, Rewind as I, Cast as It, MonitorSmartphone as J, Moon as K, RefreshCw as L, Captions as Lt, Send as M, ChevronRight as Mt, Search as N, ChevronLeft as Nt, ShoppingBag as O, Clapperboard as Ot, RotateCw as P, ChevronDown as Pt, MessageCircle as Q, Radio as R, Calendar as Rt, Speaker as S, Copy as St, Smartphone as T, Cloud as Tt, Pause as U, AudioLines as Ut, Plus as V, BookmarkCheck as Vt, PartyPopper as W, ArrowRight as Wt, Minimize as X, MonitorPlay as Y, Minimize2 as Z, ThumbsUp as _, Film as _t, VolumeX as a, Laptop as at, Sun as b, Download as bt, UsersRound as c, Info as ct, Usb as d, Heart as dt, Maximize2 as et, Upload as f, HardDrive as ft, Trash2 as g, Flame as gt, TriangleAlert as h, FolderSymlink as ht, WandSparkles as i, Library as it, Settings as j, ChevronUp as jt, Shield as k, CircleHelp as kt, User as l, Image as lt, Tv as m, Gamepad2 as mt, X as n, LoaderCircle as nt, Volume2 as o, Key as ot, Type as p, Gauge as pt, MonitorUp as q, Wifi as r, ListTree as rt, Users as s, KeyRound as st, Zap as t, Lock as tt, UserRound as u, House as ut, ThumbsDown as v, FastForward as vt, Smile as w, Coffee as wt, SunMedium as x, Crown as xt, Tag as y, ExternalLink as yt, QrCode as z, BrainCircuit as zt };

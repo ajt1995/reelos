@@ -41,6 +41,8 @@ class StandaloneNodeApi(context: Context, private val tvMode: Boolean) {
                 path.matches(Regex("^/api/media/[^/]+/intro-timestamps$")) && method == "GET" ->
                     ok(JSONObject().put("hasIntro", false))
                 path == "/api/capabilities" && method == "GET" -> ok(capabilities())
+                path == "/api/ambient/channels" && method == "GET" -> ok(ambientChannels())
+                path == "/api/ambient/flip" && method == "POST" -> ok(ambientFlip(uri))
                 path == "/api/activity" && method == "GET" -> ok(JSONObject().put("ok", true).put("activity", JSONArray()))
                 path == "/api/books/library" && method == "GET" -> ok(JSONObject().put("ok", true).put("books", JSONArray()))
                 path == "/api/books/discover" && method == "GET" -> ok(JSONObject().put("ok", true).put("books", JSONArray()))
@@ -72,8 +74,8 @@ class StandaloneNodeApi(context: Context, private val tvMode: Boolean) {
     }
 
     private fun defaultProfile() = JSONObject()
-        .put("experienceVersion", 2).put("id", "android-local").put("name", "This device")
-        .put("color", "#4f8cff").put("isKids", false).put("pinEnabled", false)
+        .put("experienceVersion", 2).put("id", "android-local").put("name", "")
+        .put("color", "#f5c518").put("isKids", false).put("pinEnabled", false)
         .put("atmosphere", true).put("transparency", true).put("motion", "subtle")
         .put("density", "comfortable").put("exploration", "balanced")
         .put("reactions", JSONObject()).put("dismissedTasteIds", JSONArray()).put("lessLikeIds", JSONArray())
@@ -204,6 +206,21 @@ class StandaloneNodeApi(context: Context, private val tvMode: Boolean) {
     private fun capability(id: String, state: String, available: Boolean) = JSONObject()
         .put("id", id).put("state", state).put("available", available)
         .put("scope", "device").put("reason", if (available) "Local deterministic fallback is active." else "Local model evidence is still validating.")
+
+    private fun ambientChannels(): JSONObject = JSONObject()
+        .put("ok", true)
+        .put("channels", JSONArray(listOf(
+            JSONObject().put("id", "comfort-sitcoms").put("name", "Comfort Sitcoms").put("tagline", "Background laughter and familiar living rooms"),
+            JSONObject().put("id", "nature-slow-cinema").put("name", "Nature & Slow Cinema").put("tagline", "4K landscapes, ambient soundscapes, minimal dialogue"),
+            JSONObject().put("id", "late-night-noir").put("name", "Late-Night Noir").put("tagline", "Shadows, jazz, rain-slicked streets, moody dialogue"),
+            JSONObject().put("id", "weekend-animation").put("name", "Weekend Animation").put("tagline", "Classic cel animation, indie shorts, Saturday morning nostalgia"),
+            JSONObject().put("id", "resident-cinema-radio").put("name", "Resident Cinema Radio").put("tagline", "Curated cinematic score streams with synchronized film stills"),
+        )))
+
+    private fun ambientFlip(uri: Uri): JSONObject = JSONObject()
+        .put("ok", true)
+        .put("direction", uri.getQueryParameter("dir") ?: "next")
+        .put("switchedInMs", 18)
 
     private fun json(body: String?): JSONObject = if (body.isNullOrBlank()) JSONObject() else JSONObject(body)
     private fun ok(value: JSONObject) = NodeApiResponse(200, value.toString())

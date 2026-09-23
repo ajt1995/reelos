@@ -13,12 +13,33 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-const DEFAULT_RING_BUFFER_MAX_BYTES = 150 * 1024 * 1024; // 150MB RAM ring buffer cap
+/**
+ * Dynamically scales RAM ring buffer capacity based on host total memory.
+ * - Low-end appliances (<= 4GB): 128MB
+ * - Balanced appliances (8GB): 256MB
+ * - Mid tier (16GB): 512MB
+ * - High-end workstation (32GB+, e.g. Austin's 64GB rig): up to 10% total RAM, safely capped at 2GB
+ */
+export function calculateDynamicRingBufferBytes(totalMemBytes = os.totalmem()) {
+  const totalMb = Math.round(totalMemBytes / (1024 * 1024));
+  if (totalMb <= 4600) {
+    return 128 * 1024 * 1024;
+  }
+  if (totalMb <= 12000) {
+    return 256 * 1024 * 1024;
+  }
+  if (totalMb <= 24000) {
+    return 512 * 1024 * 1024;
+  }
+  return Math.min(2 * 1024 * 1024 * 1024, Math.round(totalMemBytes * 0.10));
+}
+
+export const DEFAULT_RING_BUFFER_MAX_BYTES = calculateDynamicRingBufferBytes();
 
 export class InRamTranscoderService extends EventEmitter {
   constructor(options = {}) {
     super();
-    this.maxMemoryBytes = options.maxMemoryBytes || DEFAULT_RING_BUFFER_MAX_BYTES;
+    this.maxMemoryBytes = options.maxMemoryBytes || calculateDynamicRingBufferBytes();
     /** @type {Map<string, { chunks: Buffer[], totalBytes: number, createdAt: number, mimeType: string }>} */
     this.ringBuffers = new Map();
     this.totalTransmuxSessions = 0;

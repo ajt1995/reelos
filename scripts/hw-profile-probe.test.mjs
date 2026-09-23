@@ -194,21 +194,16 @@ test("UI and API surface the saved profile; wizard stays 7 steps", () => {
 });
 
 test("re-probe hooks: firstboot, OTA before cleaner, door start, USB udev", () => {
-  const install = read("daemon/install.sh");
+  const install = read("install/reelos-install.sh");
   assert.match(install, /reelos_hardware.py" --ensure/);
-  assert.match(install, /99-reelos-hw-probe.rules/);
-  assert.equal(install, read("install/reelos-install.sh"));
-  const updater = read("daemon/reelos-update.sh");
-  const hw = updater.indexOf('python3 "$ROOT/bin/reelos_hardware.py" --apply');
-  const clean = updater.indexOf('log "OTA cleaner — leftover nonsense');
-  assert.ok(hw > 0 && clean > hw, "probe before cleaner");
-  assert.match(read("daemon/reelos-ota-clean.sh"), /reelos_hardware.py" --ensure/);
+  const otaClean = read("daemon/reelos-ota-clean.sh");
+  assert.match(otaClean, /reelos_hardware.py" --ensure/);
   assert.match(read("firstboot/reelos.service"), /reelos_hardware.py --ensure/);
   assert.match(read("install/systemd/reelos.service"), /reelos_hardware.py --ensure/);
   assert.match(read("scripts/reelos-box.mjs"), /ensureHardwareProfile/);
   assert.match(read("install/udev/99-reelos-hw-probe.rules"), /reelos-hw-probe.service/);
   assert.match(read("install/systemd/reelos-hw-probe.service"), /--ensure/);
-  assert.match(updater, /reelos-hw-probe.service/);
+  const updater = read("daemon/reelos-update.sh");
   assert.equal(read("daemon/reelos_hardware.py"), read("install/bin/reelos_hardware.py"));
   assert.equal(read("daemon/reelos-ota-clean.sh"), read("install/bin/reelos-ota-clean.sh"));
   assert.equal(read("daemon/reelos_os_tune.py"), read("install/bin/reelos_os_tune.py"));

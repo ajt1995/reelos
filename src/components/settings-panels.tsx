@@ -1241,7 +1241,7 @@ export function CapabilityScaleBadgeCard() {
               {String(scale.label || "Hardware Resource Allocation").replace(/^[🧠🤖✨\s]+/, "")}
             </h3>
             <p className="text-xs text-muted mt-0.5">
-              Active Headroom: {scale.currentMemoryMb || (isContracted ? 3.2 : 12.8)} MB · {isContracted ? "Stealth Mode" : "Cinema Mode"}
+              Active Headroom: {scale.currentMemoryMb || (isContracted ? 48 : 128)} MB · {isContracted ? "Stealth Mode" : "Cinema Mode"}
             </p>
           </div>
         </div>

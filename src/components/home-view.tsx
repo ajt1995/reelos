@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, Play, Search, Sparkles, X } from "lucide-react";
+import { Bookmark, BookOpen, Check, ChevronLeft, ChevronRight, Compass, Play, Search, X } from "lucide-react";
 import { Row, TitleCard } from "@/components/title-card";
 import { BookCover } from "@/components/book-cover";
 import { RemoveFromBox } from "@/components/remove-from-box";
@@ -605,7 +605,7 @@ export function HomeView() {
                     className="inline-flex h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-card/50 px-3.5 text-xs font-medium text-muted backdrop-blur-md transition-all hover:text-foreground hover:bg-card hover:border-gold/30 cursor-pointer active:scale-95"
                     title="Next spotlight title"
                   >
-                    <Sparkles className="size-3.5 text-gold" />
+                    <Compass className="size-3.5 text-gold" />
                     <span>Next</span>
                   </button>
                 ) : null}

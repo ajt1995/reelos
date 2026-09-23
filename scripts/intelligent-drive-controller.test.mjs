@@ -22,6 +22,7 @@ test("intelligent drive controller logic in daemon/wiring/hardware.py", () => {
   assert.match(code, /-B["\s,]+254/);
   assert.match(code, /PRAGMA temp_store = MEMORY/);
   assert.match(code, /PRAGMA synchronous = NORMAL/);
+  assert.match(code, /PRAGMA busy_timeout = 5000/);
   assert.match(code, /PRAGMA journal_mode = WAL/);
 });
 

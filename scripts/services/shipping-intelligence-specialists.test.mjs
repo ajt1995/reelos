@@ -76,6 +76,14 @@ const CASES = [
     payload: { trackId: "english-main", channelCount: 6, sampleRate: 48000 } }],
   ["shared-taste-intelligence", { eventId: "shared-taste-route", type: "taste.export-candidate", source: "privacy-evaluator",
     payload: { cohortSize: 32, dimensions: 16, linkabilityScore: 0.08 } }],
+  ["distributed-workload-scheduler", { eventId: "scheduler-route", type: "cluster.telemetry", source: "resource-safety",
+    payload: { nodeId: "node-debian", cpuLoadPercent: 45, freeRamMb: 6144, isGamingActive: false, hasHardwareEncoder: false } }],
+  ["in-flight-media-distillation", { eventId: "distillation-route", type: "analysis.completed", source: "media-analysis",
+    workId: "title-a", editionId: "edition-a", payload: { keyframeIndex: 10, audioEnergyDb: -14.2, vocalDominancePercent: 82 } }],
+  ["ambient-presence-governor", { eventId: "ambient-route", type: "playback.presence", source: "experience",
+    profileId: "adult-a", deviceId: "living-room-tv", payload: { sessionId: "sess-1", idleDurationSeconds: 3000, isBackgroundMode: true } }],
+  ["predictive-cache-oracle", { eventId: "cache-oracle-route", type: "preparation.queued", source: "media-preparation",
+    workId: "series-a", payload: { seriesId: "series-a", predictedNextEpisodeId: "ep-2", confidence: 0.92 } }],
 ];
 
 test("shipping fallback capabilities are registered with the shared coordinator", async () => {

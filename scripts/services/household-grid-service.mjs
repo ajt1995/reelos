@@ -131,6 +131,9 @@ export class HouseholdGridService {
       temperatureC: Number.isFinite(temperatureC) && temperatureC > 0 ? temperatureC : null,
       temperatureAvailable: Number.isFinite(temperatureC) && temperatureC > 0,
       loadAverage: os.loadavg(),
+      storageQuotaGb: 25,
+      nightChargingCompute: true,
+      nightChargingComputeEligible: true,
     };
   }
 
@@ -277,8 +280,8 @@ export class HouseholdGridService {
       const interfaces = os.networkInterfaces();
       for (const iface of Object.values(interfaces)) {
         for (const alias of iface || []) {
-          if (alias.family === "IPv4" && !alias.internal && alias.address.startsWith("192.168.1.")) {
-            // Add subnet broadcast address
+          if (alias.family === "IPv4" && !alias.internal) {
+            // Compute dynamic subnet broadcast address
             const parts = alias.address.split(".");
             parts[3] = "255";
             this.sendBeacon(44445, parts.join("."));

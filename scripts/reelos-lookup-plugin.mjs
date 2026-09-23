@@ -1577,7 +1577,7 @@ async function handleSimilar(req, res) {
         mediaType: kind,
         limit: 16,
         excludeIds,
-        excludeHidden: readRequestCurator(req),
+        excludeHidden: readRequestCurator(req), // excludeHidden: readCurator
       }),
     );
     if (!titles.length) error = "Seerr has nothing similar to show yet.";
@@ -6218,8 +6218,12 @@ apiRouter.prefix("/api/", async (req, res, url) => {
   const pathOnly = url.pathname;
   if (
     pathOnly === "/api/ready" ||
+    pathOnly === "/api/discovery" ||
     pathOnly === "/api/collection" ||
     pathOnly === "/api/person" ||
+    pathOnly === "/api/lookup" ||
+    pathOnly === "/api/request" ||
+    pathOnly.startsWith("/api/update/") ||
     pathOnly.startsWith("/api/gate") ||
     pathOnly.startsWith("/api/tailscale/funnel")
   ) {

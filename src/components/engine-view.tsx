@@ -97,7 +97,7 @@ export function EngineView({ id }: { id: string }) {
                 <p className="text-sm font-semibold text-emerald-400">&lt;5ms (32-bit Bitmask)</p>
               </div>
               <div className="rounded-xl bg-card-2 p-3 border border-border/40">
-                <p className="text-[10px] text-muted">Predictive Binge Buffer</p>
+                <p className="text-[10px] text-muted">Instant Play Buffer</p>
                 <p className="text-sm font-semibold text-gold">80% Playback Trigger</p>
               </div>
               <div className="rounded-xl bg-card-2 p-3 border border-border/40">

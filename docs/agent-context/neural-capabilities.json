@@ -163,6 +163,62 @@
       "coordinatorRoute": "release-ranking",
       "tests": ["scripts/services/intelligence-runtime.test.mjs", "scripts/services/shipping-intelligence-specialists.test.mjs"],
       "evidence": ["scripts/services/capability-ledger.mjs", "scripts/services/shipping-intelligence-specialists.mjs"]
+    },
+    {
+      "id": "distributed-workload-scheduler",
+      "owner": "resource-safety",
+      "purpose": "Coordinate multi-PC compute rhythms, elastic RAM allocation, and opportunistic transcode work-stealing.",
+      "lifecycle": "fallback",
+      "inputs": ["cluster telemetry", "node compute headroom", "gaming yield status", "free RAM"],
+      "outputs": ["workload placement recommendation", "transcode delegation target"],
+      "fallback": "Deterministic local-first execution with silent failover and gaming yield.",
+      "privacy": "household-private; cluster telemetry never leaves the home",
+      "resourceBudget": "background; continuous lightweight sampling; yields to playback",
+      "coordinatorRoute": "distributed-workload-scheduler",
+      "tests": ["scripts/services/household-grid-service.test.mjs", "scripts/services/shipping-intelligence-specialists.test.mjs"],
+      "evidence": ["scripts/services/household-grid-service.mjs", "scripts/services/shipping-intelligence-specialists.mjs"]
+    },
+    {
+      "id": "in-flight-media-distillation",
+      "owner": "media-analysis",
+      "purpose": "Extract keyframe visual vectors, audio dialogue energy envelopes, and intro/credits markers during decode stream.",
+      "lifecycle": "shadow",
+      "inputs": ["decoded video frames", "audio sample envelopes", "transcode stream timestamps"],
+      "outputs": ["edition-bound scene embeddings", "vocal energy profile", "timeline markers"],
+      "fallback": "Standard transcode pass without in-flight feature extraction.",
+      "privacy": "home-private; frames and audio features remain local",
+      "resourceBudget": "in-flight piped tap; bounded sample rate 0.1 fps; zero disk overhead",
+      "coordinatorRoute": "in-flight-media-distillation",
+      "tests": ["scripts/services/in-ram-transcoder-ground-truth.test.mjs", "scripts/services/shipping-intelligence-specialists.test.mjs"],
+      "evidence": ["scripts/services/in-ram-transcoder-service.mjs", "scripts/services/shipping-intelligence-specialists.mjs"]
+    },
+    {
+      "id": "ambient-presence-governor",
+      "owner": "experience",
+      "purpose": "Detect low-attention Background TV viewing and dynamically adapt bitrates and stream profiles.",
+      "lifecycle": "fallback",
+      "inputs": ["playback duration", "user interaction cadence", "companion session activity", "audio volume envelope"],
+      "outputs": ["viewing engagement tier", "recommended stream profile", "watch history isolation flag"],
+      "fallback": "Standard playback policy and explicit user ambient toggle.",
+      "privacy": "device-private engagement metrics; local processing",
+      "resourceBudget": "interactive; passive sampling; zero playback blocking",
+      "coordinatorRoute": "ambient-presence-governor",
+      "tests": ["scripts/services/ambient-playback-service.test.mjs", "scripts/services/shipping-intelligence-specialists.test.mjs"],
+      "evidence": ["scripts/services/ambient-playback-service.mjs", "scripts/services/shipping-intelligence-specialists.mjs"]
+    },
+    {
+      "id": "predictive-cache-oracle",
+      "owner": "media-preparation",
+      "purpose": "Predict next episodes and frequent ambient titles to schedule polite TorBox downscale pre-caching during idle hours.",
+      "lifecycle": "fallback",
+      "inputs": ["household viewing sequences", "TorBox rate limit headroom", "storage quota", "ambient channel preferences"],
+      "outputs": ["prioritized downscale pre-cache queue", "scheduled pre-transcode tasks"],
+      "fallback": "Deterministic on-demand stream resolution and instant play buffer.",
+      "privacy": "home-private; TorBox tokens air-gapped; viewing history local",
+      "resourceBudget": "background off-peak; yields to interactive playback and gaming",
+      "coordinatorRoute": "predictive-cache-oracle",
+      "tests": ["scripts/services/media-preparation-service.test.mjs", "scripts/services/shipping-intelligence-specialists.test.mjs"],
+      "evidence": ["scripts/services/media-preparation-service.mjs", "scripts/services/shipping-intelligence-specialists.mjs"]
     }
   ]
 }

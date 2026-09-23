@@ -10,7 +10,6 @@ import {
   PartyPopper,
   Play,
   QrCode,
-  Sparkles,
   Tv,
   Users,
   X,
@@ -258,13 +257,16 @@ export function FlickMatchView() {
   if (inRoom && currentIndex < deck.length) {
     const card = deck[currentIndex];
     return (
-      <div className="relative flex min-h-dvh flex-col justify-between bg-background px-4 py-6 md:px-8">
+      <div
+        className="relative flex min-h-dvh flex-col justify-between bg-background px-4 py-6 md:px-8 overscroll-contain select-none"
+        style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
+      >
         {/* Header */}
         <header className="flex items-center justify-between">
           <button
             type="button"
             onClick={() => setInRoom(false)}
-            className="flex items-center gap-1.5 rounded-xl border border-border bg-card/60 px-3 py-1.5 text-xs text-muted hover:text-foreground"
+            className="flex min-h-11 items-center gap-1.5 rounded-xl border border-border bg-card/60 px-4 py-2 text-xs text-muted hover:text-foreground cursor-pointer"
           >
             <ArrowLeft className="size-4" />
             Leave Room
@@ -273,7 +275,7 @@ export function FlickMatchView() {
             <button
               type="button"
               onClick={() => setShowInviteModal(true)}
-              className="flex items-center gap-1.5 font-mono text-xs font-bold text-gold uppercase tracking-wider bg-gold/10 hover:bg-gold/20 px-2.5 py-1 rounded-lg border border-gold/25 transition-colors cursor-pointer shadow-sm"
+              className="flex min-h-11 items-center gap-1.5 font-mono text-xs font-bold text-gold uppercase tracking-wider bg-gold/10 hover:bg-gold/20 px-3.5 py-2 rounded-xl border border-gold/25 transition-colors cursor-pointer shadow-sm"
               title="Show QR code for couch guests to scan and join"
             >
               <QrCode className="size-3.5" />
@@ -375,7 +377,8 @@ export function FlickMatchView() {
                 <button
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="text-muted hover:text-foreground cursor-pointer"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted hover:text-foreground cursor-pointer"
+                  aria-label="Close invite modal"
                 >
                   <X className="size-4" />
                 </button>
@@ -395,7 +398,7 @@ export function FlickMatchView() {
                   size="sm"
                   variant="ghost"
                   onClick={() => copyLink(hostUrl)}
-                  className="h-7 gap-1 px-2 text-[11px]"
+                  className="min-h-11 gap-1.5 px-3 text-xs"
                 >
                   {copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
                   {copied ? "Copied" : "Copy"}
@@ -446,14 +449,14 @@ export function FlickMatchView() {
               onClick={() => {
                 setCurrentIndex(0);
               }}
-              className="rounded-xl border-border text-xs"
+              className="min-h-11 rounded-xl border border-border text-xs px-4"
             >
               Swipe Again
             </Button>
             <Button
               variant="ghost"
               onClick={() => setInRoom(false)}
-              className="rounded-xl text-xs text-muted"
+              className="min-h-11 rounded-xl text-xs text-muted px-4"
             >
               Leave Room
             </Button>
@@ -478,7 +481,7 @@ export function FlickMatchView() {
           <div className="mt-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30 shadow-md">
-                <Sparkles className="size-5" />
+                <Users className="size-5" />
               </span>
               <div>
                 <h1 className="font-display text-2xl font-bold text-foreground">
@@ -544,7 +547,8 @@ export function FlickMatchView() {
                   <button
                     type="button"
                     onClick={() => setRoomCode("")}
-                    className="absolute right-3.5 top-5 text-muted hover:text-foreground cursor-pointer"
+                    className="absolute right-2 top-2 flex min-h-11 min-w-11 items-center justify-center text-muted hover:text-foreground cursor-pointer"
+                    aria-label="Clear room code"
                   >
                     <X className="size-4" />
                   </button>
@@ -596,7 +600,7 @@ export function FlickMatchView() {
                   size="sm"
                   variant="ghost"
                   onClick={() => copyLink(joinUrl)}
-                  className="h-7 gap-1 px-2.5 text-[11px] font-sans text-foreground"
+                  className="min-h-11 gap-1.5 px-3 text-xs font-sans text-foreground"
                 >
                   {copied ? (
                     <Check className="size-3 text-emerald-400" />

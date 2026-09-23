@@ -468,6 +468,10 @@ export function PlayerView({
   // Ambient inactivity state
   const [idle, setIdle] = useState(false);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cycleSubtitlesRef = useRef(cycleSubtitles);
+  cycleSubtitlesRef.current = cycleSubtitles;
+  const audioPresetRef = useRef(audioPreset);
+  audioPresetRef.current = audioPreset;
 
   useEffect(() => {
     const handleActivity = () => {
@@ -486,10 +490,10 @@ export function PlayerView({
         return;
       }
       const target = e.target as HTMLElement | null;
-      if (target && (target.closest("button, a, input, textarea, select, video, [role=dialog]") || target.isContentEditable)) {
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable || target.closest("[role=dialog]"))) {
         return;
       }
-      if (e.code === "Space") {
+      if (e.code === "Space" || e.key === "k" || e.key === "K") {
         e.preventDefault();
         if (videoRef.current) {
           if (videoRef.current.paused) {
@@ -502,17 +506,33 @@ export function PlayerView({
             showToast("Paused", "info");
           }
         }
-      } else if (e.code === "ArrowLeft") {
+      } else if (e.code === "ArrowLeft" || e.key === "j" || e.key === "J") {
         e.preventDefault();
         if (videoRef.current) {
           videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
           showToast("-10s", "info");
         }
-      } else if (e.code === "ArrowRight") {
+      } else if (e.code === "ArrowRight" || e.key === "l" || e.key === "L") {
         e.preventDefault();
         if (videoRef.current) {
           videoRef.current.currentTime = Math.min(videoRef.current.duration || Infinity, videoRef.current.currentTime + 10);
           showToast("+10s", "info");
+        }
+      } else if (e.code === "ArrowUp") {
+        e.preventDefault();
+        if (videoRef.current) {
+          const next = Math.min(1, Math.round(((videoRef.current.volume || 1) + 0.05) * 100) / 100);
+          videoRef.current.volume = next;
+          videoRef.current.muted = false;
+          showToast(`Volume: ${Math.round(next * 100)}%`, "info");
+        }
+      } else if (e.code === "ArrowDown") {
+        e.preventDefault();
+        if (videoRef.current) {
+          const next = Math.max(0, Math.round(((videoRef.current.volume || 1) - 0.05) * 100) / 100);
+          videoRef.current.volume = next;
+          videoRef.current.muted = next === 0;
+          showToast(next === 0 ? "Muted" : `Volume: ${Math.round(next * 100)}%`, "info");
         }
       } else if (e.key === "f" || e.key === "F") {
         e.preventDefault();
@@ -531,6 +551,14 @@ export function PlayerView({
           videoRef.current.muted = !videoRef.current.muted;
           showToast(videoRef.current.muted ? "Muted" : "Unmuted", "info");
         }
+      } else if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        const next = audioPresetRef.current === "dialogueBoost" ? "off" : "dialogueBoost";
+        void changeAudioPreset(next);
+        showToast(next === "dialogueBoost" ? "Dialogue Focus: On" : "Dialogue Focus: Off", "info");
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        cycleSubtitlesRef.current();
       }
     };
 
@@ -907,7 +935,7 @@ export function PlayerView({
     <div className={cn("relative flex h-dvh max-h-dvh w-full flex-col bg-black text-foreground overflow-hidden select-none", idle && !showSound && !showRatingPill && !showLibraryKeeping && "cursor-none")}>
       <header
         className={cn(
-          "absolute top-0 inset-x-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-black/70 px-3 sm:px-4 backdrop-blur-md transition-all duration-300",
+          "absolute top-0 inset-x-0 z-40 flex h-14 shrink-0 items-center justify-between border-b border-white/10 bg-black/70 px-3 sm:px-4 pt-[env(safe-area-inset-top)] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-md transition-all duration-300",
           idle && !showSound && !showRatingPill && !showLibraryKeeping ? "opacity-0 pointer-events-none" : "opacity-100"
         )}
       >
@@ -916,7 +944,7 @@ export function PlayerView({
             to="/title/$id"
             params={{ id: title.id }}
             onClick={() => savePrivatePosition(true)}
-            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs text-muted hover:bg-white/10 hover:text-foreground shrink-0"
+            className="inline-flex min-h-11 min-w-11 items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs text-muted hover:bg-white/10 hover:text-foreground shrink-0"
           >
             <ArrowLeft className="size-4" />
             <span className="hidden sm:inline">Details</span>
@@ -935,7 +963,7 @@ export function PlayerView({
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 sm:h-9 px-2 text-xs text-muted hover:text-gold transition-colors"
+              className="min-h-11 min-w-11 px-2 text-xs text-muted hover:text-gold transition-colors"
               onClick={() => goToEpisode(prevEpisode)}
               title={`Previous: E${prevEpisode.episodeNumber} ${prevEpisode.title}`}
             >
@@ -947,7 +975,7 @@ export function PlayerView({
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 sm:h-9 px-2 text-xs text-muted hover:text-gold transition-colors"
+              className="min-h-11 min-w-11 px-2 text-xs text-muted hover:text-gold transition-colors"
               onClick={() => goToEpisode(nextEpisode)}
               title={`Next: E${nextEpisode.episodeNumber} ${nextEpisode.title}`}
             >
@@ -980,7 +1008,7 @@ export function PlayerView({
               size="sm"
               variant="quiet"
               className={cn(
-                "h-8 sm:h-9 gap-1 text-xs border transition-colors px-2 sm:px-3",
+                "min-h-11 min-w-11 gap-1 text-xs border transition-colors px-2 sm:px-3",
                 subSyncOffsetMs !== 0 || showSubSyncPanel
                   ? "border-gold bg-gold/15 text-gold font-medium"
                   : "border-border/60 text-muted hover:text-foreground"
@@ -999,7 +1027,7 @@ export function PlayerView({
               size="sm"
               variant="quiet"
               className={cn(
-                "h-8 sm:h-9 gap-1 text-xs border transition-colors px-2 sm:px-3",
+                "min-h-11 min-w-11 gap-1 text-xs border transition-colors px-2 sm:px-3",
                 selectedSubIndex !== -1
                   ? "border-gold bg-gold/15 text-gold font-medium"
                   : "border-border/60 text-muted hover:text-foreground"
@@ -1015,7 +1043,7 @@ export function PlayerView({
             <Button
               size="sm"
               variant="quiet"
-              className="h-8 sm:h-9 gap-1 text-xs border border-white/10 text-muted hover:text-foreground transition-colors px-2 sm:px-3"
+              className="min-h-11 min-w-11 gap-1 text-xs border border-white/10 text-muted hover:text-foreground transition-colors px-2 sm:px-3"
               onClick={() => markPriorEpisodesWatched(activeEpisode)}
               title="Mark prior episodes watched"
             >
@@ -1027,7 +1055,7 @@ export function PlayerView({
             <Button
               size="sm"
               variant="quiet"
-              className="h-8 sm:h-9 gap-1 text-xs border border-white/10 text-muted hover:text-gold transition-colors px-2 sm:px-3"
+              className="min-h-11 min-w-11 gap-1 text-xs border border-white/10 text-muted hover:text-gold transition-colors px-2 sm:px-3"
               onClick={openRecap}
               title="The Story So Far (Catch-up recap)"
             >
@@ -1050,7 +1078,7 @@ export function PlayerView({
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 sm:h-9 gap-1 text-xs text-gold border border-gold/30 bg-gold/10 hover:bg-gold/20 transition-colors px-2 sm:px-3"
+            className="min-h-11 min-w-11 gap-1 text-xs text-gold border border-gold/30 bg-gold/10 hover:bg-gold/20 transition-colors px-2 sm:px-3"
             onClick={() => setShowLauncher(true)}
             title="Cast to Living Room TV or switch player"
           >
@@ -1060,7 +1088,7 @@ export function PlayerView({
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 sm:h-9 gap-1 text-xs text-foreground border border-white/15 bg-white/5 hover:bg-white/10 transition-colors px-2 sm:px-3"
+            className="min-h-11 min-w-11 gap-1 text-xs text-foreground border border-white/15 bg-white/5 hover:bg-white/10 transition-colors px-2 sm:px-3"
             onClick={() => setShowCompanionQr(true)}
             title="Living Room Companion Screen (Phone Second Screen)"
           >
@@ -1106,7 +1134,7 @@ export function PlayerView({
               controls
               autoPlay
               playsInline
-              {...({ "x-webkit-airplay": "allow" } as any)}
+              {...({ "x-webkit-airplay": "allow", "webkit-playsinline": "true" } as any)}
               crossOrigin="anonymous"
               onWaiting={handleWaiting}
               onPlay={(event) => {

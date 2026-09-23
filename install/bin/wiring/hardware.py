@@ -331,6 +331,7 @@ def optimize_sqlite_databases() -> None:
                     con = sqlite3.connect(str(p), timeout=5)
                     con.execute("PRAGMA journal_mode = WAL;")
                     con.execute("PRAGMA synchronous = NORMAL;")
+                    con.execute("PRAGMA busy_timeout = 5000;")
                     con.execute("PRAGMA temp_store = MEMORY;")
                     con.execute("PRAGMA cache_size = -8000;")
                     con.close()

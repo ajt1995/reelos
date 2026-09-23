@@ -1,8 +1,8 @@
 import { i as __toESM } from "../_runtime.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { S as require_jsx_runtime, b as useNavigate, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
-import { Bt as BookOpen, St as Coffee, _ as ThumbsUp, jt as ChevronLeft, v as ThumbsDown } from "../_libs/lucide-react.mjs";
-import { A as getMediaLifecycleState, E as cn, G as titleHasRemotePoster, K as titleMatchesId, R as rememberCatalogTitles, U as showToast, V as requestProgressLabel, X as useReelStore, z as requestIsWatchableOnShelf } from "./router-2BoRtkQZ.mjs";
+import { Ht as BookOpen, Nt as ChevronLeft, _ as ThumbsUp, v as ThumbsDown, wt as Coffee } from "../_libs/lucide-react.mjs";
+import { A as getMediaLifecycleState, E as cn, G as titleHasRemotePoster, K as titleMatchesId, R as rememberCatalogTitles, U as showToast, V as requestProgressLabel, X as useReelStore, z as requestIsWatchableOnShelf } from "./router-M-yvs45k.mjs";
 import { n as useExperienceStore } from "./experience-state-BipBJc8l.mjs";
 import { t as Poster } from "./poster-Cd-JU0eF.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/discover-browse-view-Bl4qqGg3.js

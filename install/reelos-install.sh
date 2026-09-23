@@ -81,10 +81,14 @@ fi
 if [ -f "$HERE/systemd/reelos-selfheal.timer" ]; then
   install -m 0644 "$HERE/systemd/reelos-selfheal.timer" /etc/systemd/system/reelos-selfheal.timer
 fi
+if [ -f "$HERE/systemd/reelos-hotspot.service" ]; then
+  install -m 0644 "$HERE/systemd/reelos-hotspot.service" /etc/systemd/system/reelos-hotspot.service
+fi
 if [ -f "$HERE/avahi/reelos.service" ]; then
   install -m 0644 "$HERE/avahi/reelos.service" /etc/avahi/services/reelos.service
 fi
 if [ -f "$ROOT/bin/reelos-selfheal.sh" ]; then chmod 0755 "$ROOT/bin/reelos-selfheal.sh"; fi
+if [ -f "$ROOT/bin/reelos-hotspot.sh" ]; then chmod 0755 "$ROOT/bin/reelos-hotspot.sh"; fi
 if [ -f "$ROOT/bin/reelos_hardware.py" ]; then
   chmod 0755 "$ROOT/bin/reelos_hardware.py"
   python3 "$ROOT/bin/reelos_hardware.py" --ensure || true
@@ -109,6 +113,7 @@ enable_unit avahi-daemon
 enable_unit caddy
 enable_unit reelos
 if [ -f /etc/systemd/system/reelos-selfheal.timer ]; then enable_unit reelos-selfheal.timer; fi
+if [ -f /etc/systemd/system/reelos-hotspot.service ]; then enable_unit reelos-hotspot.service; fi
 
 rm -f "$STATE/install-failed"
 echo 1 >"$STATE/native-installed"

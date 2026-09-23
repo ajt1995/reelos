@@ -223,13 +223,13 @@ export function CompanionScreen({
   }
 
   return (
-    <div className="min-h-screen bg-black text-foreground selection:bg-gold selection:text-black pb-28">
+    <div className="min-h-[100dvh] bg-black text-foreground selection:bg-gold selection:text-black pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))]">
       {/* Top Ambient Bar */}
-      <header className="sticky top-0 z-30 bg-black/95 backdrop-blur-md border-b border-border/40 px-5 py-3.5 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-black/95 backdrop-blur-md border-b border-border/40 px-5 pt-[max(0.875rem,env(safe-area-inset-top))] pb-3.5 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link
             to="/library"
-            className="p-1.5 -ml-1 text-muted hover:text-foreground rounded-full transition-colors"
+            className="min-h-11 min-w-11 -ml-1 text-muted hover:text-foreground rounded-full flex items-center justify-center transition-colors"
             title="Back to Library"
           >
             <ArrowLeft className="size-4" />
@@ -248,7 +248,7 @@ export function CompanionScreen({
             setLoading(true);
             fetchDossier();
           }}
-          className="text-xs font-mono text-muted hover:text-gold flex items-center gap-1 cursor-pointer transition-colors"
+          className="min-h-11 px-2 text-xs font-mono text-muted hover:text-gold flex items-center gap-1 cursor-pointer transition-colors"
         >
           <RefreshCw className={cn("size-3.5", loading ? "animate-spin" : "")} />
           <span>Sync</span>
@@ -265,7 +265,7 @@ export function CompanionScreen({
               setActiveTab("dossier");
             }}
             className={cn(
-              "flex-1 py-2 text-xs font-medium rounded-xl transition-all",
+              "flex-1 min-h-11 py-2 text-xs font-medium rounded-xl transition-all flex items-center justify-center",
               activeTab === "dossier" ? "bg-gold text-black font-bold shadow-sm" : "text-muted hover:text-foreground"
             )}
           >
@@ -278,7 +278,7 @@ export function CompanionScreen({
               setActiveTab("remote");
             }}
             className={cn(
-              "flex-1 py-2 text-xs font-medium rounded-xl transition-all",
+              "flex-1 min-h-11 py-2 text-xs font-medium rounded-xl transition-all flex items-center justify-center",
               activeTab === "remote" ? "bg-gold text-black font-bold shadow-sm" : "text-muted hover:text-foreground"
             )}
           >
@@ -291,7 +291,7 @@ export function CompanionScreen({
               setActiveTab("standby");
             }}
             className={cn(
-              "flex-1 py-2 text-xs font-medium rounded-xl transition-all",
+              "flex-1 min-h-11 py-2 text-xs font-medium rounded-xl transition-all flex items-center justify-center",
               activeTab === "standby" ? "bg-gold text-black font-bold shadow-sm" : "text-muted hover:text-foreground"
             )}
           >
@@ -593,18 +593,18 @@ export function CompanionScreen({
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between px-4 text-xs text-muted font-mono">
+              <div className="flex items-center justify-between px-2 text-xs text-muted font-mono">
                 <button
                   type="button"
                   onClick={() => sendRemoteCommand("back")}
-                  className="hover:text-gold cursor-pointer"
+                  className="min-h-11 min-w-16 px-2 flex items-center justify-center hover:text-gold cursor-pointer"
                 >
                   ← Back
                 </button>
                 <button
                   type="button"
                   onClick={() => sendRemoteCommand("mute")}
-                  className="hover:text-gold cursor-pointer"
+                  className="min-h-11 min-w-16 px-2 flex items-center justify-center hover:text-gold cursor-pointer"
                 >
                   Mute
                 </button>

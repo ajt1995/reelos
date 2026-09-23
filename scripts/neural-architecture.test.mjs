@@ -9,8 +9,8 @@ const root = resolve(import.meta.dirname, "..");
 test("neural architecture report reconciles runtime registration, coordinator wiring, and durable metadata", () => {
   const report = buildNeuralArchitectureReport();
   assert.match(report.systemStatement, /one end-to-end local neural system/);
-  assert.equal(report.summary.registered, 11);
-  assert.equal(report.summary.coordinatorConnected, 7);
+  assert.equal(report.summary.registered, 15);
+  assert.equal(report.summary.coordinatorConnected, 15);
   assert.deepEqual(validateNeuralArchitecture(report), []);
   assert.equal(report.capabilities.find((capability) => capability.id === "taste-ranking")?.coordinatorConnected, true);
   assert.equal(report.capabilities.find((capability) => capability.id === "scene-understanding")?.lifecycle, "shadow");

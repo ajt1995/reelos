@@ -26,6 +26,7 @@ import {
   isRemoteChallengeRequired,
   extractDeviceToken,
   sendCustomSmtpEmail,
+  updateDeviceStorageQuota,
 } from "./reelos-gate-service.mjs";
 
 test("managed relay and missing Tailscale fail closed", async () => {
@@ -309,7 +310,10 @@ test("LAN and Tailscale addresses require registered, unexpired, unrevoked devic
       assert.equal(isRemoteChallengeRequired({ url: "/api/settings", socket: { remoteAddress: address }, headers: {} }, tmpDir), true);
     }
     assert.equal(isRemoteChallengeRequired({ url: "/api/profiles", headers: {} }, tmpDir), false, "profile handler owns controlled bootstrap authorization");
+    assert.equal(isRemoteChallengeRequired({ url: "/api/discovery", headers: {} }, tmpDir), false, "discovery endpoint bypasses challenge for unauthenticated LAN probes");
     const device = registerAuthorizedDevice({ id: "paired" }, tmpDir);
+    assert.equal(device.storageQuotaGb, 25);
+    assert.equal(device.overnightChargingOnly, true);
     const token = signDeviceToken(device, getGateSecret(tmpDir));
     const req = { url: "/api/settings", headers: { authorization: `Bearer ${token}` } };
     assert.equal(getAuthorizedDevice(req, tmpDir).id, "paired");
@@ -370,3 +374,47 @@ test("SMTP refuses plaintext delivery and newline injection before connecting", 
   await assert.rejects(sendCustomSmtpEmail({ smtp: { host: "example.invalid", port: 25, user: "user", pass: "pass" }, to: "user@example.invalid", subject: "test" }), /verified TLS/);
   await assert.rejects(sendCustomSmtpEmail({ smtp: { host: "example.invalid", port: 465 }, to: "user@example.invalid\r\nBcc: victim@example.invalid", subject: "test" }), /Invalid email/);
 });
+
+test("per-device storage quotas and night-charging distributed compute policy can be updated", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "reelos-policy-test-"));
+  try {
+    const dev = registerAuthorizedDevice({ id: "phone-1", userAgent: "Android Phone" }, tmpDir);
+    assert.equal(dev.storageQuotaGb, 25);
+    assert.equal(dev.nightChargingCompute, true);
+
+    const updated = updateDeviceStorageQuota("phone-1", {
+      storageQuotaGb: 64,
+      nightChargingCompute: false,
+      overnightChargingOnly: true,
+      overnightPreStage: false,
+    }, tmpDir);
+
+    assert.equal(updated.storageQuotaGb, 64);
+    assert.equal(updated.nightChargingCompute, false);
+    assert.equal(updated.overnightPreStage, false);
+
+    // Test API route handling
+    const token = signDeviceToken(dev, getGateSecret(tmpDir));
+    let replyBody = null;
+    const fakeRes = {
+      statusCode: null,
+      end(data) { replyBody = data ? JSON.parse(data) : null; },
+      setHeader() {},
+    };
+    const req = {
+      method: "POST",
+      url: "/api/gate/device-policy",
+      headers: { host: "127.0.0.1:8080", cookie: `reelos_device_token=${token}` },
+    };
+    const readBody = async () => ({ id: "phone-1", storageQuotaGb: 100, nightChargingCompute: true });
+    const handled = await handleGateRoute(req, fakeRes, new URL("http://127.0.0.1:8080/api/gate/device-policy"), readBody, tmpDir);
+    assert.equal(handled, true);
+    assert.equal(fakeRes.statusCode, 200);
+    assert.equal(replyBody.ok, true);
+    assert.equal(replyBody.device.storageQuotaGb, 100);
+    assert.equal(replyBody.device.nightChargingCompute, true);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+

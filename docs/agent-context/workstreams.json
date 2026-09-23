@@ -6,32 +6,28 @@
   "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
   "active": [
     {
-      "id": "day0-clean-workspace",
-      "owner": "codex",
-      "branch": "work/codex-cleanup-2026-09-22",
-      "checkpoint": "3e7f1f8",
+      "id": "antigravity-unified-parity",
+      "owner": "antigravity",
+      "branch": "work/antigravity-foundation-2026-09-22",
+      "checkpoint": "428978a",
       "status": "active",
       "scope": [
-        "continue product completion from the clean repository boundary",
-        "resolve release-code defects before generating acceptance evidence",
-        "preserve the native neural architecture and cross-platform Day-0 work"
+        "platform parity audit and unified first-run onboarding across all glass (TV, Fold, Desktop)",
+        "authentic 512D Float32 neural manifold scaling and Sherman-Morrison online LinUCB learning",
+        "Android native APK build, TV D-pad focus, and Living Room TV deployment"
       ],
       "currentFacts": [
-        "19 active feature groups and 2 parked groups are registered",
-        "279 tests are classified",
-        "type checking passes after the Home TV-platform repair",
-        "122 of 132 release test files pass with in-process isolation",
-        "remaining runner failures include environment-blocked child processes and targeted media/TV checks",
-        "the obsolete public GitHub repository was deleted",
-        "the canonical clean workspace is C:/Users/austi/Documents/Codex/ReelOS",
-        "this workspace has no remote until a new private repository is explicitly created"
+        "working in isolated work/antigravity-foundation-2026-09-22 branch",
+        "512D neural manifold dynamic hardware scaling uncapped and unit tested (4/4 pass)",
+        "Sherman-Morrison rank-1 online update replaces O(d^3) matrix inversion on request path",
+        "Android OnboardingActivity implemented in pure Jetpack Compose with TV focus and Mali shader safety",
+        "Android debug APK assembled successfully (142.9 MB) and installed onto Living Room TV (192.168.1.95:5555)",
+        "Living Room TV verified online (Onn Streaming Device 4K Pro, Android 14)"
       ],
       "nextChecks": [
-        "npm run typecheck",
         "npm run architecture:check",
         "npm run audit:features",
-        "npm run audit:tests",
-        "run classified tests with honest sandbox limitations recorded"
+        "verify TV display output and local computer node"
       ]
     }
   ]

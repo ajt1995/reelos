@@ -14,8 +14,8 @@ test("context brief is compact, machine-readable, and points to real entry files
   assert.ok(context.scope.decisionIds.includes("source-policy"));
   assert.ok(context.scope.decisionIds.includes("neural-system-identity"));
   assert.match(context.architecture.identity, /one end-to-end local neural system/);
-  assert.equal(context.architecture.registeredCapabilities, 11);
-  assert.equal(context.architecture.coordinatorConnected, 11);
+  assert.equal(context.architecture.registeredCapabilities, 15);
+  assert.equal(context.architecture.coordinatorConnected, 15);
   assert.equal(typeof context.repository.gitAvailable, "boolean");
   assert.ok(context.startHere.interface.includes("src/experience/reelos-world.tsx"));
   assert.ok(context.startHere.neuralSystem.includes("docs/agent-context/neural-capabilities.json"));

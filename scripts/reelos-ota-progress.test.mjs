@@ -145,7 +145,7 @@ test("splash and mailman contracts for honest progress", () => {
   assert.match(read("src/components/splash.tsx"), /Updating ReelOS/);
   assert.doesNotMatch(read("src/components/splash.tsx"), /Not a percent/);
   assert.match(read("scripts/reelos-lookup-plugin.mjs"), /\/api\/update\/progress/);
-  assert.match(read("daemon/reelos-update.sh"), /apply-progress\.json/);
+  assert.match(read("daemon/reelos_apply_progress.py"), /apply-progress\.json/);
   assert.match(read("src/components/wizard.tsx"), /TOTAL = 7/);
   assert.doesNotMatch(read("src/components/wizard.tsx"), /hardware profile step/i);
   assert.equal(read("daemon/reelos-update.sh"), read("install/bin/reelos-update.sh"));

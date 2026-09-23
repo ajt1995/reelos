@@ -1,4 +1,5 @@
 <resources>
     <color name="gold">#F5C518</color>
     <color name="dark_bg">#0F0E0C</color>
+    <color name="ic_launcher_background">#0b0d10</color>
 </resources>

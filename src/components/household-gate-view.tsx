@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useReelStore } from "@/lib/store";
 import { showToast } from "@/lib/toast";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 
 export function HouseholdGateView() {
   const navigate = useNavigate();
@@ -128,8 +129,8 @@ export function HouseholdGateView() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerifyOtp = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     const cleanCode = code.trim();
     if (cleanCode.length !== 6) {
       setError("Please enter the complete 6-digit code.");
@@ -298,21 +299,19 @@ export function HouseholdGateView() {
               </div>
             ) : null}
 
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
-              <div>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete="one-time-code"
-                  maxLength={6}
-                  autoFocus
-                  required
+            <form onSubmit={handleVerifyOtp} className="space-y-5">
+              <div className="py-2 flex justify-center">
+                <LuxuryPinInput
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="123456"
+                  onChange={(val) => setCode(val)}
+                  length={6}
                   disabled={busy}
-                  className="w-full text-center tracking-[0.5em] font-mono font-bold text-2xl py-3 rounded-xl border border-border bg-card/80 text-foreground placeholder:text-muted/40 focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
+                  autoFocus
+                  onComplete={() => {
+                    if (code.length === 6 && !busy && timeLeft > 0) {
+                      void handleVerifyOtp();
+                    }
+                  }}
                 />
               </div>
 

@@ -81,8 +81,10 @@ test("Linux appliance packages only the native ReelOS runtime", () => {
   ]) assert.equal(shouldPackage(`scripts/services/${retired}`), false, retired);
   assert.deepEqual(NATIVE_INSTALL_FILES, [
     "reelos-install.sh", "bin/reelos-selfheal.sh", "bin/reelos_hardware.py", "bin/reelos-update.sh",
+    "bin/reelos-hotspot.sh",
     "systemd/reelos.service", "systemd/reelos-selfheal.service",
-    "systemd/reelos-selfheal.timer", "avahi/reelos.service", "README.md",
+    "systemd/reelos-selfheal.timer", "systemd/reelos-hotspot.service",
+    "avahi/reelos.service", "README.md",
   ]);
   assert.doesNotMatch(packer, /cpSync\(join\(root, "install"\),/);
   assert.doesNotMatch(installer, /apt-get install[^\n]*(?:docker|sonarr|radarr|prowlarr|decypharr)/i);

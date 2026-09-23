@@ -36,6 +36,11 @@ interface Device {
   createdAt: number;
   lastSeenAt: number;
   revoked: boolean;
+  storageQuotaGb?: number;
+  storageUsedGb?: number;
+  nightChargingCompute?: boolean;
+  overnightChargingOnly?: boolean;
+  overnightPreStage?: boolean;
 }
 
 interface SmtpConfig {
@@ -198,6 +203,25 @@ export function AuthorizedDevicesCard() {
       }
     } catch {
       showToast("Failed to revoke device", "error");
+    }
+  };
+
+  const handleUpdateDevicePolicy = async (id: string, patch: Partial<Device>) => {
+    try {
+      const res = await fetch("/api/gate/device-policy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, ...patch }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setDevices((prev) => prev.map((d) => (d.id === id ? { ...d, ...patch } : d)));
+        showToast("Device policy updated", "success");
+      } else {
+        showToast(data.error || "Failed to update device policy", "error");
+      }
+    } catch {
+      showToast("Network error updating device policy", "error");
     }
   };
 
@@ -532,10 +556,28 @@ export function AuthorizedDevicesCard() {
                         {dev.platform}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-[11px] text-faint mt-0.5">
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-faint mt-1">
                       <span>Seen {formatTimeAgo(dev.lastSeenAt)}</span>
                       <span>·</span>
                       <span className="font-mono">{dev.lastSeenIp}</span>
+                      <span>·</span>
+                      <span className="inline-flex items-center gap-1 rounded bg-card px-1.5 py-0.5 text-[10px] font-mono text-muted border border-border">
+                        <HardDrive className="size-2.5 text-gold" />
+                        Quota: {dev.storageQuotaGb ?? 25} GB
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateDevicePolicy(dev.id, { nightChargingCompute: !(dev.nightChargingCompute !== false) })}
+                        title="Toggle phone night-charging distributed compute"
+                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-mono cursor-pointer border transition-colors ${
+                          dev.nightChargingCompute !== false
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                            : "bg-muted/10 text-muted border-border hover:bg-muted/20"
+                        }`}
+                      >
+                        <Radio className="size-2.5" />
+                        {dev.nightChargingCompute !== false ? "Night Compute: ON" : "Night Compute: OFF"}
+                      </button>
                     </div>
                   </div>
                 </div>

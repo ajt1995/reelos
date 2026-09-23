@@ -1,1 +1,0 @@
-import{o as e}from"./useStore-CP8wJgJA.js";import{t}from"./reelos-world-C0GtE05K.js";import{m as n,p as r}from"./index-CvqXma7_.js";var i=e();function a(){return r({select:e=>e.location.pathname!==`/settings`&&e.location.pathname!==`/settings/`})?(0,i.jsx)(n,{}):(0,i.jsx)(t,{initialView:`settings`})}export{a as component};

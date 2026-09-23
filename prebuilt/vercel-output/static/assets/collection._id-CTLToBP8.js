@@ -1,0 +1,1 @@
+import{o as e}from"./useStore-CP8wJgJA.js";import{t}from"./reelos-world-ReWf50bh.js";import{o as n}from"./index-CsomOHJh.js";var r=e();function i(){let{id:e}=n.useParams(),{name:i,titles:a}=n.useSearch();return(0,r.jsx)(t,{initialDestination:{type:`collection`,id:e,name:i,titleIds:a?.split(`,`).filter(Boolean).slice(0,80)}})}export{i as component};

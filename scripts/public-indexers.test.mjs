@@ -83,11 +83,12 @@ test("OTA Apply still POSTs missing public indexers and fullSyncs Sonarr", () =>
   assert.match(provider, /forceSave=true/);
   const schemaAdd = read("daemon/wire-engines.parts/03.part");
   assert.match(schemaAdd, /indexer\?forceSave=true/);
-  const updater = read("daemon/reelos-update.sh");
-  assert.match(updater, /wire-engines\.py" indexers/);
-  assert.match(updater, /EZTV\/ShowRSS/);
-  assert.match(updater, /ReelOS-knaben/);
-  assert.match(updater, /ReelOS-torrentcsv/);
+  const catchup = read("daemon/reelos-library-catchup.sh");
+  assert.match(catchup, /wire-engines\.py" indexers/);
+  const publicIndexers = read("daemon/public_indexers.py");
+  assert.match(publicIndexers, /EZTV\/ShowRSS/);
+  assert.match(publicIndexers, /ReelOS-knaben/);
+  assert.match(publicIndexers, /ReelOS-torrentcsv/);
 });
 
 test("Sonarr fullSync includes TorrentRss 8000/Other and preserves TV categories", () => {

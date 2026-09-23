@@ -39,6 +39,7 @@ function makeWrapperWorkspace(appEnvJson) {
   const root = makeWorkspace(appEnvJson);
   mkdirSync(join(root, "scripts"), { recursive: true });
   copyFileSync(WRAPPER, join(root, "scripts/with-app-env.mjs"));
+  copyFileSync(join(projectRoot(), "scripts/local-tool-discovery.mjs"), join(root, "scripts/local-tool-discovery.mjs"));
   return join(root, "scripts/with-app-env.mjs");
 }
 

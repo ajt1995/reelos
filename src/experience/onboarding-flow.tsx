@@ -1,5 +1,7 @@
 import { X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
+import { LuxuryInputCard } from "@/components/luxury-input-card";
 
 type Step =
   | "name"
@@ -96,21 +98,26 @@ export function OnboardingFlow({
     );
 
   return (
-    <main className="reelos-onboarding relative flex min-h-dvh overflow-hidden px-5 py-10 md:px-10">
+    <main className="reelos-onboarding relative flex min-h-dvh flex-col overflow-y-auto px-5 py-8 md:px-10 pb-36 md:pb-16">
       <div className="reelos-onboarding-orb reelos-onboarding-orb-one" />
       <div className="reelos-onboarding-orb reelos-onboarding-orb-two" />
-      <div className="relative mx-auto flex w-full max-w-6xl items-center">
+      <div className="relative mx-auto flex w-full max-w-6xl items-center py-6 sm:py-12">
         <div className="w-full">
           {step === "name" && (
             <div className="max-w-2xl">
-              <h1 className="font-display text-[clamp(3.3rem,7vw,6.8rem)] font-semibold leading-[.92] tracking-[-.07em]">
+              <h1 className="font-display text-[clamp(2.4rem,5.5vw,5.2rem)] font-semibold leading-[.96] tracking-[-.06em]">
                 Hi, what should we call you?
               </h1>
-              <div className="mt-10 border-b border-white/25">
-                <input
-                  autoFocus
+              <p className="mt-3 text-base sm:text-lg text-white/55">
+                Your profile keeps its own taste, history, books, and atmosphere.
+              </p>
+              <div className="mt-8 space-y-5">
+                <LuxuryInputCard
+                  label="Profile Name"
+                  placeholder="Your name"
                   value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  onChange={setName}
+                  autoFocus
                   onKeyDown={(event) => {
                     if (
                       event.key === "Enter" &&
@@ -119,62 +126,60 @@ export function OnboardingFlow({
                     )
                       next();
                   }}
-                  placeholder="Your name"
-                  className="w-full bg-transparent py-4 text-2xl font-medium outline-none placeholder:text-white/25"
                 />
-              </div>
-              <button
-                type="button"
-                onClick={() => setProfilePinEnabled((enabled) => !enabled)}
-                className={`mt-7 flex w-full items-center justify-between rounded-[1.35rem] border px-5 py-4 text-left transition ${profilePinEnabled ? "border-white/60 bg-white/10" : "border-white/15 bg-black/10 hover:border-white/35"}`}
-              >
-                <span>
-                  <span className="block text-base font-semibold">
-                    Add a passcode
-                  </span>
-                  <span className="mt-1 block text-sm text-white/52">
-                    Optional — keep this profile private.
-                  </span>
-                </span>
-                <span
-                  aria-hidden="true"
-                  className={`flex h-7 w-12 items-center rounded-full p-1 transition ${profilePinEnabled ? "justify-end bg-white text-[#101016]" : "justify-start bg-white/15 text-white/45"}`}
+                <button
+                  type="button"
+                  onClick={() => setProfilePinEnabled((enabled) => !enabled)}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition duration-300 ${
+                    profilePinEnabled
+                      ? "border-[#f0ba61]/60 bg-white/[0.08] shadow-[0_0_24px_rgba(240,186,97,0.12)]"
+                      : "border-white/12 bg-white/[0.04] hover:border-white/20 hover:bg-white/[0.06]"
+                  }`}
                 >
-                  <span className="h-5 w-5 rounded-full bg-current" />
-                </span>
-              </button>
-              {profilePinEnabled && (
-                <div className="mt-3 border-b border-white/25">
-                  <input
-                    autoFocus
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={4}
-                    value={profilePin}
-                    onChange={(event) =>
-                      setProfilePin(
-                        event.target.value.replace(/\D/g, "").slice(0, 4),
-                      )
-                    }
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" &&
-                        name.trim() &&
-                        profilePin.length === 4
-                      )
-                        next();
-                    }}
-                    placeholder="Create a 4-digit passcode"
-                    className="w-full bg-transparent py-4 text-xl font-medium tracking-[.25em] outline-none placeholder:text-base placeholder:tracking-normal placeholder:text-white/25"
-                  />
-                </div>
-              )}
+                  <span>
+                    <span className="block text-base font-semibold text-white">
+                      Add a passcode
+                    </span>
+                    <span className="mt-0.5 block text-xs sm:text-sm text-white/50">
+                      Optional — keep this profile private.
+                    </span>
+                  </span>
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-7 w-12 items-center rounded-full p-1 transition duration-200 ${
+                      profilePinEnabled
+                        ? "justify-end bg-[#f0ba61] text-[#1a1406]"
+                        : "justify-start bg-white/15 text-white/40"
+                    }`}
+                  >
+                    <span className="h-5 w-5 rounded-full bg-current shadow-sm" />
+                  </span>
+                </button>
+                {profilePinEnabled && (
+                  <div className="flex flex-col items-center rounded-2xl border border-white/10 bg-white/[0.03] p-5 backdrop-blur-md">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-white/50 mb-2">
+                      Create 4-Digit Passcode
+                    </span>
+                    <LuxuryPinInput
+                      value={profilePin}
+                      onChange={(val) => setProfilePin(val)}
+                      length={4}
+                      autoFocus
+                      onComplete={(val) => {
+                        if (name.trim() && val.length === 4) {
+                          next();
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
               <button
                 disabled={
                   !name.trim() || (profilePinEnabled && profilePin.length !== 4)
                 }
                 onClick={next}
-                className="reelos-play mt-8 rounded-full bg-[#f0ba61] px-6 py-3.5 text-sm font-bold text-[#211507] disabled:cursor-not-allowed disabled:opacity-35"
+                className="reelos-play mt-8 rounded-full bg-[#f0ba61] px-8 py-4 text-sm font-bold text-[#211507] shadow-[0_4px_24px_rgba(240,186,97,0.35)] disabled:cursor-not-allowed disabled:opacity-30 disabled:shadow-none transition-all duration-200 active:scale-95"
               >
                 Continue
               </button>
@@ -277,32 +282,46 @@ export function OnboardingFlow({
                 </button>
               </div>
               {addingMember && (
-                <div className="mt-8 flex gap-3 border-b border-white/25">
-                  <input
-                    autoFocus
-                    value={memberName}
-                    onChange={(event) => setMemberName(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && memberName.trim()) {
+                <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <div className="flex-1">
+                    <LuxuryInputCard
+                      label="Household Member"
+                      placeholder="Their name"
+                      value={memberName}
+                      onChange={setMemberName}
+                      autoFocus
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && memberName.trim()) {
+                          setMembers((items) => [...items, memberName.trim()]);
+                          setMemberName("");
+                          setAddingMember(false);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      disabled={!memberName.trim()}
+                      onClick={() => {
                         setMembers((items) => [...items, memberName.trim()]);
                         setMemberName("");
                         setAddingMember(false);
-                      }
-                    }}
-                    placeholder="Their name"
-                    className="min-w-0 flex-1 bg-transparent py-4 text-xl outline-none placeholder:text-white/25"
-                  />
-                  <button
-                    disabled={!memberName.trim()}
-                    onClick={() => {
-                      setMembers((items) => [...items, memberName.trim()]);
-                      setMemberName("");
-                      setAddingMember(false);
-                    }}
-                    className="text-sm font-semibold text-[#eebd69] disabled:opacity-30"
-                  >
-                    Add
-                  </button>
+                      }}
+                      className="rounded-2xl bg-[#f0ba61] px-6 py-4 text-sm font-bold text-[#211507] shadow-[0_4px_20px_rgba(240,186,97,0.3)] disabled:opacity-30 disabled:shadow-none transition-all duration-200 active:scale-95 shrink-0"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMemberName("");
+                        setAddingMember(false);
+                      }}
+                      className="rounded-2xl border border-white/12 px-4 py-4 text-sm font-medium text-white/60 hover:bg-white/10 transition-all shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               )}
               <button
@@ -432,14 +451,19 @@ export function OnboardingFlow({
                 Add your TorBox API key to unlock your own library, instant
                 requests, and private streaming throughout your home.
               </p>
-              <div className="mt-10 border-b border-white/25">
-                <input
-                  autoFocus
+              <div className="mt-8">
+                <LuxuryInputCard
                   type="password"
+                  label="TorBox API Key"
+                  placeholder="Paste your TorBox API key"
                   value={torboxKey}
-                  onChange={(event) => setTorboxKey(event.target.value)}
-                  placeholder="TorBox API key"
-                  className="w-full bg-transparent py-4 text-xl outline-none placeholder:text-white/25"
+                  onChange={setTorboxKey}
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && torboxKey.trim()) {
+                      setStep("devices");
+                    }
+                  }}
                 />
               </div>
               <button

@@ -35,7 +35,7 @@ function request(overrides = {}) {
 }
 
 test("all registered intelligence capabilities have explicit specialist routes", () => {
-  assert.equal(Object.keys(CAPABILITY_SPECIALISTS).length, 11);
+  assert.equal(Object.keys(CAPABILITY_SPECIALISTS).length, 15);
   assert.deepEqual(Object.keys(CAPABILITY_SPECIALISTS).sort(),
     REEL_INTELLIGENCE_CAPABILITIES.map(([id]) => id).sort());
   for (const route of Object.values(CAPABILITY_SPECIALISTS)) {

@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 import { FeatureShowcase } from "@/components/feature-showcase";
 import { QrCodeSvg } from "@/components/ui/qr-code-svg";
 import { SOURCES } from "@/lib/catalog";
@@ -1325,16 +1326,15 @@ function StepResidents({
               </div>
 
               {usePin ? (
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  value={pin}
-                  onChange={(e) => handlePinChange(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4-digit PIN (e.g. 1234)"
-                  className="h-11 w-full rounded-xl bg-card px-4 font-mono text-center text-base tracking-widest shadow-[var(--shadow-border)] focus:shadow-[var(--shadow-gold)]"
-                />
+                <div className="py-2 flex flex-col items-center space-y-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted">4-Digit Security Passcode</span>
+                  <LuxuryPinInput
+                    value={pin}
+                    onChange={(val) => handlePinChange(val)}
+                    length={4}
+                    autoFocus
+                  />
+                </div>
               ) : null}
             </div>
 

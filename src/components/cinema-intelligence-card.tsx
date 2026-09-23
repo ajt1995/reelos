@@ -3,11 +3,10 @@ import {
   Palette,
   Smartphone,
   Film,
-  Sparkles,
+  Layers,
   Volume2,
   Eye,
   EyeOff,
-  Cpu,
   CheckCircle2,
   ShieldCheck,
   Zap,
@@ -37,7 +36,7 @@ function Switch({
       disabled={disabled}
       onClick={() => onCheckedChange(!checked)}
       className={cn(
-        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50",
+        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 disabled:cursor-not-allowed disabled:opacity-50 after:absolute after:-inset-2.5 after:content-['']",
         checked ? "bg-amber-500" : "bg-white/15"
       )}
     >
@@ -185,7 +184,7 @@ export function CinemaIntelligenceCard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <Sparkles className="size-5" />
+            <Film className="size-5" />
           </div>
           <div>
             <h2 className="font-display text-lg font-medium text-foreground tracking-tight">
@@ -361,7 +360,7 @@ export function CinemaIntelligenceCard() {
               <span className="text-sm font-medium text-foreground">16-Color Ambient Room Sync</span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              Scene-aware physical lighting appears here after a supported Hue, Nanoleaf, or Matter bridge and real frame telemetry are connected.
+              Scene-aware physical lighting appears here after a supported Hue, Nanoleaf, or Matter bridge and active screen color sync are connected.
             </p>
             {ambientEnabled && paletteColors.length > 0 && (
               <div className="flex items-center gap-1 pt-2">
@@ -382,7 +381,7 @@ export function CinemaIntelligenceCard() {
         <div className="flex items-start justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-colors">
           <div className="space-y-1 pr-3">
             <div className="flex items-center gap-2">
-              <Sparkles className="size-4 text-amber-400" />
+              <Film className="size-4 text-amber-400" />
               <span className="text-sm font-medium text-foreground">Living Cinemagraph Posters</span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
@@ -447,10 +446,10 @@ export function CinemaIntelligenceCard() {
               <span className="text-sm font-medium text-foreground">Director's Commentary Overlay</span>
             </div>
             <p className="text-xs text-muted leading-relaxed">
-              Planned as a sourced film-scholar perspective. It remains unavailable until the model and title evidence adapters are connected.
+              Planned as a sourced film-scholar perspective. It remains unavailable until the scholarly commentary and title archive are connected.
             </p>
           </div>
-          <NeedsConnection label="Model pending" />
+          <NeedsConnection label="Scholar notes pending" />
         </div>
 
         {/* 7. Spoiler-Free 'Catch Me Up' Story Recaps */}
@@ -510,7 +509,7 @@ export function CinemaIntelligenceCard() {
         <div className="p-4 rounded-2xl bg-black/40 border border-white/10 space-y-3 font-mono text-xs">
           <div className="flex items-center justify-between text-muted border-b border-white/5 pb-2">
             <span className="flex items-center gap-1.5 text-foreground font-semibold">
-              <Cpu className="size-3.5 text-amber-400" /> Presentation capability status
+              <Layers className="size-3.5 text-amber-400" /> Presentation capability status
             </span>
             <span className="text-emerald-400 flex items-center gap-1">
               <CheckCircle2 className="size-3" /> Measured when used

@@ -31,6 +31,7 @@ import { SeasonEpisodeAccordion } from "@/components/season-episode-accordion";
 import { titleIsCuratorHidden, titleIsCuratorLiked } from "@/lib/discover-curator";
 import { useCurator } from "@/lib/use-curator";
 import { CuratorStatus } from "@/components/curator-status";
+import { StreamingAvailabilityBar } from "@/components/streaming-availability-bar";
 import { IMPORTING_SEASON_CHIP, IMPORTING_SEASON_COPY, UNRELEASED_SEASON_CHIP, UNRELEASED_SEASON_COPY } from "@/lib/episode-status";
 
 function uniqSeasons(nums: number[]) {
@@ -784,6 +785,18 @@ export function TitleView({ id }: { id: string }) {
               </Button>
             ) : null}
           </div>
+
+          {resolved ? (
+            <div className="mt-4 w-full max-w-2xl">
+              <StreamingAvailabilityBar
+                titleId={resolved.id}
+                titleName={resolved.title}
+                kind={resolved.kind}
+                year={resolved.year}
+                extraIds={extraIds}
+              />
+            </div>
+          ) : null}
 
           {activeCastSession ? (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gold/30 bg-card p-4 shadow-[var(--shadow-border)]">

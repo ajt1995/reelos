@@ -59,6 +59,7 @@ export function buildDiscoveryPayload(options = {}) {
   const tailscaleIp = opts.tailscaleIp ?? "";
   return {
     app: "reelos",
+    version: opts.version ?? ANDROID_APP_MANIFEST.version,
     boxName,
     ipv4,
     port,
@@ -139,10 +140,6 @@ export async function pushApkToTv(ip, port = 5555, apkPath = null) {
     return { ok: false, success: false, error: "Invalid TV IP or port format" };
   }
   const targetApk = apkPath || getApkPath();
-  if (!existsSync(targetApk)) {
-    return { ok: false, success: false, error: `APK file not found on server: ${targetApk}` };
-  }
-
   if (process.env.REELOS_MOCK_ADB === "1") {
     return {
       ok: false,
@@ -152,6 +149,9 @@ export async function pushApkToTv(ip, port = 5555, apkPath = null) {
       apkPath: targetApk,
       error: "Test-only ADB simulation ran; no TV installation was performed.",
     };
+  }
+  if (!existsSync(targetApk)) {
+    return { ok: false, success: false, error: `APK file not found on server: ${targetApk}` };
   }
 
   const adbCmd = ensureAdbBinary();
@@ -446,11 +446,19 @@ export async function handleAndroidClientRoute(req, res, parsedUrl, options = {}
   }
 
   if (pathname === "/api/discovery") {
-    const host = (req.headers && req.headers.host) || "127.0.0.1:8080";
+    const host = (req.headers && req.headers.host) || "";
     const [hostIp, hostPortStr] = host.split(":");
     const port = hostPortStr ? parseInt(hostPortStr, 10) : 8080;
-    const payload = buildDiscoveryPayload({ ipv4: hostIp, port });
-    return reply(200, { "Content-Type": "application/json" }, JSON.stringify(payload));
+    const lanIp = getLanIpv4();
+    const effectiveIp = (hostIp && hostIp !== "127.0.0.1" && hostIp !== "localhost") ? hostIp : lanIp;
+    const payload = buildDiscoveryPayload({ ipv4: effectiveIp, port });
+    return reply(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+      "Access-Control-Allow-Headers": "*",
+      "Cache-Control": "no-store",
+    }, JSON.stringify(payload));
   }
 
   if (pathname === "/api/apps/android/scan" && method === "GET") {

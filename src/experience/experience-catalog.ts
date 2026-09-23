@@ -778,7 +778,7 @@ const extrasCatalog: ExperienceTitle[] = EXTRAS.map(
   }),
 );
 
-const PUBLIC_DOMAIN_TITLES: ExperienceTitle[] = [
+export const PUBLIC_DOMAIN_TITLES: ExperienceTitle[] = [
   {
     id: "night-of-the-living-dead-1968",
     title: "Night of the Living Dead",

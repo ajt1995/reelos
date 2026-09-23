@@ -282,7 +282,7 @@ export function reactToTasteBubble(
   switch (normalizedReaction) {
     case "loved":
     case "love":
-      weight = 2.0;
+      weight = 2.5;
       break;
     case "liked":
     case "like":
@@ -290,12 +290,12 @@ export function reactToTasteBubble(
       break;
     case "comfy":
     case "cozy":
-      weight = 0.5;
+      weight = 1.2;
       break;
     case "lesslike":
     case "less_like":
     case "less-like":
-      weight = -1.0;
+      weight = -1.5;
       break;
     default:
       return [...residentTasteVector];

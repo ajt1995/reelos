@@ -107,23 +107,35 @@ export function safeJoin(root, urlPath) {
   return abs;
 }
 
+export function getDynamicMemoryCacheLimit() {
+  const total = os.totalmem ? os.totalmem() : 1024 * 1024 * 1024;
+  const free = os.freemem ? os.freemem() : 512 * 1024 * 1024;
+  // Elastic scaling: dynamically allocate 15-20% of system RAM or 35% of free RAM,
+  // with a minimum floor of 256MB and elastic ceiling up to 4GB.
+  // Zero arbitrary 32MB limits on host appliance memory.
+  const targetFromTotal = Math.floor(total * 0.15);
+  const targetFromFree = Math.floor(free * 0.35);
+  const elasticBytes = Math.min(targetFromTotal, targetFromFree);
+  return Math.max(256 * 1024 * 1024, Math.min(Math.max(elasticBytes, 256 * 1024 * 1024), 4 * 1024 * 1024 * 1024));
+}
+
 const staticMemoryCache = new Map();
-const MAX_CACHE_FILE_SIZE = 2 * 1024 * 1024; // 2MB per file max (larger files stream)
-const MAX_TOTAL_CACHE_BYTES = 32 * 1024 * 1024; // 32MB total aggregate cache cap
+const MAX_CACHE_FILE_SIZE = 32 * 1024 * 1024; // 32MB per file max (larger files stream)
 let totalCacheBytes = 0;
 
 function setCachedFile(file, data, mtime) {
   if (!data || data.length > MAX_CACHE_FILE_SIZE) return;
+  const maxBytes = getDynamicMemoryCacheLimit();
   if (staticMemoryCache.has(file)) {
     totalCacheBytes -= staticMemoryCache.get(file).data.length;
     staticMemoryCache.delete(file);
   }
-  while (totalCacheBytes + data.length > MAX_TOTAL_CACHE_BYTES && staticMemoryCache.size > 0) {
+  while (totalCacheBytes + data.length > maxBytes && staticMemoryCache.size > 0) {
     const oldestKey = staticMemoryCache.keys().next().value;
     totalCacheBytes -= staticMemoryCache.get(oldestKey).data.length;
     staticMemoryCache.delete(oldestKey);
   }
-  if (totalCacheBytes + data.length <= MAX_TOTAL_CACHE_BYTES) {
+  if (totalCacheBytes + data.length <= maxBytes) {
     staticMemoryCache.set(file, { data, mtime });
     totalCacheBytes += data.length;
   }

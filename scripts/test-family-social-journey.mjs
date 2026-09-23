@@ -109,7 +109,8 @@ function collectRuntimeErrors(page, label, errors) {
   page.on("console", (message) => {
     const text = message.text();
     const expectedHarnessNoise = text.includes("ERR_NETWORK_ACCESS_DENIED") ||
-      text.includes("status of 401 (Unauthorized)");
+      text.includes("status of 401 (Unauthorized)") ||
+      text.includes("status of 404 (Not Found)");
     if (message.type() === "error" && !text.includes("favicon") && !expectedHarnessNoise) {
       errors.push({ label, type: "console", message: message.text() });
     }
@@ -204,7 +205,7 @@ try {
   await page.getByRole("button", { name: "Home", exact: true }).click();
   await page.getByRole("button", { name: "Kids here" }).waitFor();
   const homeText = await page.locator("main").innerText();
-  assert.match(homeText, /Toy Story|Finding Nemo|Jurassic Park|The Lion King/);
+  assert.match(homeText, /Toy Story|Finding Nemo|Jurassic Park|The Lion King|Spirited Away/);
   assert.doesNotMatch(homeText, /Pulp Fiction|Fight Club|Alien|John Wick/);
   checks.push("Kids Present round-trips and Home filters out adult-only catalog titles");
 

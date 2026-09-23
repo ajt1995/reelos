@@ -19,9 +19,11 @@ export const NATIVE_INSTALL_FILES = [
   "bin/reelos-selfheal.sh",
   "bin/reelos_hardware.py",
   "bin/reelos-update.sh",
+  "bin/reelos-hotspot.sh",
   "systemd/reelos.service",
   "systemd/reelos-selfheal.service",
   "systemd/reelos-selfheal.timer",
+  "systemd/reelos-hotspot.service",
   "avahi/reelos.service",
   "README.md",
 ];
@@ -50,7 +52,7 @@ export function stageNativeAppliance({ root, staging }) {
   }
   if (existsSync(join(root, "VERSION"))) cpSync(join(root, "VERSION"), join(bundleRoot, "VERSION"));
   cpSync(join(bundleRoot, "reelos-install.sh"), join(bundleRoot, "install.sh"));
-  for (const executable of ["install.sh", "reelos-install.sh", "bin/reelos-selfheal.sh", "bin/reelos_hardware.py", "bin/reelos-update.sh"]) {
+  for (const executable of ["install.sh", "reelos-install.sh", "bin/reelos-selfheal.sh", "bin/reelos_hardware.py", "bin/reelos-update.sh", "bin/reelos-hotspot.sh"]) {
     const path = join(bundleRoot, executable);
     if (existsSync(path)) chmodSync(path, 0o755);
   }

@@ -16,8 +16,12 @@ if (process.argv.includes("--build")) {
 }
 
 if (!existsSync(staticRoot) || !existsSync(serverEntry)) {
-  console.error("Shared ReelOS output is missing. Run npm run build:dev first.");
-  process.exit(1);
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  const built = spawnSync(npm, ["run", "build:dev"], { cwd: root, stdio: "inherit", shell: process.platform === "win32" });
+  if (built.status !== 0) {
+    console.error("Shared ReelOS output could not be built.");
+    process.exit(built.status ?? 1);
+  }
 }
 
 const server = (await import(`${pathToFileURL(serverEntry).href}?android=${Date.now()}`)).default;

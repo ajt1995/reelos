@@ -265,6 +265,81 @@ export function CinemaPlayer({
     }, 3500);
   };
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+
+      handleMouseMove();
+
+      if (e.code === "Space" || e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        handleTogglePlay();
+      } else if (e.code === "ArrowLeft" || e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        if (videoRef.current) {
+          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+          setCurrentTime(videoRef.current.currentTime);
+        }
+      } else if (e.code === "ArrowRight" || e.key === "l" || e.key === "L") {
+        e.preventDefault();
+        if (videoRef.current) {
+          videoRef.current.currentTime = Math.min(
+            videoRef.current.duration || Infinity,
+            videoRef.current.currentTime + 10
+          );
+          setCurrentTime(videoRef.current.currentTime);
+        }
+      } else if (e.code === "ArrowUp") {
+        e.preventDefault();
+        if (videoRef.current) {
+          const next = Math.min(1, Math.round((volume + 0.05) * 100) / 100);
+          setVolume(next);
+          videoRef.current.volume = next;
+          videoRef.current.muted = false;
+          setIsMuted(false);
+        }
+      } else if (e.code === "ArrowDown") {
+        e.preventDefault();
+        if (videoRef.current) {
+          const next = Math.max(0, Math.round((volume - 0.05) * 100) / 100);
+          setVolume(next);
+          videoRef.current.volume = next;
+          videoRef.current.muted = next === 0;
+          setIsMuted(next === 0);
+        }
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        handleToggleMute();
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        handleToggleFullscreen();
+      } else if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        void changeAudioPreset(audioPreset === "dialogueBoost" ? "off" : "dialogueBoost");
+      } else if (e.key === "s" || e.key === "S") {
+        e.preventDefault();
+        setSelectedSubtitleTrack((cur) => {
+          if (cur === "off") {
+            const first = subtitles[0]?.id || (subtitles.length > 0 ? "0" : "off");
+            return first;
+          }
+          return "off";
+        });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleTogglePlay, handleToggleFullscreen, volume, isMuted, audioPreset, subtitles]);
+
   const handleKeepInLibrary = async (keep = true) => {
     const saved = await retention.save(keep);
     if (!saved) return;
@@ -293,12 +368,12 @@ export function CinemaPlayer({
       onMouseMove={handleMouseMove}
       onTouchStart={handleMouseMove}
       onFocusCapture={() => setShowControls(true)}
-      className="relative flex h-screen w-screen flex-col justify-between overflow-hidden bg-black text-white select-none"
+      className="relative flex h-[100dvh] min-h-[100dvh] w-screen flex-col justify-between overflow-hidden bg-black text-white select-none"
     >
       {/* Top Bar */}
       <div
         className={cn(
-          "absolute top-0 left-0 right-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-6 transition-opacity duration-300",
+          "absolute top-0 left-0 right-0 z-30 flex items-center justify-between bg-gradient-to-b from-black/80 via-black/40 to-transparent p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] transition-opacity duration-300",
           showControls || showLibraryKeeping ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       >
@@ -307,8 +382,9 @@ export function CinemaPlayer({
             <Button
               variant="ghost"
               size="icon"
-              className="rounded-full bg-white/10 hover:bg-white/20 text-white"
+              className="min-h-12 min-w-12 rounded-full bg-white/10 hover:bg-white/20 text-white"
               onClick={onClose}
+              aria-label="Back"
             >
               <ArrowLeft className="size-5" />
             </Button>
@@ -331,7 +407,7 @@ export function CinemaPlayer({
             type="button"
             onClick={() => setActiveAudioMode("sub")}
             className={cn(
-              "rounded-xl px-3 py-1 text-xs font-semibold transition-all",
+              "min-h-11 rounded-xl px-3.5 py-1 text-xs font-semibold transition-all",
               activeAudioMode === "sub"
                 ? "bg-gold text-black shadow-sm"
                 : "text-white/70 hover:text-white"
@@ -344,7 +420,7 @@ export function CinemaPlayer({
             type="button"
             onClick={() => setActiveAudioMode("dub")}
             className={cn(
-              "rounded-xl px-3 py-1 text-xs font-semibold transition-all",
+              "min-h-11 rounded-xl px-3.5 py-1 text-xs font-semibold transition-all",
               activeAudioMode === "dub"
                 ? "bg-gold text-black shadow-sm"
                 : "text-white/70 hover:text-white"
@@ -395,6 +471,7 @@ export function CinemaPlayer({
           onPause={() => setIsPlaying(false)}
           className="h-full w-full object-contain cursor-pointer"
           playsInline
+          {...({ "webkit-playsinline": "true" } as Record<string, string>)}
           autoPlay
         >
           {subtitles.map((sub, i) => (
@@ -456,7 +533,7 @@ export function CinemaPlayer({
       {/* Bottom Controls Bar */}
       <div
         className={cn(
-          "absolute bottom-0 left-0 right-0 z-30 flex flex-col gap-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-6 transition-opacity duration-300",
+          "absolute bottom-0 left-0 right-0 z-30 flex flex-col gap-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] pr-[max(1.5rem,env(safe-area-inset-right))] transition-opacity duration-300",
           showControls ? "opacity-100" : "pointer-events-none opacity-0"
         )}
       >
@@ -480,7 +557,8 @@ export function CinemaPlayer({
             <button
               type="button"
               onClick={handleTogglePlay}
-              className="flex size-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              className="flex min-h-12 min-w-12 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              aria-label={isPlaying ? "Pause" : "Play"}
             >
               {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 fill-current" />}
             </button>
@@ -490,7 +568,8 @@ export function CinemaPlayer({
               <button
                 type="button"
                 onClick={handleToggleMute}
-                className="text-white/80 hover:text-white"
+                className="flex min-h-12 min-w-12 items-center justify-center text-white/80 hover:text-white"
+                aria-label={isMuted ? "Unmute" : "Mute"}
               >
                 {isMuted || volume === 0 ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
               </button>
@@ -516,7 +595,8 @@ export function CinemaPlayer({
             <button
               type="button"
               onClick={handleToggleFullscreen}
-              className="text-white/80 hover:text-white"
+              className="flex min-h-12 min-w-12 items-center justify-center text-white/80 hover:text-white"
+              aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
             >
               {isFullscreen ? <Minimize className="size-5" /> : <Maximize className="size-5" />}
             </button>

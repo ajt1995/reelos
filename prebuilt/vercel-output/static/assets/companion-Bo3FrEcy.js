@@ -1,1 +1,0 @@
-import{o as e}from"./useStore-CP8wJgJA.js";import{t}from"./reelos-world-C0GtE05K.js";import{t as n}from"./companion-deep-link-Bq9eqUID.js";import{c as r}from"./index-CvqXma7_.js";var i=e();function a(){let e=r.useSearch(),a=n(e);return(0,i.jsx)(t,{initialView:`companion`,initialCompanionLink:a})}export{a as component};

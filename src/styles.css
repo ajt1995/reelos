@@ -40,6 +40,61 @@
     0 0 0 1px rgb(212 160 23 / 0.55), 0 0 24px rgb(212 160 23 / 0.12);
 }
 
+/* Universal Luxury Mobile & Screen Interaction Reset */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+input, textarea, select, button, a {
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+input:focus, textarea:focus, select:focus, button:focus {
+  outline: none !important;
+}
+
+/* Custom golden caret for luxury cinema feel */
+input, textarea {
+  caret-color: #f5c518;
+}
+
+/* Luxury PIN tactile digit cells */
+.reelos-pin-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reelos-pin-cell.is-active {
+  border-color: rgba(245, 197, 24, 0.7);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(245, 197, 24, 0.4), 0 0 16px rgba(245, 197, 24, 0.2);
+}
+
+.reelos-pin-cell.is-filled {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.reelos-pin-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: #f5c518;
+  box-shadow: 0 0 8px rgba(245, 197, 24, 0.6);
+  animation: reelos-dot-pop 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes reelos-dot-pop {
+  0% { transform: scale(0); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* ReelOS personal-world experience */
 .reelos-world {
   --reelos-surface: rgba(255, 255, 255, 0.045);
@@ -52,16 +107,16 @@
 .reelos-profile-aura {
   position: fixed;
   z-index: 0;
-  inset: -18vmax;
+  inset: -10vmax;
   pointer-events: none;
   background:
-    radial-gradient(circle at 78% 14%, color-mix(in srgb, var(--reelos-favorite) 42%, transparent), transparent 30%),
-    radial-gradient(circle at 10% 72%, color-mix(in srgb, var(--reelos-favorite) 22%, transparent), transparent 36%);
-  filter: blur(75px) saturate(1.15);
-  opacity: 0.32;
+    radial-gradient(circle at 75% 20%, color-mix(in srgb, var(--reelos-favorite, #f5c518) 32%, transparent) 0%, transparent 45%),
+    radial-gradient(circle at 20% 75%, color-mix(in srgb, var(--reelos-favorite, #f5c518) 18%, transparent) 0%, transparent 48%);
+  opacity: 0.55;
   mix-blend-mode: screen;
-  animation: reelos-aura-breathe 13s ease-in-out infinite alternate;
+  animation: reelos-aura-breathe 8s ease-in-out infinite alternate;
 }
+
 
 /* TV artwork stays alive using compositor-only transforms. Avoid animating
    blur, layout, or filters on constrained Android TV WebViews. */
@@ -102,15 +157,63 @@
   to { transform: translate3d(2%, 2%, 0) scale(1.08); opacity: 0.66; }
 }
 
-.reelos-world button,
-.reelos-world input {
-  -webkit-tap-highlight-color: transparent;
+/* Zero Browser Blue Outlines - Luxury Focus Language */
+input,
+input:focus,
+input:focus-visible,
+textarea,
+textarea:focus,
+textarea:focus-visible,
+button,
+button:focus,
+button:focus-visible,
+select,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-focus-ring-color: transparent !important;
 }
 
-.reelos-world button:focus-visible,
+.reelos-setup input,
+.reelos-setup input:focus,
+.reelos-setup input:focus-visible {
+  outline: none !important;
+  -webkit-focus-ring-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.reelos-world input,
+.reelos-world input:focus,
 .reelos-world input:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--reelos-favorite) 78%, white);
-  outline-offset: 3px;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.reelos-world button:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--reelos-favorite, #f5c518) 78%, white), 0 0 16px rgba(245, 197, 24, 0.35) !important;
+}
+
+/* Luxury Floating Frosted Glass Card & Amber Ambient Glow */
+.reelos-luxury-card {
+  background: rgba(14, 15, 20, 0.82) !important;
+  backdrop-filter: blur(32px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow:
+    0 0 24px rgba(245, 197, 24, 0.15),
+    0 32px 64px -16px rgba(0, 0, 0, 0.85) !important;
+}
+
+@keyframes reelos-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: reelos-shake 0.35s ease-in-out;
 }
 
 .reelos-world[data-density="compact"] .reelos-world-shelf {
@@ -127,39 +230,77 @@
   animation: reelos-world-breathe 10s ease-in-out infinite alternate;
 }
 
-.reelos-falling-art > div {
-  animation: reelos-world-fall 18s ease-in-out infinite alternate;
-}
-
-.reelos-falling-art > div:nth-child(2) {
-  animation-delay: -6s;
-}
-
-.reelos-falling-art > div:nth-child(3) {
-  animation-delay: -12s;
-}
 
 .reelos-setup-orb {
   position: absolute;
-  width: min(70vw, 760px);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(75vw, 680px);
   aspect-ratio: 1;
-  border-radius: 999px;
-  filter: blur(115px);
-  opacity: 0.22;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--reelos-favorite, #f5c518) 65%, transparent) 0%,
+    color-mix(in srgb, var(--reelos-favorite, #f5c518) 24%, transparent) 42%,
+    transparent 72%
+  );
+  opacity: 0.65;
   pointer-events: none;
+  will-change: transform, opacity;
+  animation: reelos-orb-pulse 2.6s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
 
 .reelos-setup-orb-a {
-  right: -20%;
-  top: -15%;
+  /* Primary luminous aura centered */
+  z-index: 0;
 }
 
 .reelos-setup-orb-b {
-  bottom: -35%;
-  left: -20%;
-  opacity: 0.13;
-  animation-delay: -5s;
+  /* Secondary harmonic aura for deeper chromatic radiance */
+  z-index: 0;
+  width: min(55vw, 480px);
+  opacity: 0.45;
+  animation: reelos-orb-pulse-inner 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite alternate;
 }
+
+.reelos-setup-orb.is-expanding {
+  animation: reelos-orb-expand 750ms cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+@keyframes reelos-orb-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.50;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.10);
+    opacity: 0.85;
+  }
+}
+
+@keyframes reelos-orb-pulse-inner {
+  0% {
+    transform: translate(-50%, -50%) scale(0.88);
+    opacity: 0.40;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0.70;
+  }
+}
+
+@keyframes reelos-orb-expand {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.70;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(3.2);
+    opacity: 0.95;
+  }
+}
+
 
 .reelos-world-taste-bubble:nth-child(3n + 1) {
   transform: translateY(0.8rem);
@@ -171,55 +312,56 @@
 
 .reelos-endless-taste-field {
   position: relative;
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(4, minmax(5.8rem, 1fr));
-  gap: 0.65rem;
-  min-height: 33rem;
-  max-height: calc(100dvh - 12.5rem);
-  margin-top: 1.2rem;
-  padding: 0.25rem 0 5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 1.2rem 1.4rem;
+  min-height: 30rem;
+  max-width: 76rem;
+  margin: 1.2rem auto 0;
+  padding: 0.5rem 0.5rem 5rem;
 }
 
 .reelos-endless-taste-field.is-setup {
-  min-height: min(38rem, 58dvh);
+  min-height: min(36rem, 58dvh);
   max-height: none;
   padding-bottom: 0;
 }
 
 .reelos-endless-taste-bubble {
   position: relative;
-  min-width: 0;
-  min-height: 4.8rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: clamp(7.2rem, 16vw, 9.6rem);
+  aspect-ratio: 1 / 1;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.14);
-  border-radius: 999px;
-  background: rgb(14 14 20 / 0.72);
-  text-align: left;
+  border: 1.5px solid rgb(255 255 255 / 0.16);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.14), rgb(14 14 20 / 0.85) 60%, rgb(4 4 8 / 0.96));
+  text-align: center;
   box-shadow:
-    inset 0 1px rgb(255 255 255 / 0.08),
-    0 16px 44px rgb(0 0 0 / 0.22);
+    inset 0 2px 4px rgb(255 255 255 / 0.14),
+    0 16px 40px rgb(0 0 0 / 0.35);
   isolation: isolate;
   animation: reelos-taste-arrive 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: calc(var(--taste-delay) / -20);
   transition:
     opacity 260ms ease,
-    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
     border-color 220ms ease,
-    box-shadow 220ms ease;
-}
-
-.reelos-endless-taste-bubble:nth-child(n + 9) {
-  display: none;
+    box-shadow 260ms ease;
 }
 
 .reelos-endless-taste-bubble:hover,
 .reelos-endless-taste-bubble:focus-visible {
-  border-color: color-mix(in srgb, var(--taste-color) 72%, white);
+  border-color: color-mix(in srgb, var(--taste-color) 78%, white);
+  transform: scale(1.08);
   box-shadow:
-    inset 0 1px rgb(255 255 255 / 0.12),
-    0 0 30px color-mix(in srgb, var(--taste-color) 32%, transparent);
+    inset 0 1px 2px rgb(255 255 255 / 0.2),
+    0 0 32px color-mix(in srgb, var(--taste-color) 40%, transparent);
 }
 
 .reelos-endless-taste-bubble img {
@@ -228,9 +370,10 @@
   z-index: -3;
   width: 100%;
   height: 100%;
+  border-radius: 50%;
   object-fit: cover;
-  opacity: 0.6;
-  transform: scale(1.03);
+  opacity: 0.45;
+  transform: scale(1.04);
   animation: reelos-taste-art-breathe 9s var(--taste-delay) ease-in-out infinite alternate;
 }
 
@@ -238,18 +381,22 @@
   position: absolute;
   inset: 0;
   z-index: -2;
+  border-radius: 50%;
   background:
-    linear-gradient(90deg, rgb(4 4 8 / 0.9), rgb(4 4 8 / 0.34) 72%, transparent),
-    linear-gradient(0deg, rgb(4 4 8 / 0.72), transparent 70%);
+    radial-gradient(circle at 35% 30%, transparent 20%, rgb(4 4 8 / 0.75) 75%),
+    linear-gradient(0deg, rgb(4 4 8 / 0.82), transparent 70%);
 }
 
 .reelos-endless-taste-copy {
   display: flex;
   height: 100%;
+  width: 100%;
   min-width: 0;
   flex-direction: column;
-  justify-content: flex-end;
-  padding: 0.9rem 1.1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
 }
 
 .reelos-endless-taste-copy b,
@@ -258,51 +405,94 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 90%;
 }
 
 .reelos-endless-taste-copy b {
-  font-size: clamp(0.78rem, 1.6vw, 1rem);
-  line-height: 1.1;
+  font-size: clamp(0.74rem, 1.5vw, 0.95rem);
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .reelos-endless-taste-copy small {
-  margin-top: 0.25rem;
-  color: rgb(255 255 255 / 0.55);
-  font-size: 0.65rem;
+  margin-top: 0.2rem;
+  color: rgb(255 255 255 / 0.6);
+  font-size: 0.62rem;
 }
 
 .reelos-endless-taste-copy em {
-  margin-top: 0.45rem;
-  color: rgb(255 255 255 / 0.58);
-  font-size: 0.58rem;
+  margin-top: 0.35rem;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 0.55rem;
   font-style: normal;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .reelos-endless-taste-bubble.is-like,
-.reelos-endless-taste-bubble.is-love,
 .reelos-endless-taste-bubble.is-cozy {
-  border-color: color-mix(in srgb, var(--taste-color) 75%, white);
-  box-shadow: 0 0 34px color-mix(in srgb, var(--taste-color) 38%, transparent);
+  transform: scale(1.3) !important;
+  border-color: color-mix(in srgb, var(--taste-color) 85%, white);
+  background: radial-gradient(circle at 35% 30%, rgb(254 243 199 / 0.35), rgb(217 119 6 / 0.75) 60%, rgb(120 53 15 / 0.95));
+  box-shadow: 0 0 35px color-mix(in srgb, var(--taste-color) 50%, transparent);
+  z-index: 10;
 }
 
 .reelos-endless-taste-bubble.is-love {
+  transform: scale(1.58) !important;
+  border-color: #ffffff;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.55), rgb(245 158 11 / 0.9) 55%, rgb(180 83 9 / 0.98));
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--taste-color) 18%, transparent),
-    0 0 48px color-mix(in srgb, var(--taste-color) 48%, transparent);
+    0 0 0 4px color-mix(in srgb, var(--taste-color) 40%, transparent),
+    0 0 55px color-mix(in srgb, var(--taste-color) 70%, transparent);
+  animation: apple-bubble-pulse 2.2s ease-in-out infinite alternate;
+  z-index: 20;
 }
 
 .reelos-endless-taste-bubble.is-less {
   filter: saturate(0.35);
-  opacity: 0.68;
+  opacity: 0.55;
 }
 
 .reelos-endless-taste-bubble.is-departing {
   pointer-events: none;
-  opacity: 0;
-  transform: scale(0.76);
+  animation: apple-bubble-pop 260ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes apple-bubble-float-1 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-8px) scale(1.02); }
+}
+
+@keyframes apple-bubble-float-2 {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(7px) scale(0.98); }
+}
+
+@keyframes apple-bubble-float-3 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(-6px) translateX(4px); }
+}
+
+@keyframes apple-bubble-float-4 {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  50% { transform: translateY(6px) translateX(-4px); }
+}
+
+@keyframes apple-bubble-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3), 0 0 35px rgba(245, 158, 11, 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.55), 0 0 58px rgba(245, 158, 11, 0.75);
+  }
+}
+
+@keyframes apple-bubble-pop {
+  0% { transform: scale(1); opacity: 1; filter: blur(0); }
+  35% { transform: scale(1.22); opacity: 0.85; }
+  100% { transform: scale(0.05); opacity: 0; filter: blur(14px); }
 }
 
 @keyframes reelos-taste-arrive {
@@ -313,40 +503,6 @@
 @keyframes reelos-taste-art-breathe {
   from { transform: scale(1.02); filter: saturate(0.86); }
   to { transform: scale(1.12); filter: saturate(1.08); }
-}
-
-@media (min-width: 640px) {
-  .reelos-endless-taste-field {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    grid-template-rows: repeat(4, minmax(5.8rem, 1fr));
-    gap: 0.8rem;
-  }
-
-  .reelos-endless-taste-bubble:nth-child(n + 9) {
-    display: block;
-  }
-
-  .reelos-endless-taste-bubble:nth-child(n + 13) {
-    display: none;
-  }
-}
-
-@media (min-width: 1024px) {
-  .reelos-endless-taste-field {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    grid-template-rows: repeat(3, minmax(7rem, 1fr));
-    gap: 1rem;
-    min-height: 31rem;
-  }
-
-  .reelos-endless-taste-bubble:nth-child(n) {
-    display: block;
-  }
-
-  .reelos-endless-taste-bubble:nth-child(5n + 1),
-  .reelos-endless-taste-bubble:nth-child(5n + 5) {
-    border-radius: 44% 56% 51% 49% / 55% 48% 52% 45%;
-  }
 }
 
 @keyframes reelos-world-breathe {
@@ -1544,6 +1700,27 @@ img.poster {
 }
 
 /* Android Foldable & Dual-Screen Tabletop Flex Mode (Samsung Galaxy Z Fold, Pixel Fold, OnePlus Open) */
+.reelos-posture-tabletop-flex .player-foldable-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100dvh !important;
+}
+.reelos-posture-tabletop-flex .player-foldable-screen {
+  flex: 1 1 50% !important;
+  max-height: 50dvh !important;
+}
+.reelos-posture-tabletop-flex .player-foldable-deck {
+  flex: 1 1 50% !important;
+  min-height: 50dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  background: rgba(11, 13, 16, 0.96) !important;
+  backdrop-filter: blur(28px) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+  padding: 1.5rem !important;
+}
+
 @media (horizontal-viewport-segments: 2),
   (vertical-viewport-segments: 2),
   (screen-spanning: single-fold-horizontal) {
@@ -1913,75 +2090,94 @@ button.reelos-person-tile:focus-visible small {
 .reelos-infinite-field {
   display: flex;
   min-height: 25rem;
-  max-width: 70rem;
-  align-content: flex-start;
+  max-width: 72rem;
+  justify-content: center;
   align-items: center;
   flex-wrap: wrap;
-  gap: 1.7rem 1.4rem;
+  gap: 1.4rem 1.6rem;
   padding: 1.8rem 0;
 }
 
 .reelos-infinite-bubble {
   position: relative;
   display: inline-flex;
-  width: auto !important;
-  height: auto !important;
-  animation: reelos-bubble 7s ease-in-out infinite alternate;
+  animation: apple-bubble-float-1 6s ease-in-out infinite alternate;
 }
 
 .reelos-infinite-bubble:nth-child(3n) {
-  animation-delay: -3s;
+  animation: apple-bubble-float-2 7s ease-in-out infinite alternate;
+  animation-delay: -2.5s;
 }
 .reelos-infinite-bubble:nth-child(4n) {
-  animation-delay: -5s;
+  animation: apple-bubble-float-3 8s ease-in-out infinite alternate;
+  animation-delay: -4s;
 }
+.reelos-infinite-bubble:nth-child(5n) {
+  animation: apple-bubble-float-4 6.5s ease-in-out infinite alternate;
+  animation-delay: -1.5s;
+}
+
 .reelos-infinite-bubble > button:first-child {
   position: relative;
-  min-height: 4.2rem;
-  padding: 0.9rem 1.25rem;
-  border: 1px solid rgb(255 255 255 / 0.15);
-  border-radius: 999px;
-  background: rgb(13 17 31 / 0.68);
-  color: rgb(255 255 255 / 0.82);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: clamp(6.8rem, 15vw, 8.8rem);
+  aspect-ratio: 1 / 1;
+  padding: 0.8rem;
+  border: 1.5px solid rgb(255 255 255 / 0.16);
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.15), rgb(13 17 31 / 0.85) 60%, rgb(4 6 15 / 0.95));
+  color: rgb(255 255 255 / 0.9);
+  text-align: center;
   box-shadow:
-    inset 0 1px rgb(255 255 255 / 0.08),
-    0 14px 32px rgb(0 0 0 / 0.18);
+    inset 0 1px 2px rgb(255 255 255 / 0.15),
+    0 14px 34px rgb(0 0 0 / 0.35);
   transition:
-    transform 300ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 200ms ease,
-    background 200ms ease,
-    box-shadow 200ms ease;
+    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms ease,
+    background 220ms ease,
+    box-shadow 260ms ease;
 }
 
 .reelos-infinite-bubble.size-1 > button:first-child {
-  min-height: 4.8rem;
+  width: clamp(7.4rem, 17vw, 9.6rem);
 }
 .reelos-infinite-bubble.size-2 > button:first-child {
-  min-height: 3.7rem;
+  width: clamp(6.2rem, 13vw, 7.8rem);
 }
 .reelos-infinite-bubble.size-3 > button:first-child {
-  min-height: 5.1rem;
+  width: clamp(8rem, 18vw, 10.4rem);
 }
 .reelos-infinite-bubble > button:first-child:hover {
-  border-color: rgb(184 199 255 / 0.7);
+  transform: scale(1.08);
+  border-color: rgb(245 158 11 / 0.75);
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.35);
 }
 .reelos-infinite-bubble.state-1 > button:first-child {
-  border-color: #b8c7ff;
-  background: rgb(66 81 163 / 0.55);
+  transform: scale(1.32);
+  border-color: #f59e0b;
+  background: radial-gradient(circle at 35% 30%, rgb(254 243 199 / 0.4), rgb(217 119 6 / 0.8) 65%, rgb(120 53 15 / 0.95));
+  box-shadow: 0 0 35px rgba(245, 158, 11, 0.5);
+  z-index: 2;
 }
 .reelos-infinite-bubble.state-2 > button:first-child {
-  border-color: #f0d899;
-  background: rgb(104 84 124 / 0.72);
+  transform: scale(1.62);
+  border-color: #ffffff;
+  background: radial-gradient(circle at 35% 30%, rgb(255 255 255 / 0.55), rgb(245 158 11 / 0.9) 60%, rgb(180 83 9 / 0.98));
   box-shadow:
-    0 0 0 4px rgb(240 216 153 / 0.1),
-    0 0 34px rgb(240 216 153 / 0.42);
-  z-index: 2;
+    0 0 0 4px rgb(245 158 11 / 0.35),
+    0 0 52px rgb(245 158 11 / 0.7);
+  animation: apple-bubble-pulse 2.2s ease-in-out infinite alternate;
+  z-index: 3;
 }
 .reelos-infinite-bubble small {
   position: absolute;
-  right: 10px;
-  top: 6px;
-  color: #f0d899;
+  top: 12%;
+  right: 18%;
+  color: #ffffff;
+  font-size: 0.9rem;
 }
 .reelos-dismiss {
   position: absolute;
@@ -2110,67 +2306,76 @@ button.reelos-person-tile:focus-visible small {
 .reelos-falling-art {
   position: absolute;
   inset: 0 0 0 auto;
-  width: min(48vw, 48rem);
+  width: min(52vw, 52rem);
   overflow: hidden;
-  opacity: 0.24;
   pointer-events: none;
+  opacity: 0.65;
   mask-image: linear-gradient(
-    90deg,
-    transparent,
-    black 42%,
-    black 80%,
-    transparent
+    to bottom,
+    transparent 0%,
+    black 12%,
+    black 82%,
+    transparent 100%
+  ),
+  linear-gradient(
+    to right,
+    transparent 0%,
+    black 25%,
+    black 100%
   );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    black 12%,
+    black 82%,
+    transparent 100%
+  ),
+  linear-gradient(
+    to right,
+    transparent 0%,
+    black 25%,
+    black 100%
+  );
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
 }
 
-.reelos-falling-art img {
-  position: absolute;
-  width: 9.5rem;
+.reelos-falling-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  will-change: transform;
+}
+
+.reelos-falling-col-slow {
+  animation: reelos-infinite-fall 42s linear infinite;
+}
+
+.reelos-falling-col-mid {
+  animation: reelos-infinite-fall 32s linear infinite;
+  animation-delay: -14s;
+}
+
+.reelos-falling-col-fast {
+  animation: reelos-infinite-fall 37s linear infinite;
+  animation-delay: -7s;
+}
+
+@keyframes reelos-infinite-fall {
+  0% {
+    transform: translate3d(0, -50%, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.reelos-falling-column img {
+  width: 100%;
   aspect-ratio: 0.68;
   object-fit: cover;
-  border-radius: 1rem;
-  box-shadow: 0 18px 42px rgb(0 0 0 / 0.56);
-  animation: reelos-fall 13s linear infinite;
-}
-
-.reelos-falling-art img:nth-child(1) {
-  left: 6%;
-  top: -28%;
-  animation-delay: -6s;
-  transform: rotate(-12deg);
-}
-.reelos-falling-art img:nth-child(2) {
-  left: 34%;
-  top: -50%;
-  animation-delay: -1s;
-  transform: rotate(8deg);
-}
-.reelos-falling-art img:nth-child(3) {
-  left: 62%;
-  top: -16%;
-  animation-delay: -9s;
-  transform: rotate(-6deg);
-}
-.reelos-falling-art img:nth-child(4) {
-  left: 22%;
-  top: 18%;
-  animation-delay: -4s;
-  transform: rotate(13deg);
-}
-.reelos-falling-art img:nth-child(5) {
-  left: 70%;
-  top: 32%;
-  animation-delay: -11s;
-  transform: rotate(-14deg);
-}
-
-@keyframes reelos-fall {
-  from {
-    translate: 0 -12rem;
-  }
-  to {
-    translate: -2rem 42rem;
-  }
+  border-radius: 1.25rem;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 @media (min-width: 768px) {

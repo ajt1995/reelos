@@ -1550,7 +1550,7 @@ function SettingsScreen({
     { id: "family", label: "Family", note: "People, kids, and boundaries" },
     {
       id: "intelligence",
-      label: "Cinema intelligence",
+      label: "Cinema presentation",
       note: "Taste, search, and the quiet work behind the scenes",
     },
     {

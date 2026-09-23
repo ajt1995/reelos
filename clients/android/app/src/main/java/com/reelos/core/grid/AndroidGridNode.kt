@@ -23,17 +23,21 @@ class AndroidGridNode(private val context: Context) {
     }
     private var httpServer: ServerSocket? = null
     private var beaconSocket: DatagramSocket? = null
+    private var receiverSocket: DatagramSocket? = null
+    private val discoveredPeers = java.util.concurrent.ConcurrentHashMap<String, JSONObject>()
 
     fun start() {
         if (!running.compareAndSet(false, true)) return
         Thread(::serveGrid, "ReelOS-grid-http").apply { isDaemon = true; start() }
         Thread(::beaconLoop, "ReelOS-grid-beacon").apply { isDaemon = true; start() }
+        Thread(::beaconReceiverLoop, "ReelOS-grid-receiver").apply { isDaemon = true; start() }
     }
 
     fun stop() {
         running.set(false)
         runCatching { httpServer?.close() }
         runCatching { beaconSocket?.close() }
+        runCatching { receiverSocket?.close() }
     }
 
     private fun serveGrid() {
@@ -96,14 +100,49 @@ class AndroidGridNode(private val context: Context) {
         }
     }
 
-    private fun status(): JSONObject = JSONObject()
-        .put("ok", true)
-        .put("remoteCompute", false)
-        .put("hardware", hardware())
-        .put("isThermalThrottled", false)
-        .put("capabilityStage", "local")
-        .put("manifest", nodeManifest())
-        .put("peerNodes", org.json.JSONArray())
+    private fun beaconReceiverLoop() {
+        val socket = runCatching {
+            DatagramSocket(null).apply {
+                reuseAddress = true
+                bind(java.net.InetSocketAddress(GRID_PORT))
+            }
+        }.getOrNull() ?: return
+        receiverSocket = socket
+        val buf = ByteArray(4096)
+        while (running.get()) {
+            try {
+                val packet = DatagramPacket(buf, buf.size)
+                socket.receive(packet)
+                val raw = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                val json = JSONObject(raw)
+                if (json.optString("type") == "REELOS_MESH_BEACON") {
+                    val peerMachineId = json.optString("machineId")
+                    if (peerMachineId.isNotBlank() && peerMachineId != machineId) {
+                        json.put("senderIp", packet.address.hostAddress)
+                        discoveredPeers[peerMachineId] = json
+                    }
+                }
+            } catch (_: Exception) {
+                if (!running.get()) break
+            }
+        }
+        runCatching { socket.close() }
+    }
+
+    private fun status(): JSONObject {
+        val peersArray = org.json.JSONArray()
+        for (peer in discoveredPeers.values) {
+            peersArray.put(peer)
+        }
+        return JSONObject()
+            .put("ok", true)
+            .put("remoteCompute", false)
+            .put("hardware", hardware())
+            .put("isThermalThrottled", false)
+            .put("capabilityStage", "local")
+            .put("manifest", nodeManifest())
+            .put("peerNodes", peersArray)
+    }
 
     private fun nodeManifest(): JSONObject {
         val hardware = hardware()
@@ -123,8 +162,12 @@ class AndroidGridNode(private val context: Context) {
             .put("resourceLimits", JSONObject()
                 .put("memoryBytes", hardware.getLong("totalMemoryMb") * 1024L * 1024L)
                 .put("storageBytes", hardware.getLong("storageFreeMb") * 1024L * 1024L)
+                .put("storageQuotaGb", prefs.getInt("storage_quota_gb", 25))
+                .put("nightChargingCompute", prefs.getBoolean("night_charging_compute", true))
                 .put("concurrency", 1)
                 .put("playbackPriority", true))
+            .put("storageQuotaGb", prefs.getInt("storage_quota_gb", 25))
+            .put("nightChargingCompute", prefs.getBoolean("night_charging_compute", true))
             .put("generatedAt", System.currentTimeMillis())
     }
 
@@ -143,6 +186,9 @@ class AndroidGridNode(private val context: Context) {
             .put("freeMemoryMb", memory.availMem / (1024 * 1024))
             .put("memoryHeadroomPercent", if (memory.totalMem > 0) memory.availMem * 100 / memory.totalMem else 0)
             .put("storageFreeMb", storage.availableBytes / (1024 * 1024))
+            .put("storageQuotaGb", prefs.getInt("storage_quota_gb", 25))
+            .put("nightChargingCompute", prefs.getBoolean("night_charging_compute", true))
+            .put("nightChargingComputeEligible", true)
             .put("hasGpu", true)
             .put("temperatureAvailable", false)
             .put("playbackPriority", true)

@@ -22,6 +22,7 @@ import { QrCodeSvg } from "@/components/ui/qr-code-svg";
 import { showToast } from "@/lib/toast";
 import { useReelStore, type HouseholdResident } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 
 const AVATAR_MAP: Record<string, typeof Clapperboard> = {
   clapperboard: Clapperboard,
@@ -331,58 +332,56 @@ export function ProfileSwitcher({
 
       {/* PIN Verification Modal */}
       {pinTarget ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl space-y-4 rise">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xl px-4 py-8 overflow-y-auto overscroll-contain">
+          <div className="reelos-luxury-card relative w-full max-w-sm rounded-[2rem] p-6 sm:p-8 space-y-5 rise my-auto">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <KeyRound className="size-4 text-gold" />
-                <h3 className="font-display text-sm font-semibold text-foreground">
-                  PIN Required for {pinTarget.name}
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-2xl bg-gold/15 text-gold border border-gold/30 shadow-[0_0_12px_rgba(245,197,24,0.2)]">
+                  <KeyRound className="size-4" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-semibold text-foreground">
+                    {pinTarget.name}
+                  </h3>
+                  <p className="text-[11px] text-muted">Passcode Required</p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setPinTarget(null)}
-                className="text-muted hover:text-foreground"
+                className="flex size-8 items-center justify-center rounded-full text-muted hover:text-foreground hover:bg-white/10 transition-colors cursor-pointer"
               >
                 <X className="size-4" />
               </button>
             </div>
 
-            <p className="text-xs text-muted">
-              Enter the 4-digit security PIN to switch into this resident profile.
+            <p className="text-xs text-muted/90 text-center leading-relaxed">
+              Enter the 4-digit security passcode to switch into this resident profile.
             </p>
 
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={4}
-              value={pinInput}
-              onChange={(e) => {
-                setPinError(false);
-                setPinInput(e.target.value.replace(/\D/g, ""));
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handlePinSubmit();
-              }}
-              placeholder="••••"
-              className={cn(
-                "h-12 w-full rounded-xl bg-raised px-4 text-center font-mono text-xl tracking-[0.5em] shadow-[var(--shadow-border)] focus:shadow-[var(--shadow-gold)]",
-                pinError && "border border-danger text-danger",
-              )}
-              autoFocus
-            />
+            <div className="py-2">
+              <LuxuryPinInput
+                value={pinInput}
+                onChange={(val) => {
+                  setPinError(false);
+                  setPinInput(val);
+                }}
+                error={pinError}
+                length={4}
+                autoFocus
+                onComplete={() => handlePinSubmit()}
+              />
+            </div>
 
             {pinError ? (
-              <p className="text-center text-xs text-danger">Incorrect PIN</p>
+              <p className="text-center text-xs font-medium text-danger animate-pulse">Incorrect passcode</p>
             ) : null}
 
-            <div className="flex gap-2">
+            <div className="flex gap-2.5 pt-1">
               <Button
                 variant="ghost"
                 onClick={() => setPinTarget(null)}
-                className="flex-1 rounded-xl"
+                className="flex-1 rounded-2xl min-h-12 border border-white/10 text-white/70 hover:text-white hover:bg-white/10"
               >
                 Cancel
               </Button>
@@ -390,7 +389,7 @@ export function ProfileSwitcher({
                 variant="gold"
                 onClick={handlePinSubmit}
                 disabled={pinInput.length < 4}
-                className="flex-1 rounded-xl"
+                className="flex-1 rounded-2xl min-h-12 font-bold bg-gradient-to-r from-gold to-gold-bright text-black shadow-lg shadow-gold/20"
               >
                 Unlock
               </Button>

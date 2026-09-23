@@ -24,11 +24,13 @@ class AppPreferences(context: Context) {
         set(value) = prefs.edit().putString("connection_mode", value).apply()
 
     val isStandalone: Boolean
-        get() = connectionMode == "standalone" && !isConfigured
+        get() = connectionMode == "standalone"
+
+    val useStandaloneNode: Boolean
+        get() = isStandalone
 
     fun useStandalone() {
         connectionMode = "standalone"
-        clearSession()
     }
 
     fun useHome() {
@@ -55,19 +57,72 @@ class AppPreferences(context: Context) {
         get() = prefs.getBoolean("volume_leveling_enabled", false)
         set(value) = prefs.edit().putBoolean("volume_leveling_enabled", value).apply()
 
+    var isDialogueFocusEnabled: Boolean
+        get() = prefs.getBoolean("dialogue_focus_enabled", false)
+        set(value) = prefs.edit().putBoolean("dialogue_focus_enabled", value).apply()
+
     var areSubtitlesEnabled: Boolean
         get() = prefs.getBoolean("subtitles_enabled", true)
         set(value) = prefs.edit().putBoolean("subtitles_enabled", value).apply()
 
     var offlineStorageLimitGb: Int
         get() = prefs.getInt("offline_storage_limit_gb", 25)
-        set(value) = prefs.edit().putInt("offline_storage_limit_gb", value.coerceIn(1, 100)).apply()
+        set(value) = prefs.edit().putInt("offline_storage_limit_gb", value.coerceIn(1, 1000)).apply()
+
+    var overnightChargingOnly: Boolean
+        get() = prefs.getBoolean("overnight_charging_only", true)
+        set(value) = prefs.edit().putBoolean("overnight_charging_only", value).apply()
+
+    var overnightPreStage: Boolean
+        get() = prefs.getBoolean("overnight_pre_stage", true)
+        set(value) = prefs.edit().putBoolean("overnight_pre_stage", value).apply()
+
+    var prowlarrUrl: String
+        get() = prefs.getString("prowlarr_url", "") ?: ""
+        set(value) = prefs.edit().putString("prowlarr_url", value).apply()
+
+    var prowlarrApiKey: String
+        get() = prefs.getString("prowlarr_api_key", "") ?: ""
+        set(value) = prefs.edit().putString("prowlarr_api_key", value).apply()
+
+    var customTorznabUrl: String
+        get() = prefs.getString("custom_torznab_url", "") ?: ""
+        set(value) = prefs.edit().putString("custom_torznab_url", value).apply()
 
     val cookieHeader: String
         get() = listOfNotNull(deviceCookie, profileCookie).joinToString("; ")
 
+    var hasCompletedOnboarding: Boolean
+        get() = prefs.getBoolean("has_completed_onboarding", false)
+        set(value) = prefs.edit().putBoolean("has_completed_onboarding", value).apply()
+
+    var onboardingAtmosphereColor: String
+        get() = prefs.getString("onboarding_atmosphere_color", "gold") ?: "gold"
+        set(value) = prefs.edit().putString("onboarding_atmosphere_color", value).apply()
+
+    var residentTasteVectorJson: String
+        get() = prefs.getString("resident_taste_vector_json", "") ?: ""
+        set(value) = prefs.edit().putString("resident_taste_vector_json", value).apply()
+
+    fun getResidentTasteVector(): FloatArray {
+        val json = residentTasteVectorJson
+        if (json.isBlank()) return FloatArray(512)
+        return try {
+            val arr = org.json.JSONArray(json)
+            FloatArray(512) { i -> if (i < arr.length()) arr.getDouble(i).toFloat() else 0f }
+        } catch (_: Exception) {
+            FloatArray(512)
+        }
+    }
+
+    fun setResidentTasteVector(vector: FloatArray) {
+        val arr = org.json.JSONArray()
+        for (v in vector) arr.put(v.toDouble())
+        residentTasteVectorJson = arr.toString()
+    }
+
     val isConfigured: Boolean
-        get() = serverBaseUrl.isNotBlank() && !deviceCookie.isNullOrBlank() && !profileCookie.isNullOrBlank()
+        get() = (serverBaseUrl.isNotBlank() && !deviceCookie.isNullOrBlank() && !profileCookie.isNullOrBlank()) || (isStandalone && hasCompletedOnboarding)
 
     fun clearSession() {
         prefs.edit()
@@ -75,6 +130,7 @@ class AppPreferences(context: Context) {
             .remove("device_cookie")
             .remove("profile_cookie")
             .remove("active_resident_id")
+            .remove("has_completed_onboarding")
             .apply()
     }
 }

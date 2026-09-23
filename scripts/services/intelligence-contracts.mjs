@@ -14,6 +14,7 @@ export const EVENT_TYPES = Object.freeze(new Set([
   "preparation.completed", "preparation.failed", "preparation.cancelled",
   "analysis.completed", "analysis.invalidated",
   "machine.pressure", "machine.yielded", "machine.resumed",
+  "cluster.telemetry", "playback.presence",
   "storage.reserved", "storage.evicted",
   "model.inference", "model.candidate", "model.evaluated", "model.activated", "model.rolled-back",
   "decision.proposed", "decision.coordinated", "decision.outcome", "decision.corrected",

@@ -13,6 +13,7 @@ import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Toggle, persistUi } from "@/components/settings-ui";
 import { StorageSettings } from "@/components/storage-settings";
+import { LuxuryPinInput } from "@/components/luxury-pin-input";
 
 export function LibraryPanel() {
   const answers = useReelStore((s) => s.answers);
@@ -468,48 +469,44 @@ export function UsersPanel() {
 
       {/* PIN Verification Modal */}
       {pinPromptResident ? (
-        <div className="rounded-2xl border border-gold/40 bg-card p-4 space-y-3 rise shadow-lg">
+        <div className="reelos-luxury-card rounded-3xl p-5 space-y-4 rise shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <KeyRound className="size-4 text-gold" />
               <span className="text-xs font-semibold text-foreground">
-                Enter PIN for {pinPromptResident.name}
+                Enter Passcode for {pinPromptResident.name}
               </span>
             </div>
             <button
               type="button"
               onClick={() => setPinPromptResident(null)}
-              className="text-muted hover:text-foreground"
+              className="text-muted hover:text-foreground cursor-pointer"
             >
               <X className="size-4" />
             </button>
           </div>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={4}
+          <div className="flex flex-col items-center space-y-3 py-1">
+            <LuxuryPinInput
               value={pinInput}
-              onChange={(e) => {
+              onChange={(val) => {
                 setPinError(false);
-                setPinInput(e.target.value.replace(/\D/g, ""));
+                setPinInput(val);
               }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handlePinSubmit();
-              }}
-              placeholder="••••"
-              className={cn(
-                "h-9 flex-1 rounded-xl bg-card-2 px-3 text-center font-mono text-base tracking-[0.3em]",
-                pinError && "border border-danger text-danger"
-              )}
+              error={pinError}
+              length={4}
               autoFocus
+              onComplete={() => handlePinSubmit()}
             />
-            <Button size="sm" variant="gold" onClick={handlePinSubmit} disabled={pinInput.length < 4}>
-              Unlock
-            </Button>
+            {pinError ? <p className="text-xs text-danger animate-pulse">Incorrect passcode</p> : null}
+            <div className="flex gap-2 w-full pt-1">
+              <Button size="sm" variant="ghost" onClick={() => setPinPromptResident(null)} className="flex-1 rounded-xl">
+                Cancel
+              </Button>
+              <Button size="sm" variant="gold" onClick={handlePinSubmit} disabled={pinInput.length < 4} className="flex-1 rounded-xl font-semibold">
+                Unlock
+              </Button>
+            </div>
           </div>
-          {pinError ? <p className="text-xs text-danger">Incorrect PIN</p> : null}
         </div>
       ) : null}
 

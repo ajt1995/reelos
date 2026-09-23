@@ -3,6 +3,7 @@ import type { CuratorVote } from "@/lib/discover-curator";
 import type { Title } from "@/lib/types";
 import { useExperienceStore } from "@/experience/experience-state";
 import { loadPrivateCurator, savePrivateCuratorVote, type PrivateCuratorSnapshot } from "@/lib/private-curator-client";
+// Delegates private preference persistence to /api/curator
 import { showToast } from "@/lib/toast";
 
 interface CuratorSession {

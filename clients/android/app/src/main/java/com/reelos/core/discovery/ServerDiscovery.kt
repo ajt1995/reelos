@@ -19,8 +19,12 @@ import java.util.concurrent.TimeUnit
 
 class ServerDiscovery(@Suppress("UNUSED_PARAMETER") context: Context) {
     private val client = OkHttpClient.Builder()
-        .connectTimeout(900, TimeUnit.MILLISECONDS)
-        .readTimeout(900, TimeUnit.MILLISECONDS)
+        .dispatcher(okhttp3.Dispatcher().apply {
+            maxRequests = 256
+            maxRequestsPerHost = 16
+        })
+        .connectTimeout(600, TimeUnit.MILLISECONDS)
+        .readTimeout(600, TimeUnit.MILLISECONDS)
         .followRedirects(false)
         .build()
 
@@ -54,28 +58,58 @@ class ServerDiscovery(@Suppress("UNUSED_PARAMETER") context: Context) {
     }
 
     private fun isPrivateHouseholdHost(host: String): Boolean {
-        if (host == "localhost" || host.endsWith(".local", true)) return true
+        if (host == "localhost" || host.endsWith(".local", true) || host == "255.255.255.255") return true
         val octets = host.split('.').mapNotNull(String::toIntOrNull)
         if (octets.size != 4 || octets.any { it !in 0..255 }) return false
         return octets[0] == 10 || octets[0] == 127 ||
             (octets[0] == 192 && octets[1] == 168) ||
             (octets[0] == 172 && octets[1] in 16..31) ||
-            (octets[0] == 100 && octets[1] in 64..127)
+            (octets[0] == 100 && octets[1] in 64..127) ||
+            (octets[0] == 255 && octets[1] == 255 && octets[2] == 255 && octets[3] == 255)
     }
 
-    suspend fun discoverLocalServer(timeoutMs: Long = 2_000L): DiscoveryInfo? = withContext(Dispatchers.IO) {
-        val candidates = linkedSetOf("10.0.2.2", "127.0.0.1")
+    suspend fun discoverLocalServer(timeoutMs: Long = 2_500L): DiscoveryInfo? = withContext(Dispatchers.IO) {
+        // Fast path 1: Listen for UDP mesh beacons broadcast on port 44445
+        val beaconFound = runCatching {
+            val socket = java.net.DatagramSocket(null).apply {
+                reuseAddress = true
+                soTimeout = 1200
+                bind(java.net.InetSocketAddress(44445))
+            }
+            socket.use { s ->
+                val buf = ByteArray(2048)
+                val packet = java.net.DatagramPacket(buf, buf.size)
+                s.receive(packet)
+                val str = String(packet.data, 0, packet.length, Charsets.UTF_8)
+                val json = JSONObject(str)
+                if (json.optString("type") == "REELOS_MESH_BEACON") {
+                    val port = json.optInt("port", 8080)
+                    val senderIp = packet.address.hostAddress ?: ""
+                    probeServer("http://$senderIp:$port")
+                } else null
+            }
+        }.getOrNull()
+
+        if (beaconFound != null) return@withContext beaconFound
+
+        // Fast path 2: Standard mDNS and network gateways
+        val candidates = linkedSetOf(
+            "reelos.local",  // Local mDNS household hostname
+            "10.0.2.2",      // Android emulator loopback host
+            "127.0.0.1",     // Localhost loopback
+        )
         runCatching {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val network = interfaces.nextElement()
                 if (!network.isUp || network.isLoopback) continue
-                val addresses = network.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
+                for (ia in network.interfaceAddresses) {
+                    val address = ia.address
                     if (address is Inet4Address && !address.isLoopbackAddress) {
                         val subnet = address.hostAddress?.substringBeforeLast('.') ?: continue
-                        listOf(1, 2, 100, 234).forEach { candidates += "$subnet.$it" }
+                        candidates += "$subnet.1"   // Active subnet gateway
+                        candidates += "$subnet.254" // Alternate router gateway
+                        ia.broadcast?.hostAddress?.let { candidates += it }
                     }
                 }
             }
