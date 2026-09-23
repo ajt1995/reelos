@@ -17,7 +17,9 @@ This is the first file a fresh engineering agent should read. It is intentionall
 
 ## Authority order
 
-When sources disagree, use this order:
+Requirements and implementation truth are different: the owner's latest explicit decisions govern intended behavior; code, tests and measurements establish what exists. A conflicting implementation is a defect to reconcile, not permission to override a requirement. For current cross-tool differences, read `docs/agent-context/branch-reconciliation.md`.
+
+When determining implementation truth, use this order:
 
 1. Current code, tests, and measured command output.
 2. `docs/feature-register.json` for active consumer scope and evidence.

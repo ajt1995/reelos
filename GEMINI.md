@@ -6,8 +6,10 @@ read `GEMINI.md`.
 1. Read [`AGENTS.md`](AGENTS.md) completely.
 2. Run `npm run context:brief` and inspect
    [`docs/agent-context/workstreams.json`](docs/agent-context/workstreams.json).
-3. Treat current code/tests, `docs/feature-register.json`, and
-   `docs/agent-context/active-decisions.json` as authoritative, in that order.
+3. Use code/tests as evidence of what exists. The owner's latest explicit
+   decisions govern intended behavior; reconcile conflicts against
+   `docs/feature-register.json` and `docs/agent-context/active-decisions.json`.
+   Read `docs/agent-context/branch-reconciliation.md` before integrating branches.
 4. Work only on the assigned branch/workstream. Do not edit `main` directly or
    overwrite another tool's uncommitted changes.
 5. Return a commit plus the smallest relevant validation evidence. Never claim

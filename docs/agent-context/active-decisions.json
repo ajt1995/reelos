@@ -45,6 +45,12 @@
       "sources": ["docs/feature-register.json", "docs/feature-acceptance.json", ".reelos-audit/platform-release-status.json"]
     },
     {
+      "id": "remote-device-storage-control",
+      "decision": "An authorized household manager can use their phone or any other ReelOS node to select another household computer or device and change its media-storage budget and background-preparation preferences. Controls identify the target device and display its acknowledged settings and usage.",
+      "rationale": "The owner explicitly confirmed remote storage management on 2026-09-23. Cross-device targeting is intentional. Authorization checks the acting person's household authority; pairing alone must not grant a child or guest management access. The target device retains measured free-space, playback, thermal and protected-original safeguards. Offline changes remain pending until acknowledged, never falsely applied.",
+      "sources": ["docs/feature-register.json", "docs/agent-context/branch-reconciliation.md"]
+    },
+    {
       "id": "access-truth",
       "decision": "Discovery may learn from or display catalog metadata that is not available, but playable, save, request, and No idea outcomes must reflect verified access. UI never fabricates service success.",
       "rationale": "Users can train taste on Batman without being told they can play or add Batman when their sources do not provide it.",

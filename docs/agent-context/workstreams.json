@@ -1,38 +1,48 @@
 {
   "schema": "reelos-workstreams/v1",
-  "updatedAt": "2026-09-22T15:30:00-05:00",
+  "updatedAt": "2026-09-23",
   "maintenance": "Replace completed or abandoned entries; do not accumulate a historical log.",
   "canonicalBranch": "main",
   "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
   "active": [
     {
-      "id": "day0-clean-workspace",
+      "id": "branch-reconciliation",
       "owner": "codex",
       "branch": "work/codex-cleanup-2026-09-22",
-      "checkpoint": "3e7f1f8",
+      "checkpoint": "5f039fd",
       "status": "active",
       "scope": [
-        "continue product completion from the clean repository boundary",
-        "resolve release-code defects before generating acceptance evidence",
-        "preserve the native neural architecture and cross-platform Day-0 work"
+        "reconcile Antigravity decisions and source changes against approved ReelOS requirements",
+        "preserve native standalone platforms and actual measured local learning",
+        "prepare bounded integration slices from docs/agent-context/branch-reconciliation.md"
       ],
       "currentFacts": [
         "19 active feature groups and 2 parked groups are registered",
-        "279 tests are classified",
-        "type checking passes after the Home TV-platform repair",
-        "122 of 132 release test files pass with in-process isolation",
-        "remaining runner failures include environment-blocked child processes and targeted media/TV checks",
-        "the obsolete public GitHub repository was deleted",
         "the canonical clean workspace is C:/Users/austi/Documents/Codex/ReelOS",
-        "this workspace has no remote until a new private repository is explicitly created"
+        "origin is the private ajt1995/reelos repository; native-platform decision 5f039fd was pushed",
+        "incoming Antigravity branch c404416 contains native Android work plus unresolved runtime and packaging defects",
+        "all 19 feature-group and 47 UI acceptance IDs and evidence requirements survived the incoming branch",
+        "owner confirmed authorized phone-to-computer storage-budget management",
+        "no incoming application code merged; review is static, not device certification",
+        "awaiting the owner's decision list from the other conversation before affected integration"
       ],
       "nextChecks": [
-        "npm run typecheck",
+        "reconcile supplied owner decisions with branch-reconciliation.md",
         "npm run architecture:check",
         "npm run audit:features",
         "npm run audit:tests",
-        "run classified tests with honest sandbox limitations recorded"
+        "run targeted native and service acceptance after each integrated slice"
       ]
+    },
+    {
+      "id": "antigravity-review-input",
+      "owner": "antigravity",
+      "branch": "work/antigravity-foundation-2026-09-22",
+      "checkpoint": "c404416",
+      "status": "waiting",
+      "scope": ["preserved source for central review; do not merge wholesale"],
+      "currentFacts": ["source inspected from remote ref; original branch remains unchanged"],
+      "nextChecks": ["supply explicit owner decisions; integrate reviewed source changes centrally"]
     }
   ]
 }
