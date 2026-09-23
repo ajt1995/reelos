@@ -28,7 +28,7 @@ class NativeTasteCoordinatorTest {
             val core = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
             core.createProfile("ada", "Ada")
             media.forEach(core::putMedia)
-            core.setReaction("ada", "zeta", ReactionKind.LOVE)
+            core.setReaction("ada", "zeta", ReactionKind.LIKE)
             core.setReaction("ada", "beta", ReactionKind.LIKE)
             val first = NativeTasteCoordinator()
             val before = first.rank(core.snapshot.profiles.getValue("ada"), core.snapshot.media.values.toList())
@@ -70,7 +70,7 @@ class NativeTasteCoordinatorTest {
         assertEquals(listOf("alpha", "beta", "zeta"), coordinator.rank(core.snapshot.profiles.getValue("ada"), media).map { it.id })
         assertEquals(TasteRankingKind.FALLBACK, coordinator.lastTrace("ada")?.kind)
         core.setReaction("ada", "zeta", ReactionKind.DISMISS)
-        assertFalse(coordinator.rank(core.snapshot.profiles.getValue("ada"), media).any { it.id == "zeta" })
+        assertEquals(listOf("alpha", "beta", "zeta"), coordinator.rank(core.snapshot.profiles.getValue("ada"), media).map { it.id })
         core.save("ada", "zeta", true)
         assertTrue("zeta" in core.snapshot.profiles.getValue("ada").savedMediaIds)
         assertTrue(media.any { it.id == "zeta" })
@@ -78,6 +78,53 @@ class NativeTasteCoordinatorTest {
         assertFalse(coordinator.rank(core.snapshot.profiles.getValue("ada"), media).any { it.id == "zeta" })
         core.setReaction("ada", "zeta", null)
         assertEquals(listOf("alpha", "beta", "zeta"), coordinator.rank(core.snapshot.profiles.getValue("ada"), media).map { it.id })
+    }
+
+    @Test fun unrelatedDismissDoesNotSpendBudgetOrYieldCachedTaste() {
+        var allowed = true
+        val coordinator = NativeTasteCoordinator(maxReactions = 1, gate = LearningGate { allowed })
+        val initial = ProfileState("ada", positiveReactions = mapOf("zeta" to ReactionKind.LOVE))
+        assertEquals("zeta", coordinator.rank(initial, media).first().id)
+        allowed = false
+        val dismissed = initial.copy(dismissedIds = setOf("beta", "alpha"))
+        assertEquals("zeta", coordinator.rank(dismissed, media).first().id)
+        assertEquals(TasteRankingKind.LEARNED, coordinator.lastTrace("ada")?.kind)
+        assertTrue(coordinator.lastTrace("ada")!!.cacheHit)
+        assertEquals(1, coordinator.lastTrace("ada")?.replayNumber)
+    }
+
+    @Test fun exactInitialTasteSeedTrainsUnlessLatestReactionOverridesIt() {
+        val coordinator = NativeTasteCoordinator()
+        val seeded = ProfileState("ada", tasteSeeds = setOf("Zeta"))
+        assertEquals("zeta", coordinator.rank(seeded, media).first().id)
+        assertEquals(TasteRankingKind.LEARNED, coordinator.lastTrace("ada")?.kind)
+        assertEquals(1, coordinator.lastTrace("ada")?.trainedReactions)
+        val dismissed = seeded.copy(dismissedIds = setOf("zeta"))
+        assertEquals(listOf("alpha", "beta", "zeta"), coordinator.rank(dismissed, media).map { it.id })
+        assertEquals(TasteRankingKind.FALLBACK, coordinator.lastTrace("ada")?.kind)
+        assertEquals("zeta", coordinator.rank(seeded, media).first().id)
+        val less = seeded.copy(lessLikeIds = setOf("zeta"))
+        assertFalse(coordinator.rank(less, media).any { it.id == "zeta" })
+        val explicit = seeded.copy(positiveReactions = mapOf("zeta" to ReactionKind.LOVE))
+        assertEquals(1, coordinator.also { it.rank(explicit, media) }.lastTrace("ada")?.trainedReactions)
+    }
+
+    @Test fun interruptedRebuildCannotPublishStaleOrPartialModel() {
+        var calls = 0
+        var failAt: Int? = null
+        val coordinator = NativeTasteCoordinator(gate = LearningGate { ++calls != failAt })
+        val first = ProfileState("ada", positiveReactions = mapOf("zeta" to ReactionKind.LOVE))
+        assertEquals("zeta", coordinator.rank(first, media).first().id)
+        val changed = first.copy(positiveReactions = mapOf("beta" to ReactionKind.LOVE))
+        failAt = calls + 3 // admission, first update, then a denied update
+        assertEquals(listOf("alpha", "beta", "zeta"), coordinator.rank(changed, media).map { it.id })
+        assertEquals(TasteRankingKind.PRESSURE, coordinator.lastTrace("ada")?.kind)
+        assertEquals(1, coordinator.cachedProfileCount())
+        failAt = null
+        val recovered = coordinator.rank(changed, media)
+        assertEquals(NativeTasteCoordinator().rank(changed, media), recovered)
+        assertEquals("beta", recovered.first().id)
+        assertEquals(TasteRankingKind.LEARNED, coordinator.lastTrace("ada")?.kind)
     }
 
     @Test fun yieldedReplayPublishesNoPartialModel() {
@@ -102,7 +149,7 @@ class NativeTasteCoordinatorTest {
         assertTrue(coordinator.lastTrace("ada")!!.cacheHit)
         coordinator.rank(p.copy(positiveReactions = mapOf("zeta" to ReactionKind.LOVE)), media)
         assertEquals(2, coordinator.lastTrace("ada")?.replayNumber)
-        coordinator.rank(p.copy(tasteSeeds = setOf("quiet")), media)
+        coordinator.rank(p.copy(tasteSeeds = setOf("Alpha")), media)
         assertEquals(3, coordinator.lastTrace("ada")?.replayNumber)
     }
 

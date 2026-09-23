@@ -18,7 +18,8 @@ data class TasteRankingTrace(
 /**
  * Replays the durable reaction snapshot into a small profile-private learner.
  * The learned factors only compare already rated catalog IDs; unseen titles retain stable
- * title order. Less and Dismiss are deterministic Discover exclusions, not learned predictions.
+ * title order. Less is a deterministic recommendation exclusion; Dismiss is a neutral
+ * calibration skip and remains visible here. Neither is a learned prediction.
  * Callers keep Library/saved collections on the unfiltered catalog.
  */
 class NativeTasteCoordinator(
@@ -31,8 +32,7 @@ class NativeTasteCoordinator(
     private data class Reactions(
         val positive: Map<String, ReactionKind>,
         val less: Set<String>,
-        val dismissed: Set<String>,
-        val seeds: Set<String>,
+        val seededIds: Set<String>,
     )
     private data class Cached(val reactions: Reactions, val learner: LocalLearning?, val trained: Int, val replayNumber: Long)
     private val cache = LinkedHashMap<String, Cached>(16, 0.75f, true)
@@ -49,10 +49,17 @@ class NativeTasteCoordinator(
     @Synchronized fun rank(profile: ProfileState, media: List<MediaRecord>): List<MediaRecord> {
         require(profile.id.isNotBlank() && profile.id.length <= 128)
         require(media.size <= maxCandidates) { "Rank a bounded catalog page" }
-        val visible = media.filter { it.id !in profile.dismissedIds && it.id !in profile.lessLikeIds }
+        val visible = media.filter { it.id !in profile.lessLikeIds }
         val titleOrder = compareBy<MediaRecord>({ it.title.lowercase() }, { it.id })
-        val inputCount = profile.positiveReactions.size + profile.lessLikeIds.size +
-            profile.dismissedIds.size + profile.tasteSeeds.size
+        // Seeds may be titles or catalog IDs selected during onboarding. Only exact
+        // matches are evidence for an item; no keyword/hash projection is invented.
+        val seededIds = media.asSequence().filter { item ->
+            item.id !in profile.positiveReactions &&
+                item.id !in profile.lessLikeIds &&
+                item.id !in profile.dismissedIds &&
+                (item.id in profile.tasteSeeds || item.title in profile.tasteSeeds)
+        }.map { it.id }.toSet()
+        val inputCount = profile.positiveReactions.size + profile.lessLikeIds.size + seededIds.size
         if (inputCount > maxReactions) {
             record(profile.id, TasteRankingTrace(TasteRankingKind.FALLBACK, "learning-input-budget", 0, 0, false, replayNumbers[profile.id] ?: 0))
             return visible.sortedWith(titleOrder)
@@ -61,8 +68,7 @@ class NativeTasteCoordinator(
         val durable = Reactions(
             profile.positiveReactions.toMap(),
             profile.lessLikeIds.toSet(),
-            profile.dismissedIds.toSet(),
-            profile.tasteSeeds.toSet(),
+            seededIds,
         )
         val prior = cache[profile.id]
         val hit = prior?.reactions == durable
@@ -77,12 +83,12 @@ class NativeTasteCoordinator(
         val model = current.learner
         val scores = HashMap<String, Double>()
         if (model != null) for (item in visible) {
-            if (item.id in durable.positive) {
+            if (item.id in durable.positive || item.id in durable.seededIds) {
                 model.predictedPreference(profile.id, item.id)?.let { scores[item.id] = it }
             }
         }
         val ordered = if (scores.isEmpty()) visible.sortedWith(titleOrder) else visible.sortedWith(
-            compareByDescending<MediaRecord> { reactionWeight(durable.positive[it.id]) }
+            compareByDescending<MediaRecord> { reactionWeight(durable.positive[it.id]) + if (it.id in durable.seededIds) 0.7 else 0.0 }
                 .thenByDescending { scores[it.id] ?: Double.NEGATIVE_INFINITY }
                 .then(titleOrder)
         )
@@ -103,6 +109,7 @@ class NativeTasteCoordinator(
                 add(id to reactionWeight(kind))
             }
             reactions.less.sorted().forEach { add(it to -0.8) }
+            reactions.seededIds.sorted().forEach { add(it to 0.7) }
         }
         val number = (replayNumbers[profileId] ?: 0) + 1
         if (observations.isEmpty()) {
