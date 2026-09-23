@@ -9,7 +9,7 @@ class LearnedEmbedding(
     val provenance: String,
     values: FloatArray,
 ) {
-    private val vector: FloatArray = values.copyOf()
+    private val vector: FloatArray
     val values: FloatArray get() = vector.copyOf()
 
     init {
@@ -18,6 +18,7 @@ class LearnedEmbedding(
         require(provenance.isNotBlank() && provenance.length <= 512)
         require(values.size == DIMENSION && values.all { it.isFinite() })
         require(values.any { it != 0f })
+        vector = values.copyOf()
     }
 
     /** Null means incompatible model spaces or invalid geometry; callers must not rank it as a match. */

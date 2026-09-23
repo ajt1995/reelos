@@ -42,8 +42,21 @@ class LocalLearningTest {
             LocalLearning.Context(listOf(0.99, 0.01, 0.0, 0.0, 0.0)),
             LocalLearning.Context(listOf(0.0, 0.0, 1.0, 0.5, 0.1)),
             LocalLearning.Context(listOf(0.0, 1.0, 0.0, 0.0, 0.2)),
+            LocalLearning.Context(listOf(0.0, 0.0, 0.0, 1.0, 0.0)),
+            LocalLearning.Context(listOf(0.0, 0.0, 0.0, 0.0, 1.0)),
         )
-        repeat(1024) { i -> learning.observeArm("ada", "mind_benders", contexts[i % contexts.size], (i % 3).toDouble() / 2) }
+        repeat(1024) { i ->
+            learning.observeArm("ada", "mind_benders", contexts[i % contexts.size], (i % 3).toDouble() / 2)
+            if (i in setOf(254, 256, 1022, 1023)) {
+                val current = learning.snapshot("ada")!!.arms.getValue("mind_benders")
+                val inverse = directInverse(current.covariance)
+                val x = contexts[2]
+                val directMean = (0 until 5).sumOf { row -> x.values[row] * (0 until 5).sumOf { col -> inverse[row][col] * current.reward[col] } }
+                val directVariance = (0 until 5).sumOf { row -> x.values[row] * (0 until 5).sumOf { col -> inverse[row][col] * x.values[col] } }
+                val directScore = directMean + 0.1 * kotlin.math.sqrt(directVariance)
+                assertTrue(abs(directScore - learning.armScore("ada", "mind_benders", x)) < 1e-7)
+            }
+        }
         val state = learning.snapshot("ada")!!
         val arm = state.arms.getValue("mind_benders")
         val inverse = directInverse(arm.covariance)
@@ -81,12 +94,35 @@ class LocalLearningTest {
         assertFailsWith<IllegalArgumentException> { learning.restore("ada", before.copy(factorDimension = 16)) }
         val invalidArm = before.arms.getValue("mind_benders").copy(covariance = List(5) { List(5) { 0.0 } })
         assertFailsWith<IllegalArgumentException> { learning.restore("ada", before.copy(arms = before.arms + ("mind_benders" to invalidArm))) }
+        val tiny = before.arms.getValue("mind_benders").copy(covariance = List(5) { i ->
+            List(5) { j -> if (i == j) 1e-8 else if (i == 0 && j == 1) 5e-7 else 0.0 }
+        })
+        assertFailsWith<IllegalArgumentException> { learning.restore("ada", before.copy(arms = before.arms + ("mind_benders" to tiny))) }
         assertEquals(before, learning.snapshot("ada"))
         val bounded = LocalLearning(factorDimension = 8, maxProfiles = 1, maxItemsPerProfile = 1)
         bounded.observe("ada", "one", 1.0)
         bounded.observe("ada", "two", 1.0)
         assertNull(bounded.predictedPreference("ada", "one"))
         assertFailsWith<IllegalArgumentException> { bounded.observe("bea", "film", 1.0) }
+    }
+
+    @Test fun contextAndSnapshotCopiesCannotMutateLiveLearning() {
+        val source = mutableListOf(1.0, 0.0, 0.0, 0.0, 0.0)
+        val context = LocalLearning.Context(source)
+        source[0] = Double.NaN
+        (context.values as MutableList<Double>)[0] = Double.NaN
+        assertTrue(context.values.all { it.isFinite() })
+        val learning = LocalLearning(factorDimension = 8)
+        learning.observe("ada", "film", 1.0)
+        learning.observeArm("ada", "mind_benders", context, 1.0)
+        val snapshot = learning.snapshot("ada")!!
+        val original = learning.snapshot("ada")!!
+        (snapshot.factors.user as MutableList<Float>)[0] = Float.NaN
+        (snapshot.factors.items.getValue("film") as MutableList<Float>)[0] = Float.NaN
+        (snapshot.arms.getValue("mind_benders").covariance[0] as MutableList<Double>)[0] = Double.NaN
+        (snapshot.arms.getValue("mind_benders").reward as MutableList<Double>)[0] = Double.NaN
+        assertEquals(original, learning.snapshot("ada"))
+        assertTrue(learning.armScore("ada", "mind_benders", context).isFinite())
     }
 
     @Test fun semanticEmbeddingsRequireActualCompatibleFiniteVectors() {

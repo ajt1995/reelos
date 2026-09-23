@@ -100,12 +100,13 @@ class LocalLearning(
 
     /** Input order: time sine, time cosine, weekend, session depth, system ease. */
     class Context(values: List<Double>) {
-        val values: List<Double>
+        private val coordinates: DoubleArray
+        val values: List<Double> get() = coordinates.toList()
         init {
             require(values.size == CONTEXT_DIMENSION && values.all { it.isFinite() && it in -1.0..1.0 })
             val norm = sqrt(values.sumOf { it * it })
             require(norm > 1e-12) { "Zero context" }
-            this.values = values.map { it / norm }
+            coordinates = DoubleArray(CONTEXT_DIMENSION) { values[it] / norm }
         }
     }
 
@@ -178,7 +179,7 @@ class LocalLearning(
             val arm = Arm()
             for (i in 0 until CONTEXT_DIMENSION) {
                 for (j in 0 until CONTEXT_DIMENSION) {
-                    require(kotlin.math.abs(source.covariance[i][j] - source.covariance[j][i]) < 1e-6)
+                    require(source.covariance[i][j] == source.covariance[j][i]) { "Asymmetric covariance" }
                     arm.a[i][j] = source.covariance[i][j]
                 }
                 arm.b[i] = source.reward[i]
