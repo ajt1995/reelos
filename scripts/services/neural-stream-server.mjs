@@ -12,6 +12,8 @@ import { join, extname, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import https from "node:https";
 import http from "node:http";
+import dns from "node:dns/promises";
+import net from "node:net";
 import { Transform } from "node:stream";
 import { beginPreparationBlockingStream } from "./preparation-activity.mjs";
 import { createHash } from "node:crypto";
@@ -34,6 +36,59 @@ const VIDEO_MIME = {
 };
 
 const PROVIDER_READY_STATES = new Set(["completed", "cached", "seeding", "uploading"]);
+const PROVIDER_IPV4_DENY = new net.BlockList();
+for (const [network, prefix] of [
+  ["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8],
+  ["169.254.0.0", 16], ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.0.2.0", 24],
+  ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24],
+  ["203.0.113.0", 24], ["224.0.0.0", 4], ["240.0.0.0", 4],
+]) PROVIDER_IPV4_DENY.addSubnet(network, prefix, "ipv4");
+PROVIDER_IPV4_DENY.addAddress("168.63.129.16", "ipv4");
+const PROVIDER_IPV6_GLOBAL = new net.BlockList();
+PROVIDER_IPV6_GLOBAL.addSubnet("2000::", 3, "ipv6");
+const PROVIDER_IPV6_DENY = new net.BlockList();
+for (const [network, prefix] of [["2001::", 32], ["2001:db8::", 32], ["2002::", 16]]) {
+  PROVIDER_IPV6_DENY.addSubnet(network, prefix, "ipv6");
+}
+
+function providerAddressAllowed(address) {
+  const family = net.isIP(address);
+  if (family === 4) return !PROVIDER_IPV4_DENY.check(address, "ipv4");
+  if (family === 6) return PROVIDER_IPV6_GLOBAL.check(address, "ipv6") && !PROVIDER_IPV6_DENY.check(address, "ipv6");
+  return false;
+}
+
+async function providerDestination(remoteUrl, { providerLookup = dns.lookup, providerSecret = "" } = {}) {
+  const url = new URL(remoteUrl);
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const lower = hostname.toLowerCase().replace(/\.$/, "");
+  if (url.protocol !== "https:" || url.username || url.password || !hostname
+      || lower === "localhost" || lower.endsWith(".localhost") || lower.endsWith(".local")
+      || lower.endsWith(".internal") || lower.endsWith(".home.arpa") || lower === "metadata") {
+    throw new Error("Provider stream destination is not allowed.");
+  }
+  if (providerSecret && (url.href.includes(providerSecret) || decodeURIComponent(url.href).includes(providerSecret))) {
+    throw new Error("Provider stream destination is not allowed.");
+  }
+  const family = net.isIP(hostname);
+  const addresses = family ? [{ address: hostname, family }]
+    : await providerLookup(hostname, { all: true, verbatim: true });
+  if (!Array.isArray(addresses) || addresses.length === 0
+      || addresses.some((entry) => !entry || net.isIP(entry.address) !== entry.family || !providerAddressAllowed(entry.address))) {
+    throw new Error("Provider stream destination is not allowed.");
+  }
+  const pinned = addresses[0];
+  const lookup = (requestedHost, lookupOptions, callback) => {
+    if (typeof lookupOptions === "function") { callback = lookupOptions; lookupOptions = {}; }
+    if (requestedHost.toLowerCase().replace(/\.$/, "") !== lower) {
+      callback(new Error("Provider stream destination changed."));
+      return;
+    }
+    if (lookupOptions?.all) callback(null, [pinned]);
+    else callback(null, pinned.address, pinned.family);
+  };
+  return { lookup };
+}
 
 function providerEpisodeMatches(item, file) {
   if (item?.mediaType !== "episode" && item?.episode == null) return true;
@@ -476,13 +531,16 @@ export function streamLocalFile(req, res, filePath, customContentType = null, gu
 
 
 /**
- * Proxies a remote encrypted Debrid stream directly to the client with Range forwarding.
- * Zero transcoding, zero disk I/O, pure streaming pipe.
+ * Proxies a remote stream directly to the client with Range forwarding.
+ * Provider mode checks every HTTPS destination and pins the validated DNS address
+ * for the socket connection; generic personal/public routes keep their own policy.
  * @param {import("node:http").IncomingMessage} req
  * @param {import("node:http").ServerResponse} res
  * @param {string} remoteUrl
+ * @param {number} [maxRedirects]
+ * @param {Object} [options]
  */
-export function proxyRemoteStream(req, res, remoteUrl, maxRedirects = 5) {
+export function proxyRemoteStream(req, res, remoteUrl, maxRedirects = 5, options = {}) {
   const release = (req.method || "GET").toUpperCase() === "HEAD" ? () => {} : beginPreparationBlockingStream();
   const active = new Set();
   let closed = false;
@@ -509,11 +567,13 @@ export function proxyRemoteStream(req, res, remoteUrl, maxRedirects = 5) {
     } else res.destroy();
   };
   const lifecycle = { active, cleanup, fail, isClosed: () => closed };
-  try { proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle); }
-  catch (error) { fail(error); }
+  const redirectLimit = options.remotePolicy === "provider"
+    ? (Number.isInteger(maxRedirects) ? Math.max(0, Math.min(5, maxRedirects)) : 5)
+    : maxRedirects;
+  void proxyRemoteStreamHop(req, res, remoteUrl, redirectLimit, lifecycle, options).catch(fail);
 }
 
-function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle) {
+async function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle, options) {
   if (lifecycle.isClosed()) return;
   if (maxRedirects < 0) {
     lifecycle.cleanup();
@@ -538,8 +598,14 @@ function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle) {
     return;
   }
 
+  let pinnedLookup;
+  if (options.remotePolicy === "provider") {
+    const destination = await providerDestination(remoteUrl, options);
+    pinnedLookup = destination.lookup;
+    if (lifecycle.isClosed()) return;
+  }
   const isHttps = urlObj.protocol === "https:";
-  const client = isHttps ? https : http;
+  const client = isHttps ? { request: options.providerHttpsRequest || https.request } : http;
 
   const headers = {
     "User-Agent": "ReelOS/2.0 (NeuralStreamEngine)",
@@ -556,6 +622,7 @@ function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle) {
     {
       method,
       headers,
+      ...(pinnedLookup ? { lookup: pinnedLookup, agent: false } : {}),
     },
     (upstreamRes) => {
       if (lifecycle.isClosed()) { upstreamRes.destroy(); return; }
@@ -569,7 +636,7 @@ function proxyRemoteStreamHop(req, res, remoteUrl, maxRedirects, lifecycle) {
       if ([301, 302, 303, 307, 308].includes(statusCode) && upstreamRes.headers.location) {
         const nextUrl = new URL(upstreamRes.headers.location, remoteUrl).href;
         upstreamRes.destroy();
-        proxyRemoteStreamHop(req, res, nextUrl, maxRedirects - 1, lifecycle);
+        void proxyRemoteStreamHop(req, res, nextUrl, maxRedirects - 1, lifecycle, options).catch(lifecycle.fail);
         return;
       }
 
@@ -758,7 +825,11 @@ export async function handleStreamRequest(req, res, options = {}) {
           return sendPlaybackFailure(res, { ok: false, status: 403, code: "playback_source_changed", error: "The playback source changed. Start playback again." });
         }
         if (streamUrl && /^https?:\/\//i.test(streamUrl)) {
-          proxyRemoteStream(req, res, streamUrl);
+          proxyRemoteStream(req, res, streamUrl, 5, {
+            ...options.providerRemoteOptions,
+            remotePolicy: "provider",
+            providerSecret: policy.apiKey,
+          });
           return true;
         }
       }

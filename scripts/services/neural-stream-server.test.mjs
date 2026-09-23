@@ -33,6 +33,14 @@ async function byteRequest(who, url, { authenticated = true, method = "GET", hea
   return res;
 }
 
+async function providerProxyRequest(remoteUrl, options = {}, { method = "GET", headers = {} } = {}) {
+  const req = createMockRequest({ method, headers });
+  const res = createMockResponse();
+  proxyRemoteStream(req, res, remoteUrl, 5, { remotePolicy: "provider", ...options });
+  await res.waitForEnd();
+  return res;
+}
+
 test("byte authorization rejects anonymous, device-only, mismatched, rotated and revoked profile credentials", async () => {
   const who = createPlaybackFixture();
   for (const route of ["sample", "public/night-of-the-living-dead-1968", "0123456789abcdef0123456789abcdef01234567"]) {
@@ -285,15 +293,24 @@ test("parseRangeHeader: identifies unsatisfiable and malformed ranges", () => {
   assert.equal(parseRangeHeader("", total), null);
 });
 
-test("getSampleVideoPath: resolves existing bundled sample media", () => {
-  const p = getSampleVideoPath();
-  assert.ok(p, "Sample video path should resolve");
-  assert.match(p, /\.mp4$/i);
+test("getSampleVideoPath: resolves only an existing file under the supplied root", () => {
+  const root = fs.mkdtempSync(path.join(process.cwd(), ".reelos-sample-path-test-"));
+  try {
+    assert.equal(getSampleVideoPath(root), null);
+    const publicDir = path.join(root, "public");
+    fs.mkdirSync(publicDir);
+    const file = path.join(publicDir, "reelos_teaser_45s.mp4");
+    fs.writeFileSync(file, Buffer.alloc(16, 0x41));
+    assert.equal(getSampleVideoPath(root), file);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
-test("handleStreamRequest: serves sample video with full 200 and range 206 chunks", async () => {
+test("handleStreamRequest: serves isolated sample bytes with full 200 and range 206 chunks", async () => {
+  const root = fs.mkdtempSync(path.join(process.cwd(), ".reelos-sample-stream-test-"));
+  fs.mkdirSync(path.join(root, "public"));
+  fs.writeFileSync(path.join(root, "public", "reelos_teaser_45s.mp4"), Buffer.alloc(2048, 0x42));
   const server = http.createServer(async (req, res) => {
-    const handled = await handleStreamRequest(req, res, { providerEnabled: true });
+    const handled = await handleStreamRequest(req, res, { root });
     if (!handled) {
       res.statusCode = 404;
       res.end("not found");
@@ -313,7 +330,7 @@ test("handleStreamRequest: serves sample video with full 200 and range 206 chunk
     assert.equal(resFull.headers.get("x-reelos-zerotranscode"), "100%");
     assert.equal(resFull.headers.get("content-type"), "video/mp4");
     const totalLength = parseInt(resFull.headers.get("content-length"), 10);
-    assert.ok(totalLength > 1000000, "Sample video should be > 1MB");
+    assert.equal(totalLength, 2048);
 
     // Consume body
     await resFull.arrayBuffer();
@@ -353,6 +370,7 @@ test("handleStreamRequest: serves sample video with full 200 and range 206 chunk
     assert.equal(headText, "", "HEAD request should have no response body");
   } finally {
     server.close();
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -399,9 +417,12 @@ test("handleStreamRequest: streams locally cached media for hash with range supp
   }
 });
 
-test("reelos-box: dispatchBoxApi handles /api/stream/sample directly", async () => {
+test("reelos-box: dispatchBoxApi handles an authorized personal Range stream directly", async () => {
   const previousState = process.env.REELOS_STATE;
   process.env.REELOS_STATE = identity.stateDir;
+  const file = path.join(identity.stateDir, "box-personal.mp4");
+  fs.writeFileSync(file, Buffer.alloc(1024, 0x52));
+  identity.writeLibrary([{ id: "box-personal", sourceKind: "personal_import", path: file, OfficialRating: "G" }]);
   const server = http.createServer(async (req, res) => {
     if (await dispatchBoxApi(req, res)) return;
     res.statusCode = 404;
@@ -413,7 +434,7 @@ test("reelos-box: dispatchBoxApi handles /api/stream/sample directly", async () 
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
-    const res = await fetch(`${baseUrl}/api/stream/sample`, {
+    const res = await fetch(`${baseUrl}/api/stream/item/box-personal`, {
       headers: { Range: "bytes=0-511" },
     });
     assert.equal(res.status, 206);
@@ -421,8 +442,11 @@ test("reelos-box: dispatchBoxApi handles /api/stream/sample directly", async () 
     assert.equal(res.headers.get("content-length"), "512");
     const buf = await res.arrayBuffer();
     assert.equal(buf.byteLength, 512);
+    assert.equal(Buffer.from(buf)[0], 0x52);
   } finally {
     server.close();
+    identity.writeLibrary([]);
+    fs.rmSync(file, { force: true });
     if (previousState === undefined) delete process.env.REELOS_STATE;
     else process.env.REELOS_STATE = previousState;
   }
@@ -529,6 +553,185 @@ test("proxyRemoteStream: transparently follows 302 redirect from debrid CDN", as
   }
 });
 
+test("provider proxy rejects unsafe initial URLs and DNS answers before transport", async () => {
+  let transports = 0;
+  const options = {
+    providerSecret: "account-api-key",
+    providerLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+    providerHttpsRequest: () => { transports += 1; throw new Error("transport should not run"); },
+  };
+  for (const url of [
+    "http://cdn.example/video", "https://user:pass@cdn.example/video", "https://127.0.0.1/video",
+    "https://0x7f000001/video", "https://10.1.2.3/video", "https://169.254.169.254/latest/meta-data/",
+    "https://168.63.129.16/video", "https://[::1]/video", "https://[::ffff:127.0.0.1]/video",
+    "https://[fc00::1]/video", "https://metadata.google.internal/video",
+    "https://cdn.example/video?token=account-api-key", "https://cdn.example/video?token=%61ccount-api-key",
+  ]) {
+    const res = await providerProxyRequest(url, options);
+    assert.equal(res.statusCode, 502, url);
+  }
+  for (const addresses of [
+    [{ address: "192.168.1.2", family: 4 }],
+    [{ address: "8.8.8.8", family: 4 }, { address: "127.0.0.1", family: 4 }],
+    [{ address: "fe80::1", family: 6 }],
+    [{ address: "2001:db8::1", family: 6 }],
+  ]) {
+    const res = await providerProxyRequest("https://cdn.example/video", { ...options, providerLookup: async () => addresses });
+    assert.equal(res.statusCode, 502);
+  }
+  assert.equal(transports, 0);
+});
+
+test("provider proxy pins public DNS, forwards Range, and allows signed CDN lease query", async () => {
+  const contacts = [];
+  const res = await providerProxyRequest("https://cdn.example/video?lease=temporary", {
+    providerSecret: "account-api-key",
+    providerLookup: async (host) => { assert.equal(host, "cdn.example"); return [{ address: "8.8.8.8", family: 4 }]; },
+    providerHttpsRequest: (url, requestOptions, respond) => {
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => requestOptions.lookup("cdn.example", {}, (error, address, family) => {
+        assert.ifError(error);
+        contacts.push({ url, address, family, options: requestOptions });
+        const upstream = Readable.from([Buffer.from("abcd")]);
+        upstream.statusCode = 206;
+        upstream.headers = { "content-range": "bytes 0-3/4", "content-length": "4", "content-type": "video/mp4" };
+        respond(upstream);
+      });
+      return outgoing;
+    },
+  }, { headers: { range: "bytes=0-3" } });
+  assert.equal(res.statusCode, 206);
+  assert.equal(res.text, "abcd");
+  assert.equal(res.getHeader("content-range"), "bytes 0-3/4");
+  assert.equal(res.getHeader("cache-control"), "private, no-store");
+  assert.equal(contacts.length, 1);
+  assert.equal(contacts[0].address, "8.8.8.8");
+  assert.equal(contacts[0].family, 4);
+  assert.equal(contacts[0].options.headers.Range, "bytes=0-3");
+  assert.equal(contacts[0].options.headers.Authorization, undefined);
+  assert.equal(contacts[0].options.agent, false);
+});
+
+test("provider proxy validates every redirect and bounds redirect chains", async () => {
+  for (const target of ["http://cdn.example/insecure", "https://127.0.0.1/private", "https://metadata.example/private"]) {
+    let contacts = 0;
+    const res = await providerProxyRequest("https://cdn.example/start", {
+      providerLookup: async (host) => [{ address: host === "metadata.example" ? "169.254.169.254" : "8.8.8.8", family: 4 }],
+      providerHttpsRequest: (_url, _options, respond) => {
+        contacts += 1;
+        const outgoing = new EventEmitter();
+        outgoing.destroy = () => {};
+        outgoing.end = () => {
+          const upstream = Readable.from([]);
+          upstream.statusCode = 302;
+          upstream.headers = { location: target };
+          respond(upstream);
+        };
+        return outgoing;
+      },
+    });
+    assert.equal(res.statusCode, 502, target);
+    assert.equal(contacts, 1, target);
+  }
+  let lookups = 0;
+  let rebindingContacts = 0;
+  const rebound = await providerProxyRequest("https://cdn.example/start", {
+    providerLookup: async () => [{ address: ++lookups === 1 ? "8.8.8.8" : "127.0.0.1", family: 4 }],
+    providerHttpsRequest: (_url, _options, respond) => {
+      rebindingContacts += 1;
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => {
+        const upstream = Readable.from([]);
+        upstream.statusCode = 302;
+        upstream.headers = { location: "https://cdn.example/next" };
+        respond(upstream);
+      };
+      return outgoing;
+    },
+  });
+  assert.equal(rebound.statusCode, 502);
+  assert.equal(lookups, 2);
+  assert.equal(rebindingContacts, 1);
+  let hops = 0;
+  const loop = await providerProxyRequest("https://cdn.example/start", {
+    providerLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+    providerHttpsRequest: (_url, _options, respond) => {
+      hops += 1;
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => {
+        const upstream = Readable.from([]);
+        upstream.statusCode = 302;
+        upstream.headers = { location: "https://cdn.example/start" };
+        respond(upstream);
+      };
+      return outgoing;
+    },
+  });
+  assert.equal(loop.statusCode, 508);
+  assert.equal(hops, 6);
+});
+
+test("provider proxy preserves HEAD, upstream status and client cancellation", async () => {
+  const providerLookup = async () => [{ address: "8.8.8.8", family: 4 }];
+  const head = await providerProxyRequest("https://cdn.example/video", {
+    providerLookup,
+    providerHttpsRequest: (_url, requestOptions, respond) => {
+      assert.equal(requestOptions.method, "HEAD");
+      assert.equal(requestOptions.headers.Range, "bytes=0-3");
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => {
+        const upstream = Readable.from([]);
+        upstream.statusCode = 206;
+        upstream.headers = { "content-range": "bytes 0-3/4", "content-length": "4" };
+        respond(upstream);
+      };
+      return outgoing;
+    },
+  }, { method: "HEAD", headers: { range: "bytes=0-3" } });
+  assert.equal(head.statusCode, 206);
+  assert.equal(head.text, "");
+  assert.equal(head.getHeader("content-range"), "bytes 0-3/4");
+
+  const unavailable = await providerProxyRequest("https://cdn.example/video", {
+    providerLookup,
+    providerHttpsRequest: (_url, _requestOptions, respond) => {
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => {};
+      outgoing.end = () => {
+        const upstream = Readable.from([Buffer.from("upstream unavailable")]);
+        upstream.statusCode = 503;
+        upstream.headers = { "content-type": "text/plain" };
+        respond(upstream);
+      };
+      return outgoing;
+    },
+  });
+  assert.equal(unavailable.statusCode, 503);
+  assert.equal(unavailable.text, "upstream unavailable");
+
+  const req = createMockRequest();
+  const res = createMockResponse();
+  let destroyed = false;
+  let started;
+  const didStart = new Promise((resolve) => { started = resolve; });
+  proxyRemoteStream(req, res, "https://cdn.example/video", 5, {
+    remotePolicy: "provider", providerLookup,
+    providerHttpsRequest: () => {
+      const outgoing = new EventEmitter();
+      outgoing.destroy = () => { destroyed = true; };
+      outgoing.end = () => started();
+      return outgoing;
+    },
+  });
+  await didStart;
+  req.emit("aborted");
+  assert.equal(destroyed, true);
+});
+
 test("handleStreamRequest: handles TorBox array response and .mp4 extension in URL", async () => {
   const testHash = "4444444444444444444444444444444444444444";
   identity.setProvider(true);
@@ -580,17 +783,6 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
     end() {},
   };
 
-  // We can pass an upstream mock that streams directly
-  const dummyServer = http.createServer((sReq, sRes) => {
-    sRes.statusCode = 206;
-    sRes.setHeader("Content-Range", "bytes 0-100/1000");
-    sRes.setHeader("Content-Length", "101");
-    sRes.setHeader("Content-Type", "video/mp4");
-    sRes.end(Buffer.alloc(101, 0x99));
-  });
-  await new Promise((resolve) => dummyServer.listen(0, "127.0.0.1", resolve));
-  const dummyPort = dummyServer.address().port;
-
   let requestDownloadCall;
   const mockFetchWithServer = async (url, init = {}) => {
     if (url.includes("mylist")) {
@@ -615,7 +807,7 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
         ok: true,
         json: async () => ({
           success: true,
-          data: `http://127.0.0.1:${dummyPort}/video.mp4`,
+          data: "https://cdn.example/video.mp4?lease=temporary",
         }),
       };
     }
@@ -628,6 +820,23 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
       apiKey: "test-api-key",
       providerEnabled: true,
       libraryItems: [{ id: "mapped-provider", infohash: testHash, sourceKind: "debrid", torrentId: 9988, providerFileId: 1 }],
+      providerRemoteOptions: {
+        providerLookup: async () => [{ address: "8.8.8.8", family: 4 }],
+        providerHttpsRequest: (url, requestOptions, respond) => {
+          const outgoing = new EventEmitter();
+          outgoing.destroy = () => {};
+          outgoing.end = () => requestOptions.lookup(new URL(url).hostname, {}, (error, address) => {
+            if (error) { outgoing.emit("error", error); return; }
+            assert.equal(address, "8.8.8.8");
+            assert.equal(requestOptions.headers.Range, "bytes=0-100");
+            const upstream = Readable.from([Buffer.alloc(101, 0x99)]);
+            upstream.statusCode = 206;
+            upstream.headers = { "content-range": "bytes 0-100/1000", "content-length": "101", "content-type": "video/mp4" };
+            respond(upstream);
+          });
+          return outgoing;
+        },
+      },
     });
     if (!handled) {
       eRes.statusCode = 404;
@@ -649,7 +858,6 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
     assert.match(requestDownloadCall.init.headers.Authorization, /^Bearer \S+$/);
   } finally {
     edgeServer.close();
-    dummyServer.close();
     identity.setProvider(false);
   }
 });
