@@ -28,7 +28,33 @@ test("TorBox adapter refuses unauthorized and ambiguous files", async () => {
   const unauthorized = new TorBoxProviderAdapter({ apiKey: "bad", rateLimiter: limiter, fetchImpl: async () => response(401, {}) });
   await assert.rejects(() => unauthorized.validate(), (error) => error.code === "provider_unauthorized");
   assert.equal(torBoxFileSelector([{ id: 1, name: "a.mkv", size: 100 }, { id: 2, name: "b.mkv", size: 100 }]), null);
+  assert.equal(torBoxFileSelector([{ id: 1, name: "S01E01.mkv", size: 100 }, { id: 2, name: "S01E02.mkv", size: 200 }]), null);
   assert.equal(torBoxFileSelector([{ id: 1, name: "a.mkv", size: 100 }], 2), null);
+});
+
+test("TorBox adapter binds the returned torrent id, hash, file and episode", async () => {
+  const hash = "d".repeat(40);
+  const adapter = new TorBoxProviderAdapter({ apiKey: "secret", rateLimiter: limiter, fetchImpl: async (url) => {
+    if (url.includes("createtorrent")) return response(200, { data: { torrent_id: 11 } });
+    if (url.includes("mylist")) return response(200, { data: [{ id: 11, hash, download_state: "completed", files: [
+      { id: 1, name: "Series.S01E01.mkv", size: 100 }, { id: 2, name: "Series.S01E02.mkv", size: 200 },
+    ] }] });
+    throw new Error(url);
+  } });
+  const candidate = { hash, magnet: `magnet:?xt=urn:btih:${hash}`, fileId: 1 };
+  const acquired = await adapter.acquire(candidate, { requestedMedia: { mediaType: "episode", season: 1, episode: 1 } });
+  const verified = await adapter.verify(acquired);
+  assert.deepEqual(verified.source.binding, { infohash: hash, torrentId: 11, fileId: 1, sizeBytes: 100 });
+  await assert.rejects(() => adapter.verify({ ...acquired, requestedFileId: 2 }), (error) => error.code === "provider_episode_mismatch");
+  await assert.rejects(() => adapter.verify({ ...acquired, requestedFileId: null }), (error) => error.code === "provider_file_ambiguous");
+});
+
+test("TorBox adapter rejects a same-hash torrent with a different id", async () => {
+  const hash = "e".repeat(40);
+  const adapter = new TorBoxProviderAdapter({ apiKey: "secret", rateLimiter: limiter, fetchImpl: async () => response(200, {
+    data: [{ id: 12, hash, download_state: "completed", files: [{ id: 1, name: "film.mkv", size: 100 }] }],
+  }) });
+  await assert.rejects(() => adapter.verify({ torrentId: 11, hash }), (error) => error.code === "provider_job_ambiguous");
 });
 
 test("TorBox adapter rejects unavailable provider state", async () => {

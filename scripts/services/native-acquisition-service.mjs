@@ -111,6 +111,7 @@ export class NativeAcquisitionService {
     const episode = input?.episode == null ? null : Number(input.episode);
     if (season != null && (!Number.isInteger(season) || season < 0)) fail("The season number is invalid.");
     if (episode != null && (!Number.isInteger(episode) || episode < 0)) fail("The episode number is invalid.");
+    if ((mediaType === "episode" || episode != null) && (season == null || episode == null)) fail("An episode needs both season and episode numbers.");
     const candidate = { profileId, workId, mediaType, season, episode };
     const key = requestKey(candidate);
     const state = this.read();
@@ -212,14 +213,18 @@ export class NativeAcquisitionService {
       const provider = await adapters.resolveProvider(job, selected, { signal });
       if (!provider?.adapter || typeof provider.adapter.acquire !== "function") fail("No validated provider can acquire this source.", "provider_unavailable");
       job = this.transition(id, "acquiring", { provider: String(provider.id || "").slice(0, 64), progress: 0 });
-      const acquired = await provider.adapter.acquire(selected, { signal, onProgress: (progress) => {
-        if (!Number.isFinite(progress)) return;
-        const state = this.read();
-        if (state.jobs[id]?.status !== "acquiring") return;
-        state.jobs[id].progress = Math.max(0, Math.min(100, Math.round(progress)));
-        state.jobs[id].updatedAt = Date.now();
-        this.write(state);
-      } });
+      const acquired = await provider.adapter.acquire(selected, {
+        signal,
+        requestedMedia: { mediaType: job.mediaType, season: job.season, episode: job.episode },
+        onProgress: (progress) => {
+          if (!Number.isFinite(progress)) return;
+          const state = this.read();
+          if (state.jobs[id]?.status !== "acquiring") return;
+          state.jobs[id].progress = Math.max(0, Math.min(100, Math.round(progress)));
+          state.jobs[id].updatedAt = Date.now();
+          this.write(state);
+        },
+      });
       stop();
       job = this.transition(id, "verifying", { progress: null, providerReceipt: acquired?.receipt || null });
       const verify = typeof provider.adapter.waitUntilReady === "function"
@@ -242,7 +247,8 @@ export class NativeAcquisitionService {
       }
       const item = adapters.registry.register({
         workId: job.workId, editionId: verified.editionId, title: job.title, year: job.year,
-        mediaType: job.mediaType, aliases: verified.aliases || [], source,
+        mediaType: job.mediaType, season: job.season, episode: job.episode,
+        aliases: verified.aliases || [], source,
       });
       return this.transition(id, "ready", { progress: 100, error: null, libraryItemId: item.itemId });
     } catch (error) {

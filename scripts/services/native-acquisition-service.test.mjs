@@ -23,7 +23,8 @@ test("native acquisition is idempotent and publishes only after source verificat
     rank: async (_job, candidates) => candidates[0],
     resolveProvider: async () => ({ id: "torbox", adapter: {
       acquire: async () => ({ receipt: { providerJobId: "opaque" } }),
-      verify: async () => ({ editionId: "tmdb-550-cut-1999", source: { id: "tb-file-a", kind: "provider_stream", provider: "torbox", verified: true, binding: { opaque: "private" } } }),
+      verify: async () => ({ editionId: "tmdb-550-cut-1999", source: { id: "tb-file-a", kind: "provider_stream", provider: "torbox", verified: true,
+        binding: { infohash: "a".repeat(40), torrentId: 7, fileId: 3 } } }),
     } }),
     registry,
   });
@@ -41,6 +42,26 @@ test("native acquisition fails closed when provider verification is absent", asy
   });
   assert.equal(failed.status, "failed");
   assert.equal(registry.list().length, 0);
+});
+
+test("acquisition passes the canonical episode to the provider", async () => {
+  const { service, registry } = setup();
+  const { job } = service.create({ profileId: "adult-a", workId: "series-a", mediaType: "episode", season: 2, episode: 4 });
+  let requestedMedia;
+  const result = await service.run(job.id, {
+    discover: async () => [{ id: "episode-candidate" }],
+    rank: async (_job, candidates) => candidates[0],
+    resolveProvider: async () => ({ id: "torbox", adapter: {
+      acquire: async (_candidate, options) => { requestedMedia = options.requestedMedia; return {}; },
+      verify: async () => ({ editionId: "series-a-s02e04", source: { id: "episode-file", kind: "provider_stream", provider: "torbox",
+        verified: true, binding: { infohash: "d".repeat(40), torrentId: 12, fileId: 4 } } }),
+    } }),
+    registry,
+  });
+  assert.deepEqual(requestedMedia, { mediaType: "episode", season: 2, episode: 4 });
+  assert.equal(registry.get(result.libraryItemId).episode, 4);
+  assert.throws(() => service.create({ profileId: "adult-a", workId: "series-a", mediaType: "episode", episode: 4 }),
+    /both season and episode/);
 });
 
 test("restart converts active jobs to explicit interrupted state", () => {

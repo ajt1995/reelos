@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { torBoxRateLimiter } from "./debrid-service.mjs";
 import { chaosMonkeyService, createChaosStreamTransform } from "./chaos-monkey-service.mjs";
 import { SAMPLE_MOVIES } from "../sample-library-seed.mjs";
-import { authorizePlaybackItem, playbackIdentity, resolvePlaybackItem, sendPlaybackFailure, verifiedPlaybackFile } from "./playback-access-service.mjs";
+import { authorizePlaybackItem, playbackIdentity, playbackItemId, resolvePlaybackItem, sendPlaybackFailure, verifiedPlaybackFile } from "./playback-access-service.mjs";
 
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -32,6 +32,17 @@ const VIDEO_MIME = {
   ".ts": "video/mp2t",
   ".m4v": "video/mp4",
 };
+
+const PROVIDER_READY_STATES = new Set(["completed", "cached", "seeding", "uploading"]);
+
+function providerEpisodeMatches(item, file) {
+  if (item?.mediaType !== "episode" && item?.episode == null) return true;
+  const season = item.season;
+  const episode = item.episode;
+  if (!Number.isInteger(season) || !Number.isInteger(episode)) return false;
+  const name = String(file?.name || file?.short_name || file?.path || "");
+  return new RegExp(`(?:^|[^a-z0-9])s0*${season}e0*${episode}(?!\\d)`, "i").test(name);
+}
 
 /**
  * Dynamic Console Gaming QoS Video Chunk Pacing State
@@ -676,8 +687,12 @@ export async function handleStreamRequest(req, res, options = {}) {
   }
   const access = authorizePlaybackItem(req, item, options);
   if (!access.ok) return sendPlaybackFailure(res, access);
+  const requestedFile = url.searchParams.get("file_id");
+  if (requestedFile && String(item?.source?.fileId ?? item?.providerFileId ?? "") !== requestedFile) {
+    return sendPlaybackFailure(res, { ok: false, status: 404, code: "playback_source_unmapped", error: "No verified media source is mapped to this file." });
+  }
   const file = verifiedPlaybackFile(item);
-  if (file) {
+  if (file && access.sourceKind !== "debrid") {
     streamLocalFile(req, res, file);
     return true;
   }
@@ -692,27 +707,33 @@ export async function handleStreamRequest(req, res, options = {}) {
   // Hash-only RAM buffers and guessed disk filenames have no verified title/file
   // provenance. Do not serve them or redirect to unauthenticated relay nodes.
   const providerFileId = item?.source?.fileId ?? item?.providerFileId;
+  const torrentId = item?.source?.torrentId ?? item?.torrentId;
   const hash = String(item?.infohash || item?.source?.infohash || "").toLowerCase();
   const policy = access.sourcePolicy;
   const providerScope = createHash("sha256").update(policy.apiKey || "").digest("hex");
   if (access.sourceKind === "debrid" && policy.connected && policy.provider === "torbox"
-      && providerFileId !== undefined && providerFileId !== null && hash) {
+      && providerFileId != null && torrentId != null && /^[A-Za-z0-9_-]+$/.test(String(torrentId))
+      && /^[a-f0-9]{40}$/.test(hash) && playbackItemId(item)) {
     try {
       const fetchImpl = options.fetchImpl || globalThis.fetch;
-      const { data } = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:streamlink:${hash}`, () =>
-        fetchImpl(`https://api.torbox.app/v1/api/torrents/mylist?id=${encodeURIComponent(hash)}`, {
+      const { data } = await torBoxRateLimiter.executeRequest(`playback:${providerScope}:streamlink:${torrentId}`, () =>
+        fetchImpl(`https://api.torbox.app/v1/api/torrents/mylist?id=${encodeURIComponent(torrentId)}`, {
           headers: { Authorization: `Bearer ${policy.apiKey}` },
           signal: AbortSignal.timeout(5000),
         }), { bypassCache: true });
       const raw = data?.data || data;
       const torrents = Array.isArray(raw) ? raw : [raw];
-      const matches = torrents.filter((torrent) => String(torrent?.hash || "").toLowerCase() === hash);
+      const matches = torrents.filter((torrent) => String(torrent?.id ?? "") === String(torrentId)
+        && String(torrent?.hash || "").toLowerCase() === hash);
       const torrent = matches.length === 1 ? matches[0] : null;
       const files = torrent?.files?.filter((entry) => String(entry.id) === String(providerFileId)) || [];
       const providerState = String(torrent?.download_state || "").toLowerCase();
-      const providerItemUnavailable = ["expired", "incomplete", "error", "failed"].includes(providerState);
-      if (torrent?.id !== undefined && files.length === 1 && !providerItemUnavailable) {
-        const freshItem = resolvePlaybackItem({ kind: "hash", value: hash }, options);
+      const expectedSize = item?.source?.sizeBytes;
+      const sizeMatches = expectedSize == null || (Number.isSafeInteger(expectedSize) && expectedSize > 0
+        && Number(files[0]?.size) === expectedSize);
+      if (files.length === 1 && sizeMatches && PROVIDER_READY_STATES.has(providerState) && providerEpisodeMatches(item, files[0])) {
+        const itemSelector = { kind: "item", value: playbackItemId(item) };
+        const freshItem = resolvePlaybackItem(itemSelector, options);
         const current = authorizePlaybackItem(req, freshItem, options);
         if (!current.ok) return sendPlaybackFailure(res, current);
         if (JSON.stringify(freshItem) !== JSON.stringify(item) || current.sourcePolicy.apiKey !== policy.apiKey
@@ -726,7 +747,7 @@ export async function handleStreamRequest(req, res, options = {}) {
           }), { bypassCache: true });
         const value = download?.data;
         const streamUrl = typeof value?.data === "string" ? value.data : value?.data?.url || value?.data?.stream_url || (typeof value === "string" ? value : null);
-        const latestItem = resolvePlaybackItem({ kind: "hash", value: hash }, options);
+        const latestItem = resolvePlaybackItem(itemSelector, options);
         const latest = authorizePlaybackItem(req, latestItem, options);
         if (!latest.ok) return sendPlaybackFailure(res, latest);
         if (JSON.stringify(latestItem) !== JSON.stringify(item) || latest.sourcePolicy.apiKey !== policy.apiKey

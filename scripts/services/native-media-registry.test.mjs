@@ -24,7 +24,8 @@ test("native registry publishes only verified exact sources", () => {
 
 test("provider revocation hides only provider projections", () => {
   const registry = new NativeMediaRegistry({ stateDir: fixture() });
-  const item = registry.register({ workId: "tmdb-2", editionId: "edition-b", source: { id: "provider-a", kind: "provider_stream", provider: "torbox", verified: true, binding: { opaque: "private" } } });
+  const item = registry.register({ workId: "tmdb-2", editionId: "edition-b", source: { id: "provider-a", kind: "provider_stream", provider: "torbox", verified: true,
+    binding: { infohash: "b".repeat(40), torrentId: 9, fileId: 2 } } });
   assert.equal(registry.publicProjection(item, { canAccessProvider: () => true }).ready, true);
   assert.equal(registry.revokeProvider("torbox"), 1);
   const revoked = registry.get(item.itemId);
@@ -36,4 +37,20 @@ test("registry refuses alias ambiguity", () => {
   registry.register({ itemId: "one", workId: "tmdb-3", editionId: "edition-1", aliases: ["shared"], source: { id: "a", kind: "personal_import", verified: true, fileReceipt: receipt } });
   registry.register({ itemId: "two", workId: "tmdb-4", editionId: "edition-2", aliases: ["shared"], source: { id: "b", kind: "personal_import", verified: true, fileReceipt: receipt } });
   assert.equal(registry.get("shared"), null);
+});
+
+test("registry pins a provider file to one canonical episode", () => {
+  const registry = new NativeMediaRegistry({ stateDir: fixture() });
+  const source = { id: "episode-file", kind: "provider_stream", provider: "torbox", verified: true,
+    binding: { infohash: "c".repeat(40), torrentId: 17, fileId: 4 } };
+  assert.throws(() => registry.register({ workId: "series", editionId: "cut", mediaType: "episode", source }),
+    (error) => error.code === "episode_identity_invalid");
+  const item = registry.register({ workId: "series", editionId: "cut", mediaType: "episode", season: 1, episode: 2, source });
+  assert.equal(item.season, 1);
+  assert.equal(item.episode, 2);
+  assert.equal(registry.publicProjection(item, { canAccessProvider: () => true }).episode, 2);
+  assert.throws(() => registry.register({ itemId: item.itemId, workId: "series", editionId: "cut", mediaType: "episode", season: 1, episode: 3, source }),
+    (error) => error.code === "registry_identity_conflict");
+  assert.throws(() => registry.register({ workId: "other", editionId: "other-cut", mediaType: "episode", season: 1, episode: 2,
+    source: { ...source, id: "duplicate-file" } }), (error) => error.code === "registry_identity_conflict");
 });

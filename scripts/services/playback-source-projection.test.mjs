@@ -24,7 +24,7 @@ test("projects a verified public-domain route without inventing codec readiness"
 test("projects only the currently connected provider binding", () => {
   const item = {
     id: "media-private",
-    source: { id: "tb-source", kind: "provider_stream", provider: "torbox", infohash: "a".repeat(40), fileId: 7 },
+    source: { id: "tb-source", kind: "provider_stream", provider: "torbox", infohash: "a".repeat(40), torrentId: 8, fileId: 7 },
     infohash: "a".repeat(40),
     providerFileId: 7,
   };

@@ -37,9 +37,13 @@ export function readPlaybackLibraryItems(options = {}) {
       const filePath = source.path || source.fileReceipt?.path || null;
       return [{
         id: item.itemId,
+        workId: item.workId,
+        editionId: item.editionId,
         title: item.title,
         year: item.year,
         mediaType: item.mediaType,
+        season: item.season ?? null,
+        episode: item.episode ?? null,
         aliases: item.aliases,
         sourceKind: source.kind,
         source: {
@@ -49,8 +53,10 @@ export function readPlaybackLibraryItems(options = {}) {
           infohash: binding.infohash,
           torrentId: binding.torrentId,
           fileId: binding.fileId,
+          sizeBytes: binding.sizeBytes,
         },
         infohash: binding.infohash,
+        torrentId: binding.torrentId,
         providerFileId: binding.fileId,
         path: filePath,
         publicUrl: source.kind === "public_domain" && /^https:\/\//i.test(String(source.uri || "")) ? source.uri : null,
@@ -170,14 +176,15 @@ export function projectPlaybackSources(item, access) {
   if (!item || !access?.ok) return [];
   const canonicalId = playbackItemId(item);
   if (!canonicalId) return [];
-  const file = verifiedPlaybackFile(item);
   const sourceKind = access.sourceKind || libraryItemSourceKind(item);
+  const file = sourceKind === "debrid" ? null : verifiedPlaybackFile(item);
   const remoteVerified = sourceKind === "public_domain"
     ? /^https:\/\//i.test(String(item.publicUrl || ""))
     : sourceKind === "debrid"
       ? access.sourcePolicy?.connected === true
         && String(item.source?.provider || "") === String(access.sourcePolicy?.provider || "")
         && Boolean(item.source?.infohash || item.infohash)
+        && item.source?.torrentId != null
         && (item.source?.fileId != null || item.providerFileId != null)
       : false;
   if (!file && !remoteVerified) return [];

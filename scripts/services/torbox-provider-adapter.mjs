@@ -39,8 +39,16 @@ function selectVideoFile(files, requestedId = null) {
     const exact = usable.filter((file) => String(file.id) === String(requestedId));
     return exact.length === 1 ? exact[0] : null;
   }
-  usable.sort((a, b) => Number(b.size || 0) - Number(a.size || 0));
-  return usable.length === 1 || usable[0]?.size !== usable[1]?.size ? usable[0] || null : null;
+  return usable.length === 1 ? usable[0] : null;
+}
+
+function episodeMatches(file, requestedMedia) {
+  if (requestedMedia?.mediaType !== "episode" && requestedMedia?.episode == null) return true;
+  const season = requestedMedia.season;
+  const episode = requestedMedia.episode;
+  if (!Number.isInteger(season) || !Number.isInteger(episode)) return false;
+  const name = String(file?.name || file?.short_name || file?.path || "");
+  return new RegExp(`(?:^|[^a-z0-9])s0*${season}e0*${episode}(?!\\d)`, "i").test(name);
 }
 
 export class TorBoxProviderAdapter {
@@ -93,7 +101,7 @@ export class TorBoxProviderAdapter {
     return { available: true, hash, ...(checked[hash] || { cached: false }) };
   }
 
-  async acquire(candidate, { signal, onProgress } = {}) {
+  async acquire(candidate, { signal, onProgress, requestedMedia } = {}) {
     const hash = candidateHash(candidate);
     const magnet = String(candidate?.magnet || candidate?.url || "").trim();
     if (!hash || !magnet.startsWith("magnet:?")) throw providerError("This release does not contain a usable provider identity.", "candidate_unresolvable", 400);
@@ -104,22 +112,27 @@ export class TorBoxProviderAdapter {
     });
     const data = dataOf(json) || {};
     const torrentId = data.torrent_id ?? data.id ?? null;
+    if (torrentId == null || !/^[A-Za-z0-9_-]+$/.test(String(torrentId))) {
+      throw providerError("TorBox did not return an exact torrent identity.", "provider_job_unmapped", 502);
+    }
     onProgress?.(20);
     return {
       hash,
       torrentId,
       requestedFileId: candidate.fileId ?? null,
+      requestedMedia: requestedMedia || null,
       receipt: { provider: "torbox", hash, torrentId, acceptedAt: Date.now() },
     };
   }
 
   async poll(acquired, { signal } = {}) {
-    const id = acquired?.torrentId ?? acquired?.hash;
+    const id = acquired?.torrentId;
     if (id == null) throw providerError("TorBox did not return a job identity.", "provider_job_unmapped", 502);
     const json = await this.request(`/torrents/mylist?id=${encodeURIComponent(String(id))}`, {
       signal, cacheKey: `native:${this.scope}:list:${id}`, bypassCache: true,
     });
-    const rows = torrentRows(json).filter((row) => String(row?.id ?? row?.hash ?? "") === String(id) || String(row?.hash || "").toLowerCase() === acquired.hash);
+    const rows = torrentRows(json).filter((row) => String(row?.id ?? "") === String(id)
+      && String(row?.hash || "").toLowerCase() === acquired.hash);
     if (rows.length !== 1) throw providerError("TorBox could not uniquely resolve the requested item.", "provider_job_ambiguous", 409);
     return rows[0];
   }
@@ -127,10 +140,13 @@ export class TorBoxProviderAdapter {
   async verify(acquired, { signal } = {}) {
     const torrent = await this.poll(acquired, { signal });
     const state = String(torrent.download_state || torrent.state || "").toLowerCase();
-    if (UNAVAILABLE_STATES.has(state)) throw providerError("The TorBox item is not currently playable.", "provider_item_unavailable", 409);
-    if (!READY_STATES.has(state)) throw providerError("TorBox is still preparing this title.", "provider_item_pending", 202);
+    if (!READY_STATES.has(state)) {
+      if (["expired", "incomplete", "error", "failed"].includes(state)) throw providerError("The TorBox item is not currently playable.", "provider_item_unavailable", 409);
+      throw providerError("TorBox is still preparing this title.", "provider_item_pending", 202);
+    }
     const file = selectVideoFile(torrent.files, acquired.requestedFileId);
     if (!file) throw providerError("ReelOS could not select one exact playable video file.", "provider_file_ambiguous", 409);
+    if (!episodeMatches(file, acquired.requestedMedia)) throw providerError("The selected file does not match the requested episode.", "provider_episode_mismatch", 409);
     const hash = String(torrent.hash || acquired.hash || "").toLowerCase();
     if (!HASH.test(hash)) throw providerError("TorBox returned an invalid media identity.", "provider_identity_invalid", 502);
     const duration = Number(torrent.duration || file.duration || 0);
@@ -139,7 +155,7 @@ export class TorBoxProviderAdapter {
       editionId,
       aliases: [],
       source: {
-        id: `torbox-${hash}-${file.id}`,
+        id: `torbox-${torrent.id}-${hash}-${file.id}`,
         kind: "provider_stream",
         provider: "torbox",
         verified: true,

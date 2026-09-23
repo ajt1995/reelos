@@ -41,6 +41,14 @@ function validateSource(source) {
   const provider = source.provider == null ? null : String(source.provider).trim().toLowerCase();
   if (provider != null && !PROVIDER.test(provider)) fail("The provider identity is invalid.");
   if (source.kind === "provider_stream" && !provider) fail("Provider streams require a provider identity.");
+  if (source.kind === "provider_stream" && provider === "torbox") {
+    const binding = source.binding;
+    if (!/^[a-f0-9]{40}$/i.test(String(binding?.infohash || ""))
+        || !/^[A-Za-z0-9_-]+$/.test(String(binding?.torrentId ?? ""))
+        || !/^[A-Za-z0-9_-]+$/.test(String(binding?.fileId ?? ""))) {
+      fail("TorBox sources require exact torrent, hash, and file identities.", "provider_binding_invalid");
+    }
+  }
   if (["personal_import", "retained_local", "prepared_rendition"].includes(source.kind)) {
     if (!source.fileReceipt || typeof source.fileReceipt !== "object") fail("Local sources require a file receipt.");
     if (!Number.isSafeInteger(source.fileReceipt.sizeBytes) || source.fileReceipt.sizeBytes < 0) fail("The file receipt size is invalid.");
@@ -91,13 +99,36 @@ export class NativeMediaRegistry {
       fail("That media id already belongs to another edition.", "registry_identity_conflict");
     }
     const aliases = [...new Set([workId, ...(Array.isArray(input.aliases) ? input.aliases : [])].map((v) => cleanId(v, "alias")))];
+    const mediaType = ["movie", "tv", "episode", "book"].includes(input.mediaType) ? input.mediaType : "movie";
+    const season = input.season == null ? null : Number(input.season);
+    const episode = input.episode == null ? null : Number(input.episode);
+    if ((mediaType === "episode" || episode != null) && (!Number.isInteger(season) || season < 0 || !Number.isInteger(episode) || episode < 0)) {
+      fail("Episodes require an exact season and episode.", "episode_identity_invalid");
+    }
+    if (existing && (existing.mediaType !== mediaType || (existing.season ?? null) !== season || (existing.episode ?? null) !== episode)) {
+      fail("That media id already belongs to another episode.", "registry_identity_conflict");
+    }
+    if (source.kind === "provider_stream" && source.provider === "torbox") {
+      const binding = source.binding;
+      for (const other of Object.values(state.items)) {
+        if (other.itemId === itemId) continue;
+        if (other.sources.some((entry) => entry.kind === "provider_stream" && entry.provider === "torbox"
+          && String(entry.binding?.torrentId) === String(binding.torrentId)
+          && String(entry.binding?.fileId) === String(binding.fileId)
+          && String(entry.binding?.infohash).toLowerCase() === String(binding.infohash).toLowerCase())) {
+          fail("That provider file already belongs to another item.", "registry_identity_conflict");
+        }
+      }
+    }
     const sources = [...(existing?.sources || []).filter((entry) => entry.id !== source.id), source];
     state.items[itemId] = {
       itemId,
       workId,
       editionId,
       aliases,
-      mediaType: ["movie", "tv", "episode", "book"].includes(input.mediaType) ? input.mediaType : "movie",
+      mediaType,
+      season,
+      episode,
       title: String(input.title || existing?.title || "Untitled").trim().slice(0, 300),
       year: Number.isInteger(input.year) ? input.year : existing?.year ?? null,
       sources,
@@ -157,6 +188,8 @@ export class NativeMediaRegistry {
       title: item.title,
       year: item.year,
       mediaType: item.mediaType,
+      season: item.season ?? null,
+      episode: item.episode ?? null,
       kind: item.mediaType === "tv" || item.mediaType === "episode" ? "tv" : item.mediaType,
       aliases: item.aliases,
       ready: playableSources.length > 0,

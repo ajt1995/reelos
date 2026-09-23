@@ -106,6 +106,30 @@ test("native registry is the playback authority when present", async () => {
   assert.equal(result.body.length, 8);
 });
 
+test("native provider playback uses the registry item and its exact torrent file binding", async () => {
+  const who = createPlaybackFixture();
+  const hash = "a".repeat(40);
+  const registry = new NativeMediaRegistry({ stateDir: who.stateDir });
+  const item = registry.register({ itemId: "native-episode", workId: "series-a", editionId: "cut-1",
+    mediaType: "episode", season: 1, episode: 2,
+    source: { id: "torbox-31-file-5", kind: "provider_stream", provider: "torbox", verified: true,
+      binding: { infohash: hash, torrentId: 31, fileId: 5, sizeBytes: 100 } } });
+  who.writeLibrary([{ id: item.itemId, sourceKind: "personal_import" }]);
+  who.setProvider(true);
+  const calls = [];
+  const result = await byteRequest(who, "/api/stream/item/native-episode", { options: { fetchImpl: async (url) => {
+    calls.push(url);
+    if (url.includes("mylist")) return { ok: true, json: async () => ({ data: [{ id: 31, hash, download_state: "completed",
+      files: [{ id: 5, name: "Show.S01E02.mkv", size: 100 }] }] }) };
+    return { ok: true, json: async () => ({ data: null }) };
+  } } });
+  assert.equal(result.statusCode, 404);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0], /mylist\?id=31/);
+  assert.match(calls[1], /torrent_id=31&file_id=5/);
+  assert.ok(calls.every((url) => !url.includes("torrent_id=undefined")));
+});
+
 test("provider disable denies mapped disk cache and hash RAM cache on the next Range request", async () => {
   const { neuroCache } = await import("./neuro-cache.mjs");
   const who = createPlaybackFixture();
@@ -118,7 +142,7 @@ test("provider disable denies mapped disk cache and hash RAM cache on the next R
   neuroCache.setPrewarmedBuffer(hash, Buffer.alloc(128, 0x77));
   try {
     who.setProvider(true);
-    assert.equal((await byteRequest(who, `/api/stream/${hash}`, { headers: { range: "bytes=0-7" } })).statusCode, 206);
+    assert.equal((await byteRequest(who, `/api/stream/${hash}`, { headers: { range: "bytes=0-7" } })).json.code, "playback_source_unavailable");
     who.setProvider(false);
     const denied = await byteRequest(who, `/api/stream/${hash}`, { headers: { range: "bytes=0-7" }, options: { providerEnabled: true, apiKey: "forged-legacy-option" } });
     assert.equal(denied.statusCode, 403);
@@ -181,7 +205,7 @@ test("public playback resolves only a server catalog identity and forwards Range
 test("provider resolution never substitutes another torrent/file or outlives provider revocation", async () => {
   const who = createPlaybackFixture();
   const hash = "cccccccccccccccccccccccccccccccccccccccc";
-  const item = { id: "provider-selected", infohash: hash, sourceKind: "debrid", providerFileId: 9 };
+  const item = { id: "provider-selected", infohash: hash, sourceKind: "debrid", torrentId: 5, providerFileId: 9 };
   who.writeLibrary([item]);
   who.setProvider(true);
   const calls = [];
@@ -199,13 +223,39 @@ test("provider resolution never substitutes another torrent/file or outlives pro
   const revokeDuringLookup = async (url) => {
     calls.push(url);
     who.setProvider(false);
-    return { ok: true, json: async () => ({ data: [{ id: 5, hash, files: [{ id: 9 }] }] }) };
+    return { ok: true, json: async () => ({ data: [{ id: 5, hash, download_state: "completed", files: [{ id: 9 }] }] }) };
   };
   const revoked = await byteRequest(who, `/api/stream/${hash}`, { options: { fetchImpl: revokeDuringLookup } });
   assert.equal(revoked.statusCode, 403);
   assert.equal(revoked.json.code, "source_unavailable");
   assert.equal(calls.length, 2);
   assert.ok(calls.every((url) => !url.includes("requestdl") && !url.includes("createtorrent")));
+});
+
+test("provider byte route requires exact stored torrent, ready state and episode file", async () => {
+  const who = createPlaybackFixture();
+  const hash = "dddddddddddddddddddddddddddddddddddddddd";
+  const item = { id: "episode-one", workId: "series", editionId: "cut-one", mediaType: "episode", season: 1, episode: 1,
+    infohash: hash, sourceKind: "debrid", torrentId: 21, providerFileId: 3 };
+  who.writeLibrary([item]);
+  who.setProvider(true);
+  const checked = [];
+  const lookup = (row) => async (url) => {
+    checked.push(url);
+    return { ok: true, json: async () => ({ data: [row] }) };
+  };
+  const base = { id: 21, hash, files: [{ id: 3, name: "Show.S01E01.mkv", size: 100 }] };
+  for (const row of [
+    { ...base, id: 22, download_state: "completed" },
+    { ...base, download_state: "downloading" },
+    { ...base, download_state: "completed", files: [{ id: 3, name: "Show.S01E02.mkv", size: 100 }] },
+  ]) {
+    const result = await byteRequest(who, "/api/stream/item/episode-one", { options: { fetchImpl: lookup(row) } });
+    assert.equal(result.statusCode, 404);
+    assert.equal(result.json.code, "playback_source_unavailable");
+  }
+  assert.equal(checked.length, 3);
+  assert.ok(checked.every((url) => url.includes("mylist?id=21")));
 });
 
 test("parseRangeHeader: parses standard, open, and suffix byte ranges", () => {
@@ -551,6 +601,7 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
             {
               id: 9988,
               hash: testHash,
+              download_state: "completed",
               files: [{ id: 1, name: "Movie.mp4", size: 1000 }],
             },
           ],
@@ -575,7 +626,7 @@ test("handleStreamRequest: handles TorBox array response and .mp4 extension in U
       fetchImpl: mockFetchWithServer,
       apiKey: "test-api-key",
       providerEnabled: true,
-      libraryItems: [{ id: "mapped-provider", infohash: testHash, sourceKind: "debrid", providerFileId: 1 }],
+      libraryItems: [{ id: "mapped-provider", infohash: testHash, sourceKind: "debrid", torrentId: 9988, providerFileId: 1 }],
     });
     if (!handled) {
       eRes.statusCode = 404;
