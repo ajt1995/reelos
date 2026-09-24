@@ -61,10 +61,13 @@ does not reset data. The local snapshot is a feasibility store, not the finished
    not complete onboarding, playback, model or platform acceptance.
 2. Complete model-worker boundary and approved artwork/taste field;
    then measure the actual native slice on all four targets before expanding remaining journeys.
-3. Android TV (`armeabi-v7a`) passed twelve physical media checks, including rapid source
-   revocation/restoration and profile switch/back during active playback; the script below
-   replaces evidence on each run and fails on missing checks. This is not full UI acceptance.
-   Fold ARM64 is currently disconnected. Windows .214 is 15.8 GiB, not 64 GiB.
+3. Android TV (`armeabi-v7a`), Fold SM_F971U and Pixel 10 Pro XL each passed 28 physical
+   checks: nine empty-profile first-run/import/Play/Resume, twelve media (including rapid
+   source revocation/restoration and profile switch/back during playback), and seven personal
+   UI checks. Zero skips; the script below records exact source/APK hashes and fails on missing
+   cases. Fold is wireless-paired; Pixel is USB-authorized. Fold posture/rotation/keyboard,
+   audio/subtitles, sustained playback and full UI acceptance remain open.
+   Windows .214 is 15.8 GiB, not 64 GiB.
    HP password SSH verified Ubuntu 26.04.1 x86_64, about 3.2 GiB RAM and an active Wayland
    Cage Wayland kiosk, not a general desktop. Java 17 and LibVLC are now installed with
    approval; an immutable Linux x64 validation bundle renders its first native screen.
