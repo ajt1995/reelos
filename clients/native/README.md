@@ -172,6 +172,17 @@ establish full-film remote decoding, audio/subtitles or provider-disable end-to-
 Integrated offline checks passed 30 provider tests and 20 desktop tests with no skips, including
 the opt-in installed-decoder fixture. Recheck the source-fingerprinted reports after each change.
 
+`-Journey provider-playback` checks the actual shared preparation/Library and Android player
+with the owner's saved connection. Fold passed 5/5: rendered video with time progression,
+seek/persist, re-resolved resume, source-revocation release, and original core-state restoration.
+This short muted test does not verify full-film, audio/subtitle, scene analysis or learning.
+No keys, signed links, account identities or file titles appear in its output. A temporary test
+profile is backed up inside the validation app; the runner stops the player and runs a separate
+recovery process even on test failure/timeout. Recovery failure blocks further tests. Abrupt host
+loss/disconnection may leave `provider-playback-baseline.core`; do not delete it or rerun over it.
+After reconnecting, stop the validation app and run its instrumentation with
+`-e journey provider-recovery` to restore and verify that baseline before proceeding.
+
 For Windows callback/decoder tests, set `REELOS_DESKTOP_FIXTURE` to
 `clients/native/android/src/androidTest/assets/Native-Validation-30s.mp4` (absolute path),
 and `REELOS_TEST_LIBVLC_CALLBACKS=1`, then run `:desktop:test`. The latter opt-in tests

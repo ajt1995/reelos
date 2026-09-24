@@ -21,7 +21,7 @@ import androidx.media3.ui.PlayerView
 import com.reelos.core.*
 import java.util.ConcurrentModificationException
 
-/** Local adapter only. No synthetic streams, exported intents, or claimed family enforcement. */
+/** Native local/authorized-byte adapter. No remote URLs, exported intents, or claimed family enforcement. */
 @androidx.media3.common.util.UnstableApi
 class PlaybackActivity : ComponentActivity() {
     private var providerPlayback: com.reelos.presentation.PreparedProviderPlayback? = null

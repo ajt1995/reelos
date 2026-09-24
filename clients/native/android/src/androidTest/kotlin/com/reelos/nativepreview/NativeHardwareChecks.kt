@@ -20,6 +20,8 @@ class NativeHardwareChecks : Instrumentation() {
         start()
     }
     override fun onStart() {
+        if (journey == "provider-recovery") { NativeProviderPlaybackChecks.recover(this); return }
+        if (journey == "provider-playback") { NativeProviderPlaybackChecks.run(this); return }
         if (journey == "provider-live") { NativeLiveConnectionChecks.run(this); return }
         if (journey == "connection") { NativeConnectionChecks.run(this); return }
         if (journey == "personal-ui" || journey == "first-run") {

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Device,
-    [ValidateSet('media','personal-ui','first-run','connection','provider-live')][string]$Journey = 'media',
+    [ValidateSet('media','personal-ui','first-run','connection','provider-live','provider-playback')][string]$Journey = 'media',
     [string]$Adb = 'C:\Users\austi\Documents\Codex\.toolchains\android-sdk\platform-tools\adb.exe'
 )
 $ErrorActionPreference = 'Stop'
@@ -12,8 +12,14 @@ $personalJourney = $Journey -eq 'personal-ui'
 $freshJourney = $Journey -eq 'first-run'
 $connectionJourney = $Journey -eq 'connection'
 $liveProviderJourney = $Journey -eq 'provider-live'
+$providerPlaybackJourney = $Journey -eq 'provider-playback'
+$playbackStarted = $false
 $evidence = Join-Path $repo $(if ($liveProviderJourney) { ".reelos-audit/native-provider-live/$safeDevice" } elseif ($connectionJourney) { ".reelos-audit/native-connection/$safeDevice" } elseif ($freshJourney) { ".reelos-audit/native-first-run/$safeDevice" } elseif ($personalJourney) { ".reelos-audit/native-personal-ui/$safeDevice" } else { ".reelos-audit/native-hardware/$safeDevice" })
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+if ($providerPlaybackJourney) {
+    $evidence = Join-Path $repo ".reelos-audit/native-provider-playback/$safeDevice"
+    New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+}
 $required = if ($liveProviderJourney) {
     @('live-provider-account','live-provider-exact-file','live-provider-range-bytes')
 } elseif ($connectionJourney) {
@@ -36,6 +42,11 @@ $result = [ordered]@{
     scope = if ($liveProviderJourney) { 'Explicit owner-authorized account, exact-file resolution and 16KiB range verification inside the app. No secrets/media identifiers logged; not decoder or sustained-playback acceptance.' } elseif ($connectionJourney) { 'Synthetic-key Android Keystore, protected persistence, tamper and revocation checks. No provider network calls or live credentials.' } elseif ($freshJourney) { 'Empty-profile native first run, explicit import, Save/Library and local fixture playback. No seeded profile transitions; not Family/provider/audio/artwork or whole-product acceptance.' } elseif ($personalJourney) { 'Seeded isolated-profile appearance and taste UI interaction only; not fresh onboarding or whole-product acceptance.' } else { 'Local native media integration only; not whole-product, UI, audio, subtitle, or sustained-playback acceptance.' }
 }
 try {
+    if ($providerPlaybackJourney) {
+        $required = @('provider-native-frame-and-progress','provider-native-seek-and-persist','provider-native-resume','provider-native-revocation-stops-player','provider-native-owner-state-preserved')
+        $result.schema = 'reelos-native-provider-playback/v1'
+        $result.scope = 'Owner-authorized real provider bytes through shared preparation and native player: rendered frames/progression, seek, resume, revocation and restored test baseline. Muted short video, not full-film/audio/subtitle/analysis acceptance.'
+    }
     $devices = (& $Adb devices) -join "`n"
     if ($devices -notmatch "(?m)^$([regex]::Escape($Device))\s+device\s*$") { throw 'Target is not connected and authorized.' }
     $result.model = ((& $Adb -s $Device shell getprop ro.product.model) -join '').Trim()
@@ -82,10 +93,11 @@ try {
     $stdout = Join-Path $evidence 'instrumentation.txt'
     $stderr = Join-Path $evidence 'instrumentation-error.txt'
     $instrumentArgs = @('-s',$Device,'shell','am','instrument','-w')
-    if ($personalJourney -or $freshJourney -or $connectionJourney -or $liveProviderJourney) { $instrumentArgs += @('-e','journey',$Journey) }
+    if ($personalJourney -or $freshJourney -or $connectionJourney -or $liveProviderJourney -or $providerPlaybackJourney) { $instrumentArgs += @('-e','journey',$Journey) }
     $instrumentArgs += 'com.reelos.nativepreview.test/com.reelos.nativepreview.NativeHardwareChecks'
+    $playbackStarted = $providerPlaybackJourney
     $process = Start-Process -FilePath $Adb -ArgumentList $instrumentArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
-    $deadline = [DateTime]::UtcNow.AddSeconds($(if ($personalJourney -or $freshJourney) { 180 } else { 120 }))
+    $deadline = [DateTime]::UtcNow.AddSeconds($(if ($providerPlaybackJourney) { 300 } elseif ($personalJourney -or $freshJourney) { 180 } else { 120 }))
     while (-not $process.WaitForExit(1000)) {
         if ([DateTime]::UtcNow -gt $deadline) {
             $process.Kill()
@@ -115,6 +127,27 @@ try {
 } catch {
     $result.error = $_.Exception.Message
 } finally {
+    if ($playbackStarted) {
+        # Restoration must survive failed Activity cleanup or a killed instrumentation process.
+        # Stop players first so no stale player can write over the restored baseline.
+        try {
+            & $Adb -s $Device shell am force-stop com.reelos.nativepreview | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot stop validation player for recovery.' }
+            $recoveryOutput = Join-Path $evidence 'recovery.txt'
+            $recoveryError = Join-Path $evidence 'recovery-error.txt'
+            $recovery = Start-Process -FilePath $Adb -ArgumentList @('-s',$Device,'shell','am','instrument','-w','-e','journey','provider-recovery','com.reelos.nativepreview.test/com.reelos.nativepreview.NativeHardwareChecks') -WindowStyle Hidden -PassThru -RedirectStandardOutput $recoveryOutput -RedirectStandardError $recoveryError
+            if (-not $recovery.WaitForExit(30000)) { $recovery.Kill(); throw 'Recovery timed out; in-app baseline retained.' }
+            $recoveryText = Get-Content -LiteralPath $recoveryOutput -Raw
+            if ($recovery.ExitCode -ne 0 -or $recoveryText -notmatch 'provider-baseline-recovery: passed' -or $recoveryText -match 'FAILED') {
+                throw 'Recovery did not verify; in-app baseline retained. Do not continue device tests.'
+            }
+            $result.recovery = 'verified'
+        } catch {
+            $result.status = 'failed'
+            $result.error = $_.Exception.Message
+            $result.recovery = 'blocked'
+        }
+    }
     $resultPath = Join-Path $evidence 'result.json'
     [IO.File]::WriteAllText($resultPath, ($result | ConvertTo-Json -Depth 8))
     Write-Output "$($result.status): $($result.tests.Count)/$($required.Count) native $Journey checks; evidence $resultPath"
