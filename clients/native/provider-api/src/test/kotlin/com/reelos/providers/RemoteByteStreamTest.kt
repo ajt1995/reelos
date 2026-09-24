@@ -10,7 +10,11 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import java.io.IOException
 import java.net.InetAddress
 import java.net.URI
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -132,6 +136,120 @@ class RemoteByteStreamTest {
         assertFailsWith<IllegalStateException> { stream.open(0) }
     }
 
+    @Test fun destinationGuardRunsBeforeDnsForOriginalAndEveryRedirect() {
+        val requested = AtomicInteger()
+        val resolved = AtomicInteger()
+        val allowedHosts = mutableListOf<String>()
+        val guard: (URI) -> Boolean = { target ->
+            allowedHosts += target.host
+            target.host == "api.torbox.app" || target.host.endsWith(".torbox.app")
+        }
+        val dns = dns { resolved.incrementAndGet(); listOf(publicAddress()) }
+        val stream = fakeStream(4, AtomicBoolean(true), { request ->
+            requested.incrementAndGet()
+            redirect(request, "https://other.example/media")
+        }, dns, URI("https://api.torbox.app/media"), guard)
+        assertFailsWith<IllegalStateException> { stream.open(0) }
+        assertEquals(listOf("api.torbox.app", "other.example"), allowedHosts)
+        assertEquals(1, resolved.get())
+        assertEquals(1, requested.get())
+
+        val denied = fakeStream(4, AtomicBoolean(true), { request ->
+            requested.incrementAndGet()
+            partial(request, byteArrayOf(1, 2, 3, 4), "bytes 0-3/4")
+        }, dns, URI("https://other.example/media"), guard)
+        assertFailsWith<IllegalStateException> { denied.open(0) }
+        assertEquals(1, resolved.get())
+        assertEquals(1, requested.get())
+    }
+
+    @Test fun closeWakesReaderWhileDnsResolverIsStalled() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val requests = AtomicInteger()
+        val stream = fakeStream(4, AtomicBoolean(true), { request ->
+            requests.incrementAndGet()
+            partial(request, byteArrayOf(1, 2, 3, 4), "bytes 0-3/4")
+        }, dns { entered.countDown(); awaitUninterruptibly(release); listOf(publicAddress()) })
+        val reader = Executors.newSingleThreadExecutor()
+        try {
+            val result = reader.submit<Throwable?> { runCatching { stream.open(0) }.exceptionOrNull() }
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            stream.close()
+            assertTrue(result.get(1, TimeUnit.SECONDS) is IllegalStateException)
+            assertEquals(0, requests.get())
+        } finally {
+            release.countDown()
+            reader.shutdownNow()
+            stream.close()
+        }
+    }
+
+    @Test fun stalledDnsTimesOutWithoutIssuingHttpRequest() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val requests = AtomicInteger()
+        val stream = fakeStream(4, AtomicBoolean(true), { request ->
+            requests.incrementAndGet()
+            partial(request, byteArrayOf(1, 2, 3, 4), "bytes 0-3/4")
+        }, dns { entered.countDown(); awaitUninterruptibly(release); listOf(publicAddress()) })
+        try {
+            val start = System.nanoTime()
+            assertFailsWith<IllegalStateException> { stream.open(0) }
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+            assertTrue(entered.count == 0L)
+            assertTrue(elapsedMs in 4_000..10_000, "DNS timeout was not bounded")
+            assertEquals(0, requests.get())
+        } finally {
+            release.countDown()
+            stream.close()
+        }
+    }
+
+    @Test fun saturatedDnsPoolFailsClosedAndRecoversAfterResolversRelease() {
+        val entered = CountDownLatch(4)
+        val release = CountDownLatch(1)
+        val readers = Executors.newFixedThreadPool(4)
+        val blocked = (1..4).map {
+            fakeStream(4, AtomicBoolean(true), { request ->
+                partial(request, byteArrayOf(1, 2, 3, 4), "bytes 0-3/4")
+            }, dns { entered.countDown(); awaitUninterruptibly(release); listOf(publicAddress()) })
+        }
+        val extra = fakeStream(4, AtomicBoolean(true), { request ->
+            partial(request, byteArrayOf(1, 2, 3, 4), "bytes 0-3/4")
+        })
+        try {
+            val pending = blocked.map { stream -> readers.submit<RemoteRange> { stream.open(0) } }
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            assertFailsWith<IllegalStateException> { extra.open(0) }
+            release.countDown()
+            pending.forEach { it.get(2, TimeUnit.SECONDS).close() }
+            extra.open(0).use { assertContentEquals(byteArrayOf(1, 2, 3, 4), it.readBytes()) }
+        } finally {
+            release.countDown()
+            blocked.forEach(RemoteByteStream::close)
+            extra.close()
+            readers.shutdownNow()
+        }
+    }
+
+    @Test fun longAdvertisedMediaSizeDoesNotAllocateOrImposeAnArbitraryCap() {
+        val size = Long.MAX_VALUE
+        val first = size - 4
+        fakeStream(size, AtomicBoolean(true), { request ->
+            partial(request, byteArrayOf(1, 2, 3, 4), "bytes $first-${size - 1}/$size")
+        }).use { stream ->
+            assertEquals(size, stream.expectedSize)
+            stream.open(first, 4).use { assertContentEquals(byteArrayOf(1, 2, 3, 4), it.readBytes()) }
+        }
+    }
+
+    private fun awaitUninterruptibly(latch: CountDownLatch) {
+        while (true) {
+            try { latch.await(); return } catch (_: InterruptedException) { /* Simulate an OS resolver that ignores cancellation. */ }
+        }
+    }
+
     private fun publicAddress() = InetAddress.getByAddress(byteArrayOf(8, 8, 8, 8))
 
     private fun dns(resolve: (String) -> List<InetAddress>): Dns = object : Dns {
@@ -144,9 +262,10 @@ class RemoteByteStreamTest {
         respond: (Request) -> Response,
         dns: Dns = dns { listOf(publicAddress()) },
         uri: URI = URI("https://provider.example/media"),
+        destinationAllowed: (URI) -> Boolean = { true },
     ): RemoteByteStream {
         val client = OkHttpClient.Builder().addInterceptor(Interceptor { respond(it.request()) }).build()
-        return RemoteByteStream(uri, size, authorized::get, client, dns)
+        return RemoteByteStream(uri, size, authorized::get, client, dns, destinationAllowed)
     }
 
     private fun partial(request: Request, bytes: ByteArray, contentRange: String, contentType: String = "application/octet-stream") =

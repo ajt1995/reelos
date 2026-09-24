@@ -13,7 +13,14 @@ import java.io.InputStream
 import java.net.InetAddress
 import java.net.Proxy
 import java.net.URI
+import java.util.concurrent.CancellationException
+import java.util.concurrent.ExecutionException
+import java.util.concurrent.Future
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.SynchronousQueue
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 /** Reads an already authorized, provider-resolved HTTPS media URL as exact byte ranges. */
 class RemoteByteStream internal constructor(
@@ -22,19 +29,26 @@ class RemoteByteStream internal constructor(
     private val authorize: () -> Boolean,
     private val client: OkHttpClient,
     private val resolver: Dns,
+    private val destinationAllowed: (URI) -> Boolean = { true },
 ) : AutoCloseable {
-    constructor(uri: URI, expectedSize: Long, authorize: () -> Boolean) : this(
-        uri, expectedSize, authorize, secureClient(), Dns.SYSTEM,
+    constructor(
+        uri: URI,
+        expectedSize: Long,
+        authorize: () -> Boolean,
+        destinationAllowed: (URI) -> Boolean = { true },
+    ) : this(
+        uri, expectedSize, authorize, secureClient(), Dns.SYSTEM, destinationAllowed,
     )
 
     private val lock = Any()
     @Volatile private var closed = false
+    private val dnsLookups = mutableSetOf<Future<*>>()
     private val calls = mutableSetOf<Call>()
     private val ranges = mutableSetOf<RemoteRange>()
 
     init {
         validateUri(uri)
-        require(expectedSize in 1..MAX_MEDIA_BYTES) { "Invalid remote media size" }
+        require(expectedSize > 0) { "Invalid remote media size" }
     }
 
     fun open(offset: Long, length: Long? = null): RemoteRange {
@@ -47,10 +61,10 @@ class RemoteByteStream internal constructor(
             repeat(MAX_REDIRECTS + 1) { redirectCount ->
                 requireAuthorized()
                 validateUri(target)
+                check(try { destinationAllowed(target) } catch (_: Exception) { false })
                 val host = checkNotNull(target.host)
                 // Pin this request to the exact set checked here. OkHttp cannot re-resolve it later.
-                val addresses = resolver.lookup(host)
-                check(addresses.isNotEmpty() && addresses.all(RemoteAddressPolicy::isPublic))
+                val addresses = resolveAddresses(host)
                 val requestClient = client.newBuilder()
                     .dns(object : Dns {
                         override fun lookup(requestedHost: String): List<InetAddress> {
@@ -121,16 +135,20 @@ class RemoteByteStream internal constructor(
     }
 
     override fun close() {
+        val pendingDns: List<Future<*>>
         val pendingCalls: List<Call>
         val openRanges: List<RemoteRange>
         synchronized(lock) {
             if (closed) return
             closed = true
+            pendingDns = dnsLookups.toList()
             pendingCalls = calls.toList()
             openRanges = ranges.toList()
+            dnsLookups.clear()
             calls.clear()
             ranges.clear()
         }
+        pendingDns.forEach { it.cancel(true) }
         pendingCalls.forEach(Call::cancel)
         openRanges.forEach(RemoteRange::close)
     }
@@ -138,6 +156,47 @@ class RemoteByteStream internal constructor(
     private fun requireAuthorized() {
         check(!closed && try { authorize() } catch (_: Exception) { false })
         check(!closed)
+    }
+
+    private fun resolveAddresses(host: String): List<InetAddress> {
+        val future = try {
+            DNS_EXECUTOR.submit<List<InetAddress>> { resolver.lookup(host) }
+        } catch (_: RejectedExecutionException) {
+            throw IllegalStateException("Remote media unavailable")
+        }
+        synchronized(lock) {
+            if (closed) {
+                future.cancel(true)
+                throw IllegalStateException("Remote media unavailable")
+            }
+            dnsLookups.add(future)
+        }
+        try {
+            val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(DNS_TIMEOUT_MILLIS)
+            while (true) {
+                requireAuthorized()
+                val left = deadline - System.nanoTime()
+                check(left > 0) { "Remote media unavailable" }
+                try {
+                    val addresses = future.get(minOf(left, DNS_AUTH_CHECK_NANOS), TimeUnit.NANOSECONDS).toList()
+                    requireAuthorized()
+                    check(addresses.isNotEmpty() && addresses.all(RemoteAddressPolicy::isPublic))
+                    return addresses
+                } catch (_: TimeoutException) {
+                    // Poll authorization while a platform resolver is waiting.
+                }
+            }
+        } catch (_: CancellationException) {
+            throw IllegalStateException("Remote media unavailable")
+        } catch (_: ExecutionException) {
+            throw IllegalStateException("Remote media unavailable")
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw IllegalStateException("Remote media unavailable")
+        } finally {
+            synchronized(lock) { dnsLookups.remove(future) }
+            future.cancel(true)
+        }
     }
 
     private fun validateRange(response: Response, first: Long, last: Long, length: Long) {
@@ -164,8 +223,15 @@ class RemoteByteStream internal constructor(
     }
 
     private companion object {
-        const val MAX_MEDIA_BYTES = 16L * 1024 * 1024 * 1024 * 1024
         const val MAX_REDIRECTS = 3
+        const val DNS_TIMEOUT_MILLIS = 5_000L
+        val DNS_AUTH_CHECK_NANOS = TimeUnit.MILLISECONDS.toNanos(100)
+        // Synchronous handoff bounds even uninterruptible platform DNS lookups to four daemon threads.
+        val DNS_EXECUTOR = ThreadPoolExecutor(
+            0, 4, 30, TimeUnit.SECONDS, SynchronousQueue(),
+            { task -> Thread(task, "reelos-remote-dns").apply { isDaemon = true } },
+            ThreadPoolExecutor.AbortPolicy(),
+        )
         val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
         val CONTENT_RANGE = Regex("bytes ([0-9]+)-([0-9]+)/([0-9]+)")
 
@@ -196,7 +262,8 @@ class RemoteByteStream internal constructor(
             .retryOnConnectionFailure(false)
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
-            .callTimeout(6, TimeUnit.HOURS)
+            // A paused or long-running film may outlive a total deadline; reads still have inactivity limits.
+            .callTimeout(0, TimeUnit.MILLISECONDS)
             .build()
     }
 }
