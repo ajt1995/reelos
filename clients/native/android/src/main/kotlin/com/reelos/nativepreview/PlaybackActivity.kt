@@ -39,7 +39,11 @@ class PlaybackActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val frame = FrameLayout(this)
         status = TextView(this).apply { setTextColor(android.graphics.Color.WHITE); setPadding(24, 24, 24, 24) }
-        playerView = PlayerView(this)
+        playerView = PlayerView(this).apply {
+            // Media3's native controls expose available audio tracks in Settings and captions here.
+            // They derive options from the actual stream, including on TV with D-pad navigation.
+            setShowSubtitleButton(true)
+        }
         frame.addView(playerView, FrameLayout.LayoutParams(-1, -1))
         frame.addView(status)
         setContentView(frame)

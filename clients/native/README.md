@@ -189,3 +189,21 @@ and `REELOS_TEST_LIBVLC_CALLBACKS=1`, then run `:desktop:test`. The latter opt-i
 silent-fixture byte callbacks, time progress, seek and resume using installed LibVLC 3.
 It is not live provider playback or a visual/frame/audio/subtitle certification. Missing
 opt-ins count as skipped, never passing hardware evidence.
+
+### Native track controls and evidence
+
+Android/TV exposes Media3's native audio Settings and subtitle button; choices come from the
+actual media tracks. The desktop adapter enumerates LibVLC3 tracks and offers Audio/Subtitles
+menus including Off. Selections are per-playback for now; saved language defaults, subtitle
+timing/appearance and volume leveling are still open work, not implied by these controls.
+
+Pixel, Fold and Onn TV each passed16/16 media checks including actual AAC decoded buffers,
+audio switching and English/Spanish decoded captions/Off. These are short synthetic test-only
+fixtures, not perceptual audio or whole-film acceptance. Tests use native control clicks and
+accessibility actions; they do not certify every D-pad/folded-screen navigation path.
+
+Set `REELOS_DESKTOP_TRACK_FIXTURE` to the absolute `Native-Tracks-30s.mp4` test asset alongside
+the two existing fixture variables above. Central desktop tests passed22/22 with zero skips:
+the installed decoder applies both audio/subtitle IDs, Off, and continues playback. That test
+does not inspect caption pixels or verify audible output. Source-specific remote playback on
+Windows/Linux/TV and full UI acceptance remain separate checks.

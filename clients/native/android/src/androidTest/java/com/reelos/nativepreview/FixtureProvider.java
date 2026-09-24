@@ -20,6 +20,7 @@ public final class FixtureProvider extends ContentProvider {
     @Override public String getType(Uri uri) { return "video/mp4"; }
     private String asset(Uri uri) {
         if ("valid".equals(uri.getLastPathSegment())) return "Native-Validation-30s.mp4";
+        if ("tracks".equals(uri.getLastPathSegment())) return "Native-Tracks-30s.mp4";
         if ("invalid".equals(uri.getLastPathSegment())) return "invalid-video.mp4";
         if ("mutable".equals(uri.getLastPathSegment())) return "Mutable-Validation.mp4";
         throw new IllegalArgumentException("Unknown fixture");

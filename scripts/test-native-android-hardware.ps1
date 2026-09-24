@@ -29,7 +29,7 @@ $required = if ($liveProviderJourney) {
 } elseif ($personalJourney) {
     @('personal-appearance-controls','personal-taste-like-love','personal-taste-cozy-reset-dismiss','personal-taste-finish-and-reentry','personal-second-profile-isolation','personal-restart-persistence','personal-setup-finish')
 } else {
-    @('valid-local-import-and-decoder','invalid-video-rejected','repeat-import-does-not-leak-private-copies','mutable-provider-retained-bytes-validated','native-player-decodes-real-frame','seek-and-persist-position','resume-restores-position','completed-playback-restarts-from-beginning','player-keeps-screen-on-only-while-playing','active-playback-stops-after-source-revocation','active-playback-stops-after-profile-switch','profile-isolation-and-revoked-source')
+    @('valid-local-import-and-decoder','invalid-video-rejected','repeat-import-does-not-leak-private-copies','mutable-provider-retained-bytes-validated','native-player-decodes-real-frame','seek-and-persist-position','resume-restores-position','completed-playback-restarts-from-beginning','player-keeps-screen-on-only-while-playing','active-playback-stops-after-source-revocation','active-playback-stops-after-profile-switch','native-player-decodes-audio-tracks','native-audio-track-controls','native-subtitle-controls-and-cues','native-subtitles-off','profile-isolation-and-revoked-source')
 }
 $result = [ordered]@{
     schema = if ($liveProviderJourney) { 'reelos-native-provider-live/v1' } elseif ($connectionJourney) { 'reelos-native-connection/v1' } elseif ($freshJourney) { 'reelos-native-first-run/v1' } elseif ($personalJourney) { 'reelos-native-personal-ui/v1' } else { 'reelos-native-hardware/v1' }
@@ -69,7 +69,7 @@ try {
     $sourceFiles = @(Get-ChildItem $nativeRoot -Recurse -File | Where-Object {
         $_.FullName -notmatch '[\\/](build|\.gradle|\.kotlin|desktop|test|smoke)[\\/]' -and
         $_.Name -ne 'local.properties' -and
-        $_.Extension -in @('.kt','.kts','.xml','.java','.mp4','.properties','.tsv')
+        $_.Extension -in @('.kt','.kts','.xml','.java','.mp4','.srt','.properties','.tsv')
     })
     $declared = @($buildEvidence.sources.PSObject.Properties)
     if ($sourceFiles.Count -ne $declared.Count) { throw 'Native source set changed; rebuild the validation APKs.' }

@@ -52,7 +52,7 @@ tasks.register("prepareHardwareValidation") {
         val tests = layout.buildDirectory.file("outputs/apk/androidTest/debug/android-debug-androidTest.apk").get().asFile
         check(app.isFile && tests.isFile) { "Both isolated validation APKs are required" }
         val sources = rootProject.fileTree(rootProject.rootDir) {
-            include("**/*.kt", "**/*.kts", "**/*.xml", "**/*.java", "**/*.mp4", "**/*.properties", "**/*.tsv")
+            include("**/*.kt", "**/*.kts", "**/*.xml", "**/*.java", "**/*.mp4", "**/*.srt", "**/*.properties", "**/*.tsv")
             exclude("**/build/**", "**/.gradle/**", "**/.kotlin/**", "desktop/**", "**/test/**", "**/smoke/**", "**/local.properties")
         }.files.sortedBy { it.relativeTo(rootProject.rootDir).invariantSeparatorsPath }
             .associate { it.relativeTo(rootProject.rootDir).invariantSeparatorsPath to digest(it) }

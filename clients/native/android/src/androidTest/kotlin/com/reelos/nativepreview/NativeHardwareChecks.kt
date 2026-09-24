@@ -10,6 +10,9 @@ import com.reelos.core.*
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
+import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.media3.common.C
 
 /** Real-device integration checks; direct setup below is NOT onboarding/UI acceptance. */
 class NativeHardwareChecks : Instrumentation() {
@@ -250,6 +253,104 @@ class NativeHardwareChecks : Instrumentation() {
                     waitFor("profile-switch player destroyed") { activity.isDestroyed }
                     load().selectProfile(profileId)
                 }
+            }
+            // Real embedded AAC/caption tracks in a synthetic test-only fixture. Not perceptual audio QA.
+            val trackId = "native-track-validation-fixture"
+            load().apply {
+                selectProfile(profileId)
+                putMedia(MediaRecord(trackId, "Native track validation", PERSONAL_SOURCE_ID, MediaAvailability.READY))
+            }
+            check(targetContext.getSharedPreferences("local-media", 0).edit()
+                .putString(trackId, "content://com.reelos.nativepreview.test.fixture/tracks").commit())
+            playback = launchPlayer(trackId)
+            fun tracksOf(type: Int) = player(requireNotNull(playback)).currentTracks.groups.filter { it.type == type }
+            fun selectedLanguage(type: Int, language: String): Boolean {
+                var selected = false
+                runOnMainSync {
+                    selected = tracksOf(type).any { group -> (0 until group.length).any {
+                        group.isTrackSelected(it) && group.getTrackFormat(it).language?.startsWith(language) == true
+                    } }
+                }
+                return selected
+            }
+            fun openControl(id: Int) {
+                runOnMainSync {
+                    val view = playerView(requireNotNull(playback))
+                    view.showController()
+                    val control = requireNotNull(view.findViewById<View>(id))
+                    check(control.isShown && control.isEnabled && control.performClick())
+                }
+            }
+            fun clickLabel(label: String) {
+                waitFor("native track option") {
+                    if (android.os.Build.VERSION.SDK_INT >= 34) uiAutomation.clearCache()
+                    val root = uiAutomation.rootInActiveWindow ?: return@waitFor false
+                    if (root.packageName?.toString() != targetContext.packageName) return@waitFor false
+                    val queue = java.util.ArrayDeque<AccessibilityNodeInfo>()
+                    queue.add(root)
+                    var count = 0
+                    while (queue.isNotEmpty() && count++ < 300) {
+                        val node = queue.removeFirst()
+                        val text = node.text?.toString().orEmpty()
+                        if (node.isVisibleToUser && (text.equals(label, ignoreCase = true) || text.startsWith("$label,", ignoreCase = true))) {
+                            var action: AccessibilityNodeInfo? = node
+                            repeat(5) {
+                                if (action?.isClickable == true && action?.isEnabled == true)
+                                    return@waitFor action!!.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                                action = action?.parent
+                            }
+                        }
+                        for (index in 0 until node.childCount) node.getChild(index)?.let(queue::add)
+                    }
+                    false
+                }
+            }
+            checkCase("native-player-decodes-audio-tracks") {
+                waitFor("audio buffers and video") {
+                    var decoded = false
+                    runOnMainSync {
+                        val p = player(requireNotNull(playback))
+                        decoded = (p.audioDecoderCounters?.renderedOutputBufferCount ?: 0) > 0 &&
+                            tracksOf(C.TRACK_TYPE_AUDIO).sumOf { it.length } == 2 &&
+                            tracksOf(C.TRACK_TYPE_TEXT).sumOf { it.length } == 2
+                        p.volume = 0f
+                    }
+                    decoded && firstFrame(requireNotNull(playback))
+                }
+            }
+            checkCase("native-audio-track-controls") {
+                openControl(androidx.media3.ui.R.id.exo_settings)
+                clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_title_audio))
+                clickLabel("Spanish")
+                waitFor("selected Spanish audio") { selectedLanguage(C.TRACK_TYPE_AUDIO, "es") }
+            }
+            checkCase("native-subtitle-controls-and-cues") {
+                openControl(androidx.media3.ui.R.id.exo_subtitle)
+                clickLabel("English")
+                waitFor("English decoded caption") {
+                    var shown = false
+                    runOnMainSync { shown = player(requireNotNull(playback)).currentCues.cues.any { it.text?.contains("English") == true } }
+                    shown && selectedLanguage(C.TRACK_TYPE_TEXT, "en")
+                }
+                openControl(androidx.media3.ui.R.id.exo_subtitle)
+                clickLabel("Spanish")
+                waitFor("Spanish decoded caption") {
+                    var shown = false
+                    runOnMainSync { shown = player(requireNotNull(playback)).currentCues.cues.any { it.text?.contains("Spanish") == true } }
+                    shown && selectedLanguage(C.TRACK_TYPE_TEXT, "es")
+                }
+            }
+            checkCase("native-subtitles-off") {
+                openControl(androidx.media3.ui.R.id.exo_subtitle)
+                clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_none))
+                waitFor("subtitles disabled and cues cleared") {
+                    var off = false
+                    runOnMainSync { off = tracksOf(C.TRACK_TYPE_TEXT).none { it.isSelected } && player(requireNotNull(playback)).currentCues.cues.isEmpty() }
+                    off
+                }
+                val closing = requireNotNull(playback)
+                runOnMainSync { closing.finish() }
+                waitFor("track player destroyed") { closing.isDestroyed }
             }
             checkCase("profile-isolation-and-revoked-source") {
                 val core = load()
