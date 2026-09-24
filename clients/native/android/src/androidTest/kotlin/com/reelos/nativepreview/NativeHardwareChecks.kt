@@ -258,6 +258,7 @@ class NativeHardwareChecks : Instrumentation() {
             val trackId = "native-track-validation-fixture"
             load().apply {
                 selectProfile(profileId)
+                setPlaybackPreferences(profileId, PlaybackPreferences("es", "en", SubtitleMode.ON))
                 putMedia(MediaRecord(trackId, "Native track validation", PERSONAL_SOURCE_ID, MediaAvailability.READY))
             }
             check(targetContext.getSharedPreferences("local-media", 0).edit()
@@ -319,6 +320,16 @@ class NativeHardwareChecks : Instrumentation() {
                 }
             }
             checkCase("native-audio-track-controls") {
+                waitFor("saved audio language applied") { selectedLanguage(C.TRACK_TYPE_AUDIO, "es") }
+                var caption = false
+                waitFor("saved subtitle language applied") {
+                    runOnMainSync { caption = player(requireNotNull(playback)).currentCues.cues.any { it.text?.contains("English") == true } }
+                    caption && selectedLanguage(C.TRACK_TYPE_TEXT, "en")
+                }
+                openControl(androidx.media3.ui.R.id.exo_settings)
+                clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_title_audio))
+                clickLabel("English")
+                waitFor("selected English audio override") { selectedLanguage(C.TRACK_TYPE_AUDIO, "en") }
                 openControl(androidx.media3.ui.R.id.exo_settings)
                 clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_title_audio))
                 clickLabel("Spanish")

@@ -1,6 +1,9 @@
 package com.reelos.desktop
 
 import com.reelos.providers.RemoteByteStream
+import com.reelos.core.PlaybackPreferences
+import com.reelos.core.SubtitleMode
+import com.reelos.core.playbackLanguageMatches
 import com.sun.jna.Callback
 import com.sun.jna.Library
 import com.sun.jna.Native
@@ -77,12 +80,12 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
     }
 
     @Synchronized
-    fun player(path: Path, resumeMs: Long): VlcPlayback {
+    fun player(path: Path, resumeMs: Long, preferences: PlaybackPreferences = PlaybackPreferences()): VlcPlayback {
         check(!closed.get()) { "The native decoder is closed" }
         val media = api.libvlc_media_new_path(instance, path.toString()) ?: error("LibVLC could not open this local file")
         try {
             val player = api.libvlc_media_player_new_from_media(media) ?: error("LibVLC could not create a media player")
-            return VlcPlayback(api, player, resumeMs)
+            return VlcPlayback(api, player, resumeMs, preferences = preferences, media = media)
         } finally {
             api.libvlc_media_release(media)
         }
@@ -90,11 +93,11 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
 
     /** LibVLC receives callbacks, never the signed provider URL. */
     @Synchronized
-    fun player(remote: RemoteByteStream, resumeMs: Long): VlcPlayback =
-        player(ProviderByteSource(remote), resumeMs)
+    fun player(remote: RemoteByteStream, resumeMs: Long, preferences: PlaybackPreferences = PlaybackPreferences()): VlcPlayback =
+        player(ProviderByteSource(remote), resumeMs, preferences)
 
     @Synchronized
-    internal fun player(source: RemoteByteSource, resumeMs: Long): VlcPlayback {
+    internal fun player(source: RemoteByteSource, resumeMs: Long, preferences: PlaybackPreferences = PlaybackPreferences()): VlcPlayback {
         if (closed.get()) {
             source.close()
             error("The native decoder is closed")
@@ -117,7 +120,7 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
         try {
             val player = api.libvlc_media_player_new_from_media(media)
                 ?: error("LibVLC could not create a media player")
-            return VlcPlayback(api, player, resumeMs, callbacks)
+            return VlcPlayback(api, player, resumeMs, callbacks, preferences, media)
         } catch (_: Throwable) {
             callbacks.stop()
             error("LibVLC could not create a media player")
@@ -130,6 +133,23 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
     override fun close() {
         if (closed.compareAndSet(false, true)) api.libvlc_release(instance)
     }
+
+}
+
+/** Exact LibVLC3 media-track ABI; language comes from stream metadata, not display-name guessing. */
+@Structure.FieldOrder("codec", "original", "id", "type", "profile", "level", "details", "bitrate", "language", "description")
+internal class VlcMediaTrack(pointer: Pointer) : Structure(pointer) {
+    @JvmField var codec = 0
+    @JvmField var original = 0
+    @JvmField var id = 0
+    @JvmField var type = 0
+    @JvmField var profile = 0
+    @JvmField var level = 0
+    @JvmField var details: Pointer? = null
+    @JvmField var bitrate = 0
+    @JvmField var language: Pointer? = null
+    @JvmField var description: Pointer? = null
+    init { read() }
 }
 
 internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean)
@@ -171,10 +191,15 @@ internal class VlcPlayback(
     private val player: Pointer,
     private val resumeMs: Long,
     private val remoteCallbacks: RemoteMediaCallbacks? = null,
+    private val preferences: PlaybackPreferences = PlaybackPreferences(),
+    /** Borrowed from this player, which retains its media until libvlc_media_player_release. */
+    private val media: Pointer? = null,
 ) : AutoCloseable {
     private val started = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private var resumeApplied = false
+    private var audioPreferenceApplied = preferences.audioLanguage == null
+    private var subtitlePreferenceApplied = preferences.subtitleMode == SubtitleMode.AUTO
 
     @Synchronized
     fun tracks(): VlcTracks {
@@ -191,6 +216,7 @@ internal class VlcPlayback(
         val available = tracks().audio
         require(available.any { it.id == id }) { "That audio track is unavailable" }
         check(api.libvlc_audio_set_track(player, id) == 0) { "LibVLC could not select that audio track" }
+        audioPreferenceApplied = true // An explicit in-film choice wins over defaults and late tracks.
     }
 
     @Synchronized
@@ -198,6 +224,7 @@ internal class VlcPlayback(
         val available = tracks().subtitles
         require((id == -1 && available.isNotEmpty()) || available.any { it.id == id }) { "That subtitle track is unavailable" }
         check(api.libvlc_video_set_spu(player, id) == 0) { "LibVLC could not select that subtitle track" }
+        subtitlePreferenceApplied = true
     }
 
     @Synchronized
@@ -215,6 +242,7 @@ internal class VlcPlayback(
     @Synchronized
     fun poll(): PlaybackState {
         check(!closed.get()) { "The player is closed" }
+        if (started.get()) applyPreferredTracks()
         val duration = api.libvlc_media_player_get_length(player).coerceAtLeast(0)
         val seekable = api.libvlc_media_player_is_seekable(player) != 0
         if (started.get() && !resumeApplied && seekable && duration > 0) {
@@ -230,6 +258,33 @@ internal class VlcPlayback(
             error = state == 7 || remoteCallbacks?.failed == true,
             seekable = seekable,
         )
+    }
+
+    private fun applyPreferredTracks() {
+        if ((audioPreferenceApplied && subtitlePreferenceApplied) || media == null) return
+        check(api.libvlc_get_version().startsWith("3.")) { "Language preferences require LibVLC 3" }
+        val pointer = PointerByReference()
+        val count = api.libvlc_media_tracks_get(media, pointer)
+        val array = pointer.value ?: return
+        try {
+            require(count in 0..4096) { "Invalid native track count" }
+            val available = tracks()
+            if (!subtitlePreferenceApplied && preferences.subtitleMode == SubtitleMode.OFF && available.subtitles.isNotEmpty()) {
+                subtitlePreferenceApplied = api.libvlc_video_set_spu(player, -1) == 0
+            }
+            for (index in 0 until count) {
+                val entry = VlcMediaTrack(array.getPointer(index.toLong() * Native.POINTER_SIZE))
+                val language = entry.language?.getString(0, "UTF-8")
+                if (!audioPreferenceApplied && entry.type == 0 && available.audio.any { it.id == entry.id } &&
+                    playbackLanguageMatches(preferences.audioLanguage, language)) {
+                    audioPreferenceApplied = api.libvlc_audio_set_track(player, entry.id) == 0
+                }
+                if (!subtitlePreferenceApplied && preferences.subtitleMode == SubtitleMode.ON && entry.type == 2 &&
+                    available.subtitles.any { it.id == entry.id } && (preferences.subtitleLanguage == null || playbackLanguageMatches(preferences.subtitleLanguage, language))) {
+                    subtitlePreferenceApplied = api.libvlc_video_set_spu(player, entry.id) == 0
+                }
+            }
+        } finally { api.libvlc_media_tracks_release(array, count) }
     }
 
     @Synchronized
@@ -381,6 +436,8 @@ internal class RemoteMediaCallbacks(private val source: RemoteByteSource) {
 }
 
 internal interface LibVlc : Library {
+    fun libvlc_media_tracks_get(media: Pointer, tracks: PointerByReference): Int
+    fun libvlc_media_tracks_release(tracks: Pointer, count: Int)
     fun libvlc_new(argc: Int, argv: Array<String>): Pointer?
     fun libvlc_get_version(): String
     fun libvlc_release(instance: Pointer)

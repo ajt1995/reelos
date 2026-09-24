@@ -65,6 +65,13 @@ class PlaybackActivity : ComponentActivity() {
             if (remote != null) builder.setMediaSourceFactory(DefaultMediaSourceFactory(this)
                 .setDataSourceFactory { ProviderDataSource(remote.bytes) })
             player = builder.build().also { playback ->
+                val preferences = profile.playbackPreferences
+                playback.trackSelectionParameters = playback.trackSelectionParameters.buildUpon()
+                    .setPreferredAudioLanguage(preferences.audioLanguage)
+                    .setPreferredTextLanguage(preferences.subtitleLanguage.takeIf { preferences.subtitleMode == SubtitleMode.ON })
+                    .setSelectUndeterminedTextLanguage(preferences.subtitleMode == SubtitleMode.ON)
+                    .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_TEXT, preferences.subtitleMode == SubtitleMode.OFF)
+                    .build()
                 playerView.player = playback
                 playback.addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() { hasRenderedFrame = true }

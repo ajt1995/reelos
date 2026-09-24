@@ -60,7 +60,7 @@ internal class DesktopMediaLibrary(private val directory: Path, private val core
             throw failure
         }
         val savedPosition = core.snapshot.profiles.getValue(profileId).playbackPositionsMs[id] ?: 0L
-        return decoder.player(real, savedPosition)
+        return decoder.player(real, savedPosition, core.snapshot.profiles.getValue(profileId).playbackPreferences)
     }
 
     /** Revalidate persisted paths so returning files can become playable again. */

@@ -41,6 +41,7 @@ data class ProfileState(
     val motionMode: MotionMode = MotionMode.SUBTLE,
     val browsingDensity: BrowsingDensity = BrowsingDensity.COMFORTABLE,
     val transparencyEnabled: Boolean = true,
+    val playbackPreferences: PlaybackPreferences = PlaybackPreferences(),
 )
 
 data class SourceRecord(
@@ -75,6 +76,6 @@ data class CoreState(
     val activeProfile: ProfileState? get() = activeProfileId?.let(profiles::get)
 }
 
-const val CORE_SCHEMA_VERSION = 5
+const val CORE_SCHEMA_VERSION = 6
 const val PERSONAL_SOURCE_ID = "personal"
 const val PUBLIC_DOMAIN_SOURCE_ID = "public-domain"

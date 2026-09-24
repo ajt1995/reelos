@@ -62,6 +62,7 @@ enum class UiAction { PLAY, FIND, PREPARING, UNAVAILABLE }
 data class UiMedia(val id: String, val title: String, val action: UiAction, val saved: Boolean, val reaction: String?, val positionMs: Long = 0L)
 data class UiTasteSubject(val id: String, val title: String, val reaction: String?, val context: String = "")
 data class UiProfile(val id: String, val name: String, val color: String)
+data class UiLanguage(val code: String, val label: String)
 data class UiModel(
     val profileId: String?,
     val profiles: List<UiProfile>,
@@ -80,6 +81,10 @@ data class UiModel(
     val effectiveMotion: String,
     val browsingDensity: String,
     val transparencyEnabled: Boolean,
+    val audioLanguage: String? = null,
+    val subtitleLanguage: String? = null,
+    val subtitleMode: String = "AUTO",
+    val languages: List<UiLanguage> = emptyList(),
     val error: String? = null,
 )
 
@@ -99,6 +104,8 @@ sealed interface UiEvent {
     data class SelectProfile(val id: String) : UiEvent
     data class CreateProfile(val name: String) : UiEvent
     data class Appearance(val motion: String? = null, val density: String? = null, val toggleTransparency: Boolean = false) : UiEvent
+    data class AudioLanguage(val code: String?) : UiEvent
+    data class SubtitleDefault(val mode: String, val code: String? = null) : UiEvent
     data object FinishTaste : UiEvent
 }
 
@@ -293,6 +300,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                             Text("Settings", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                             Spacer(Modifier.height(16.dp))
                             AppearanceControls(model, accent, onEvent)
+                            PlaybackPreferenceControls(model, accent, onEvent)
                             Spacer(Modifier.height(10.dp))
                             Text("Your personal collection stays on this device. Home connections and family controls are still in development.", color = muted)
                             Spacer(Modifier.height(12.dp))

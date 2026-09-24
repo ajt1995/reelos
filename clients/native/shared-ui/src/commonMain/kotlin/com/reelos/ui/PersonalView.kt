@@ -3,6 +3,8 @@ package com.reelos.ui
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -25,6 +27,39 @@ import androidx.compose.ui.unit.sp
         }
         ReelButton("Tune your taste", accent, onClick = onTaste)
         AppearanceControls(model, accent, onEvent)
+        PlaybackPreferenceControls(model, accent, onEvent)
+    }
+}
+
+@Composable internal fun PlaybackPreferenceControls(model: UiModel, accent: Color, onEvent: (UiEvent) -> Unit) {
+    var open by remember(model.profileId) { mutableStateOf(false) }
+    var choosing by remember(model.profileId) { mutableStateOf<String?>(null) }
+    var query by remember(choosing) { mutableStateOf("") }
+    fun label(code: String?) = model.languages.firstOrNull { it.code == code }?.label ?: code ?: "Automatic"
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ReelButton(if (open) "Close playback preferences" else "Playback · you", accent, compact = true) { open = !open; choosing = null }
+        if (open) {
+            Text("Your default languages. You can still change tracks during a film.", color = muted)
+            ReelButton("Audio · ${label(model.audioLanguage)}", accent, compact = true) { choosing = "audio" }
+            ReelButton("Subtitles · ${if (model.subtitleMode == "OFF") "Off" else if (model.subtitleMode == "AUTO") "Automatic" else label(model.subtitleLanguage)}", accent, compact = true) { choosing = "subtitles" }
+            if (choosing != null) {
+                ReelButton("Automatic", accent, compact = true) {
+                    if (choosing == "audio") onEvent(UiEvent.AudioLanguage(null)) else onEvent(UiEvent.SubtitleDefault("AUTO"))
+                    choosing = null
+                }
+                if (choosing == "subtitles") ReelButton("Off", accent, compact = true) { onEvent(UiEvent.SubtitleDefault("OFF")); choosing = null }
+                OutlinedTextField(query, { query = it }, label = { Text("Find a language") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                LazyColumn(Modifier.fillMaxWidth().height(240.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(model.languages.filter { it.label.contains(query, true) || it.code.contains(query, true) }, key = { it.code }) { language ->
+                        ReelButton(language.label, accent, compact = true) {
+                            if (choosing == "audio") onEvent(UiEvent.AudioLanguage(language.code)) else onEvent(UiEvent.SubtitleDefault("ON", language.code))
+                            choosing = null
+                        }
+                    }
+                }
+                ReelButton("Cancel language choice", accent, compact = true) { choosing = null }
+            }
+        }
     }
 }
 

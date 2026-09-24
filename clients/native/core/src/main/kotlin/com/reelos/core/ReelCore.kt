@@ -98,6 +98,16 @@ class ReelCore(
     }
 
     @Synchronized
+    fun setPlaybackPreferences(profileId: String, preferences: PlaybackPreferences) {
+        val normalized = preferences.copy(
+            audioLanguage = normalizedPlaybackLanguage(preferences.audioLanguage),
+            subtitleLanguage = normalizedPlaybackLanguage(preferences.subtitleLanguage),
+        )
+        validatePlaybackPreferences(normalized)
+        updateProfile(profileId) { it.copy(playbackPreferences = normalized) }
+    }
+
+    @Synchronized
     fun setTasteSeeds(profileId: String, seeds: Set<String>) {
         val clean = seeds.map(String::trim).filter(String::isNotEmpty).toSet()
         require(clean.all { it.length <= 128 }) { "Taste seed identifier is too long" }

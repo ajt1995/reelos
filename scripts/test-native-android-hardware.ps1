@@ -27,7 +27,7 @@ $required = if ($liveProviderJourney) {
 } elseif ($freshJourney) {
     @('fresh-identity-and-back','fresh-color-and-guidance','fresh-taste-and-restart','fresh-standalone-and-empty-home','fresh-completed-restart','fresh-import-requires-confirmation','fresh-confirmed-import-and-save','fresh-ui-playback-and-return','fresh-ui-resume')
 } elseif ($personalJourney) {
-    @('personal-appearance-controls','personal-taste-like-love','personal-taste-cozy-reset-dismiss','personal-taste-finish-and-reentry','personal-second-profile-isolation','personal-restart-persistence','personal-setup-finish')
+    @('personal-appearance-controls','personal-playback-preferences','personal-taste-like-love','personal-taste-cozy-reset-dismiss','personal-taste-finish-and-reentry','personal-second-profile-isolation','personal-restart-persistence','personal-setup-finish')
 } else {
     @('valid-local-import-and-decoder','invalid-video-rejected','repeat-import-does-not-leak-private-copies','mutable-provider-retained-bytes-validated','native-player-decodes-real-frame','seek-and-persist-position','resume-restores-position','completed-playback-restarts-from-beginning','player-keeps-screen-on-only-while-playing','active-playback-stops-after-source-revocation','active-playback-stops-after-profile-switch','native-player-decodes-audio-tracks','native-audio-track-controls','native-subtitle-controls-and-cues','native-subtitles-off','profile-isolation-and-revoked-source')
 }

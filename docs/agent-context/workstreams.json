@@ -9,7 +9,7 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "fb8bfaf",
+      "checkpoint": "9c2b253",
       "status": "active",
       "scope": [
         "Lead owns shared Kotlin/Compose integration, contracts, native versions, context and physical validation; isolated workers return reviewed commits.",
@@ -20,7 +20,7 @@
         "19 active groups, 2 parked and all47 UI requirements retained. completion-execution.md is the dependency graph. Release remains BLOCKED with145 evidence gaps; native validation foundation is not friend-ready.",
         "Windows .214 measured15.8GiB on Ethernet. Fold SM-F971U/R5GL64PC0CF paired via wireless ADB; Pixel10ProXL/5A230DLCQ0018X via USB; OnnTV .95 armeabi-v7a authorized. Fold wireless ports may change; never assume old addresses remain live.",
         "HP .234 authenticated Ubuntu26.04.1 x86_64,3304MiB, Java17.0.20.1/LibVLC,Cage/Xwayland. Isolated native first-screen rendering verified, not replacement or playback certification; active kiosk still legacy Chromium. Do not wipe OS/network/unrelated data.",
-        "Core schema5 persists profile motion/density/transparency and fail-closed source/media/profile access generations. Rapid revoke/restore and profile-away/back invalidate old sessions. No Family/PIN/Home-sync certification.",
+        "Core schema6 adds profile-private audio/subtitle language defaults; schema5 migration and restart/isolation verified. Persists profile motion/density/transparency and fail-closed source/media/profile access generations. Rapid revoke/restore and profile-away/back invalidate old sessions. No Family/PIN/Home-sync certification.",
         "Native Home/taste uses bounded local SGD with109 factual subjects (12books excluded TV). Dismiss neutral, Less reversible, rated/seed-matched ranking. No genuine pretrained semantic encoder or held-out usefulness certification. Architecture report11 legacy routes:7fallback/4shadow, not all15 native specialists active.",
         "Earlier TV/Fold/Pixel each passed9 first-run and7 personal-UI cases, plus local-media regressions. Windows setup/name/color/taste/standalone Home observed via Computer Use; file-picker import remains unverified. Whole-interface/Fold-posture/Family/artwork acceptance remains open.",
         "Current multitrack candidate: Pixel,Fold,OnnTV each16/16 native media checks passed, zero skips: real video, seek/resume/end/revocation, decoded AAC buffers, native audio selection, English/Spanish caption cues and Off. Test-only synthetic30s fixture, not perceptual audio quality/full-film/volume leveling/subtitle timing or full remote-navigation audit.",
@@ -29,9 +29,11 @@
         "Desktop controls enumerate actual LibVLC3 audio/subtitle tracks with checked switching and Off. Central desktop22/22 tests passed zero skips, including installed decoder callbacks, progress/seek/resume/cancel and real multitrack native IDs/progression. Desktop visual captions/perceptual audio/provider-network playback remain unverified.",
         "Evidence .reelos-audit/native-hardware/{5A230DLCQ0018X,192.168.1.221_38765,192.168.1.95_5555}, native-provider-playback/192.168.1.221_38765 and desktop XML/logs is source/APK/fixture-scoped. Provider test restores baseline and runner verifies fresh-process recovery; abrupt disconnect retains journal and blocks rerun. No unsupported skips count as acceptance.",
         "Family/taste More of this in their world and Watch with me recorded, queued AFTER current playback. Parent suggestions separately attributed from child taste/safety, gentle/backoff after dismissals, preserve favorites. Not implemented.",
-        "All310 test files classified. Full historical npm suite remains failed; do not revive retired stack/fake catalog for green tests. No full governor/model-worker/pretrained-runtime/Home-sync/whole-film/signed-install certification. Scoped worker commits reviewed centrally; no worker currently edits canonical checkout."
+        "All311 test files classified. Full historical npm suite remains failed; do not revive retired stack/fake catalog for green tests. No full governor/model-worker/pretrained-runtime/Home-sync/whole-film/signed-install certification. Scoped worker commits reviewed centrally; no worker currently edits canonical checkout."
       ],
       "nextChecks": [
+        "Current saved-language slice:55 core and22 desktop tests passed zero skips, including actual LibVLC metadata-selected Spanish audio/English captions and Off. Pixel/TV each16 media+8 personal-UI passed after fixing test traversal to wait for the language field and avoid clicking the query instead of its result. Fold not rerun for schema6; prior Fold evidence remains version-scoped. Subtitle timing/appearance/volume leveling remain open.",
+        "Use scripts/test-native-checkpoint.ps1 for deterministic cached native batches; read result.json first, only failed-stage logs. Batch fail-fast exercised; final UI fixes verified by scoped reruns, not a new whole-batch pass. Keep prior failed result honest. Do not repeatedly build/run already-passed scopes or use agents for routine orchestration.",
         "Fold now passed5/5 real provider-playback checks: decoded frames/progression, seek/persist, shared Library resume, source-revocation player release and owner-state restoration; runner fresh-process recovery also passed. Evidence .reelos-audit/native-provider-playback/192.168.1.221_38765 is source/APK hashed. Muted short clip only, not full-film/audio/subtitles/analysis. Windows/TV live-provider playback and UI disable remain unverified; Linux still needs protected vault. Never extract or copy Fold key.",
         "Native basic standalone first run and personal UI verified on TV, Fold and Pixel; Windows basic setup observed. Complete approved artwork, Family/PIN/deployment setup and remaining journeys. Retain Fold-specific folded/unfolded/rotation/keyboard acceptance; paired wireless ports may change and must be rediscovered.",
         "Connect true learned encoder/model-worker isolation, event/resource spine and all15 specialists with quality evidence.",

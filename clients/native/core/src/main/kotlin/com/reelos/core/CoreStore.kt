@@ -62,6 +62,7 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     motionMode = if (version >= 4) enumValueOf<MotionMode>(input.readUTF()) else MotionMode.SUBTLE,
                     browsingDensity = if (version >= 4) enumValueOf<BrowsingDensity>(input.readUTF()) else BrowsingDensity.COMFORTABLE,
                     transparencyEnabled = if (version >= 4) input.readBoolean() else true,
+                    playbackPreferences = if (version >= 6) PlaybackPreferences(readNullable(input), readNullable(input), enumValueOf<SubtitleMode>(input.readUTF())) else PlaybackPreferences(),
                 )
             }
             val activeId = readNullable(input)
@@ -138,6 +139,9 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     output.writeUTF(p.motionMode.name)
                     output.writeUTF(p.browsingDensity.name)
                     output.writeBoolean(p.transparencyEnabled)
+                    writeNullable(output, p.playbackPreferences.audioLanguage)
+                    writeNullable(output, p.playbackPreferences.subtitleLanguage)
+                    output.writeUTF(p.playbackPreferences.subtitleMode.name)
                 }
                 writeNullable(output, state.activeProfileId)
                 writeNullable(output, state.requestedHomeId)
@@ -216,6 +220,7 @@ internal fun validateCoreState(state: CoreState): CoreState {
         "Invalid Home identity"
     }
     state.profiles.forEach { (id, profile) ->
+        validatePlaybackPreferences(profile.playbackPreferences)
         require(id.isNotBlank() && id == profile.id) { "Invalid profile identity" }
         require(profile.name.isNotBlank() || profile.onboardingStep == OnboardingStep.IDENTITY) { "Incomplete profile identity" }
         require(Regex("#[0-9A-Fa-f]{6}").matches(profile.color)) { "Invalid profile color" }

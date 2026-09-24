@@ -214,7 +214,7 @@ fun main(args: Array<String>) = application {
                 check(result.guard.isAllowed(current.snapshot)) { "Playback access changed" }
                 val resumeMs = current.snapshot.profiles[result.profileId]?.playbackPositionsMs?.get(result.mediaId) ?: 0L
                 val player = requireNotNull(vlc) { "In-process LibVLC is unavailable on this computer" }
-                    .player(result.bytes, resumeMs)
+                    .player(result.bytes, resumeMs, current.snapshot.profiles.getValue(result.profileId).playbackPreferences)
                 try {
                     check(!closing && ticket == connectionEpoch && result.isAuthorized()) { "Connection changed" }
                     loaded = Result.success(current)

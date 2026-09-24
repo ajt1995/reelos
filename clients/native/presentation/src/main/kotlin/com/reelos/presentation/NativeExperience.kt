@@ -11,6 +11,9 @@ import com.reelos.core.DeviceKind
 import com.reelos.core.intelligence.NativeTasteCatalog
 import com.reelos.core.MotionMode
 import com.reelos.core.BrowsingDensity
+import com.reelos.core.SubtitleMode
+import com.reelos.ui.UiLanguage
+import java.util.Locale
 import com.reelos.core.effectiveMotionMode
 import com.reelos.core.ReactionKind
 import com.reelos.core.ReelCore
@@ -57,6 +60,10 @@ fun NativeExperience(
             effectiveMotion = profile?.let { effectiveMotionMode(it, motionAllowed, !core.canEnterHome(it.id)).name } ?: if (motionAllowed) "EXPRESSIVE" else "STILL",
             browsingDensity = profile?.browsingDensity?.name ?: "COMFORTABLE",
             transparencyEnabled = profile?.transparencyEnabled ?: true,
+            audioLanguage = profile?.playbackPreferences?.audioLanguage,
+            subtitleLanguage = profile?.playbackPreferences?.subtitleLanguage,
+            subtitleMode = profile?.playbackPreferences?.subtitleMode?.name ?: "AUTO",
+            languages = playbackLanguages,
             tasteSeeds = profile?.tasteSeeds ?: emptySet(),
             homeMediaIds = profile?.let { core.rankedHomeMedia(it.id).map { item -> item.id } } ?: emptyList(),
             destinations = core.navigation().map { it.name }.filter { it == "HOME" || it == "LIBRARY" || it == "SETTINGS" },
@@ -132,6 +139,10 @@ fun NativeExperience(
                     motionMode = event.motion?.let(MotionMode::valueOf),
                     browsingDensity = event.density?.let(BrowsingDensity::valueOf),
                     toggleTransparency = event.toggleTransparency)
+                is UiEvent.AudioLanguage -> core.setPlaybackPreferences(requireNotNull(profileId),
+                    core.snapshot.profiles.getValue(profileId).playbackPreferences.copy(audioLanguage = event.code))
+                is UiEvent.SubtitleDefault -> core.setPlaybackPreferences(requireNotNull(profileId),
+                    core.snapshot.profiles.getValue(profileId).playbackPreferences.copy(subtitleMode = SubtitleMode.valueOf(event.mode), subtitleLanguage = event.code))
                 UiEvent.FinishTaste -> core.finishTaste(requireNotNull(profileId))
             }
             error = null
@@ -143,4 +154,9 @@ fun NativeExperience(
             revision++ // A retry may have reloaded a newer snapshot even when persistence failed.
         }
     }
+}
+
+private val playbackLanguages by lazy {
+    Locale.getISOLanguages().map { UiLanguage(it, Locale.forLanguageTag(it).getDisplayLanguage(Locale.getDefault())) }
+        .sortedBy { it.label.lowercase(Locale.getDefault()) }
 }

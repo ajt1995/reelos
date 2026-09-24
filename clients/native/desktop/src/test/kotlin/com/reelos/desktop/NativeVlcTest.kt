@@ -1,6 +1,8 @@
 package com.reelos.desktop
 
 import java.awt.Canvas
+import com.reelos.core.PlaybackPreferences
+import com.reelos.core.SubtitleMode
 import java.awt.Frame
 import java.awt.GraphicsEnvironment
 import java.nio.file.Files
@@ -33,7 +35,7 @@ class NativeVlcTest {
         check(canvas.isDisplayable) { "Native test drawable could not be created" }
         try {
             NativeVlc.open().getOrThrow().use { vlc ->
-                vlc.player(fixture, 0).use { playback ->
+                vlc.player(fixture, 0, PlaybackPreferences("es", "en", SubtitleMode.ON)).use { playback ->
                     SwingUtilities.invokeAndWait { playback.attach(canvas) }
                     awaitTrackState(playback) { state, _ -> state.playing && state.positionMs > 500 }
                     val initial = awaitTrackState(playback) { _, tracks ->
@@ -41,6 +43,8 @@ class NativeVlcTest {
                     }.second
                     assertEquals(2, initial.audio.map { it.id }.distinct().size)
                     assertEquals(2, initial.subtitles.map { it.id }.distinct().size)
+                    // Fixture track order is English then Spanish for both media types.
+                    awaitTrackState(playback) { _, tracks -> tracks.audioId == tracks.audio.last().id && tracks.subtitleId == tracks.subtitles.first().id }
                     initial.audio.forEach { track ->
                         playback.selectAudioTrack(track.id)
                         awaitTrackState(playback) { _, tracks -> tracks.audioId == track.id }
@@ -56,6 +60,10 @@ class NativeVlcTest {
                         state.playing && state.positionMs >= afterOff.first.positionMs + 300
                     }
                 }
+                vlc.player(fixture, 0, PlaybackPreferences(subtitleMode = SubtitleMode.OFF)).use { playback ->
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    awaitTrackState(playback) { state, tracks -> state.playing && state.positionMs > 500 && tracks.subtitleId == -1 }
+                }
             }
         } finally {
             SwingUtilities.invokeAndWait { frame.dispose() }
@@ -67,14 +75,16 @@ class NativeVlcTest {
         accepted: (PlaybackState, VlcTracks) -> Boolean,
     ): Pair<PlaybackState, VlcTracks> {
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+        var last = "not observed"
         while (System.nanoTime() < deadline) {
             val state = playback.poll()
             check(!state.error) { "LibVLC reported a media or decoding error" }
             val tracks = playback.tracks()
+            last = "audio=${tracks.audioId}/${tracks.audio}, subtitles=${tracks.subtitleId}/${tracks.subtitles}"
             if (accepted(state, tracks)) return state to tracks
             Thread.sleep(100)
         }
-        error("LibVLC did not reach the expected track state within 15 seconds")
+        error("LibVLC fixture did not reach expected track state: $last")
     }
 
     @Test

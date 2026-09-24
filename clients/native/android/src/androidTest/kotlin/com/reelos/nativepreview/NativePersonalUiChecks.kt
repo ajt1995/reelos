@@ -195,7 +195,8 @@ internal object NativePersonalUiChecks {
             }
             while (SystemClock.elapsedRealtime() < deadline) {
                 val current = page(label)
-                val target = if (needsClick) current.matches.firstNotNullOfOrNull { clickable(it) }
+                // A language query can equal its result label; activate the result, not the editable field.
+                val target = if (needsClick) current.matches.filterNot { it.isEditable }.firstNotNullOfOrNull { clickable(it) }
                     else current.matches.firstOrNull()
                 if (target != null) return target
                 val moved = scrollSteps < 12 && scroll(current)
@@ -459,6 +460,27 @@ internal object NativePersonalUiChecks {
                     } == true
                 }
             }
+            checkCase("personal-playback-preferences") {
+                click("Close appearance")
+                click("Playback · you")
+                click("Audio · Automatic")
+                val edit = requireNotNull(seek("__editable__", false, SystemClock.elapsedRealtime() + 8_000)) {
+                    "Language search did not become accessible"
+                }
+                check(edit.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, "Spanish")
+                }))
+                click("Spanish")
+                waitFor("Spanish audio default persisted") {
+                    load().snapshot.profiles[a]?.playbackPreferences?.audioLanguage == "es"
+                }
+                click("Subtitles · Automatic")
+                click("Off")
+                waitFor("private playback defaults persisted") {
+                    load().snapshot.profiles[a]?.playbackPreferences == com.reelos.core.PlaybackPreferences("es", null, com.reelos.core.SubtitleMode.OFF)
+                }
+                click("Close playback preferences")
+            }
             checkCase("personal-taste-like-love") {
                 click("Tune your taste")
                 visible("What pulls you in?")
@@ -501,7 +523,7 @@ internal object NativePersonalUiChecks {
                 check(load().snapshot.profiles[b]?.let {
                     it.motionMode == MotionMode.SUBTLE &&
                         it.browsingDensity == BrowsingDensity.COMFORTABLE &&
-                        it.transparencyEnabled && it.positiveReactions.isEmpty()
+                        it.transparencyEnabled && it.positiveReactions.isEmpty() && it.playbackPreferences == com.reelos.core.PlaybackPreferences()
                 } == true)
                 click("Switch person")
                 waitFor("return profile picker") { page("Choose a person").matches.isNotEmpty() }
@@ -524,7 +546,8 @@ internal object NativePersonalUiChecks {
                         it.browsingDensity == BrowsingDensity.COMPACT &&
                         !it.transparencyEnabled &&
                         it.dismissedIds.contains("tmdb-movie-693134") &&
-                        it.positiveReactions["tmdb-movie-335984"] == ReactionKind.COZY
+                        it.positiveReactions["tmdb-movie-335984"] == ReactionKind.COZY &&
+                        it.playbackPreferences == com.reelos.core.PlaybackPreferences("es", null, com.reelos.core.SubtitleMode.OFF)
                 } == true)
                 runCatching {
                     val screenshot = host.uiAutomation.takeScreenshot() ?: error("No screenshot")

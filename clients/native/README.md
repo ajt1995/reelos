@@ -190,12 +190,28 @@ silent-fixture byte callbacks, time progress, seek and resume using installed Li
 It is not live provider playback or a visual/frame/audio/subtitle certification. Missing
 opt-ins count as skipped, never passing hardware evidence.
 
-### Native track controls and evidence
+### Local batched validation
+
+Run `./scripts/test-native-checkpoint.ps1 -Devices '<authorized-device-id>' -PersonalUi`
+from the repository root with the existing approved toolchain installed. Omit `-Devices`
+for build/core/desktop/contracts only. Multiple explicitly authorized devices run serially;
+omit `-PersonalUi` for media checks only. No tool/model downloads, provider requests or
+credentials are involved. Device access still uses USB/LAN; "offline" means cached local
+tools, fixtures and no model reasoning inside the batch, not an air-gapped device session.
+
+The runner stops on failure and replaces `.reelos-audit/native-checkpoint/result.json`.
+Read that compact summary first and only the failed stage's log when needed. Required
+desktop decoder tests cannot count as passed when skipped. This is a targeted native
+checkpoint, not whole-product acceptance or proof that every platform works.
+
+### Native track controls
 
 Android/TV exposes Media3's native audio Settings and subtitle button; choices come from the
 actual media tracks. The desktop adapter enumerates LibVLC3 tracks and offers Audio/Subtitles
-menus including Off. Selections are per-playback for now; saved language defaults, subtitle
-timing/appearance and volume leveling are still open work, not implied by these controls.
+menus including Off. Personal/Settings share saved profile-private audio and subtitle defaults
+(schema6; older profiles migrate to Automatic). Android uses Media3 track preferences; desktop
+selects actual LibVLC stream language metadata. In-film changes override only that session.
+Subtitle timing/appearance and volume leveling remain open work, not implied by these controls.
 
 Pixel, Fold and Onn TV each passed16/16 media checks including actual AAC decoded buffers,
 audio switching and English/Spanish decoded captions/Off. These are short synthetic test-only
