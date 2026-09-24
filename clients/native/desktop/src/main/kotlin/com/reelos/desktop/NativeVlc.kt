@@ -1,12 +1,20 @@
 package com.reelos.desktop
 
+import com.reelos.providers.RemoteByteStream
+import com.sun.jna.Callback
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
+import com.sun.jna.ptr.LongByReference
+import com.sun.jna.ptr.PointerByReference
 import java.awt.Canvas
+import java.io.ByteArrayInputStream
+import java.io.InputStream
 import java.nio.file.Files
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /** In-process LibVLC bridge. The native video target is an AWT Canvas inside Compose SwingPanel. */
 internal class NativeVlc private constructor(private val api: LibVlc, private val instance: Pointer) : AutoCloseable {
@@ -79,6 +87,44 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
         }
     }
 
+    /** LibVLC receives callbacks, never the signed provider URL. */
+    @Synchronized
+    fun player(remote: RemoteByteStream, resumeMs: Long): VlcPlayback =
+        player(ProviderByteSource(remote), resumeMs)
+
+    @Synchronized
+    internal fun player(source: RemoteByteSource, resumeMs: Long): VlcPlayback {
+        if (closed.get()) {
+            source.close()
+            error("The native decoder is closed")
+        }
+        // LibVLC 4 changed this C callback ABI; never call the 3.x signature on it.
+        val version = try { api.libvlc_get_version() } catch (_: Throwable) { "" }
+        if (!version.startsWith("3.")) {
+            source.close()
+            error("Remote callback playback requires LibVLC 3")
+        }
+        val callbacks = RemoteMediaCallbacks(source)
+        val media = try {
+            api.libvlc_media_new_callbacks(instance, callbacks.openCallback, callbacks.readCallback,
+                callbacks.seekCallback, callbacks.closeCallback, null)
+                ?: error("LibVLC could not open remote media")
+        } catch (_: Throwable) {
+            callbacks.stop()
+            error("LibVLC could not open remote media")
+        }
+        try {
+            val player = api.libvlc_media_player_new_from_media(media)
+                ?: error("LibVLC could not create a media player")
+            return VlcPlayback(api, player, resumeMs, callbacks)
+        } catch (_: Throwable) {
+            callbacks.stop()
+            error("LibVLC could not create a media player")
+        } finally {
+            api.libvlc_media_release(media)
+        }
+    }
+
     @Synchronized
     override fun close() {
         if (closed.compareAndSet(false, true)) api.libvlc_release(instance)
@@ -87,7 +133,12 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
 
 internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean)
 
-internal class VlcPlayback(private val api: LibVlc, private val player: Pointer, private val resumeMs: Long) : AutoCloseable {
+internal class VlcPlayback(
+    private val api: LibVlc,
+    private val player: Pointer,
+    private val resumeMs: Long,
+    private val remoteCallbacks: RemoteMediaCallbacks? = null,
+) : AutoCloseable {
     private val started = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private var resumeApplied = false
@@ -119,7 +170,7 @@ internal class VlcPlayback(private val api: LibVlc, private val player: Pointer,
             durationMs = duration,
             playing = api.libvlc_media_player_is_playing(player) != 0,
             ended = state == 6,
-            error = state == 7,
+            error = state == 7 || remoteCallbacks?.failed == true,
             seekable = seekable,
         )
     }
@@ -148,6 +199,8 @@ internal class VlcPlayback(private val api: LibVlc, private val player: Pointer,
     @Synchronized
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
+        // Stop/cancel remote reads first: LibVLC stop waits for its read callback to return.
+        remoteCallbacks?.stop()
         try {
             if (started.get()) api.libvlc_media_player_stop(player)
         } finally {
@@ -156,10 +209,127 @@ internal class VlcPlayback(private val api: LibVlc, private val player: Pointer,
     }
 }
 
+internal interface RemoteByteSource : AutoCloseable {
+    val expectedSize: Long
+    fun open(offset: Long): InputStream
+}
+
+private class ProviderByteSource(private val remote: RemoteByteStream) : RemoteByteSource {
+    override val expectedSize: Long get() = remote.expectedSize
+    override fun open(offset: Long): InputStream = remote.open(offset)
+    override fun close() = remote.close()
+}
+
+internal fun interface VlcOpenCallback : Callback {
+    fun callback(opaque: Pointer?, data: PointerByReference?, size: LongByReference?): Int
+}
+internal fun interface VlcReadCallback : Callback {
+    fun callback(data: Pointer?, buffer: Pointer?, length: Long): Long
+}
+internal fun interface VlcSeekCallback : Callback {
+    fun callback(data: Pointer?, offset: Long): Int
+}
+internal fun interface VlcCloseCallback : Callback {
+    fun callback(data: Pointer?)
+}
+
+/** Owns callback and stream lifetimes until the corresponding player has fully stopped. */
+internal class RemoteMediaCallbacks(private val source: RemoteByteSource) {
+    private class Cursor(@Volatile var input: InputStream, @Volatile var offset: Long)
+    private val stopped = AtomicBoolean(false)
+    private val failure = AtomicBoolean(false)
+    private val nextId = AtomicLong(1)
+    private val cursors = ConcurrentHashMap<Long, Cursor>()
+    val failed: Boolean get() = failure.get()
+
+    val openCallback = VlcOpenCallback { _, data, size ->
+        try {
+            check(data != null && size != null && !stopped.get() && source.expectedSize > 0)
+            val input = source.open(0)
+            if (stopped.get()) { input.close(); error("stopped") }
+            val id = nextId.getAndIncrement()
+            check(id > 0)
+            cursors[id] = Cursor(input, 0)
+            if (stopped.get()) {
+                cursors.remove(id)?.input?.close()
+                error("stopped")
+            }
+            data.value = Pointer(id)
+            size.value = source.expectedSize
+            0
+        } catch (_: Throwable) {
+            failure.set(true)
+            -1
+        }
+    }
+
+    val readCallback = VlcReadCallback { data, buffer, length ->
+        try {
+            val cursor = data?.let { cursors[Pointer.nativeValue(it)] }
+            check(!stopped.get() && cursor != null && buffer != null && length >= 0)
+            val remaining = source.expectedSize - cursor.offset
+            if (remaining == 0L || length == 0L) 0L
+            else {
+                val count = minOf(length, remaining, 64L * 1024).toInt()
+                val bytes = ByteArray(count)
+                try {
+                    val read = cursor.input.read(bytes)
+                    check(!stopped.get() && read in 1..count)
+                    buffer.write(0, bytes, 0, read)
+                    cursor.offset += read
+                    read.toLong()
+                } finally { bytes.fill(0) }
+            }
+        } catch (_: Throwable) {
+            failure.set(true)
+            -1L
+        }
+    }
+
+    val seekCallback = VlcSeekCallback { data, offset ->
+        try {
+            val cursor = data?.let { cursors[Pointer.nativeValue(it)] }
+            check(!stopped.get() && cursor != null && offset in 0..source.expectedSize)
+            val input = if (offset == source.expectedSize) ByteArrayInputStream(byteArrayOf())
+                else source.open(offset)
+            if (stopped.get()) { input.close(); error("stopped") }
+            val old = cursor.input
+            cursor.input = input
+            cursor.offset = offset
+            if (stopped.get()) { input.close(); error("stopped") }
+            try { old.close() } catch (_: Exception) { /* Current source already replaced. */ }
+            0
+        } catch (_: Throwable) {
+            failure.set(true)
+            -1
+        }
+    }
+
+    val closeCallback = VlcCloseCallback { data ->
+        try {
+            data?.let { cursors.remove(Pointer.nativeValue(it)) }?.let { cursor ->
+                try { cursor.input.close() } catch (_: Throwable) { /* Already cancelled. */ }
+            }
+        } catch (_: Throwable) { failure.set(true) }
+    }
+
+    fun stop() {
+        if (!stopped.compareAndSet(false, true)) return
+        try { source.close() } catch (_: Throwable) { failure.set(true) }
+        cursors.values.forEach { cursor ->
+            try { cursor.input.close() } catch (_: Throwable) { /* Already cancelled. */ }
+        }
+        cursors.clear()
+    }
+}
+
 internal interface LibVlc : Library {
     fun libvlc_new(argc: Int, argv: Array<String>): Pointer?
+    fun libvlc_get_version(): String
     fun libvlc_release(instance: Pointer)
     fun libvlc_media_new_path(instance: Pointer, path: String): Pointer?
+    fun libvlc_media_new_callbacks(instance: Pointer, open: VlcOpenCallback, read: VlcReadCallback,
+        seek: VlcSeekCallback, close: VlcCloseCallback, opaque: Pointer?): Pointer?
     fun libvlc_media_release(media: Pointer)
     fun libvlc_media_parse_with_options(media: Pointer, flags: Int, timeoutMs: Int): Int
     fun libvlc_media_get_parsed_status(media: Pointer): Int
