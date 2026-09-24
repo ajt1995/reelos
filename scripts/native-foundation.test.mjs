@@ -41,7 +41,8 @@ test("shared native save control can remove unavailable saved titles", () => {
   const screen = read("clients/native/shared-ui/src/commonMain/kotlin/com/reelos/ui/NativeScreen.kt");
   const bridge = read("clients/native/presentation/src/main/kotlin/com/reelos/presentation/NativeExperience.kt");
   assert.match(screen, /if \(media\.saved \|\| media\.action == UiAction\.PLAY\)/);
-  assert.match(screen, /if \(media\.action == UiAction\.PLAY\) \{\s*ReelButton\("Play"/);
+  assert.match(screen, /if \(media\.action == UiAction\.PLAY\) \{\s*ReelButton\(if \(media\.positionMs > 0\) "Resume" else "Play"/);
+  assert.ok(bridge.includes('positionMs = profile?.playbackPositionsMs?.get(item.id) ?: 0L'));
   assert.match(bridge, /if \(event\.saved\) \{\s*check\(core\.mediaAction\(event\.id\)/);
   assert.match(bridge, /event\.id in core\.snapshot\.profiles\.getValue\(activeId\)\.savedMediaIds/);
   assert.match(screen, /\.clickable\(enabled = enabled, role = Role\.Button, onClick = onClick\)/);
@@ -113,6 +114,27 @@ test("personal navigation resets entry scroll and appearance controls send only 
   assert.ok(personal.includes("UiEvent.Appearance(motion = value)"));
   assert.ok(personal.includes("UiEvent.Appearance(density = value)"));
   assert.ok(personal.includes("UiEvent.Appearance(toggleTransparency = true)"));
+});
+
+test("fresh native journey uses visible setup and import controls instead of seeded completion", () => {
+  const checks = read("clients/native/android/src/androidTest/kotlin/com/reelos/nativepreview/NativePersonalUiChecks.kt");
+  const fresh = checks.slice(checks.indexOf("fun runFreshJourney()"), checks.indexOf("check(host.targetContext.packageName"));
+  assert.ok(fresh.includes('ACTION_SET_TEXT'));
+  assert.ok(fresh.includes('click("Continue on this device")'));
+  assert.ok(fresh.includes('click("Add video")'));
+  assert.ok(fresh.includes('click("Play")'));
+  assert.ok(fresh.includes('getDeclaredField("hasRenderedFrame")'));
+  assert.doesNotMatch(fresh, /core\.(createProfile|setColor|acknowledgeCurator|finishTaste|chooseHome|putMedia)/);
+  assert.doesNotMatch(fresh, /getDeclaredMethod\("importVideo"/);
+  const runner = read("scripts/test-native-android-hardware.ps1");
+  for (const name of ['fresh-identity-and-back', 'fresh-color-and-guidance', 'fresh-taste-and-restart', 'fresh-standalone-and-empty-home', 'fresh-completed-restart', 'fresh-import-requires-confirmation', 'fresh-confirmed-import-and-save', 'fresh-ui-playback-and-return', 'fresh-ui-resume']) {
+    assert.ok(runner.includes(name));
+    assert.ok(fresh.includes(name));
+  }
+  assert.ok(runner.includes('.reelos-audit/native-first-run/'));
+  assert.ok(checks.includes('cleanupPendingImport()'));
+  assert.ok(checks.includes('it.fd.sync()'));
+  assert.doesNotMatch(checks, /host\.waitForIdleSync\(/);
 });
 
 test("both native players enforce the shared continuity guard and TV checks cannot omit revocation", () => {

@@ -64,6 +64,7 @@ fun NativeExperience(
                     action = UiAction.valueOf(core.mediaAction(item.id).name),
                     saved = profile?.savedMediaIds?.contains(item.id) == true,
                     reaction = profile?.let { core.reactionFor(it.id, item.id)?.name },
+                    positionMs = profile?.playbackPositionsMs?.get(item.id) ?: 0L,
                 )
             },
             tasteSubjects = run {

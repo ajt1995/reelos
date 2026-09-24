@@ -20,8 +20,8 @@ class NativeHardwareChecks : Instrumentation() {
         start()
     }
     override fun onStart() {
-        if (journey == "personal-ui") {
-            NativePersonalUiChecks.run(this)
+        if (journey == "personal-ui" || journey == "first-run") {
+            NativePersonalUiChecks.run(this, fresh = journey == "first-run")
             return
         }
         val results = Bundle()

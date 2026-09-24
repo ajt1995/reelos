@@ -3,6 +3,7 @@ package com.reelos.nativepreview
 import android.app.Activity
 import android.app.Instrumentation
 import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Bundle
@@ -26,16 +27,19 @@ import java.util.ArrayDeque
 internal object NativePersonalUiChecks {
     private const val TARGET_PACKAGE = "com.reelos.nativepreview"
 
-    fun run(host: Instrumentation) {
+    fun run(host: Instrumentation, fresh: Boolean = false) {
         val results = Bundle()
         var passed = 0
         var main: Activity? = null
+        var playback: Activity? = null
+        var importedId: String? = null
         var authorized = false
         var failure: Throwable? = null
         val statePath = host.targetContext.filesDir.resolve("core.bin").toPath()
         val backupPath = host.targetContext.filesDir.resolve("personal-ui-baseline.core").toPath()
         val stateStore = FileCoreStore(statePath)
         val backupStore = FileCoreStore(backupPath)
+        val importJournal = host.targetContext.filesDir.resolve("first-run-import.id")
         fun load() = ReelCore(stateStore, DeviceKind.ANDROID_PHONE)
         fun samePayload(left: CoreState, right: CoreState) =
             left.copy(revision = right.revision) == right
@@ -46,6 +50,18 @@ internal object NativePersonalUiChecks {
             stateStore.save(baseline.copy(revision = Math.addExact(current.revision, 1L)))
             check(samePayload(stateStore.load(), baseline)) { "Baseline restore did not verify; backup retained" }
             Files.delete(backupPath)
+        }
+        fun cleanupPendingImport() {
+            if (!importJournal.exists()) return
+            val id = importJournal.readText()
+            check(Regex("[0-9a-f]{64}").matches(id)) { "Invalid fixture cleanup journal; retained for recovery" }
+            check(id !in stateStore.load().media) { "Fixture still referenced; restore baseline before cleanup" }
+            val mappings = host.targetContext.getSharedPreferences("local-media", android.content.Context.MODE_PRIVATE)
+            mappings.getString(id, null)?.let { uri ->
+                LocalVideo.discardPrivateCopy(host.targetContext, Uri.parse(uri))
+                check(mappings.edit().remove(id).commit())
+            }
+            check(importJournal.delete()) { "Fixture cleanup journal could not be removed" }
         }
         fun installIsolatedFixture() {
             check(!Files.exists(backupPath)) { "Previous baseline recovery is incomplete" }
@@ -58,6 +74,9 @@ internal object NativePersonalUiChecks {
                     revision = Math.addExact(baseline.revision, 1L),
                     profiles = emptyMap(),
                     activeProfileId = null,
+                    sources = if (fresh) emptyMap() else baseline.sources,
+                    media = if (fresh) emptyMap() else baseline.media,
+                    requestedHomeId = if (fresh) null else baseline.requestedHomeId,
                 ),
             )
             check(stateStore.load().profiles.isEmpty()) { "Fixture isolation did not verify" }
@@ -86,6 +105,9 @@ internal object NativePersonalUiChecks {
         var lastLabels: List<String> = emptyList()
         var lastNavigation = "No navigation attempted"
         fun page(label: String): Page {
+            // Compose can advance visually while UiAutomation retains a previous window subtree.
+            // API 34 exposes an explicit cache refresh; earlier devices refresh individual nodes.
+            if (android.os.Build.VERSION.SDK_INT >= 34) host.uiAutomation.clearCache()
             val root = host.uiAutomation.rootInActiveWindow
                 ?: return Page(emptyList(), emptyList(), emptyList(), listOf("No active window root"))
             val windowPackage = root.packageName?.toString()
@@ -109,11 +131,13 @@ internal object NativePersonalUiChecks {
             var inspected = 0
             while (queue.isNotEmpty() && inspected++ < 700) {
                 val node = queue.removeFirst()
+                if (android.os.Build.VERSION.SDK_INT < 34 && !node.refresh()) continue
                 val text = node.text?.toString() ?: node.contentDescription?.toString() ?: node.paneTitle?.toString().orEmpty()
                 val actions = node.actionList.map { it.id }
                 val bounds = Rect().also(node::getBoundsInScreen)
                 if (node.isVisibleToUser) {
-                    if (text == label) matches += node
+                    // Native dialog themes may capitalize button labels; match the whole label, never substrings.
+                    if (text.equals(label, ignoreCase = true) || (label == "__editable__" && node.isEditable)) matches += node
                     if (text.isNotBlank() && labels.size < 24) labels += text.replace('\n', ' ').take(80)
                 }
                 // Compose can report the LazyColumn ancestor as not visible while its children are.
@@ -192,12 +216,13 @@ internal object NativePersonalUiChecks {
             return null
         }
         fun click(label: String) {
+            host.sendStatus(0, Bundle().apply { putString("stream", "UI action: $label\n") })
             val deadline = SystemClock.elapsedRealtime() + 8_000
             while (SystemClock.elapsedRealtime() < deadline) {
                 val target = seek(label, true, deadline) ?: break
                 target.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
                 if (target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    host.waitForIdleSync()
+                    // Living artwork need not make the main queue idle. Never wait without a deadline.
                     runCatching { host.uiAutomation.waitForIdle(150, 2_000) }
                     return
                 }
@@ -226,6 +251,153 @@ internal object NativePersonalUiChecks {
                 return activity
             } finally { host.removeMonitor(monitor) }
         }
+        fun restart() {
+            val closing = requireNotNull(main)
+            host.runOnMainSync { closing.finish() }
+            waitFor("activity destroyed") { closing.isDestroyed }
+            main = launch()
+        }
+        fun runFreshJourney() {
+            val name = "First Run ${System.currentTimeMillis().toString(36)}"
+            main = launch()
+            checkCase("fresh-identity-and-back") {
+                visible("What should we call you?")
+                check(load().snapshot.profiles.isEmpty())
+                val field = requireNotNull(seek("__editable__", false, SystemClock.elapsedRealtime() + 8_000))
+                check(field.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, Bundle().apply {
+                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, name)
+                })) { "Native name field did not accept text" }
+                // ACTION_SET_TEXT acknowledges dispatch, not Compose state publication.
+                waitFor("name visible before submission") {
+                    page("__editable__").matches.any { it.text?.toString() == name }
+                }
+                click("Continue")
+                visible("Make it yours, $name.")
+                click("Back")
+                visible("What should we call you?")
+                visible(name)
+                check(load().snapshot.activeProfile?.onboardingStep == OnboardingStep.IDENTITY)
+                restart()
+                visible(name)
+                click("Continue")
+                visible("Make it yours, $name.")
+            }
+            checkCase("fresh-color-and-guidance") {
+                click("Blue")
+                visible("Blue · selected")
+                click("Continue")
+                visible("Your way to discover.")
+                click("I'll find my way")
+                click("Continue")
+                visible("What pulls you in?")
+                check(load().snapshot.activeProfile?.let {
+                    it.color == "#376FE4" && it.guidance == com.reelos.core.GuidanceLevel.INDEPENDENT
+                } == true)
+            }
+            checkCase("fresh-taste-and-restart") {
+                click("Dune: Part Two")
+                click("Dune: Part Two")
+                waitFor("Love persisted") {
+                    load().snapshot.activeProfile?.positiveReactions?.get("tmdb-movie-693134") == ReactionKind.LOVE
+                }
+                restart()
+                visible("What pulls you in?")
+                check(load().snapshot.activeProfile?.onboardingStep == OnboardingStep.TASTE)
+                click("Continue")
+                visible("Bring your collection.")
+            }
+            checkCase("fresh-standalone-and-empty-home") {
+                click("Continue")
+                visible("Your own space.")
+                click("Continue on this device")
+                visible("Welcome back, $name.")
+                visible("No titles yet. Add personal media to begin.")
+                val state = load().snapshot
+                check(state.activeProfile?.onboardingStep == OnboardingStep.COMPLETE)
+                check(state.requestedHomeId == null && state.media.isEmpty())
+            }
+            checkCase("fresh-completed-restart") {
+                restart()
+                visible("Welcome back, $name.")
+                check(load().snapshot.profiles.size == 1)
+                check(load().snapshot.activeProfile?.positiveReactions?.get("tmdb-movie-693134") == ReactionKind.LOVE)
+            }
+            // Unique URI prevents replacement/deletion of an earlier validation import's retained bytes.
+            val uri = Uri.parse("content://com.reelos.nativepreview.test.fixture/valid?run=${System.nanoTime()}")
+            importedId = java.security.MessageDigest.getInstance("SHA-256").digest(uri.toString().toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            check(!importJournal.exists())
+            check(importedId !in load().snapshot.media)
+            check(!host.targetContext.getSharedPreferences("local-media", android.content.Context.MODE_PRIVATE).contains(importedId))
+            FileOutputStream(importJournal).use {
+                it.write(requireNotNull(importedId).toByteArray(Charsets.UTF_8))
+                it.fd.sync()
+            }
+            fun offerVideo() {
+                host.targetContext.startActivity(Intent(host.targetContext, MainActivity::class.java)
+                    .setAction(Intent.ACTION_VIEW).setData(uri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+                visible("Add this video?")
+            }
+            checkCase("fresh-import-requires-confirmation") {
+                offerVideo()
+                check(load().snapshot.media.isEmpty())
+                click("Cancel")
+                check(load().snapshot.media.isEmpty())
+            }
+            checkCase("fresh-confirmed-import-and-save") {
+                offerVideo()
+                click("Add video")
+                waitFor("verified import") { load().snapshot.media.containsKey(importedId) }
+                visible("Native-Validation-30s.mp4")
+                click("Save")
+                waitFor("saved title") { load().snapshot.activeProfile?.savedMediaIds?.contains(importedId) == true }
+                click("Library")
+                visible("Native-Validation-30s.mp4")
+            }
+            checkCase("fresh-ui-playback-and-return") {
+                val monitor = host.addMonitor(PlaybackActivity::class.java.name, null, false)
+                try {
+                    click("Play")
+                    playback = monitor.waitForActivityWithTimeout(15_000) ?: error("Play did not open native player")
+                } finally { host.removeMonitor(monitor) }
+                waitFor("decoded video frame") {
+                    var rendered = false
+                    host.runOnMainSync {
+                        rendered = PlaybackActivity::class.java.getDeclaredField("hasRenderedFrame")
+                            .apply { isAccessible = true }.getBoolean(playback)
+                    }
+                    rendered
+                }
+                SystemClock.sleep(1_800)
+                host.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+                waitFor("player closed") { requireNotNull(playback).isDestroyed }
+                waitFor("private progress saved") {
+                    (load().snapshot.activeProfile?.playbackPositionsMs?.get(importedId) ?: 0) > 0
+                }
+                visible("Native-Validation-30s.mp4")
+            }
+            checkCase("fresh-ui-resume") {
+                val saved = requireNotNull(load().snapshot.activeProfile?.playbackPositionsMs?.get(importedId))
+                check(saved > 0)
+                val monitor = host.addMonitor(PlaybackActivity::class.java.name, null, false)
+                try {
+                    click("Resume")
+                    playback = monitor.waitForActivityWithTimeout(15_000) ?: error("Resume did not open native player")
+                } finally { host.removeMonitor(monitor) }
+                waitFor("resumed position and frame") {
+                    var resumed = false
+                    host.runOnMainSync {
+                        val rendered = PlaybackActivity::class.java.getDeclaredField("hasRenderedFrame")
+                            .apply { isAccessible = true }.getBoolean(playback)
+                        val player = PlaybackActivity::class.java.getDeclaredField("player")
+                            .apply { isAccessible = true }.get(playback) as? androidx.media3.exoplayer.ExoPlayer
+                        resumed = rendered && player != null && player.currentPosition >= saved
+                    }
+                    resumed
+                }
+            }
+        }
         try {
             check(host.targetContext.packageName == TARGET_PACKAGE &&
                 MainActivity::class.java.name == "$TARGET_PACKAGE.MainActivity") {
@@ -241,7 +413,11 @@ internal object NativePersonalUiChecks {
             }
             authorized = true // Never restore over intervening state unless its recovery copy verified.
             restorePendingBaseline()
+            cleanupPendingImport()
             installIsolatedFixture()
+            if (fresh) {
+                runFreshJourney()
+            } else {
             val nonce = System.currentTimeMillis().toString(36)
             val prefix = "personal-ui-$nonce"
             val aName = "Personal A $nonce"
@@ -369,6 +545,7 @@ internal object NativePersonalUiChecks {
                 }
                 visible("Bring your collection.")
             }
+            }
         } catch (caught: Throwable) {
             failure = caught
             val directory = host.targetContext.getExternalFilesDir(null) ?: host.targetContext.filesDir
@@ -394,11 +571,24 @@ internal object NativePersonalUiChecks {
         } finally {
             if (authorized) {
                 runCatching {
+                    playback?.let { closing ->
+                        if (!closing.isDestroyed) host.runOnMainSync { closing.finish() }
+                        waitFor("player destroyed before baseline restore") { closing.isDestroyed }
+                    }
                     main?.let { closing ->
+                        waitFor("import idle before baseline restore") {
+                            var running = false
+                            host.runOnMainSync {
+                                running = MainActivity::class.java.getDeclaredField("importRunning")
+                                    .apply { isAccessible = true }.getBoolean(closing)
+                            }
+                            !running
+                        }
                         if (!closing.isDestroyed) host.runOnMainSync { closing.finish() }
                         waitFor("activity destroyed before baseline restore") { closing.isDestroyed }
                     }
                     restorePendingBaseline()
+                    cleanupPendingImport()
                 }.onFailure { cleanup ->
                     if (failure == null) failure = cleanup else failure?.addSuppressed(cleanup)
                 }
@@ -406,7 +596,9 @@ internal object NativePersonalUiChecks {
         }
         results.putInt("passed", passed)
         if (failure == null) {
-            results.putString("stream", "Native personal UI checks: $passed passed; no skips. This is a seeded validation-profile journey, not fresh onboarding or whole-product acceptance.\n")
+            val scope = if (fresh) "Empty-profile native first run and confirmed local fixture playback; not full Family/provider/audio/artwork acceptance."
+                else "Seeded validation-profile journey, not fresh onboarding or whole-product acceptance."
+            results.putString("stream", "Native UI checks: $passed passed; no skips. $scope\n")
             host.finish(Activity.RESULT_OK, results)
         } else {
             val causes = generateSequence(failure) { it.cause }.take(6)

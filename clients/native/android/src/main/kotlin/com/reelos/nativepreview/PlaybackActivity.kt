@@ -101,9 +101,9 @@ class PlaybackActivity : ComponentActivity() {
         }
     }
 
-    override fun onStop() {
-        accessJob?.cancel()
-        accessJob = null
+    override fun onPause() {
+        // Android resumes the underlying library before this activity's onStop. Publish the
+        // resume point during onPause so MainActivity.onResume reads the current position.
         playerView.keepScreenOn = false
         player?.let { playback ->
             val completed = playback.playbackState == Player.STATE_ENDED
@@ -114,6 +114,13 @@ class PlaybackActivity : ComponentActivity() {
                     .onFailure { status.text = "Your place could not be saved. Your previous saved position is unchanged." }
             }
         }
+        super.onPause()
+    }
+
+    override fun onStop() {
+        accessJob?.cancel()
+        accessJob = null
+        playerView.keepScreenOn = false
         super.onStop()
     }
 

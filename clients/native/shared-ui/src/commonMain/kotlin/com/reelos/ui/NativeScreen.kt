@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.sp
 
 enum class UiStep { IDENTITY, ATMOSPHERE, CURATOR, TASTE, SOURCES, HOME, COMPLETE }
 enum class UiAction { PLAY, FIND, PREPARING, UNAVAILABLE }
-data class UiMedia(val id: String, val title: String, val action: UiAction, val saved: Boolean, val reaction: String?)
+data class UiMedia(val id: String, val title: String, val action: UiAction, val saved: Boolean, val reaction: String?, val positionMs: Long = 0L)
 data class UiTasteSubject(val id: String, val title: String, val reaction: String?, val context: String = "")
 data class UiProfile(val id: String, val name: String, val color: String)
 data class UiModel(
@@ -331,7 +331,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
         }, color = muted)
         Spacer(Modifier.height(12.dp))
         if (media.action == UiAction.PLAY) {
-            ReelButton("Play", accent) { onEvent(UiEvent.Play(media.id)) }
+            ReelButton(if (media.positionMs > 0) "Resume" else "Play", accent) { onEvent(UiEvent.Play(media.id)) }
             Spacer(Modifier.height(8.dp))
         }
         if (media.saved || media.action == UiAction.PLAY) {

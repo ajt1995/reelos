@@ -108,6 +108,18 @@ whole product. The runner backs up and restores the isolated validation package'
 an interrupted baseline remains recoverable and intervening state is retained before recovery.
 It never resets the installed consumer package. Both journeys require current source hashes.
 
+Use `-Journey first-run` for an empty-profile native journey: name entry, Back and restart,
+color/guidance, Like/Love, standalone completion, confirmed Open With import, Save/Library,
+Play/return and Resume. Setup advances through accessibility controls, not seeded core calls.
+Evidence replaces `.reelos-audit/native-first-run/<serial>/result.json`. It uses the short,
+silent test-only fixture and does not certify provider access, Family/PIN, artwork, full
+onboarding requirements, a system file picker, audio/subtitles or sustained playback. The
+existing validation state is backed up/restored; a synced fixture-ID journal supports
+cleanup after interrupted runs. Accessibility dispatch waits for observable state changes,
+not unbounded animation-idle waits. Every named case is required; failures remain failures.
+Shared title cards derive Play versus Resume only from the active person's saved position
+and existing source availability; progress never grants access to revoked media.
+
 Native versions derive from the root `VERSION`, Git revision and source fingerprint. Settings
 shows the same generated identity on every host; Android package metadata uses that identity too.
 These are validation artifacts, not a newly signed consumer release. Changing a native source
