@@ -9,7 +9,7 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "9adab68",
+      "checkpoint": "912af7e298f58a118afae8a54116c75ce1b5a1e8",
       "status": "active",
       "scope": [
         "Lead owns shared Kotlin/Compose integration, contracts, native versions, context and physical validation; isolated workers return reviewed commits.",
@@ -39,7 +39,7 @@
         "Integrated provider30/30 and desktop20/20 tests passed without skips, including installed LibVLC3 silent-fixture callback progress/seek/resume/cancel. Android builds pass. Not full-film remote decode, audio/subtitles or release acceptance.",
         "Family/taste More of this in their world and Watch with me queued AFTER playback. Parent suggestions stay separate from child preferences/safety, preserve favorites, gentle exposure/backoff after dismissals. Recorded, not implemented.",
         "All309 test files classified; context/native structural checks pass. Release still BLOCKED with145 evidence gaps. Owner requests STOP after this checkpoint to update ChatGPT; resume only on owner instruction.",
-        "Final tightened candidate: Fold live3/3 passed (account/exact-file/16KiB), Pixel and TV each12/12media+4/4protected-store checks passed. Zero skips. Evidence remains local under .reelos-audit, keyed by source/APK hash/device. No full-film provider, decoded-scene/learning, HP provider, or installer claim."
+        "Final tightened candidate: Fold live3/3 passed (account/exact-file/16KiB), Pixel and TV each12/12media+4/4protected-store checks passed. Zero skips. Evidence remains local under .reelos-audit, keyed by source/APK hash/device. No full-film provider, decoded-scene/learning, HP provider, or installer claim. Independent scoped review closed DNS-shutdown and encoded-credential domain findings; no remaining P1/P2 in that reviewed slice, not whole-product certification."
       ],
       "nextChecks": [
         "Resume from provider-live evidence: verify actual authorized remote native decode/seek/resume on Fold, Windows and TV; live3/3 covers account/exact-file/16KiB only. Do not re-request/extract Fold key. Test provider-disable via UI; Linux needs protected vault.",
