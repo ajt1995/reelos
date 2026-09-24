@@ -4,10 +4,16 @@ import com.sun.jna.Memory
 import com.sun.jna.Pointer
 import com.sun.jna.ptr.LongByReference
 import com.sun.jna.ptr.PointerByReference
+import java.awt.Canvas
+import java.awt.Frame
+import java.awt.GraphicsEnvironment
 import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.InputStream
 import java.lang.reflect.Proxy
+import java.nio.file.Files
+import java.nio.file.Path
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -15,12 +21,13 @@ import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import javax.swing.SwingUtilities
 
 class DesktopRemoteMediaTest {
     private class BytesSource(private val bytes: ByteArray) : RemoteByteSource {
         override val expectedSize: Long get() = bytes.size.toLong()
-        val offsets = mutableListOf<Long>()
-        var closed = false
+        val offsets = Collections.synchronizedList(mutableListOf<Long>())
+        @Volatile var closed = false
         override fun open(offset: Long): InputStream {
             offsets += offset
             return ByteArrayInputStream(bytes, offset.toInt(), bytes.size - offset.toInt())
@@ -82,6 +89,65 @@ class DesktopRemoteMediaTest {
         NativeVlc.open().getOrThrow().use { native ->
             native.player(BytesSource("test bytes".toByteArray()), 0).use { /* No playback or network. */ }
         }
+    }
+
+    @Test fun installedLibVlcPlaysSeeksResumesAndCancelsFixtureThroughCallbacksWhenOptedIn() {
+        assumeTrue("Opt in with REELOS_TEST_LIBVLC_CALLBACKS=1", System.getenv("REELOS_TEST_LIBVLC_CALLBACKS") == "1")
+        check(!GraphicsEnvironment.isHeadless()) { "A desktop display is required for native video validation" }
+        val fixtureName = "Native-Validation-30s.mp4"
+        val fixture = listOf(
+            Path.of("clients/native/android/src/androidTest/assets", fixtureName),
+            Path.of("android/src/androidTest/assets", fixtureName),
+            Path.of("../android/src/androidTest/assets", fixtureName),
+        ).map { it.toAbsolutePath().normalize() }.firstOrNull(Files::isRegularFile)
+            ?: error("Bundled 30-second silent fixture is missing")
+        val bytes = Files.readAllBytes(fixture)
+        check(bytes.isNotEmpty()) { "Bundled 30-second silent fixture is empty" }
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait {
+            frame.add(canvas)
+            frame.setSize(320, 180)
+            frame.addNotify() // Native drawable without displaying a window to the user.
+        }
+        check(canvas.isDisplayable) { "Native test drawable could not be created" }
+        try {
+            NativeVlc.open().getOrThrow().use { native ->
+                val first = BytesSource(bytes)
+                native.player(first, 0).use { playback ->
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    awaitState(playback) { it.durationMs >= 29_000 && it.playing && it.positionMs > 500 }
+                    playback.seek(15_000)
+                    val afterSeek = awaitState(playback) { it.positionMs in 14_000..25_000 && it.playing }
+                    awaitState(playback) { it.positionMs >= afterSeek.positionMs + 300 && it.playing }
+                }
+                assertTrue("Closing playback must cancel source reads", first.closed)
+
+                val resumed = BytesSource(bytes)
+                native.player(resumed, 10_000).use { playback ->
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    val resumedAt = awaitState(playback) { it.durationMs >= 29_000 && it.positionMs in 9_000..25_000 && it.playing }
+                    awaitState(playback) { it.positionMs >= resumedAt.positionMs + 300 && it.playing }
+                }
+                assertTrue("Closing resumed playback must cancel source reads", resumed.closed)
+            }
+        } finally {
+            SwingUtilities.invokeAndWait { frame.dispose() }
+            bytes.fill(0)
+        }
+    }
+
+    private fun awaitState(playback: VlcPlayback, accepted: (PlaybackState) -> Boolean): PlaybackState {
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
+        var latest = playback.poll()
+        while (System.nanoTime() < deadline) {
+            if (accepted(latest)) return latest
+            if (latest.error) fail("LibVLC reported a callback or decode error")
+            Thread.sleep(100)
+            latest = playback.poll()
+        }
+        fail("LibVLC did not reach the expected callback playback state within 15 seconds")
+        throw AssertionError("unreachable")
     }
 
     @Test fun incompatibleCallbackAbiFailsBeforeNativeInvocation() {
