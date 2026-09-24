@@ -389,6 +389,62 @@ class NativeHardwareChecks : Instrumentation() {
                 offsetAt(0, 1_000)
                 waitFor("reset restores real cue after backward seek") { captionAt(1_000, 8_000, true) }
             }
+            checkCase("native-caption-appearance-renders") {
+                runOnMainSync {
+                    player(requireNotNull(playback)).seekTo(8_000)
+                    player(requireNotNull(playback)).pause()
+                    playerView(requireNotNull(playback)).showController()
+                }
+                waitFor("caption ready for appearance") {
+                    var ready = false
+                    runOnMainSync { ready = player(requireNotNull(playback)).currentCues.cues.any { it.text?.contains("Spanish") == true } }
+                    ready
+                }
+                fun choose(label: String) {
+                    clickLabel("Caption appearance")
+                    clickLabel(label)
+                    waitForIdleSync()
+                }
+                fun pixels(): Pair<Int, Int> {
+                    var white = 0
+                    var yellow = 0
+                    runOnMainSync {
+                        val view = requireNotNull(playerView(requireNotNull(playback)).subtitleView)
+                        check(view.width > 0 && view.height > 0)
+                        val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                        try {
+                            view.draw(android.graphics.Canvas(bitmap))
+                            val colors = IntArray(view.width * view.height)
+                            bitmap.getPixels(colors, 0, view.width, 0, 0, view.width, view.height)
+                            colors.forEach { color ->
+                                if (android.graphics.Color.alpha(color) > 200 && android.graphics.Color.red(color) > 180 && android.graphics.Color.green(color) > 180) {
+                                    if (android.graphics.Color.blue(color) > 180) white++
+                                    if (android.graphics.Color.blue(color) < 80) yellow++
+                                }
+                            }
+                        } finally { bitmap.recycle() }
+                    }
+                    return white to yellow
+                }
+                choose("White with outline")
+                choose("Small captions")
+                val small = pixels().first
+                check(small > 0) { "Native renderer produced no white caption pixels" }
+                choose("Large captions")
+                val large = pixels().first
+                check(large > small * 1.3) { "Caption size did not change rendered glyph area: $small -> $large" }
+                choose("Yellow on black")
+                val yellow = pixels()
+                check(yellow.second > 0 && yellow.first == 0) { "Selected caption color did not reach native rendered glyphs" }
+                choose("Use device captions")
+                runOnMainSync {
+                    check(PlaybackActivity::class.java.getDeclaredMethod("getCaptionSize").apply { isAccessible = true }
+                        .invoke(requireNotNull(playback)) == com.reelos.ui.CaptionSize.DEVICE)
+                    check(PlaybackActivity::class.java.getDeclaredMethod("getCaptionStyle").apply { isAccessible = true }
+                        .invoke(requireNotNull(playback)) == com.reelos.ui.CaptionStyle.DEVICE)
+                    player(requireNotNull(playback)).play()
+                }
+            }
             checkCase("native-subtitles-off") {
                 openControl(androidx.media3.ui.R.id.exo_subtitle)
                 clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_none))

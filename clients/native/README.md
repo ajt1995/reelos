@@ -222,7 +222,26 @@ Session-only caption timing uses shared positive=later/negative=earlier arithmet
 shifts only Media3's text-renderer clock and re-seeks to clear stale cues; desktop uses LibVLC's
 native microsecond delay control. Pixel/TV each passed20 media cases, including +5s cue onset,
 -5s cue ending, native control/reset and backward seek. Desktop delay readback passed, but
-visual desktop caption timing remains unverified. Appearance and volume leveling remain open.
+visual desktop caption timing remains unverified. Volume leveling remains open.
+
+Caption appearance uses the shared Compose choices and Media3's existing Canvas subtitle view
+on Android/TV, not a new renderer. Device caption style/size is the default; session overrides
+offer small/regular/large text and outlined white, white-on-black, or yellow-on-black. Device
+accessibility scaling remains part of custom sizing. Reset restores device defaults, and activity
+recreation preserves the session choice. The new physical test operates the native controls and
+draws the actual SubtitleView to verify increased glyph area and selected glyph color; it does
+not certify all bitmap/ASS subtitle formats, every screen layout or persistent profile defaults.
+Pixel and Onn TV passed21/21 media checks with zero skips; saved appearance restoration across
+activity recreation is implemented but not yet physically verified. Core61/61 and desktop22/22
+also passed; desktop appearance is not included in those passing tests.
+
+Desktop appearance is still open: LibVLC3 explicitly does **not** apply text-renderer options
+through per-media options. Apply bounded presets at `libvlc_new`, then test actual caption pixels;
+an in-film change needs a safely recreated player/instance with authorization, tracks, position,
+pause and timing retained. Do not expose a pretend live setter or call private libvlccore symbols.
+Reuse references: [Media3 SubtitleView 1.5.0](https://github.com/androidx/media/blob/1.5.0/libraries/ui/src/main/java/androidx/media3/ui/SubtitleView.java),
+[LibVLC3 media option limitations](https://videolan.videolan.me/vlc-3.0/group__libvlc__media.html),
+[VLC3 freetype presets](https://github.com/videolan/vlc/blob/3.0.x/modules/text_renderer/freetype/freetype.c).
 
 Pixel, Fold and Onn TV each passed16/16 media checks including actual AAC decoded buffers,
 audio switching and English/Spanish decoded captions/Off. These are short synthetic test-only

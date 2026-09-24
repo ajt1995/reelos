@@ -48,6 +48,8 @@ class PlaybackActivity : ComponentActivity() {
     private var subtitleRenderer: SubtitleTimingRenderer? = null
     private var subtitleDelayMs by mutableStateOf(0L)
     private var hasSubtitleTracks by mutableStateOf(false)
+    private var captionSize by mutableStateOf(com.reelos.ui.CaptionSize.DEVICE)
+    private var captionStyle by mutableStateOf(com.reelos.ui.CaptionStyle.DEVICE)
     private val stateStore by lazy { FileCoreStore(filesDir.resolve("core.bin").toPath()) }
     private lateinit var playerView: PlayerView
     private lateinit var status: TextView
@@ -56,6 +58,12 @@ class PlaybackActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         subtitleDelayMs = savedInstanceState?.getLong("subtitleDelayMs") ?: 0L
         SubtitleTiming.micros(subtitleDelayMs)
+        captionSize = savedInstanceState?.getString("captionSize")?.let {
+            runCatching { com.reelos.ui.CaptionSize.valueOf(it) }.getOrNull()
+        } ?: com.reelos.ui.CaptionSize.DEVICE
+        captionStyle = savedInstanceState?.getString("captionStyle")?.let {
+            runCatching { com.reelos.ui.CaptionStyle.valueOf(it) }.getOrNull()
+        } ?: com.reelos.ui.CaptionStyle.DEVICE
         savedInstanceState?.takeIf { it.containsKey("sleepStarted") }?.let {
             val end = it.getBoolean("sleepEnd")
             sleepTimer.restore(PlaybackSleepTimer.State(it.getLong("sleepStarted"), if (end) null else it.getLong("sleepDeadline"), end))
@@ -69,6 +77,7 @@ class PlaybackActivity : ComponentActivity() {
             setShowSubtitleButton(true)
         }
         frame.addView(playerView, FrameLayout.LayoutParams(-1, -1))
+        playerView.subtitleView?.applyCaptionAppearance(captionSize, captionStyle)
         frame.addView(status)
         sleepControls = ComposeView(this).apply {
             setContent {
@@ -85,6 +94,18 @@ class PlaybackActivity : ComponentActivity() {
                     if (hasSubtitleTracks) com.reelos.ui.SubtitleTimingControl(subtitleDelayMs,
                         onAdjust = { change -> changeSubtitleDelay(SubtitleTiming.adjust(subtitleDelayMs, change)) },
                         onReset = { changeSubtitleDelay(0) },
+                        onExpanded = { open ->
+                            playerView.controllerShowTimeoutMs = if (open) 0 else 5_000
+                            playerView.showController()
+                        })
+                    if (hasSubtitleTracks) com.reelos.ui.CaptionAppearanceControl(captionSize, captionStyle,
+                        onSize = { captionSize = it; updateCaptionAppearance() },
+                        onStyle = { captionStyle = it; updateCaptionAppearance() },
+                        onReset = {
+                            captionSize = com.reelos.ui.CaptionSize.DEVICE
+                            captionStyle = com.reelos.ui.CaptionStyle.DEVICE
+                            updateCaptionAppearance()
+                        },
                         onExpanded = { open ->
                             playerView.controllerShowTimeoutMs = if (open) 0 else 5_000
                             playerView.showController()
@@ -232,6 +253,8 @@ class PlaybackActivity : ComponentActivity() {
     override fun onDestroy() { providerPlayback?.close(); providerPlayback = null; player?.release(); super.onDestroy() }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("captionSize", captionSize.name)
+        outState.putString("captionStyle", captionStyle.name)
         outState.putLong("subtitleDelayMs", subtitleDelayMs)
         sleepTimer.state?.let {
             outState.putLong("sleepStarted", it.startedAtMs)
@@ -251,6 +274,10 @@ class PlaybackActivity : ComponentActivity() {
             playback.seekTo(playback.currentPosition)
             subtitleDelayMs = delayMs
         }.onFailure { status.text = "Caption timing could not be changed. Try again." }
+    }
+
+    private fun updateCaptionAppearance() {
+        playerView.subtitleView?.applyCaptionAppearance(captionSize, captionStyle)
     }
 
     private fun applySleepTimer() {

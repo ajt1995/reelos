@@ -9,7 +9,7 @@
       "id": "native-core-foundation",
       "owner": "codex",
       "branch": "work/codex-native-core-2026-09-23",
-      "checkpoint": "c21e852",
+      "checkpoint": "87c5a27",
       "status": "active",
       "scope": [
         "Lead owns shared Kotlin/Compose integration, contracts, native versions, context and physical validation; isolated workers return reviewed commits.",
@@ -17,7 +17,7 @@
       ],
       "currentFacts": [
         "Canonical repo C:/Users/austi/Documents/Codex/ReelOS; PUBLIC origin; no credentials/private presets in pushes. Shared Kotlin/Compose core, no browser shell; Books absent TV, no learning exports beyond Home.",
-        "19 active groups, 2 parked and all47 UI requirements retained. completion-execution.md is the dependency graph. Release remains BLOCKED with145 evidence gaps; native validation foundation is not friend-ready.",
+        "19 active groups, 2 parked and all47 UI requirements retained. completion-execution.md is the dependency graph. Release remains BLOCKED with146 evidence gaps after reopening watch-together for persistent Friends; native validation foundation is not friend-ready.",
         "Windows .214 measured15.8GiB on Ethernet. Fold SM-F971U/R5GL64PC0CF paired via wireless ADB; Pixel10ProXL/5A230DLCQ0018X via USB; OnnTV .95 armeabi-v7a authorized. Fold wireless ports may change; never assume old addresses remain live.",
         "HP .234 authenticated Ubuntu26.04.1 x86_64,3304MiB, Java17.0.20.1/LibVLC,Cage/Xwayland. Isolated native first-screen rendering verified, not replacement or playback certification; active kiosk still legacy Chromium. Do not wipe OS/network/unrelated data.",
         "Core schema6 adds profile-private audio/subtitle language defaults; schema5 migration and restart/isolation verified. Persists profile motion/density/transparency and fail-closed source/media/profile access generations. Rapid revoke/restore and profile-away/back invalidate old sessions. No Family/PIN/Home-sync certification.",
@@ -32,7 +32,8 @@
         "All313 test files classified. Full historical npm suite remains failed; do not revive retired stack/fake catalog for green tests. No full governor/model-worker/pretrained-runtime/Home-sync/whole-film/signed-install certification. Scoped worker commits reviewed centrally; no worker currently edits canonical checkout."
       ],
       "nextChecks": [
-        "Native playback checkpoint:61 core and22 desktop tests passed zero skips. Pixel/TV each20 media cases include sleep and real subtitle cue timing: +5s starts later, -5s ends earlier, reset/backward seek restores cue, native timing controls. Desktop delay API roundtrip/continued decode verified, not visual caption timing. Shared signed-offset policy; session-only. Appearance/volume leveling, episode navigation and full-film remain open; Fold not rerun.",
+        "Owner selected persistent Friends across separate Homes: explicit recommendations/shared watchlists/party invites, own media access per participant, no learning/history export. H4 and watch-together acceptance record this required unimplemented scope; no library sharing or Home membership implied. Reuse suitable existing/open-source infrastructure before custom work, with license/privacy/platform review and device tests.",
+        "Native playback checkpoint:61 core and22 desktop tests passed zero skips. Pixel/TV each21 media cases include sleep, real subtitle timing and shared appearance controls: native SubtitleView glyph area increases with size and selected yellow color renders. Device captions default/reset; session settings survive activity recreation by saved state (recreation path not physically retested). Desktop caption styling/visual timing, persistent profile appearance, volume leveling, episodes and full-film remain open; Fold not rerun. Reuse shortlist in completion-execution.md records the pinned-player/API findings and candidate libraries; no new dependencies/models installed.",
         "Use scripts/test-native-checkpoint.ps1 for deterministic cached native batches; current complete media batch passed with Pixel/TV and context/test contracts. Read result.json first, only failed-stage logs. Timer UI test failure was diagnosed to preceding subtitle test closing its player; cleanup moved after timer checks and regression rerun passed. No redundant builds/agents for routine orchestration.",
         "Fold now passed5/5 real provider-playback checks: decoded frames/progression, seek/persist, shared Library resume, source-revocation player release and owner-state restoration; runner fresh-process recovery also passed. Evidence .reelos-audit/native-provider-playback/192.168.1.221_38765 is source/APK hashed. Muted short clip only, not full-film/audio/subtitles/analysis. Windows/TV live-provider playback and UI disable remain unverified; Linux still needs protected vault. Never extract or copy Fold key.",
         "Native basic standalone first run and personal UI verified on TV, Fold and Pixel; Windows basic setup observed. Complete approved artwork, Family/PIN/deployment setup and remaining journeys. Retain Fold-specific folded/unfolded/rotation/keyboard acceptance; paired wireless ports may change and must be rediscovered.",
