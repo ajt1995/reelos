@@ -3,6 +3,12 @@
   "purpose": "Active durable decisions only. Replace obsolete entries; do not append a history.",
   "decisions": [
     {
+      "id": "friends-with-separate-homes",
+      "decision": "Persistent Friends connects people across separate Homes through explicit recommendations, shared watchlists and watch-party invitations. Each participant retains independent media authorization. Friendship is not Home membership, library sharing or device-management authority. No automatic private taste, history, learning or credential export; only deliberately shared social content crosses Homes. Require invitation acceptance, removal/block/revocation and parent-authorized child participation.",
+      "rationale": "Owner selected the own-media-access option on 2026-09-24. Existing remote-party and friend-installation work did not cover a persistent Friends layer. Record it in the existing watch-together feature group; old party evidence is not proof of this new scope.",
+      "sources": ["docs/agent-context/owner-requirements.md", "docs/feature-register.json"]
+    },
+    {
       "id": "native-platform-and-first-run",
       "decision": "One shared Kotlin engine and Compose UI serve standalone Windows, Linux, Android phone/tablet and TV, with narrow native platform adapters. This supersedes separate C# Windows presentation. Desktop bundles its runtime without browser rendering. Only iOS may use browser/PWA presentation. Books is absent on TV. All targets share resumable identity, atmosphere, guidance, taste, source and optional Home onboarding. The HP has a visible interface by default; TV uses lightweight gradients and high-contrast stationary focus.",
       "rationale": "Owner approved the unified native completion plan on 2026-09-23. Equivalent standalone products share behavior and implementation, not identical executable bytes. Existing web launchers and separate Android subsets remain migration gaps, not acceptance evidence.",

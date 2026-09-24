@@ -60,6 +60,7 @@ while compiling. Build immutable candidates. Do not make acceptance claims from 
 | H1 | Home membership, offline sync, leave/revoke, identity and management authority | B2 | Partitions/duplicates/conflicts; departed node denied |
 | H2 | Phone-to-device storage changes with pending/delivered/applied acknowledgments | H1,C5 | Owner success; guest/child denied; offline state honest |
 | H3 | Household compute, gaming/playback yielding, cancellation and standalone fallback | H1,N4 | Peer loss, bounded leases and no duplicate publication |
+| H4 | Persistent Friends across separate Homes; explicit recommendations, shared watchlists and party invitations | B2,H1,U5 | Mutual identity/acceptance, remove/block/revoke, parent authority, offline/reconnect; each participant independently authorizes their own media; no private learning/history export |
 | X1 | Background TV, isolated ambient history/progress, Tune In | C4,N4 | Ambient vs deliberate history isolation |
 | X2 | Overnight charging/unmetered preparation and useful predictive caching | C5,N4,H2 | Storage/battery/provider backoff and restart recovery |
 | X3 | In-flight sampled scene/audio/intro-credit analysis with edition provenance | C5,N3 | Actual extracted evidence; not compression-only |
@@ -68,11 +69,31 @@ while compiling. Build immutable candidates. Do not make acceptance claims from 
 | R1 | One-revision platform packages, artifact allowlist and existing signing identity | C4,U4,H1 | Native package inspection and clean install |
 | R2 | Signed update, staged activation, interrupted update, rollback and recovery | R1 | Real retained-state and rollback rehearsal |
 | R3 | Authorized LAN/Tailscale pairing, certificate/reconnect/revocation | H1,R1 | Real authenticated destination; random URL not security |
-| V1 | Independent 47-ID UI/UX and security review on installed builds | U4,U5,H3,X1,X2,X3,X4,S1 | Findings with revision/device/steps/severity and retest |
+| V1 | Independent 47-ID UI/UX and security review on installed builds | U4,U5,H3,H4,X1,X2,X3,X4,S1 | Findings with revision/device/steps/severity and retest |
 | V2 | Four-device release acceptance and friend clean-user rehearsal | V1,R2,R3 | 19/19 and 47/47 current evidence, no unsupported skips |
 | D1 | User/Family/private-owner/recovery guides and measured technical whitepaper | V2 | Docs agree with verified, experimental and parked capabilities |
 
 ## Specialist accountability
+
+### Reuse shortlist (researched 2026-09-24; not adopted by this list)
+
+Reuse existing dependencies before adding new ones; adapting open-source implementation is
+allowed subject to its license, attribution and distribution obligations. No new model/tool
+download or dependency migration is approved merely by this research. Keep the native product
+and deterministic policy boundaries; test integration on the actual fleet.
+
+| Remaining gap | Reuse candidate / concrete integration | Gate and decision |
+| --- | --- | --- |
+| Media controls/appearance | Existing Media3 and LibVLC3 adapters | Continue using their native controls/renderers; Android caption appearance verified on Pixel/TV. VLC3 style options require instance creation, not per-media options. Desktop restart/state restoration and actual pixels still need testing. |
+| Model execution N3 | [ONNX Runtime Java/Android](https://onnxruntime.ai/docs/get-started/with-java.html), MIT | Candidate for the isolated worker, not fifteen resident LMs. Verify actual AAR ABI/operator contents; [armv7 source-build support](https://onnxruntime.ai/docs/build/android.html) is not proof the downloaded artifact supports the 32-bit TV. No inference or model pack is installed by this decision. |
+| Genuine text embeddings N1 | [distiluse-base-multilingual-cased-v2](https://huggingface.co/sentence-transformers/distiluse-base-multilingual-cased-v2), Apache-2.0 | Candidate learned 512D output; freeze/export full tokenizer, pooling and dense graph. Prove output dimensions and ranking quality; model size and HP/TV RAM may disqualify it. Never truncate/pad another encoder to fake 512D. |
+| Preparation/analysis C5/X3 | Existing FFmpeg/FFprobe on desktop; [Media3 Transformer](https://developer.android.com/media/media3/transformer/getting-started) on Android | Prefer established remux, sampled extraction and loudness filters; respect FFmpeg build-specific LGPL/GPL obligations. Transformer encoder/device limits remain. Match existing Media3 version; do not introduce retired ffmpeg-kit. Add only after current playback checkpoint. |
+| Durable Home/Friends events H1/H4 | [SQLDelight](https://github.com/sqldelight/sqldelight), Apache-2.0, with existing OkHttp transport | Evaluate for new outbox/inbox storage, not a wholesale migration of tested core.bin. It does not implement replication, authorization, invitations, relay or conflict semantics. Separate-Home rendezvous/hosting is still an explicit architectural decision. |
+| Cryptography and packaging | Existing AndroidKeystore/DPAPI/JDK primitives first; [Tink](https://github.com/tink-crypto/tink-java) only for a demonstrated missing primitive. [jpackage](https://docs.oracle.com/en/java/javase/25/jpackage/packaging-overview.html) and [PackageInstaller.Session](https://developer.android.com/reference/android/content/pm/PackageInstaller.Session) for platform packages | Do not replace functioning secret custody. Packaging APIs do not provide signing identity, trust, atomic application-state migration, rollback or silent Android installation authority. Build on target OS; verify real installs and recovery. |
+
+Priority: finish the existing-player integration, then a bounded real-encoder/runtime feasibility
+check after artifact approval; use the Home/Friends dependency graph before selecting sync storage.
+No savings estimate or upstream test result substitutes for ReelOS acceptance evidence.
 
 Queued after current playback work (C1–C4): extend N2/U5 with Family’s “More of this in their world” parent suggestions and a “Watch with me” collection. Use the shared taste engine; suggestions remain separate from child taste and safety, preserve favorites, enter gently and back off after dismissals. Add tests for attribution/isolation, eligibility, exposure/backoff and unchanged safety enforcement; this addition is recorded, not implemented.
 

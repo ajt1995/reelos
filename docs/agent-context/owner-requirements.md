@@ -5,6 +5,7 @@ This compact record incorporates the owner's approved native completion/release 
 ## Workflow
 
 - Develop only on registered workstream/feature branches; never commit directly to main/master. Central integration reviews and validates each worker's changes.
+- Reuse existing repository implementations and maintained open-source components before building infrastructure. Check license, native-platform support, security/privacy boundaries and integration cost; one codebase does not mean reinventing libraries. Record the reuse decision with the affected implementation, and still test installed-device behavior.
 - On an owner stop request, stop active test loops promptly, checkpoint attributable work, push the workstream, and yield. Never include secrets or unrelated changes in that checkpoint; report a blocked push honestly.
 - Audit neural systems, UI contracts and feature coverage before modifying critical foundations. Reuse current evidence only when its source revision and affected boundaries still match; rerun invalidated checks.
 - Retire the old Gwen persona. Owner instructions and repository requirements govern intent; source and measured tests establish implementation truth.
@@ -47,6 +48,8 @@ Core ships personal and public-domain sources with neutral adapter interfaces. C
 - Official subscription-service discovery/handoff is an additive beta direction, not a replacement for native playback. Verified title links may be opened locally or requested on an authenticated paired node; provider apps retain credentials, playback and protections. Do not capture/relay protected browser video, assume Cast SDK permission to launch another provider's receiver, or imply another app enforces ReelOS Family rules. Exact destination, foreground-launch, provider/account and return behavior require per-device tests. Research is not legal clearance.
 
 ## Expanded behaviors and release gate
+
+- Friends across separate Homes is required within the watch-together/social group: persistent friendships, explicitly shared recommendations/watchlists, and watch-party invitations. Owner selected separate media access for every participant; friendship does not grant library, byte, credential, device-management or Home membership access. No automatic taste/history/learning exports. Implement authenticated invitations/acceptance, remove/block/revoke, private-by-default presence and parent-authorized child participation; verify two independent Homes and offline/reconnect behavior. This is recorded scope, not implemented or accepted behavior.
 
 - Family/taste addition: “More of this in their world” lets authorized parents suggest titles or qualities through the shared taste engine. Keep suggestions separately attributed from the child's own preferences and deterministic safety rules. Introduce eligible suggestions gently, preserve favorites, and back off after dismissals (never infer dislike). Include a “Watch with me” collection. Implement after the current playback slice; verify isolation, authority, exposure/backoff and favorites/safety preservation before acceptance.
 

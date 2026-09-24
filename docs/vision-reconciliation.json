@@ -8,6 +8,13 @@
   },
   "entries": [
     {
+      "id": "friends-across-separate-homes",
+      "source": "docs/agent-context/owner-requirements.md",
+      "disposition": "active",
+      "targets": ["watch-together"],
+      "rationale": "Owner selected persistent Friends, explicit recommendations, shared watchlists and party invitations with each participant's own media access. This does not permit library sharing, Home membership or private learning/history export. Required native work and two-Home acceptance are not implemented merely by existing party routes."
+    },
+    {
       "id": "personal-cinema-world",
       "source": "docs/MASTER-VISION-LEDGER.md",
       "disposition": "active",

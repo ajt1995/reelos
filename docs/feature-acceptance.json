@@ -281,7 +281,7 @@
     {
       "id": "group-watch-together",
       "featureId": "watch-together",
-      "status": "verified",
+      "status": "missing",
       "requiredEvidence": [
         "automated-test",
         "observed-run"
