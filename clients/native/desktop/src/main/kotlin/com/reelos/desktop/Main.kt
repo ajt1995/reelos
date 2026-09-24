@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -364,6 +366,7 @@ fun main(args: Array<String>) = application {
 @Composable
 private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, onClose: () -> Unit) {
     var status by remember(playback) { mutableStateOf(playback.player.poll()) }
+    var tracks by remember(playback) { mutableStateOf<VlcTracks?>(null) }
     var problem by remember(playback) { mutableStateOf<String?>(null) }
     var dragged by remember(playback) { mutableStateOf<Float?>(null) }
     val canvas = remember(playback) { Canvas().apply { background = Color.BLACK } }
@@ -390,6 +393,8 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
             }
             val current = result.getOrThrow()
             status = current
+            // Demux may discover tracks after playback starts (especially remote media).
+            runCatching { playback.player.tracks() }.onSuccess { tracks = it }
             if (current.error) problem = "LibVLC reported a decoding or media error."
             if (current.ended && !completionSaved) {
                 onPosition(0)
@@ -432,6 +437,46 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
             }
             Text("${formatTime(status.positionMs)} / ${formatTime(status.durationMs)}", Modifier.padding(top = 12.dp))
             Button(onClick = onClose) { Text("Close") }
+        }
+        tracks?.let { available ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (available.audio.isNotEmpty()) TrackMenu(
+                    label = "Audio",
+                    selected = available.audio.firstOrNull { it.id == available.audioId }?.name ?: "Select track",
+                    choices = available.audio,
+                    onSelect = { id -> playback.player.selectAudioTrack(id) },
+                    onError = { problem = it },
+                )
+                if (available.subtitles.isNotEmpty()) TrackMenu(
+                    label = "Subtitles",
+                    selected = if (available.subtitleId == -1) "Off"
+                        else available.subtitles.firstOrNull { it.id == available.subtitleId }?.name ?: "Select track",
+                    choices = listOf(VlcTrack(-1, "Off")) + available.subtitles,
+                    onSelect = { id -> playback.player.selectSubtitleTrack(id) },
+                    onError = { problem = it },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrackMenu(
+    label: String, selected: String, choices: List<VlcTrack>,
+    onSelect: (Int) -> Unit, onError: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Button(onClick = { expanded = true }) { Text("$label: $selected") }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            choices.forEach { choice ->
+                DropdownMenuItem(text = { Text(choice.name) }, onClick = {
+                    expanded = false
+                    runCatching { onSelect(choice.id) }.onFailure {
+                        onError(it.message ?: "Track selection failed")
+                    }
+                })
+            }
         }
     }
 }

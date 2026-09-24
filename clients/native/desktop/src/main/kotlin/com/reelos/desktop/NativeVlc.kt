@@ -5,6 +5,7 @@ import com.sun.jna.Callback
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.Pointer
+import com.sun.jna.Structure
 import com.sun.jna.ptr.LongByReference
 import com.sun.jna.ptr.PointerByReference
 import java.awt.Canvas
@@ -132,6 +133,38 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
 }
 
 internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean)
+internal data class VlcTrack(val id: Int, val name: String)
+internal data class VlcTracks(
+    val audio: List<VlcTrack>, val audioId: Int,
+    val subtitles: List<VlcTrack>, val subtitleId: Int,
+)
+
+/** libvlc_track_description_t in LibVLC 3; native strings and nodes belong to LibVLC. */
+@Structure.FieldOrder("i_id", "psz_name", "p_next")
+internal class VlcTrackDescription(pointer: Pointer) : Structure(pointer) {
+    @JvmField var i_id: Int = 0
+    @JvmField var psz_name: Pointer? = null
+    @JvmField var p_next: Pointer? = null
+    init { read() }
+}
+
+internal fun readTrackDescriptions(api: LibVlc, head: Pointer?): List<VlcTrack> {
+    if (head == null) return emptyList()
+    try {
+        val result = mutableListOf<VlcTrack>()
+        val seen = mutableSetOf<Long>()
+        var node: Pointer? = head
+        while (node != null && result.size < 128 && seen.add(Pointer.nativeValue(node))) {
+            val entry = VlcTrackDescription(node)
+            result += VlcTrack(entry.i_id, entry.psz_name?.getString(0, "UTF-8")?.take(120).orEmpty()
+                .ifBlank { "Track ${entry.i_id}" })
+            node = entry.p_next
+        }
+        return result.distinctBy(VlcTrack::id)
+    } finally {
+        api.libvlc_track_description_list_release(head)
+    }
+}
 
 internal class VlcPlayback(
     private val api: LibVlc,
@@ -142,6 +175,30 @@ internal class VlcPlayback(
     private val started = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private var resumeApplied = false
+
+    @Synchronized
+    fun tracks(): VlcTracks {
+        check(!closed.get()) { "The player is closed" }
+        // Track description ABI is the LibVLC 3 contract used by this desktop adapter.
+        check(api.libvlc_get_version().startsWith("3.")) { "Track controls require LibVLC 3" }
+        val audio = readTrackDescriptions(api, api.libvlc_audio_get_track_description(player)).filter { it.id >= 0 }
+        val subtitles = readTrackDescriptions(api, api.libvlc_video_get_spu_description(player)).filter { it.id >= 0 }
+        return VlcTracks(audio, api.libvlc_audio_get_track(player), subtitles, api.libvlc_video_get_spu(player))
+    }
+
+    @Synchronized
+    fun selectAudioTrack(id: Int) {
+        val available = tracks().audio
+        require(available.any { it.id == id }) { "That audio track is unavailable" }
+        check(api.libvlc_audio_set_track(player, id) == 0) { "LibVLC could not select that audio track" }
+    }
+
+    @Synchronized
+    fun selectSubtitleTrack(id: Int) {
+        val available = tracks().subtitles
+        require((id == -1 && available.isNotEmpty()) || available.any { it.id == id }) { "That subtitle track is unavailable" }
+        check(api.libvlc_video_set_spu(player, id) == 0) { "LibVLC could not select that subtitle track" }
+    }
 
     @Synchronized
     fun attach(canvas: Canvas) {
@@ -347,4 +404,11 @@ internal interface LibVlc : Library {
     fun libvlc_media_player_is_playing(player: Pointer): Int
     fun libvlc_media_player_is_seekable(player: Pointer): Int
     fun libvlc_media_player_set_pause(player: Pointer, paused: Int)
+    fun libvlc_audio_get_track_description(player: Pointer): Pointer?
+    fun libvlc_audio_get_track(player: Pointer): Int
+    fun libvlc_audio_set_track(player: Pointer, trackId: Int): Int
+    fun libvlc_video_get_spu_description(player: Pointer): Pointer?
+    fun libvlc_video_get_spu(player: Pointer): Int
+    fun libvlc_video_set_spu(player: Pointer, trackId: Int): Int
+    fun libvlc_track_description_list_release(description: Pointer)
 }
