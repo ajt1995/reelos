@@ -352,6 +352,43 @@ class NativeHardwareChecks : Instrumentation() {
                     shown && selectedLanguage(C.TRACK_TYPE_TEXT, "es")
                 }
             }
+            checkCase("native-subtitle-timing-controls") {
+                runOnMainSync { playerView(requireNotNull(playback)).showController() }
+                clickLabel("Caption timing · 0ms")
+                clickLabel("Later · 1 second")
+                clickLabel("Caption timing · 1000ms")
+                clickLabel("Reset caption timing")
+                runOnMainSync {
+                    check(PlaybackActivity::class.java.getDeclaredMethod("getSubtitleDelayMs").apply { isAccessible = true }
+                        .invoke(requireNotNull(playback)) == 0L)
+                }
+            }
+            checkCase("native-subtitle-offset-cues-and-seek") {
+                fun offsetAt(delay: Long, position: Long) {
+                    runOnMainSync {
+                        PlaybackActivity::class.java.getDeclaredMethod("changeSubtitleDelay", java.lang.Long.TYPE)
+                            .apply { isAccessible = true }.invoke(requireNotNull(playback), delay)
+                        player(requireNotNull(playback)).seekTo(position)
+                        player(requireNotNull(playback)).play()
+                    }
+                }
+                fun captionAt(from: Long, until: Long, present: Boolean): Boolean {
+                    var matches = false
+                    runOnMainSync {
+                        val playing = player(requireNotNull(playback))
+                        matches = playing.playbackState == Player.STATE_READY && playing.currentPosition in from..until &&
+                            playing.currentCues.cues.any { it.text?.contains("Spanish") == true } == present
+                    }
+                    return matches
+                }
+                offsetAt(5_000, 1_000)
+                waitFor("positive offset hides cue before delayed start") { captionAt(1_000, 4_000, false) }
+                waitFor("delayed real cue appears") { captionAt(5_500, 11_000, true) }
+                offsetAt(-5_000, 26_000)
+                waitFor("negative offset ends cue earlier after seek") { captionAt(26_000, 28_500, false) }
+                offsetAt(0, 1_000)
+                waitFor("reset restores real cue after backward seek") { captionAt(1_000, 8_000, true) }
+            }
             checkCase("native-subtitles-off") {
                 openControl(androidx.media3.ui.R.id.exo_subtitle)
                 clickLabel(getTargetContext().getString(androidx.media3.ui.R.string.exo_track_selection_none))

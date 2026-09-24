@@ -11,6 +11,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Column
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -44,12 +45,17 @@ class PlaybackActivity : ComponentActivity() {
     private val sleepTimer = PlaybackSleepTimer { SystemClock.elapsedRealtime() }
     private var sleepLabel by mutableStateOf(sleepTimer.label())
     private lateinit var sleepControls: ComposeView
+    private var subtitleRenderer: SubtitleTimingRenderer? = null
+    private var subtitleDelayMs by mutableStateOf(0L)
+    private var hasSubtitleTracks by mutableStateOf(false)
     private val stateStore by lazy { FileCoreStore(filesDir.resolve("core.bin").toPath()) }
     private lateinit var playerView: PlayerView
     private lateinit var status: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        subtitleDelayMs = savedInstanceState?.getLong("subtitleDelayMs") ?: 0L
+        SubtitleTiming.micros(subtitleDelayMs)
         savedInstanceState?.takeIf { it.containsKey("sleepStarted") }?.let {
             val end = it.getBoolean("sleepEnd")
             sleepTimer.restore(PlaybackSleepTimer.State(it.getLong("sleepStarted"), if (end) null else it.getLong("sleepDeadline"), end))
@@ -67,6 +73,7 @@ class PlaybackActivity : ComponentActivity() {
         sleepControls = ComposeView(this).apply {
             setContent {
                 MaterialTheme(colorScheme = darkColorScheme()) {
+                    Column {
                     com.reelos.ui.SleepTimerControl(sleepLabel,
                         onMinutes = { sleepTimer.after(it * 60_000L); sleepLabel = sleepTimer.label() },
                         onEnd = { sleepTimer.atEnd(); sleepLabel = sleepTimer.label() },
@@ -75,6 +82,14 @@ class PlaybackActivity : ComponentActivity() {
                             playerView.controllerShowTimeoutMs = if (open) 0 else 5_000
                             playerView.showController()
                         })
+                    if (hasSubtitleTracks) com.reelos.ui.SubtitleTimingControl(subtitleDelayMs,
+                        onAdjust = { change -> changeSubtitleDelay(SubtitleTiming.adjust(subtitleDelayMs, change)) },
+                        onReset = { changeSubtitleDelay(0) },
+                        onExpanded = { open ->
+                            playerView.controllerShowTimeoutMs = if (open) 0 else 5_000
+                            playerView.showController()
+                        })
+                    }
                 }
             }
         }
@@ -100,10 +115,21 @@ class PlaybackActivity : ComponentActivity() {
                 else Uri.parse(requireNotNull(getSharedPreferences("local-media", MODE_PRIVATE).getString(id, null)))
             if (remote == null) LocalVideo.verifyAccess(this, uri)
             mediaId = id; profileId = profile.id
-            val builder = ExoPlayer.Builder(this)
+            val factory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
+                override fun buildTextRenderers(context: android.content.Context,
+                    output: androidx.media3.exoplayer.text.TextOutput, outputLooper: android.os.Looper,
+                    extensionRendererMode: Int, out: ArrayList<androidx.media3.exoplayer.Renderer>) {
+                    val timing = SubtitleTimingRenderer(androidx.media3.exoplayer.text.TextRenderer(output, outputLooper))
+                    subtitleRenderer = timing
+                    out.add(timing)
+                }
+            }
+            val builder = ExoPlayer.Builder(this, factory)
             if (remote != null) builder.setMediaSourceFactory(DefaultMediaSourceFactory(this)
                 .setDataSourceFactory { ProviderDataSource(remote.bytes) })
             player = builder.build().also { playback ->
+                playback.createMessage(requireNotNull(subtitleRenderer)).setType(SubtitleTimingRenderer.SET_DELAY)
+                    .setPayload(subtitleDelayMs).send()
                 val preferences = profile.playbackPreferences
                 playback.trackSelectionParameters = playback.trackSelectionParameters.buildUpon()
                     .setPreferredAudioLanguage(preferences.audioLanguage)
@@ -114,6 +140,9 @@ class PlaybackActivity : ComponentActivity() {
                 playerView.player = playback
                 playback.addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() { hasRenderedFrame = true }
+                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                        hasSubtitleTracks = tracks.groups.any { it.type == androidx.media3.common.C.TRACK_TYPE_TEXT }
+                    }
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         playerView.keepScreenOn = isPlaying
                         if (isPlaying && status.text.toString() == "Sleep timer paused playback.") status.text = ""
@@ -203,12 +232,25 @@ class PlaybackActivity : ComponentActivity() {
     override fun onDestroy() { providerPlayback?.close(); providerPlayback = null; player?.release(); super.onDestroy() }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putLong("subtitleDelayMs", subtitleDelayMs)
         sleepTimer.state?.let {
             outState.putLong("sleepStarted", it.startedAtMs)
             outState.putBoolean("sleepEnd", it.endOfTitle)
             it.deadlineMs?.let { deadline -> outState.putLong("sleepDeadline", deadline) }
         }
         super.onSaveInstanceState(outState)
+    }
+
+    private fun changeSubtitleDelay(delayMs: Long) {
+        val playback = player ?: return
+        runCatching {
+            SubtitleTiming.micros(delayMs)
+            playback.createMessage(requireNotNull(subtitleRenderer)).setType(SubtitleTimingRenderer.SET_DELAY)
+                .setPayload(delayMs).send()
+            // Re-seek flushes already-dispatched cues when an in-film adjustment changes direction.
+            playback.seekTo(playback.currentPosition)
+            subtitleDelayMs = delayMs
+        }.onFailure { status.text = "Caption timing could not be changed. Try again." }
     }
 
     private fun applySleepTimer() {

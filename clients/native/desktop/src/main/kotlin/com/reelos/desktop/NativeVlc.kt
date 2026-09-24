@@ -228,6 +228,20 @@ internal class VlcPlayback(
     }
 
     @Synchronized
+    fun subtitleDelayMs(): Long {
+        check(!closed.get()) { "The player is closed" }
+        return api.libvlc_video_get_spu_delay(player) / 1_000
+    }
+
+    @Synchronized
+    fun setSubtitleDelayMs(delayMs: Long) {
+        check(!closed.get()) { "The player is closed" }
+        check(api.libvlc_video_set_spu_delay(player, com.reelos.core.SubtitleTiming.micros(delayMs)) == 0) {
+            "Caption timing could not be changed"
+        }
+    }
+
+    @Synchronized
     fun attach(canvas: Canvas) {
         check(!closed.get()) { "The player is closed" }
         if (!canvas.isDisplayable || !started.compareAndSet(false, true)) return
@@ -442,6 +456,8 @@ internal class RemoteMediaCallbacks(private val source: RemoteByteSource) {
 }
 
 internal interface LibVlc : Library {
+    fun libvlc_video_get_spu_delay(player: Pointer): Long
+    fun libvlc_video_set_spu_delay(player: Pointer, delayUs: Long): Int
     fun libvlc_media_tracks_get(media: Pointer, tracks: PointerByReference): Int
     fun libvlc_media_tracks_release(tracks: Pointer, count: Int)
     fun libvlc_new(argc: Int, argv: Array<String>): Pointer?

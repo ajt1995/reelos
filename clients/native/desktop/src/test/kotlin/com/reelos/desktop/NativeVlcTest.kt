@@ -53,6 +53,11 @@ class NativeVlcTest {
                         playback.selectSubtitleTrack(track.id)
                         awaitTrackState(playback) { _, tracks -> tracks.subtitleId == track.id }
                     }
+                    listOf(5_000L, -5_000L, 0L).forEach { offset ->
+                        playback.setSubtitleDelayMs(offset)
+                        assertEquals(offset, playback.subtitleDelayMs())
+                        assertFalse(playback.poll().error)
+                    }
                     playback.selectSubtitleTrack(-1)
                     val afterOff = awaitTrackState(playback) { _, tracks -> tracks.subtitleId == -1 }
                     assertFalse(afterOff.first.error)

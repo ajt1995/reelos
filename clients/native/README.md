@@ -218,7 +218,11 @@ actual media tracks. The desktop adapter enumerates LibVLC3 tracks and offers Au
 menus including Off. Personal/Settings share saved profile-private audio and subtitle defaults
 (schema6; older profiles migrate to Automatic). Android uses Media3 track preferences; desktop
 selects actual LibVLC stream language metadata. In-film changes override only that session.
-Subtitle timing/appearance and volume leveling remain open work, not implied by these controls.
+Session-only caption timing uses shared positive=later/negative=earlier arithmetic. Android
+shifts only Media3's text-renderer clock and re-seeks to clear stale cues; desktop uses LibVLC's
+native microsecond delay control. Pixel/TV each passed20 media cases, including +5s cue onset,
+-5s cue ending, native control/reset and backward seek. Desktop delay readback passed, but
+visual desktop caption timing remains unverified. Appearance and volume leveling remain open.
 
 Pixel, Fold and Onn TV each passed16/16 media checks including actual AAC decoded buffers,
 audio switching and English/Spanish decoded captions/Off. These are short synthetic test-only

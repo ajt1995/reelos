@@ -369,6 +369,7 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
     var sleepLabel by remember(playback) { mutableStateOf(sleepTimer.label()) }
     var status by remember(playback) { mutableStateOf(playback.player.poll()) }
     var tracks by remember(playback) { mutableStateOf<VlcTracks?>(null) }
+    var subtitleDelayMs by remember(playback) { mutableStateOf(0L) }
     var problem by remember(playback) { mutableStateOf<String?>(null) }
     var dragged by remember(playback) { mutableStateOf<Float?>(null) }
     val canvas = remember(playback) { Canvas().apply { background = Color.BLACK } }
@@ -452,6 +453,13 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
                 onCancel = { sleepTimer.cancel(); sleepLabel = sleepTimer.label() })
         }
         tracks?.let { available ->
+            if (available.subtitles.isNotEmpty()) com.reelos.ui.SubtitleTimingControl(subtitleDelayMs,
+                onAdjust = { delta -> runCatching {
+                    playback.player.setSubtitleDelayMs(com.reelos.core.SubtitleTiming.adjust(subtitleDelayMs, delta))
+                    subtitleDelayMs = playback.player.subtitleDelayMs()
+                }.onFailure { problem = "Caption timing could not be changed." } },
+                onReset = { runCatching { playback.player.setSubtitleDelayMs(0); subtitleDelayMs = playback.player.subtitleDelayMs() }
+                    .onFailure { problem = "Caption timing could not be reset." } })
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (available.audio.isNotEmpty()) TrackMenu(
                     label = "Audio",
