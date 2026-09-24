@@ -235,10 +235,15 @@ Pixel and Onn TV passed21/21 media checks with zero skips; saved appearance rest
 activity recreation is implemented but not yet physically verified. Core61/61 and desktop22/22
 also passed; desktop appearance is not included in those passing tests.
 
-Desktop appearance is still open: LibVLC3 explicitly does **not** apply text-renderer options
-through per-media options. Apply bounded presets at `libvlc_new`, then test actual caption pixels;
-an in-film change needs a safely recreated player/instance with authorization, tracks, position,
-pause and timing retained. Do not expose a pretend live setter or call private libvlccore symbols.
+Desktop appearance controls are still open: LibVLC3 explicitly does **not** apply text-renderer
+options through per-media options. `DesktopCaptionAppearance` now maps the shared bounded presets
+to `libvlc_new` options. The installed Windows decoder has passed real native-canvas pixel checks
+for small/large white and large yellow plain-text captions; evidence is in
+`desktop/build/reports/caption-pixels/` and `DesktopCaptionAppearanceTest` XML. This is renderer
+feasibility, **not an exposed player control**. An in-film change still needs a safely recreated
+player/instance with authorization, tracks, position, pause, sleep deadline and timing retained.
+Do not expose a pretend live setter or call private libvlccore symbols. Bitmap/ASS overrides,
+Linux rendering, default-profile persistence and remote restart remain separate checks.
 Reuse references: [Media3 SubtitleView 1.5.0](https://github.com/androidx/media/blob/1.5.0/libraries/ui/src/main/java/androidx/media3/ui/SubtitleView.java),
 [LibVLC3 media option limitations](https://videolan.videolan.me/vlc-3.0/group__libvlc__media.html),
 [VLC3 freetype presets](https://github.com/videolan/vlc/blob/3.0.x/modules/text_renderer/freetype/freetype.c).

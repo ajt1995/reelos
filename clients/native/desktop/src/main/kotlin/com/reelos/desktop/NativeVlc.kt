@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicLong
 internal class NativeVlc private constructor(private val api: LibVlc, private val instance: Pointer) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     companion object {
-        fun open(): Result<NativeVlc> = runCatching {
+        fun open(appearance: DesktopCaptionAppearance = DesktopCaptionAppearance()): Result<NativeVlc> = runCatching {
             val os = System.getProperty("os.name").lowercase()
             val candidates = when {
                 os.contains("win") -> listOf(
@@ -44,7 +44,8 @@ internal class NativeVlc private constructor(private val api: LibVlc, private va
                         if (os.contains("win") && Files.isRegularFile(coreLibrary)) System.load(coreLibrary.toString())
                     }
                     val api = Native.load(candidate, LibVlc::class.java, mapOf(Library.OPTION_STRING_ENCODING to "UTF-8"))
-                    val instance = api.libvlc_new(3, arrayOf("--no-video-title-show", "--no-media-library", "--no-metadata-network-access"))
+                    val options = (listOf("--no-video-title-show", "--no-media-library", "--no-metadata-network-access") + appearance.options()).toTypedArray()
+                    val instance = api.libvlc_new(options.size, options)
                     if (instance != null) return@runCatching NativeVlc(api, instance)
                     failure += "$candidate: initialization failed"
                 } catch (error: RuntimeException) {
