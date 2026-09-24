@@ -43,6 +43,27 @@ class DesktopCaptionAppearanceTest {
             val originalDeadline = System.nanoTime() + 10_000_000_000L
             while ((!original.poll().seekable || (multitrack && original.tracks().audio.isEmpty())) && System.nanoTime() < originalDeadline) Thread.sleep(100)
             original.seek(6_000)
+            // Establish that this visible surface is actually rendering before replacing it.
+            // A seekable clock alone cannot distinguish decoder failure from replacement failure.
+            var originalVisible = false
+            while (System.nanoTime() < originalDeadline) {
+                val state = original.poll()
+                lateinit var bounds: Rectangle
+                SwingUtilities.invokeAndWait {
+                    val p = canvas.locationOnScreen
+                    bounds = Rectangle(p.x + canvas.width / 2 - 100, p.y + canvas.height / 2 - 50, 200, 100)
+                }
+                val before = robot.createScreenCapture(bounds)
+                var colored = 0
+                for (y in 0 until before.height step 4) for (x in 0 until before.width step 4) {
+                    val c = java.awt.Color(before.getRGB(x, y))
+                    if (maxOf(c.red, c.green, c.blue) - minOf(c.red, c.green, c.blue) > 80) colored++
+                }
+                originalVisible = state.positionMs >= 5_900 && colored > 125
+                if (originalVisible) break
+                Thread.sleep(100)
+            }
+            assertTrue(originalVisible, "Original video must render before testing replacement")
             val saved = original.pauseForReplacement().copy(positionMs = 6_000, playing = false)
             original.releaseDrawableForReplacement()
             val replacementCanvas = Canvas()
@@ -56,6 +77,7 @@ class DesktopCaptionAppearanceTest {
                     val deadline = System.nanoTime() + 15_000_000_000L
                     var green = false
                     var state = player.poll()
+                    var previousDiagnostic = ""
                     while (System.nanoTime() < deadline) {
                         state = player.poll()
                         check(!state.error)
@@ -63,12 +85,19 @@ class DesktopCaptionAppearanceTest {
                         lateinit var bounds: Rectangle
                         SwingUtilities.invokeAndWait {
                             val p = replacementCanvas.locationOnScreen
-                            bounds = Rectangle(p.x + replacementCanvas.width / 2 - 10, p.y + replacementCanvas.height / 2 - 10, 20, 20)
+                            bounds = Rectangle(p.x + replacementCanvas.width / 2 - 100, p.y + replacementCanvas.height / 2 - 50, 200, 100)
                         }
                         val image = robot.createScreenCapture(bounds)
-                        val color = java.awt.Color(image.getRGB(10, 10))
-                        green = if (multitrack) color.red > 100 || color.green > 100 || color.blue > 100
+                        val color = java.awt.Color(image.getRGB(100, 50))
+                        var colored = 0
+                        if (multitrack) for (y in 0 until image.height step 4) for (x in 0 until image.width step 4) {
+                            val sample = java.awt.Color(image.getRGB(x, y))
+                            if (maxOf(sample.red, sample.green, sample.blue) - minOf(sample.red, sample.green, sample.blue) > 80) colored++
+                        }
+                        green = if (multitrack) colored > 125
                             else color.green > 180 && color.red < 60 && color.blue < 60
+                        val diagnostic = "multitrack=$multitrack time=${state.positionMs} restoring=${state.restoring} frames=${player.videoProgress()} pixel=${color.rgb}"
+                        if (diagnostic != previousDiagnostic) { println(diagnostic); previousDiagnostic = diagnostic }
                         if (!state.restoring && green) break
                         Thread.sleep(100)
                     }
@@ -147,7 +176,7 @@ class DesktopCaptionAppearanceTest {
                         Thread.sleep(100)
                     }
                     val rendered = requireNotNull(image) { "Native subtitle frame never appeared" }
-                    check(blackFixtureVisible(rendered)) { "Test canvas was not visible; refusing to save a non-fixture screenshot" }
+                    check(blackFixtureVisible(rendered)) { "Test canvas was not visible ($name, white=${count(rendered, false)}, yellow=${count(rendered, true)}, state=${player.poll()}, frames=${player.videoProgress()}); refusing to save a non-fixture screenshot" }
                     ImageIO.write(rendered, "png", output.resolve("$name.png").toFile())
                     val measured = count(rendered, false) to count(rendered, true)
                     check((if (style == CaptionStyle.YELLOW) measured.second else measured.first) > 20) {

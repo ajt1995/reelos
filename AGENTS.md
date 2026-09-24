@@ -67,6 +67,7 @@ Do not treat `GROUND-TRUTH.md`, `STATUS.md`, `PROJECT.md`, `GEMINI.md`, or broad
 - `npm run scope:changed` — narrows current working-tree changes to relevant feature evidence and checks.
 - `npm run doctor` — read-only local runtime and hardware prerequisite report.
 - `./scripts/test-native-checkpoint.ps1 -Devices '<authorized-device-id>' -PersonalUi` — cached/offline native build, required core/desktop tests, serial native device checks and context/test contracts. Read `.reelos-audit/native-checkpoint/result.json` first; open only failed-stage logs. Device checks require explicit targets and operate the validation app. This is targeted evidence, not the full release gate; it never runs live provider checks or downloads tools/models.
+  Windows pixel tests need the actual interactive desktop through approved execution. Restricted sandbox captures can return black even for original video; the original-frame prerequisite diagnoses this. Do not weaken pixel assertions or treat a hidden/addNotify-only surface as hardware-rendering evidence.
 - `npm run test:release` — current release-contract tests only; `npm run test:all` retains the full recovered suite for migration triage.
 - `npm run verify:public-release` — checks public-release source boundaries.
 - `npm run typecheck` / `npm run build:dev` - focused application validation.

@@ -502,7 +502,7 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
         var lastSaved = 0L
         var completionSaved = false
         while (true) {
-            delay(500)
+            delay(if (status.restoring) 50 else 500)
             val result = runCatching { playback.player.poll() }
             if (result.isFailure) {
                 problem = result.exceptionOrNull()?.message ?: "Native playback failed"

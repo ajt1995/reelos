@@ -4,26 +4,40 @@
 
 ## Current installed-app findings
 
-### Windows player follow-up — 2026-09-24, WIP after b820dc7
+### Windows player follow-up — 2026-09-24, after 6927e8f
 
 Actual native Main app, isolated Caption Check profile, synthetic Native-Tracks-30s.mp4;
 no owner media or credentials. This narrow check does not accept all of `ui-player`.
-Final targeted batch:61 core tests passed;28/29 desktop tests passed, one reproduced
-paused multitrack pixel failure, zero skips. Context, feature inventory and314-test
-classification passed separately. Release acceptance remains blocked with146 gaps.
+The paused replacement now warms the decoder silently at the saved position, restores
+tracks, and waits for output before honoring play/pause intent. The visible single-track
+and multitrack pixel regressions both pass on the actual Windows desktop. Restricted
+sandbox captures returned black even for the ORIGINAL video; tests now verify that
+prerequisite rather than misclassifying it as a replacement failure. Current full-batch
+counts belong in `.reelos-audit/native-checkpoint/result.json`. Release remains blocked
+with146 acceptance gaps; this check does not certify Linux or remote-source replacement.
+Latest complete batch was61 core passes and29/31 desktop passes, zero skips; caption-style
+visibility and denied-restart restoration failed. A later focused process crashed with
+Windows status0xC0000374 (heap corruption); it did not produce a complete fresh report.
+Computer Use then directly observed a leftover `java.exe - Application Error` dialog
+covering the caption fixture, with actual text visible behind it. App approval to dismiss
+that system dialog timed out; owner was asked to close it. Do not rerun visual tests through
+the obstruction or count the interrupted run as passing. Native crash cause remains open.
 
 | Finding | Result / remaining check |
 | --- | --- |
 | Appearance dropdown obscured by heavyweight video | Separate native dialog now shows all size/style/reset choices above video; actual pointer selection verified. Keyboard focus/Escape still require verification. |
 | Replacement retained old SwingPanel drawable | Keyed surface and stopping old output before removal restore controls and correct resumed time. Duplicate same-handle attachment is guarded. |
-| Paused replacement shows black instead of saved picture (major) | STILL OPEN. Clock and track IDs restore, Play renders correct burned-in time. Reproduced at11/14/20s; new visible multitrack pixel test fails whereas simple color-only fixture passes. Do not count clock-only tests as success. |
+| Paused replacement shows black instead of saved picture (major) | Local Windows retest passes: actual Main retained the paused picture at6.417s from6.375s, and both visible pixel regressions pass. Muted warm-up, bounded corrective seek and acknowledged pause replace paused-input seeking. Remote and Linux checks remain open. |
+| Sleep expiry or late tracks during replacement | Pause records intent without stalling muted warm-up; authorization still runs before completion. Late tracks trigger one asynchronous corrective seek, with bounded position and timeout-to-fallback. Real-decoder sleep regression and deterministic late-track regression added. |
+| Format-specific caption appearance | Main's embedded MP4 mov_text cue remained white despite Yellow selection. Plain SubRip/MKV pixel tests support actual style overrides; authored-format override behavior remains unresolved and must not be claimed universally. |
 | Close/return | Native player Close returns to Home; saved Resume action observed. Normal app close exits successfully. |
 
-Canvas size gating and stable control space did not resolve the black picture. Neither
-skipping redundant track setters nor a single LibVLC next-frame request resolved the pixel
-regression; start-time preroll also failed. The latter two experiments were removed. Next:
-diagnose the multitrack/hardware paused presentation path, then retest installed Main,
-provider restart/cancellation and Linux. No Android physical rerun in this follow-up.
+The rejected approaches were paused-input seek, a single next-frame call, and start-time
+combined with start-paused. Current restoration starts MUTED but playing; it pauses only
+after output is ready. Output statistics are cumulative and are not universal pixel proof;
+visible tests remain required. Real-decoder test surfaces must be visible, not merely
+addNotify-created hidden windows. Next: provider restart/cancellation, Linux output,
+format-specific styling and dialog keyboard/focus. No Android physical rerun in this follow-up.
 
 ## Authority and shared design (baseline contract)
 

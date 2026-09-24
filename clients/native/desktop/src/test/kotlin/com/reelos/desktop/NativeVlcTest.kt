@@ -17,12 +17,42 @@ import kotlin.test.assertTrue
 
 class NativeVlcTest {
     @Test
+    fun captionRestartAcceptsSleepPauseDuringDecoderWarmup() {
+        val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.isVisible = true; frame.validate() }
+        var clock = 0L
+        val sleep = com.reelos.core.PlaybackSleepTimer { clock }.apply { after(1_000) }
+        var policyCalls = 0
+        try {
+            NativeVlc.open().getOrThrow().use { vlc ->
+                vlc.player(Path.of(requireNotNull(supplied)), 0).use { playback ->
+                    playback.restoreBeforeAttach(VlcContinuation(6_000, true, null, null, 0)) { policyCalls++; true }
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    clock = 1_000
+                    // Match the UI's deadline handling while the replacement is still warming.
+                    assertTrue(sleep.shouldPause(false))
+                    playback.pause()
+                    val state = awaitTrackState(playback) { state, _ -> !state.restoring && state.seekable }.first
+                    assertEquals(1, policyCalls, "Pause must not bypass the authorization callback")
+                    assertFalse(state.playing)
+                    assertTrue(kotlin.math.abs(state.positionMs - 6_000) <= 400)
+                    Thread.sleep(350)
+                    assertFalse(playback.poll().playing)
+                }
+            }
+        } finally { SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
+    @Test
     fun captionRestartChecksSleepDeadlineAtResumeAndStaysPaused() {
         val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
         assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.isVisible = true; frame.validate() }
         var clock = 0L
         val sleep = com.reelos.core.PlaybackSleepTimer { clock }.apply { after(1_000) }
         var policyCalls = 0
@@ -53,7 +83,7 @@ class NativeVlcTest {
         val fixture = Path.of(requireNotNull(supplied))
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.isVisible = true; frame.validate() }
         try {
             NativeVlc.open().getOrThrow().use { originalRuntime ->
                 originalRuntime.player(fixture, 0).use { original ->
@@ -96,7 +126,7 @@ class NativeVlcTest {
         val fixture = Path.of(requireNotNull(supplied))
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.isVisible = true; frame.validate() }
         try {
             for (playing in listOf(false, true)) {
                 val saved = NativeVlc.open().getOrThrow().use { vlc ->
@@ -219,7 +249,7 @@ class NativeVlcTest {
             val state = playback.poll()
             check(!state.error) { "LibVLC reported a media or decoding error" }
             val tracks = playback.tracks()
-            last = "audio=${tracks.audioId}/${tracks.audio}, subtitles=${tracks.subtitleId}/${tracks.subtitles}"
+            last = "state=$state, frames=${playback.videoProgress()}, audio=${tracks.audioId}/${tracks.audio}, subtitles=${tracks.subtitleId}/${tracks.subtitles}"
             if (accepted(state, tracks)) return state to tracks
             Thread.sleep(100)
         }

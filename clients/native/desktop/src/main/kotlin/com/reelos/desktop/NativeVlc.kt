@@ -153,6 +153,28 @@ internal class VlcMediaTrack(pointer: Pointer) : Structure(pointer) {
     init { read() }
 }
 
+/** LibVLC3 public media statistics ABI; counts only, no media or credentials. */
+@Structure.FieldOrder("readBytes", "inputBitrate", "demuxBytes", "demuxBitrate", "corrupt", "discontinuities",
+    "decodedVideo", "decodedAudio", "displayedPictures", "lostPictures", "playedAudio", "lostAudio",
+    "sentPackets", "sentBytes", "sendBitrate")
+internal class VlcMediaStats : Structure() {
+    @JvmField var readBytes = 0
+    @JvmField var inputBitrate = 0f
+    @JvmField var demuxBytes = 0
+    @JvmField var demuxBitrate = 0f
+    @JvmField var corrupt = 0
+    @JvmField var discontinuities = 0
+    @JvmField var decodedVideo = 0
+    @JvmField var decodedAudio = 0
+    @JvmField var displayedPictures = 0
+    @JvmField var lostPictures = 0
+    @JvmField var playedAudio = 0
+    @JvmField var lostAudio = 0
+    @JvmField var sentPackets = 0
+    @JvmField var sentBytes = 0
+    @JvmField var sendBitrate = 0f
+}
+
 internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean, val restoring: Boolean = false)
 internal data class VlcTrack(val id: Int, val name: String)
 internal data class VlcContinuation(val positionMs: Long, val playing: Boolean,
@@ -205,7 +227,10 @@ internal class VlcPlayback(
     private var subtitlePreferenceApplied = preferences.subtitleMode == SubtitleMode.AUTO
     private var continuation: VlcContinuation? = null
     private var restoreStartedAt = 0L
-    private var restorePositionReads = 0
+    private var restoreTracksApplied = false
+    private var restoreMute = 0
+    private var restorePauseRequested = false
+    private var restoreSeekRequested = false
     private var resumeContinuation: () -> Boolean = { true }
     private var reattachContinuation: VlcContinuation? = null
     private var boundDrawable: Long? = null
@@ -241,14 +266,20 @@ internal class VlcPlayback(
             selected.subtitleId.takeIf { selected.subtitles.isNotEmpty() }, subtitleDelayMs())
     }
 
-    /** Input option is supported by LibVLC3; remain paused until seek and explicit tracks are restored. */
+    /** Prepare silently; paused hardware decoders may accept a seek without presenting a frame. */
     @Synchronized
     fun restoreBeforeAttach(saved: VlcContinuation, resumeAllowed: () -> Boolean = { true }) {
         check(!closed.get() && !started.get() && media != null)
         require(saved.positionMs >= 0)
         com.reelos.core.SubtitleTiming.micros(saved.subtitleDelayMs)
-        api.libvlc_media_add_option(media, ":start-paused")
+        api.libvlc_media_add_option(media, ":start-time=${saved.positionMs / 1000.0}")
+        restoreMute = api.libvlc_audio_get_mute(player).coerceAtLeast(0)
+        api.libvlc_audio_set_mute(player, 1)
         resumeMs = saved.positionMs
+        resumeApplied = true
+        restoreTracksApplied = false
+        restorePauseRequested = false
+        restoreSeekRequested = false
         continuation = saved
         resumeContinuation = resumeAllowed
     }
@@ -309,7 +340,6 @@ internal class VlcPlayback(
             if (started.get()) api.libvlc_media_player_stop(player)
             started.set(false)
             resumeApplied = false
-            restorePositionReads = 0
             restoreBeforeAttach(saved)
         }
         if (windows) {
@@ -338,19 +368,41 @@ internal class VlcPlayback(
             val selected = tracks()
             val audioReady = saved.audioId == null || selected.audio.any { it.id == saved.audioId }
             val textReady = saved.subtitleId == null || (saved.subtitleId == -1 && selected.subtitles.isNotEmpty()) || selected.subtitles.any { it.id == saved.subtitleId }
-            val atPosition = resumeApplied && kotlin.math.abs(api.libvlc_media_player_get_time(player) - saved.positionMs) <= 400 && api.libvlc_media_player_get_state(player) == 4
-            restorePositionReads = if (atPosition) restorePositionReads + 1 else 0
-            if (restorePositionReads >= 2 && audioReady && textReady) {
+            if (!restoreTracksApplied && audioReady && textReady) {
                 // Restore differences only; matching selections need no native track reset.
                 saved.audioId?.let { if (selected.audioId != it) selectAudioTrack(it) }
                 saved.subtitleId?.let { if (selected.subtitleId != it) selectSubtitleTrack(it) }
                 if (subtitleDelayMs() != saved.subtitleDelayMs) setSubtitleDelayMs(saved.subtitleDelayMs)
                 if (saved.audioId != null) audioPreferenceApplied = true
                 if (saved.subtitleId != null) subtitlePreferenceApplied = true
-                val allowed = resumeContinuation()
+                restoreTracksApplied = true
+            }
+            val position = api.libvlc_media_player_get_time(player)
+            val videoReady = api.libvlc_media_player_has_vout(player) > 0 && (videoProgress()?.second ?: 0) > 0
+            // Late track discovery must not silently skip seconds of the film. Re-seek while
+            // muted, then wait for the asynchronous seek rather than issuing it every poll.
+            if (restoreTracksApplied && videoReady && !restorePauseRequested && position > saved.positionMs + 300 && !restoreSeekRequested) {
+                check(seekable) { "Caption restart could not restore your place" }
+                api.libvlc_media_player_set_time(player, saved.positionMs)
+                restoreSeekRequested = true
+            }
+            val atPosition = restoreTracksApplied && videoReady &&
+                position in (saved.positionMs - 100)..(saved.positionMs + 300) && api.libvlc_media_player_is_playing(player) != 0
+            if (restorePauseRequested && api.libvlc_media_player_get_state(player) == 4) {
+                check(kotlin.math.abs(position - saved.positionMs) <= 400) { "Caption restart could not restore your place" }
                 continuation = null
                 resumeContinuation = { true }
-                api.libvlc_media_player_set_pause(player, if (saved.playing && allowed) 0 else 1)
+                api.libvlc_audio_set_mute(player, restoreMute)
+            } else if (!restorePauseRequested && atPosition) {
+                val allowed = resumeContinuation()
+                if (saved.playing && allowed) {
+                    continuation = null
+                    resumeContinuation = { true }
+                    api.libvlc_audio_set_mute(player, restoreMute)
+                } else {
+                    restorePauseRequested = true
+                    api.libvlc_media_player_set_pause(player, 1)
+                }
             }
         }
         val state = api.libvlc_media_player_get_state(player)
@@ -363,6 +415,15 @@ internal class VlcPlayback(
             seekable = seekable,
             restoring = continuation != null,
         )
+    }
+
+    @Synchronized
+    internal fun videoProgress(): Pair<Int, Int>? {
+        check(!closed.get())
+        val item = media ?: return null
+        val stats = VlcMediaStats()
+        if (api.libvlc_media_get_stats(item, stats) == 0) return null
+        return stats.decodedVideo to stats.displayedPictures
     }
 
     private fun applyPreferredTracks() {
@@ -395,6 +456,12 @@ internal class VlcPlayback(
     @Synchronized
     fun pause() {
         check(!closed.get()) { "The player is closed" }
+        continuation?.let {
+            // A sleep deadline can arrive during silent decoder warm-up. Preserve the pause
+            // intent, but let the decoder produce its frame before applying the native pause.
+            continuation = it.copy(playing = false)
+            return
+        }
         if (started.get()) api.libvlc_media_player_set_pause(player, 1)
     }
 
@@ -549,6 +616,10 @@ internal class RemoteMediaCallbacks(private val source: RemoteByteSource) {
 }
 
 internal interface LibVlc : Library {
+    fun libvlc_audio_get_mute(player: Pointer): Int
+    fun libvlc_audio_set_mute(player: Pointer, muted: Int)
+    fun libvlc_media_player_has_vout(player: Pointer): Int
+    fun libvlc_media_get_stats(media: Pointer, stats: VlcMediaStats): Int
     fun libvlc_video_get_spu_delay(player: Pointer): Long
     fun libvlc_video_set_spu_delay(player: Pointer, delayUs: Long): Int
     fun libvlc_media_tracks_get(media: Pointer, tracks: PointerByReference): Int
