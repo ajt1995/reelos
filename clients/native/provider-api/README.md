@@ -1,0 +1,9 @@
+# Optional shared provider API
+
+`com.reelos.providers` is a standalone Kotlin/JVM TorBox protocol adapter for Android and desktop hosts. It does not depend on the Node services or the shared product core. The host supplies a credential from its platform vault and rechecks the vault's current credential revision/authorization before and after calls; the adapter does not store keys, authorize playback bytes, acquire torrents, or delete provider data.
+
+`validate(secret)` returns a stable provider account ID. `list(secret, expectedAccount)` returns explicit torrent-file candidates and positive readiness; it never guesses the largest file in a pack. `resolve(secret, expectedAccount, video)` revalidates the account and the exact torrent/hash/file/name/size binding, then returns a short-lived opaque lease. Do not persist or print the lease. Byte transport must independently enforce HTTPS, DNS/address and redirect restrictions, range handling, and cancellation.
+
+The TorBox API documents `requestdl` as a GET requiring the API token in its query. This unavoidable provider-protocol exception is constructed only inside `JdkProviderTransport` for the fixed `https://api.torbox.app` origin, with redirects disabled and no raw request, response, or exception diagnostics. The token is not in `ProviderVideo`, `ProviderStream`, public URLs, or API-facing paths. Signed CDN lease query parameters may be legitimate and are not blanket rejected. The host must not enable HTTP client wire logging. Provider compatibility and live playback remain unverified without an authorized live account test.
+
+The list call requests up to 1000 current entries; this module does not yet paginate larger accounts. It has no retry policy or cache. The JSON parser and transport cap responses at 256 KiB, so oversized accounts fail closed. Desktop and Android integration, platform vaults, optional UI, and secure CDN byte streaming are separate work.
