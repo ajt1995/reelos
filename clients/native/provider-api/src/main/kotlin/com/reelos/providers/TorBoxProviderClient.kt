@@ -119,7 +119,12 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
         }
         if (response.status !in 200..299) throw ProviderFailure(ProviderFailureCode.UNAVAILABLE)
         val json = BoundedJson.parse(response.body) as? Map<*, *> ?: invalid()
-        if (json["success"] != true) throw ProviderFailure(ProviderFailureCode.UNAVAILABLE)
+        if (json["success"] != true) {
+            // TorBox's documented error table identifies only these as bad/missing credentials.
+            val code = if (json["error"] == "BAD_TOKEN" || json["error"] == "NO_AUTH")
+                ProviderFailureCode.INVALID_CREDENTIAL else ProviderFailureCode.UNAVAILABLE
+            throw ProviderFailure(code)
+        }
         return json
     }
 

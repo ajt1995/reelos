@@ -125,6 +125,23 @@ class TorBoxProviderClientTest {
         assertFalse(client().list(keyA, "7").single().toString().contains("Show"))
     }
 
+    @Test fun documentedBodyErrorsClassifyOnlyBadOrMissingTokenAsCredentialFailure() {
+        for (providerCode in listOf("BAD_TOKEN", "NO_AUTH", "AUTH_ERROR", "DATABASE_ERROR", "UNKNOWN_ERROR")) {
+            val subject = TorBoxProviderClient(ProviderTransport { _, _, _ ->
+                ProviderHttpResponse(200,
+                    """{"success":false,"error":"$providerCode","detail":"synthetic-key-A private diagnostic","data":null}""")
+            })
+            val expected = if (providerCode in listOf("BAD_TOKEN", "NO_AUTH"))
+                ProviderFailureCode.INVALID_CREDENTIAL else ProviderFailureCode.UNAVAILABLE
+            try { subject.validate(keyA); fail("Expected provider failure") }
+            catch (error: ProviderFailure) {
+                assertEquals(expected, error.code)
+                assertFalse(error.toString().contains("synthetic-key-A"))
+                assertFalse(error.message.orEmpty().contains("private diagnostic"))
+            }
+        }
+    }
+
     @Test fun rejectsUnsafeOrCredentialBearingLeaseAndOversizedResponse() {
         val video = client().list(keyA, "7").single()
         for (url in listOf(
