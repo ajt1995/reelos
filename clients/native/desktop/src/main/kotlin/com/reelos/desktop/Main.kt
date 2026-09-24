@@ -62,9 +62,14 @@ import kotlinx.coroutines.withContext
 private data class ActivePlayback(
     val id: String, val profileId: String, val title: String, val player: VlcPlayback,
     val session: LocalPlaybackSession, val remote: PreparedProviderPlayback? = null,
+    val appearance: DesktopCaptionAppearance = DesktopCaptionAppearance(),
+    val ownedDecoder: NativeVlc? = null,
+    val sleepTimer: com.reelos.core.PlaybackSleepTimer = com.reelos.core.PlaybackSleepTimer { System.nanoTime() / 1_000_000 },
+    var fallback: ActivePlayback? = null,
 ) {
     fun isAllowed(state: CoreState): Boolean = session.isAllowed(state) && (remote?.isAuthorized() ?: true)
-    fun close() { try { player.close() } finally { remote?.close() } }
+    fun releaseFallback() { val previous = fallback; fallback = null; previous?.close() }
+    fun close() { try { player.close() } finally { try { remote?.close() } finally { try { ownedDecoder?.close() } finally { releaseFallback() } } } }
 }
 internal data class FileLaunch(val path: Path? = null, val error: String? = null)
 
@@ -158,7 +163,7 @@ fun main(args: Array<String>) = application {
         try {
             val state = playback.player.poll()
             val current = freshCore()
-            if ((state.ended || state.positionMs > 0) && playback.isAllowed(current.snapshot)) {
+            if (!state.restoring && (state.ended || state.positionMs > 0) && playback.isAllowed(current.snapshot)) {
                 current.setPlaybackPosition(playback.profileId, playback.id, if (state.ended) 0 else state.positionMs)
             }
         } catch (failure: Exception) {
@@ -230,6 +235,89 @@ fun main(args: Array<String>) = application {
                 prepared?.close()
                 providerJob = null
             }
+        }
+    }
+
+    fun changeCaptionAppearance(appearance: DesktopCaptionAppearance) {
+        val original = active ?: return
+        if (closing || providerJob?.isActive == true || importJob?.isActive == true || original.appearance == appearance) return
+        if (!runCatching { original.isAllowed(freshCore().snapshot) }.getOrDefault(false)) {
+            runCatching { original.close() }; active = null
+            message = "Playback access changed. Return to your library to try again."
+            return
+        }
+        if (runCatching { original.player.poll().restoring }.getOrDefault(true)) return
+        val saved = runCatching {
+            val current = freshCore()
+            check(original.isAllowed(current.snapshot)) { "Playback access changed" }
+            original.player.pauseForReplacement().also {
+                current.setPlaybackPosition(original.profileId, original.id, it.positionMs)
+            }
+        }.getOrElse { message = "Wait until this video is ready before changing captions."; return }
+        val sleepState = original.sleepTimer.state
+        val ticket = connectionEpoch
+        message = null
+        providerJob = scope.launch {
+            var decoder: NativeVlc? = null
+            var remote: PreparedProviderPlayback? = null
+            var next: VlcPlayback? = null
+            try {
+                withContext(Dispatchers.IO) { decoder = NativeVlc.open(appearance).getOrThrow() }
+                val runtime = requireNotNull(decoder)
+                if (original.remote != null) {
+                    withContext(Dispatchers.IO) { remote = requireNotNull(providerAccess).openMedia(original.id) }
+                }
+                val current = freshCore()
+                check(!closing && active === original && ticket == connectionEpoch && original.isAllowed(current.snapshot)) { "Playback access changed" }
+                val prepared = remote
+                if (prepared != null) {
+                    check(prepared.mediaId == original.id && prepared.profileId == original.profileId && prepared.isAuthorized())
+                    next = runtime.player(prepared.bytes, saved.positionMs, current.snapshot.profiles.getValue(original.profileId).playbackPreferences)
+                } else withContext(Dispatchers.IO) { next = DesktopMediaLibrary(dataDirectory, current, runtime).open(original.id, original.profileId) }
+                val candidate = requireNotNull(next)
+                // A timer that elapsed while preparation ran must not be undone by restoring play intent.
+                val expired = com.reelos.core.PlaybackSleepTimer { System.nanoTime() / 1_000_000 }
+                    .apply { restore(sleepState) }.shouldPause(false)
+                if (expired) original.sleepTimer.cancel()
+                candidate.restoreBeforeAttach(saved.copy(playing = saved.playing && !expired)) {
+                    check(original.session.isAllowed(freshCore().snapshot) && prepared?.isAuthorized() != false) { "Playback access changed" }
+                    val sleepExpired = com.reelos.core.PlaybackSleepTimer { System.nanoTime() / 1_000_000 }
+                        .apply { restore(sleepState) }.shouldPause(false)
+                    if (sleepExpired) original.sleepTimer.cancel()
+                    !sleepExpired
+                }
+                check(!closing && active === original && ticket == connectionEpoch && original.isAllowed(freshCore().snapshot) && prepared?.isAuthorized() != false)
+                val replacement = ActivePlayback(original.id, original.profileId, original.title, candidate,
+                    original.session, prepared, appearance, runtime, original.sleepTimer, original)
+                active = replacement
+                decoder = null; remote = null; next = null // The active session owns all new resources.
+                message = null
+            } catch (_: Exception) {
+                val allowed = runCatching { original.isAllowed(freshCore().snapshot) }.getOrDefault(false)
+                if (!allowed && active === original) { runCatching { original.close() }; active = null }
+                message = if (active === original && allowed)
+                    "Caption appearance could not be changed. Your previous video remains paused; retry or return to your library."
+                    else "Playback access changed while updating captions. Return to your library to try again."
+            } finally {
+                runCatching { next?.close() }
+                runCatching { remote?.close() }
+                runCatching { decoder?.close() }
+                providerJob = null
+            }
+        }
+    }
+
+    fun captionReplacementFailed(candidate: ActivePlayback) {
+        if (active !== candidate) return
+        val previous = candidate.fallback ?: return
+        candidate.fallback = null
+        runCatching { candidate.close() }
+        if (!closing && runCatching { previous.isAllowed(freshCore().snapshot) }.getOrDefault(false)) {
+            active = previous
+            message = "Caption update failed. Restoring your previous video; it will stay paused."
+        } else {
+            runCatching { previous.close() }; active = null
+            message = "Playback access changed. Return to your library to try again."
         }
     }
 
@@ -344,7 +432,10 @@ fun main(args: Array<String>) = application {
         Window(onCloseRequest = ::closeActive, title = "ReelOS — ${playback.title}") {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
-                PlaybackView(playback, onPosition = { position ->
+                PlaybackView(playback, changingCaptions = providerJob?.isActive == true, notice = message,
+                    onReady = { if (active === playback) runCatching { playback.releaseFallback() } },
+                    onFailure = { captionReplacementFailed(playback) },
+                    onAppearance = ::changeCaptionAppearance, onPosition = { position ->
                     try {
                         val current = freshCore()
                         check(playback.isAllowed(current.snapshot)) { "Playback access changed" }
@@ -364,8 +455,9 @@ fun main(args: Array<String>) = application {
 }
 
 @Composable
-private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, onClose: () -> Unit) {
-    val sleepTimer = remember(playback) { com.reelos.core.PlaybackSleepTimer { System.nanoTime() / 1_000_000 } }
+private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, notice: String?,
+    onReady: () -> Unit, onFailure: () -> Unit, onAppearance: (DesktopCaptionAppearance) -> Unit, onPosition: (Long) -> Unit, onClose: () -> Unit) {
+    val sleepTimer = playback.sleepTimer
     var sleepLabel by remember(playback) { mutableStateOf(sleepTimer.label()) }
     var status by remember(playback) { mutableStateOf(playback.player.poll()) }
     var tracks by remember(playback) { mutableStateOf<VlcTracks?>(null) }
@@ -377,14 +469,14 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
     DisposableEffect(playback, canvas) {
         val listener = HierarchyListener { event ->
             if (event.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong() != 0L && canvas.isDisplayable) {
-                runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start" }
+                runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start"; onFailure() }
             }
         }
         canvas.addHierarchyListener(listener)
-        if (canvas.isDisplayable) runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start" }
+        if (canvas.isDisplayable) runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start"; onFailure() }
         onDispose { canvas.removeHierarchyListener(listener) }
     }
-    LaunchedEffect(playback) {
+    LaunchedEffect(playback, changingCaptions) {
         var lastSaved = 0L
         var completionSaved = false
         while (true) {
@@ -392,24 +484,28 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
             val result = runCatching { playback.player.poll() }
             if (result.isFailure) {
                 problem = result.exceptionOrNull()?.message ?: "Native playback failed"
+                onFailure()
                 break
             }
             val current = result.getOrThrow()
             status = current
+            if (current.error) { problem = "Playback could not continue."; onFailure(); break }
+            if (!current.restoring && current.durationMs > 0) onReady()
             if (sleepTimer.shouldPause(current.ended)) {
                 runCatching {
                     playback.player.pause()
-                    onPosition(if (current.ended) 0 else current.positionMs)
+                    if (!changingCaptions && !current.restoring) onPosition(if (current.ended) 0 else current.positionMs)
                 }.onFailure { problem = "Sleep pause failed. Please pause playback manually." }
             }
             sleepLabel = sleepTimer.label()
             // Demux may discover tracks after playback starts (especially remote media).
             runCatching { playback.player.tracks() }.onSuccess { tracks = it }
+            runCatching { playback.player.subtitleDelayMs() }.onSuccess { subtitleDelayMs = it }
             if (current.error) problem = "LibVLC reported a decoding or media error."
-            if (current.ended && !completionSaved) {
+            if (!changingCaptions && !current.restoring && current.ended && !completionSaved) {
                 onPosition(0)
                 completionSaved = true
-            } else if (!current.ended) {
+            } else if (!changingCaptions && !current.restoring && !current.ended) {
                 if (completionSaved) {
                     completionSaved = false
                     lastSaved = 0
@@ -427,6 +523,11 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
         Text(playback.title, style = MaterialTheme.typography.titleLarge)
         Box(Modifier.fillMaxWidth().weight(1f)) { SwingPanel(factory = { panel }, modifier = Modifier.fillMaxSize()) }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        notice?.let { Text(it) }
+        if (changingCaptions || status.restoring) {
+            Text("Updating captions… Your place is saved.")
+            Button(onClick = onClose) { Text("Close") }
+        } else {
         Slider(
             value = dragged ?: if (status.durationMs > 0) (status.positionMs.toFloat() / status.durationMs).coerceIn(0f, 1f) else 0f,
             onValueChange = { dragged = it },
@@ -453,6 +554,11 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
                 onCancel = { sleepTimer.cancel(); sleepLabel = sleepTimer.label() })
         }
         tracks?.let { available ->
+            if (available.subtitles.isNotEmpty()) com.reelos.ui.CaptionAppearanceControl(
+                playback.appearance.size, playback.appearance.style,
+                onSize = { onAppearance(playback.appearance.copy(size = it)) },
+                onStyle = { onAppearance(playback.appearance.copy(style = it)) },
+                onReset = { onAppearance(DesktopCaptionAppearance()) })
             if (available.subtitles.isNotEmpty()) com.reelos.ui.SubtitleTimingControl(subtitleDelayMs,
                 onAdjust = { delta -> runCatching {
                     playback.player.setSubtitleDelayMs(com.reelos.core.SubtitleTiming.adjust(subtitleDelayMs, delta))
@@ -477,6 +583,7 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
                     onError = { problem = it },
                 )
             }
+        }
         }
     }
 }

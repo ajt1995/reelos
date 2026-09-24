@@ -17,6 +17,125 @@ import kotlin.test.assertTrue
 
 class NativeVlcTest {
     @Test
+    fun captionRestartChecksSleepDeadlineAtResumeAndStaysPaused() {
+        val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        var clock = 0L
+        val sleep = com.reelos.core.PlaybackSleepTimer { clock }.apply { after(1_000) }
+        var policyCalls = 0
+        try {
+            NativeVlc.open().getOrThrow().use { vlc ->
+                vlc.player(Path.of(requireNotNull(supplied)), 0).use { playback ->
+                    playback.restoreBeforeAttach(VlcContinuation(6_000, true, null, null, 0)) {
+                        policyCalls++
+                        !sleep.shouldPause(false)
+                    }
+                    clock = 1_000 // Deadline expires after preparation, before actual native restoration.
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    val state = awaitTrackState(playback) { state, _ -> !state.restoring && state.seekable }.first
+                    assertEquals(1, policyCalls)
+                    assertFalse(state.playing)
+                    assertTrue(kotlin.math.abs(state.positionMs - 6_000) <= 400)
+                    Thread.sleep(350)
+                    assertFalse(playback.poll().playing)
+                }
+            }
+        } finally { SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
+    @Test
+    fun deniedCaptionRestartKeepsOriginalAvailableForPausedReattachment() {
+        val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
+        val fixture = Path.of(requireNotNull(supplied))
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        try {
+            NativeVlc.open().getOrThrow().use { originalRuntime ->
+                originalRuntime.player(fixture, 0).use { original ->
+                    SwingUtilities.invokeAndWait { original.attach(canvas) }
+                    awaitTrackState(original) { state, _ -> state.playing && state.seekable }
+                    original.seek(6_000)
+                    awaitTrackState(original) { state, _ -> state.positionMs in 5_600..7_000 }
+                    val saved = original.pauseForReplacement()
+                    awaitTrackState(original) { state, _ -> !state.playing }
+                    NativeVlc.open().getOrThrow().use { replacementRuntime ->
+                        replacementRuntime.player(fixture, 0).use { replacement ->
+                            replacement.restoreBeforeAttach(saved) { error("Test source authority revoked") }
+                            SwingUtilities.invokeAndWait { replacement.attach(canvas) }
+                            val failure = runCatching {
+                                awaitTrackState(replacement) { state, _ -> !state.restoring }
+                            }.exceptionOrNull()
+                            assertEquals("Test source authority revoked", failure?.message)
+                        }
+                    }
+                    val freshCanvas = Canvas()
+                    SwingUtilities.invokeAndWait {
+                        frame.remove(canvas); frame.add(freshCanvas); frame.validate()
+                        original.attach(freshCanvas)
+                    }
+                    val returned = awaitTrackState(original) { state, _ -> !state.restoring && state.seekable && !state.playing }.first
+                    assertTrue(kotlin.math.abs(returned.positionMs - saved.positionMs) < 500,
+                        "Fallback position changed from ${saved.positionMs} to ${returned.positionMs}")
+                    original.togglePause()
+                    awaitTrackState(original) { state, _ -> state.playing && state.positionMs > returned.positionMs + 250 }
+                }
+            }
+        } finally { SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
+    @Test
+    fun captionRestartRetainsPositionTracksTimingAndPauseIntent() {
+        val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
+        val fixture = Path.of(requireNotNull(supplied))
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        try {
+            for (playing in listOf(false, true)) {
+                val saved = NativeVlc.open().getOrThrow().use { vlc ->
+                    vlc.player(fixture, 0).use { playback ->
+                        SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                        val tracks = awaitTrackState(playback) { state, tracks -> state.playing && state.seekable && tracks.audio.size == 2 && tracks.subtitles.size == 2 }.second
+                        playback.selectAudioTrack(tracks.audio.last().id)
+                        playback.selectSubtitleTrack(if (playing) -1 else tracks.subtitles.last().id)
+                        playback.setSubtitleDelayMs(250)
+                        playback.seek(6_000)
+                        awaitTrackState(playback) { state, _ -> state.positionMs in 5_500..8_000 }
+                        if (!playing) {
+                            playback.pause()
+                            awaitTrackState(playback) { state, _ -> !state.playing }
+                        }
+                        playback.captureContinuation()
+                    }
+                }
+                assertEquals(playing, saved.playing)
+                NativeVlc.open(DesktopCaptionAppearance(com.reelos.ui.CaptionSize.LARGE, com.reelos.ui.CaptionStyle.YELLOW)).getOrThrow().use { vlc ->
+                    vlc.player(fixture, 0).use { restored ->
+                        restored.restoreBeforeAttach(saved)
+                        SwingUtilities.invokeAndWait { restored.attach(canvas) }
+                        val state = awaitTrackState(restored) { state, tracks ->
+                            state.positionMs in (saved.positionMs - 400)..(saved.positionMs + 1_500) &&
+                                state.playing == playing && tracks.audioId == saved.audioId && tracks.subtitleId == saved.subtitleId && restored.subtitleDelayMs() == 250L
+                        }.first
+                        if (playing) awaitTrackState(restored) { current, _ -> current.positionMs > state.positionMs + 250 }
+                        else {
+                            Thread.sleep(350)
+                            assertFalse(restored.poll().playing)
+                            assertTrue(kotlin.math.abs(restored.poll().positionMs - state.positionMs) < 400)
+                        }
+                    }
+                }
+            }
+        } finally { SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
+    @Test
     fun installedDecoderSwitchesRealMultitrackFixtureWhenOptedIn() {
         val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
         assumeTrue("Set REELOS_DESKTOP_TRACK_FIXTURE for the real multitrack test", !supplied.isNullOrBlank())

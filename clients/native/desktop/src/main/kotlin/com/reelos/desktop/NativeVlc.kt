@@ -153,8 +153,10 @@ internal class VlcMediaTrack(pointer: Pointer) : Structure(pointer) {
     init { read() }
 }
 
-internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean)
+internal data class PlaybackState(val positionMs: Long, val durationMs: Long, val playing: Boolean, val ended: Boolean, val error: Boolean, val seekable: Boolean, val restoring: Boolean = false)
 internal data class VlcTrack(val id: Int, val name: String)
+internal data class VlcContinuation(val positionMs: Long, val playing: Boolean,
+    val audioId: Int?, val subtitleId: Int?, val subtitleDelayMs: Long)
 internal data class VlcTracks(
     val audio: List<VlcTrack>, val audioId: Int,
     val subtitles: List<VlcTrack>, val subtitleId: Int,
@@ -190,7 +192,7 @@ internal fun readTrackDescriptions(api: LibVlc, head: Pointer?): List<VlcTrack> 
 internal class VlcPlayback(
     private val api: LibVlc,
     private val player: Pointer,
-    private val resumeMs: Long,
+    private var resumeMs: Long,
     private val remoteCallbacks: RemoteMediaCallbacks? = null,
     private val preferences: PlaybackPreferences = PlaybackPreferences(),
     /** Borrowed from this player, which retains its media until libvlc_media_player_release. */
@@ -201,6 +203,44 @@ internal class VlcPlayback(
     private var resumeApplied = false
     private var audioPreferenceApplied = preferences.audioLanguage == null
     private var subtitlePreferenceApplied = preferences.subtitleMode == SubtitleMode.AUTO
+    private var continuation: VlcContinuation? = null
+    private var restoreStartedAt = 0L
+    private var restorePositionReads = 0
+    private var resumeContinuation: () -> Boolean = { true }
+    private var reattachContinuation: VlcContinuation? = null
+
+    @Synchronized
+    fun pauseForReplacement(): VlcContinuation {
+        val saved = captureContinuation()
+        pause()
+        // A removed native drawable can reset the old input before it is reattached.
+        // Retain the pre-swap state instead of consulting that damaged input during rollback.
+        reattachContinuation = saved.copy(playing = false)
+        return saved
+    }
+
+    @Synchronized
+    fun captureContinuation(): VlcContinuation {
+        val state = poll()
+        check(!state.error && state.seekable) { "Wait until this video is ready before changing captions" }
+        val selected = tracks()
+        check(selected.audio.isEmpty() || selected.audio.any { it.id == selected.audioId }) { "Wait until the audio track is ready" }
+        return VlcContinuation(if (state.ended) 0 else state.positionMs, state.playing && !state.ended,
+            selected.audioId.takeIf { selected.audio.isNotEmpty() },
+            selected.subtitleId.takeIf { selected.subtitles.isNotEmpty() }, subtitleDelayMs())
+    }
+
+    /** Input option is supported by LibVLC3; remain paused until seek and explicit tracks are restored. */
+    @Synchronized
+    fun restoreBeforeAttach(saved: VlcContinuation, resumeAllowed: () -> Boolean = { true }) {
+        check(!closed.get() && !started.get() && media != null)
+        require(saved.positionMs >= 0)
+        com.reelos.core.SubtitleTiming.micros(saved.subtitleDelayMs)
+        api.libvlc_media_add_option(media, ":start-paused")
+        resumeMs = saved.positionMs
+        continuation = saved
+        resumeContinuation = resumeAllowed
+    }
 
     @Synchronized
     fun tracks(): VlcTracks {
@@ -245,24 +285,54 @@ internal class VlcPlayback(
     @Synchronized
     fun attach(canvas: Canvas) {
         check(!closed.get()) { "The player is closed" }
-        if (!canvas.isDisplayable || !started.compareAndSet(false, true)) return
+        if (!canvas.isDisplayable) return
+        if (started.get()) {
+            // LibVLC3 applies a new drawable at playback start (not reliably through a seek).
+            // Rebuild the input in a paused state before returning a retained fallback to a new canvas.
+            val saved = reattachContinuation ?: captureContinuation().copy(playing = false)
+            reattachContinuation = null
+            api.libvlc_media_player_stop(player)
+            started.set(false)
+            resumeApplied = false
+            restorePositionReads = 0
+            restoreBeforeAttach(saved)
+        }
         if (System.getProperty("os.name").startsWith("Windows")) {
             api.libvlc_media_player_set_hwnd(player, Native.getComponentPointer(canvas))
         } else {
             api.libvlc_media_player_set_xwindow(player, Native.getComponentID(canvas).toInt())
         }
+        started.set(true)
         check(api.libvlc_media_player_play(player) == 0) { "LibVLC could not begin playback" }
+        restoreStartedAt = System.nanoTime()
     }
 
     @Synchronized
     fun poll(): PlaybackState {
         check(!closed.get()) { "The player is closed" }
-        if (started.get()) applyPreferredTracks()
+        if (started.get() && continuation == null) applyPreferredTracks()
         val duration = api.libvlc_media_player_get_length(player).coerceAtLeast(0)
         val seekable = api.libvlc_media_player_is_seekable(player) != 0
         if (started.get() && !resumeApplied && seekable && duration > 0) {
             if (resumeMs in 1 until duration) api.libvlc_media_player_set_time(player, resumeMs)
             resumeApplied = true
+        }
+        continuation?.takeIf { started.get() }?.let { saved ->
+            check(System.nanoTime() - restoreStartedAt < 20_000_000_000L) { "Caption restart could not restore playback. Return to your library and retry." }
+            val selected = tracks()
+            val audioReady = saved.audioId == null || selected.audio.any { it.id == saved.audioId }
+            val textReady = saved.subtitleId == null || (saved.subtitleId == -1 && selected.subtitles.isNotEmpty()) || selected.subtitles.any { it.id == saved.subtitleId }
+            val atPosition = resumeApplied && kotlin.math.abs(api.libvlc_media_player_get_time(player) - saved.positionMs) <= 400 && api.libvlc_media_player_get_state(player) == 4
+            restorePositionReads = if (atPosition) restorePositionReads + 1 else 0
+            if (restorePositionReads >= 2 && audioReady && textReady) {
+                saved.audioId?.let(::selectAudioTrack)
+                saved.subtitleId?.let(::selectSubtitleTrack)
+                setSubtitleDelayMs(saved.subtitleDelayMs)
+                val allowed = resumeContinuation()
+                continuation = null
+                resumeContinuation = { true }
+                api.libvlc_media_player_set_pause(player, if (saved.playing && allowed) 0 else 1)
+            }
         }
         val state = api.libvlc_media_player_get_state(player)
         return PlaybackState(
@@ -272,6 +342,7 @@ internal class VlcPlayback(
             ended = state == 6,
             error = state == 7 || remoteCallbacks?.failed == true,
             seekable = seekable,
+            restoring = continuation != null,
         )
     }
 
@@ -311,6 +382,7 @@ internal class VlcPlayback(
     @Synchronized
     fun togglePause() {
         check(!closed.get()) { "The player is closed" }
+        reattachContinuation = null
         if (api.libvlc_media_player_get_state(player) == 6) {
             // LibVLC 3 can remain in Ended after a bare seek(0) + play().
             api.libvlc_media_player_stop(player)
@@ -324,6 +396,7 @@ internal class VlcPlayback(
     @Synchronized
     fun seek(positionMs: Long) {
         check(!closed.get()) { "The player is closed" }
+        reattachContinuation = null
         check(api.libvlc_media_player_is_seekable(player) != 0) { "This media cannot be seeked" }
         resumeApplied = true
         api.libvlc_media_player_set_time(player, positionMs.coerceAtLeast(0))
@@ -468,6 +541,7 @@ internal interface LibVlc : Library {
     fun libvlc_media_new_callbacks(instance: Pointer, open: VlcOpenCallback, read: VlcReadCallback,
         seek: VlcSeekCallback, close: VlcCloseCallback, opaque: Pointer?): Pointer?
     fun libvlc_media_release(media: Pointer)
+    fun libvlc_media_add_option(media: Pointer, option: String)
     fun libvlc_media_parse_with_options(media: Pointer, flags: Int, timeoutMs: Int): Int
     fun libvlc_media_get_parsed_status(media: Pointer): Int
     fun libvlc_media_get_duration(media: Pointer): Long

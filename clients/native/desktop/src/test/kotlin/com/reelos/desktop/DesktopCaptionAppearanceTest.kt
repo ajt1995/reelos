@@ -31,9 +31,11 @@ class DesktopCaptionAppearanceTest {
         val frame = Frame("ReelOS native caption validation")
         val canvas = Canvas()
         SwingUtilities.invokeAndWait {
+            canvas.background = java.awt.Color.BLACK
             frame.add(canvas)
             frame.setSize(960, 600)
             frame.setLocation(20, 20)
+            frame.isAlwaysOnTop = true
             frame.isVisible = true
             frame.toFront()
         }
@@ -56,6 +58,14 @@ class DesktopCaptionAppearanceTest {
             }
             return total
         }
+        fun blackFixtureVisible(image: BufferedImage): Boolean {
+            var black = 0
+            for (y in 0 until image.height) for (x in 0 until image.width) {
+                val color = java.awt.Color(image.getRGB(x, y))
+                if (color.red < 8 && color.green < 8 && color.blue < 8) black++
+            }
+            return black > image.width * image.height * .9
+        }
         fun render(size: CaptionSize, style: CaptionStyle, name: String): Pair<Int, Int> {
             NativeVlc.open(DesktopCaptionAppearance(size, style)).getOrThrow().use { vlc ->
                 vlc.player(fixture, 1_000, PlaybackPreferences(subtitleMode = SubtitleMode.ON)).use { player ->
@@ -68,11 +78,12 @@ class DesktopCaptionAppearanceTest {
                         if (state.positionMs >= 1_000 && player.tracks().subtitleId >= 0) {
                             image = capture()
                             val glyphs = count(image, style == CaptionStyle.YELLOW)
-                            if (glyphs > 20 && glyphs < image.width * image.height / 4) break
+                            if (blackFixtureVisible(image) && glyphs > 20 && glyphs < image.width * image.height / 4) break
                         }
                         Thread.sleep(100)
                     }
                     val rendered = requireNotNull(image) { "Native subtitle frame never appeared" }
+                    check(blackFixtureVisible(rendered)) { "Test canvas was not visible; refusing to save a non-fixture screenshot" }
                     ImageIO.write(rendered, "png", output.resolve("$name.png").toFile())
                     val measured = count(rendered, false) to count(rendered, true)
                     check((if (style == CaptionStyle.YELLOW) measured.second else measured.first) > 20) {
