@@ -74,6 +74,8 @@ while compiling. Build immutable candidates. Do not make acceptance claims from 
 
 ## Specialist accountability
 
+Queued after current playback work (C1–C4): extend N2/U5 with Family’s “More of this in their world” parent suggestions and a “Watch with me” collection. Use the shared taste engine; suggestions remain separate from child taste and safety, preserve favorites, enter gently and back off after dismissals. Add tests for attribution/isolation, eligibility, exposure/backoff and unchanged safety enforcement; this addition is recorded, not implemented.
+
 Taste; semantic search; preparation; storage/retention; machine protection; interface/atmosphere;
 source/rendition ranking; workload scheduling; ambient presence; predictive caching; scenes;
 family annotations; dialogue enhancement; household matching; in-flight analysis.

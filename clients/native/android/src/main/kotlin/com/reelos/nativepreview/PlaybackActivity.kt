@@ -16,12 +16,15 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.reelos.core.*
 import java.util.ConcurrentModificationException
 
 /** Local adapter only. No synthetic streams, exported intents, or claimed family enforcement. */
+@androidx.media3.common.util.UnstableApi
 class PlaybackActivity : ComponentActivity() {
+    private var providerPlayback: com.reelos.presentation.PreparedProviderPlayback? = null
     private var player: ExoPlayer? = null
     private var mediaId: String? = null
     private var profileId: String? = null
@@ -42,14 +45,22 @@ class PlaybackActivity : ComponentActivity() {
         setContentView(frame)
         runCatching {
             val state = ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), DeviceKind.ANDROID_PHONE)
-            val id = requireNotNull(intent.getStringExtra("mediaId"))
+            val providerToken = intent.getStringExtra("providerPlayback")
+            if (providerToken != null) providerPlayback = requireNotNull(PendingProviderPlayback.take(providerToken))
+            val remote = providerPlayback
+            val id = remote?.mediaId ?: requireNotNull(intent.getStringExtra("mediaId"))
             val profile = requireNotNull(state.snapshot.activeProfile)
             check(state.canEnterHome(profile.id) && state.mediaAction(id) == MediaAction.PLAY)
-            session = LocalPlaybackSession.open(state.snapshot, id)
-            val uri = Uri.parse(requireNotNull(getSharedPreferences("local-media", MODE_PRIVATE).getString(id, null)))
-            LocalVideo.verifyAccess(this, uri)
+            session = remote?.guard ?: LocalPlaybackSession.open(state.snapshot, id)
+            check(remote == null || remote.isAuthorized())
+            val uri = if (remote != null) Uri.parse("reelos://authorized-media/$id")
+                else Uri.parse(requireNotNull(getSharedPreferences("local-media", MODE_PRIVATE).getString(id, null)))
+            if (remote == null) LocalVideo.verifyAccess(this, uri)
             mediaId = id; profileId = profile.id
-            player = ExoPlayer.Builder(this).build().also { playback ->
+            val builder = ExoPlayer.Builder(this)
+            if (remote != null) builder.setMediaSourceFactory(DefaultMediaSourceFactory(this)
+                .setDataSourceFactory { ProviderDataSource(remote.bytes) })
+            player = builder.build().also { playback ->
                 playerView.player = playback
                 playback.addListener(object : Player.Listener {
                     override fun onRenderedFirstFrame() { hasRenderedFrame = true }
@@ -72,6 +83,7 @@ class PlaybackActivity : ComponentActivity() {
                 playback.playWhenReady = true
             }
         }.onFailure {
+            providerPlayback?.close(); providerPlayback = null
             playerView.player?.release()
             playerView.player = null
             player = null
@@ -85,8 +97,9 @@ class PlaybackActivity : ComponentActivity() {
         val expected = session ?: return
         accessJob = lifecycleScope.launch {
             while (isActive && player != null) {
-                val allowed = withContext(Dispatchers.IO) { runCatching { expected.isAllowed(stateStore.load()) }.getOrDefault(false) }
+                val allowed = withContext(Dispatchers.IO) { runCatching { expected.isAllowed(stateStore.load()) && providerPlayback?.isAuthorized() != false }.getOrDefault(false) }
                 if (!allowed) {
+                    providerPlayback?.close(); providerPlayback = null
                     // Release rather than pause: the old controls cannot resume a revoked session.
                     playerView.player = null
                     player?.release()
@@ -124,7 +137,7 @@ class PlaybackActivity : ComponentActivity() {
         super.onStop()
     }
 
-    override fun onDestroy() { player?.release(); super.onDestroy() }
+    override fun onDestroy() { providerPlayback?.close(); providerPlayback = null; player?.release(); super.onDestroy() }
 
     private fun persistPosition(positionMs: Long) {
         val originalProfileId = requireNotNull(profileId)
@@ -134,6 +147,7 @@ class PlaybackActivity : ComponentActivity() {
         repeat(3) {
             val current = ReelCore(store, DeviceKind.ANDROID_PHONE)
             check(requireNotNull(session).isAllowed(current.snapshot)) { "Playback access changed" }
+            check(providerPlayback?.isAuthorized() != false) { "Connection changed" }
             check(originalProfileId in current.snapshot.profiles) { "Playback profile is no longer available" }
             val sourceId = current.snapshot.media[originalMediaId]?.sourceId
             check(sourceId != null && sourceId in current.snapshot.sources) { "Playback source is no longer available" }

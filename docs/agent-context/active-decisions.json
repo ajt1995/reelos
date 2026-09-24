@@ -46,7 +46,7 @@
     },
     {
       "id": "taste-semantics",
-      "decision": "Like, Love, Cozy, Dismiss, and Less like this are distinct and reversible. Dismiss means no opinion, not dislike.",
+      "decision": "Like, Love, Cozy, Dismiss, and Less like this are distinct and reversible. Dismiss means no opinion, not dislike. Family’s More of this in their world accepts parent-suggested titles or qualities as separate, attributed suggestions, not child preferences or policy changes. Gentle exposure preserves favorites and backs off after dismissals; include a Watch with me collection. Implement with the shared taste engine after current playback work.",
       "rationale": "Taste calibration should remain pleasant and truthful rather than turning uncertainty into negative preference.",
       "sources": ["src/experience/experience-state.ts", "src/lib/experience-state.test.ts"]
     },

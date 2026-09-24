@@ -1,7 +1,6 @@
 package com.reelos.providers
 
 import java.net.URI
-import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
@@ -15,41 +14,60 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
         return ProviderAccount(id)
     }
 
+    /** Bounded bulk compatibility API. Native collection UI uses page() instead. */
     override fun list(secret: CharArray, expectedAccount: String): List<ProviderVideo> {
+        val result = ArrayList<ProviderVideo>()
+        val seen = HashSet<String>()
+        val deadline = System.nanoTime() + 60_000_000_000L
+        var offset = 0
+        while (true) {
+            if (Thread.currentThread().isInterrupted || System.nanoTime() > deadline)
+                throw ProviderFailure(ProviderFailureCode.TIMEOUT)
+            val page = page(secret, expectedAccount, offset)
+            for (video in page.videos) {
+                if (!seen.add("${video.torrentId}:${video.fileId}")) invalid()
+                result.add(video)
+                if (result.size > 20_000) invalid()
+            }
+            offset = page.nextOffset ?: return result
+        }
+    }
+
+    override fun page(secret: CharArray, expectedAccount: String, offset: Int): ProviderPage {
+        if (offset < 0 || offset > Int.MAX_VALUE - 25) invalid()
         val account = checkAccount(secret, expectedAccount)
-        val payload = data(request("/v1/api/torrents/mylist?bypass_cache=true&limit=1000", secret))
+        val payload = data(request("/v1/api/torrents/mylist?bypass_cache=false&limit=25&offset=$offset", secret))
         val rows = when (payload) {
             is List<*> -> payload
             is Map<*, *> -> payload["torrents"] as? List<*> ?: invalid()
             else -> invalid()
         }
-        if (rows.size > 1000) invalid()
+        if (rows.size > 25) invalid()
         val digest = credentialDigest(secret, account)
         val result = ArrayList<ProviderVideo>()
         val seen = HashSet<String>()
-        for (raw in rows) {
-            val row = raw as? Map<*, *> ?: invalid()
-            val torrentId = identity(row["id"]) ?: invalid()
-            val hash = (row["hash"] ?: row["infohash"] as Any?) as? String ?: invalid()
-            if (!HASH.matches(hash)) invalid()
-            val files = row["files"] as? List<*> ?: invalid()
-            if (files.size > 1000) invalid()
-            val ready = (row["download_state"] ?: row["state"] as Any?)
-                .let { it as? String }?.lowercase() in READY_STATES
-            for (rawFile in files) {
-                val file = rawFile as? Map<*, *> ?: invalid()
-                val fileId = identity(file["id"]) ?: continue
-                val name = (file["name"] ?: file["short_name"] ?: file["path"]) as? String ?: continue
-                val size = positiveSize(file["size"]) ?: continue
-                if (name.length > 1024 || !VIDEO.containsMatchIn(name)) continue
-                val key = "$torrentId:${hash.lowercase()}:$fileId"
-                if (!seen.add(key)) invalid()
-                result.add(ProviderVideo(account, torrentId, hash.lowercase(), fileId, name, size, ready, digest.copyOf()))
-                if (result.size > 5000) invalid()
+        val seenTorrents = HashSet<String>()
+        try {
+            for (raw in rows) {
+                val row = raw as? Map<*, *> ?: invalid()
+                val torrentId = identity(row["id"]) ?: invalid()
+                if (!seenTorrents.add(torrentId)) invalid()
+                val hash = (row["hash"] ?: row["infohash"]) as? String ?: invalid()
+                if (!HASH.matches(hash)) invalid()
+                val ready = isReady(row)
+                val files = row["files"] as? List<*> ?: if (!ready && row["files"] == null) emptyList<Any>() else invalid()
+                for (rawFile in files) {
+                    val file = rawFile as? Map<*, *> ?: invalid()
+                    val fileId = identity(file["id"]) ?: continue
+                    val name = (file["name"] ?: file["short_name"] ?: file["path"]) as? String ?: continue
+                    val size = positiveSize(file["size"]) ?: continue
+                    if (name.length > 1024 || !VIDEO.containsMatchIn(name)) continue
+                    if (!seen.add("$torrentId:${hash.lowercase()}:$fileId")) invalid()
+                    result.add(ProviderVideo(account, torrentId, hash.lowercase(), fileId, name, size, ready, digest.copyOf()))
+                }
             }
-        }
-        digest.fill(0)
-        return result
+            return ProviderPage(result, if (rows.size == 25) offset + 25 else null)
+        } finally { digest.fill(0) }
     }
 
     override fun resolve(secret: CharArray, expectedAccount: String, video: ProviderVideo): ProviderStream {
@@ -75,8 +93,7 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
         }
         if (matches.size != 1) invalid()
         val row = matches.single() as Map<*, *>
-        val state = (row["download_state"] ?: row["state"]) as? String
-        if (state?.lowercase() !in READY_STATES) throw ProviderFailure(ProviderFailureCode.NOT_READY)
+        if (!isReady(row)) throw ProviderFailure(ProviderFailureCode.NOT_READY)
         val files = row["files"] as? List<*> ?: invalid()
         val matchingFiles = files.filter { it is Map<*, *> && identity(it["id"]) == fileId }
         if (matchingFiles.size != 1) invalid()
@@ -96,10 +113,17 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
         }
         val lease = try { URI(value) } catch (_: Exception) { invalid() }
         if (lease.scheme != "https" || lease.host.isNullOrBlank() || lease.userInfo != null ||
-            lease.fragment != null || lease.port !in -1..65535 || value.length > 8192 ||
-            value.contains(String(secret)) || value.contains(URLEncoder.encode(String(secret), StandardCharsets.UTF_8))
+            lease.fragment != null || lease.port !in listOf(-1, 443) || value.length > 8192
         ) invalid()
-        return ProviderStream(lease)
+        fun providerDestination(uri: URI): Boolean {
+            val host = uri.host?.lowercase() ?: return false
+            return uri.scheme == "https" && uri.port in listOf(-1, 443) &&
+                PROVIDER_DOMAINS.any { host == it || host.endsWith(".$it") }
+        }
+        // Treat every lease as a secret, regardless of percent-encoding or token spelling.
+        // Keep all leases and their redirects inside the provider-published CDN boundary.
+        if (!providerDestination(lease)) invalid()
+        return ProviderStream(lease, ::providerDestination)
     }
 
     private fun checkAccount(secret: CharArray, expected: String): String {
@@ -118,7 +142,7 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
             429 -> throw ProviderFailure(ProviderFailureCode.RATE_LIMITED)
         }
         if (response.status !in 200..299) throw ProviderFailure(ProviderFailureCode.UNAVAILABLE)
-        val json = BoundedJson.parse(response.body) as? Map<*, *> ?: invalid()
+        val json = BoundedJson.parse(response.body, if (path.startsWith("/v1/api/torrents/mylist?")) 2 * 1024 * 1024 else 256 * 1024) as? Map<*, *> ?: invalid()
         if (json["success"] != true) {
             // TorBox's documented error table identifies only these as bad/missing credentials.
             val code = if (json["error"] == "BAD_TOKEN" || json["error"] == "NO_AUTH")
@@ -151,6 +175,8 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
         else -> null
     }
 
+    private fun isReady(row: Map<*, *>) = row["download_finished"] == true && row["download_present"] == true
+
     private fun positiveSize(value: Any?): Long? = when (value) {
         is Long -> value.takeIf { it > 0 }
         else -> null
@@ -159,9 +185,12 @@ class TorBoxProviderClient(private val transport: ProviderTransport = JdkProvide
     private fun invalid(): Nothing = throw ProviderFailure(ProviderFailureCode.INVALID_RESPONSE)
 
     private companion object {
+        // Provider-published CDN domains, not arbitrary hosts from a returned URL:
+        // https://support.torbox.app/en/articles/13181686-accessing-torbox-with-nextdns
+        val PROVIDER_DOMAINS = setOf("torbox.app", "tb-cdn.cx", "tb-cdn.io", "tb-cdn.pw",
+            "tb-cdn.sh", "tb-cdn.st", "tb-cdn.to", "tb-cdn.earth")
         val ID = Regex("[A-Za-z0-9_-]+")
         val HASH = Regex("[A-Fa-f0-9]{40}")
         val VIDEO = Regex("(?i)\\.(mkv|mp4|m4v|webm|avi|mov|ts)$")
-        val READY_STATES = setOf("completed", "cached", "seeding", "uploading")
     }
 }

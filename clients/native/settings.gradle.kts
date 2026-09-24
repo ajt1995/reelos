@@ -6,4 +6,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "ReelOSNative"
-include(":core", ":shared-ui", ":desktop", ":android")
+include(":core", ":shared-ui", ":provider-api", ":desktop", ":android")

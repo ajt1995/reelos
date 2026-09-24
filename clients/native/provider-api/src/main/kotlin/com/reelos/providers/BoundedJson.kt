@@ -2,8 +2,8 @@ package com.reelos.providers
 
 /** Minimal strict JSON reader for bounded provider responses; it never includes input in failures. */
 internal object BoundedJson {
-    fun parse(input: String): Any? {
-        if (input.length > 256 * 1024) invalid()
+    fun parse(input: String, maxChars: Int = 256 * 1024): Any? {
+        if (maxChars !in 1..2 * 1024 * 1024 || input.length > maxChars) invalid()
         return Reader(input).parse()
     }
 
@@ -21,7 +21,7 @@ internal object BoundedJson {
         }
 
         private fun value(depth: Int): Any? {
-            if (depth > 24 || ++nodes > 20_000) invalid()
+            if (depth > 24 || ++nodes > 160_000) invalid()
             space()
             if (index >= input.length) invalid()
             return when (input[index]) {

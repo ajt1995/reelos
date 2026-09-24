@@ -1,6 +1,6 @@
 {
   "schema": "reelos-workstreams/v1",
-  "updatedAt": "2026-09-23",
+  "updatedAt": "2026-09-24",
   "maintenance": "Replace completed or abandoned entries; do not accumulate a historical log.",
   "canonicalBranch": "main",
   "integrationRule": "No tool edits main directly. Each tool returns a commit from its own work branch; integration is reviewed and validated centrally.",
@@ -34,14 +34,20 @@
         "Native personal view/profile switching, appearance controls and self-replenishing text/light taste field implemented. Catalog has 109 factual subjects, excludes 12 books on TV, grants no media access and is not a pretrained model. Independent static UI review fixed one-slot stalling and desktop forced-no-motion.",
         "Shared title cards show Resume from active-profile progress only when playable. Android persists progress in onPause before Library resumes, fixing a real stale-Play regression. UI runner refreshes stale Android accessibility caches and uses bounded waits; baseline and imported-fixture recovery journal preserve isolated test state. Independent scoped reviews found no remaining P1/P2.",
         "HP reauthenticated with owner-supplied login and strict known-host check: Java17.0.20.1, 3304MiB RAM, Cage/Wayland+X0 present. Current active kiosk is still legacy Chromium, not native ReelOS. Earlier native render was isolated testing, not replacement or Linux playback certification.",
-        "Latest inventory: all 300 test files classified. Release remains BLOCKED with 145 missing/invalid evidence records. Scoped tests do not establish 19/19 features or 47/47 UI acceptance."
+        "Shared optional provider protocol, protected controller, paged UI and byte transport integrated across native Android/Windows. Android Keystore and current-user DPAPI verified; Linux protected provider storage still unavailable. No key/private media identifiers exported to diagnostics or Git.",
+        "Live Fold account, exact-file resolution and16KiB range bytes passed. Fixed oversized collection requests, readiness labels, key-bearing CDN leases and blocking DNS. All leases/redirects require provider-published domains and public DNS; players receive bytes, never URLs.",
+        "Integrated provider30/30 and desktop20/20 tests passed without skips, including installed LibVLC3 silent-fixture callback progress/seek/resume/cancel. Android builds pass. Not full-film remote decode, audio/subtitles or release acceptance.",
+        "Family/taste More of this in their world and Watch with me queued AFTER playback. Parent suggestions stay separate from child preferences/safety, preserve favorites, gentle exposure/backoff after dismissals. Recorded, not implemented.",
+        "All309 test files classified; context/native structural checks pass. Release still BLOCKED with145 evidence gaps. Owner requests STOP after this checkpoint to update ChatGPT; resume only on owner instruction.",
+        "Final tightened candidate: Fold live3/3 passed (account/exact-file/16KiB), Pixel and TV each12/12media+4/4protected-store checks passed. Zero skips. Evidence remains local under .reelos-audit, keyed by source/APK hash/device. No full-film provider, decoded-scene/learning, HP provider, or installer claim."
       ],
       "nextChecks": [
-        "Complete live credential-revision/account-scoped source validation and native authorized network playback; current native validation app local-only.",
+        "Resume from provider-live evidence: verify actual authorized remote native decode/seek/resume on Fold, Windows and TV; live3/3 covers account/exact-file/16KiB only. Do not re-request/extract Fold key. Test provider-disable via UI; Linux needs protected vault.",
         "Native basic standalone first run and personal UI verified on TV, Fold and Pixel; Windows basic setup observed. Complete approved artwork, Family/PIN/deployment setup and remaining journeys. Retain Fold-specific folded/unfolded/rotation/keyboard acceptance; paired wireless ports may change and must be rediscovered.",
         "Connect true learned encoder/model-worker isolation, event/resource spine and all15 specialists with quality evidence.",
         "Run current native candidate on Fold/Windows/HP; complete real audio/subtitle/whole-film, Home sync, signed install/update/rollback and 19/47 acceptance.",
-        "Use git/context:brief and current hash-scoped evidence; full baseline remains failed. Track, secret-scan, push and verify each validated checkpoint."
+        "Use git/context:brief and current hash-scoped evidence; full baseline remains failed. Track, secret-scan, push and verify each validated checkpoint.",
+        "After current playback, implement parent-suggestion/Watch with me scope through shared taste engine with attribution, safety eligibility and dismissal backoff tests."
       ]
     },
     {

@@ -1,7 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.software.leanback" android:required="false" />
-    <!-- Local-file feasibility app. No network permission, remote providers, or model downloads. -->
+    <!-- Optional explicit owner connection uses HTTPS; no model worker or automatic source activation. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:label="ReelOS Native Validation" android:allowBackup="false"
         android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">

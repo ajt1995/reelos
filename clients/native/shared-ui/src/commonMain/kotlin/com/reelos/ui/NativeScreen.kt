@@ -117,7 +117,8 @@ internal val colorNames = listOf("Violet", "Blue", "Teal", "Moss", "Amber", "Cor
 
 @Composable
 fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: Int = 0,
-    onBackAvailabilityChanged: (Boolean) -> Unit = {}, onEvent: (UiEvent) -> Unit) {
+    onBackAvailabilityChanged: (Boolean) -> Unit = {}, connectionContent: (@Composable () -> Unit)? = null,
+    onEvent: (UiEvent) -> Unit) {
     var nameDraft by remember(model.profileId, model.name) { mutableStateOf(model.name.orEmpty()) }
     var colorDraft by remember(model.profileId, model.color) { mutableStateOf(model.color) }
     var guidanceDraft by remember(model.name, model.guidance) { mutableStateOf(model.guidance) }
@@ -215,7 +216,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                     Text("Bring your collection.", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                     Text("Start with personal media. Public-domain titles can appear when a source adds them.", color = muted)
                     Spacer(Modifier.height(16.dp))
-                    Text("External media connections are optional. No connection adapter is installed in this build yet.", color = muted)
+                    connectionContent?.invoke() ?: Text("External media connections are unavailable on this device.", color = muted)
                     Spacer(Modifier.height(20.dp))
                     ReelButton("Continue", accent) { onEvent(UiEvent.ConfirmSources) }
                 }
@@ -296,7 +297,7 @@ fun NativeScreen(model: UiModel, motionAllowed: Boolean = true, backRevision: In
                             Text("Your personal collection stays on this device. Home connections and family controls are still in development.", color = muted)
                             Spacer(Modifier.height(12.dp))
                             Text("Media connections", color = Color.White, fontSize = 20.sp)
-                            Text("Personal media is available. External adapters are not installed yet; they will not require experimental handoffs.", color = muted)
+                            connectionContent?.invoke() ?: Text("External media connections are unavailable on this device.", color = muted)
                             Spacer(Modifier.height(12.dp))
                             ReelButton("Add personal media", accent) { onEvent(UiEvent.Import) }
                             Spacer(Modifier.height(12.dp))

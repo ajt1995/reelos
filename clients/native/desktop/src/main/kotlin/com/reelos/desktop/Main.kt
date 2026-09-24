@@ -30,10 +30,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.reelos.core.DeviceKind
+import com.reelos.core.CoreState
 import com.reelos.core.FileCoreStore
 import com.reelos.core.LocalPlaybackSession
 import com.reelos.core.ReelCore
 import com.reelos.presentation.NativeExperience
+import com.reelos.presentation.PreparedProviderPlayback
+import com.reelos.presentation.ProviderMediaAccess
+import com.reelos.providers.ProtectedConnectionStore
+import com.reelos.providers.ProviderConnectionController
+import com.reelos.providers.ProviderVideo
+import com.reelos.providers.TorBoxProviderClient
 import java.awt.BorderLayout
 import java.awt.Canvas
 import java.awt.Color
@@ -50,7 +57,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private data class ActivePlayback(val id: String, val profileId: String, val title: String, val player: VlcPlayback, val session: LocalPlaybackSession)
+private data class ActivePlayback(
+    val id: String, val profileId: String, val title: String, val player: VlcPlayback,
+    val session: LocalPlaybackSession, val remote: PreparedProviderPlayback? = null,
+) {
+    fun isAllowed(state: CoreState): Boolean = session.isAllowed(state) && (remote?.isAuthorized() ?: true)
+    fun close() { try { player.close() } finally { remote?.close() } }
+}
 internal data class FileLaunch(val path: Path? = null, val error: String? = null)
 
 /** Closing an idle window must not depend on a composition-owned coroutine. */
@@ -83,7 +96,9 @@ fun main(args: Array<String>) = application {
     // Isolated data path; no existing household state is imported or overwritten.
     val dataDirectory = System.getenv("REELOS_NATIVE_DATA")?.let(Path::of)
         ?: Path.of(System.getProperty("user.home"), ".reelos-native-validation")
-    val loaded = remember { runCatching { ReelCore(FileCoreStore(dataDirectory.resolve("core.bin")), kind) } }
+    val corePath = remember(dataDirectory) { dataDirectory.resolve("core.bin") }
+    fun freshCore() = ReelCore(FileCoreStore(corePath), kind)
+    var loaded by remember { mutableStateOf(runCatching(::freshCore)) }
     val launch = remember { parseFileLaunch(args) }
     val eligibleLaunch = remember(launch, loaded) {
         launch.path?.takeIf {
@@ -102,13 +117,23 @@ fun main(args: Array<String>) = application {
     var revision by remember { mutableIntStateOf(0) }
     var active by remember { mutableStateOf<ActivePlayback?>(null) }
     var importJob by remember { mutableStateOf<Job?>(null) }
+    var providerJob by remember { mutableStateOf<Job?>(null) }
+    var connectionEpoch by remember { mutableIntStateOf(0) }
     var closing by remember { mutableStateOf(false) }
     var deviceMotionAllowed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val connection = remember(dataDirectory, kind) {
+        if (kind == DeviceKind.WINDOWS) ProviderConnectionController("External media connection",
+            TorBoxProviderClient(), ProtectedConnectionStore(dataDirectory.resolve("connection.bin"), WindowsCredentialProtector()))
+        else null // No plaintext fallback on a host without an OS-protected adapter.
+    }
+    val providerAccess = remember(connection) { connection?.let { ProviderMediaAccess(::freshCore, it) } }
+    fun reloadCore() { loaded = runCatching(::freshCore); revision++ }
     LaunchedEffect(Unit) { deviceMotionAllowed = withContext(Dispatchers.IO) { DesktopMotionPolicy.readAllowed() } }
 
     fun queueImport(selected: Path) {
         if (closing) return
+        if (providerJob?.isActive == true) { message = "Finish checking connected media before importing a file."; return }
         if (importJob?.isActive == true) {
             message = "A local file is already being checked."
             return
@@ -130,17 +155,79 @@ fun main(args: Array<String>) = application {
         val playback = active ?: return
         try {
             val state = playback.player.poll()
-            if ((state.ended || state.positionMs > 0) && playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) {
-                loaded.getOrThrow().setPlaybackPosition(playback.profileId, playback.id, if (state.ended) 0 else state.positionMs)
+            val current = freshCore()
+            if ((state.ended || state.positionMs > 0) && playback.isAllowed(current.snapshot)) {
+                current.setPlaybackPosition(playback.profileId, playback.id, if (state.ended) 0 else state.positionMs)
             }
         } catch (failure: Exception) {
-            message = "Resume could not be saved: ${failure.message?.take(180) ?: "storage failed"}"
+            message = if (playback.remote != null) "Connected-media resume could not be saved."
+                else "Resume could not be saved: ${failure.message?.take(180) ?: "storage failed"}"
         } finally {
-            runCatching { playback.player.close() }.onFailure { failure ->
-                message = "Playback could not close cleanly: ${failure.message?.take(180) ?: "native player failed"}"
+            runCatching { playback.close() }.onFailure { failure ->
+                message = if (playback.remote != null) "Connected playback could not close cleanly."
+                    else "Playback could not close cleanly: ${failure.message?.take(180) ?: "native player failed"}"
             }
             active = null
-            revision++
+            reloadCore()
+        }
+    }
+
+    fun stopRemoteForConnectionChange() {
+        val playback = active?.takeIf { it.remote != null } ?: return
+        runCatching { playback.close() }
+        active = null
+        message = "Connected playback stopped because the connection changed."
+        revision++
+    }
+
+    fun connectionChanged() {
+        connectionEpoch++
+        stopRemoteForConnectionChange()
+        scope.launch {
+            try { withContext(Dispatchers.IO) { providerAccess?.reconcile() } }
+            catch (_: Exception) { message = "Connected media could not be refreshed. Access remains unavailable until it can be checked." }
+            finally { reloadCore() }
+        }
+    }
+
+    fun playProvider(id: String? = null, video: ProviderVideo? = null) {
+        if (closing || providerJob?.isActive == true || importJob?.isActive == true) {
+            message = "Finish the current media check before starting another."
+            return
+        }
+        if (vlc == null) { message = "Connected playback requires the local LibVLC decoder."; return }
+        closeActive() // Save/close the old session before reading the new profile's resume position.
+        val ticket = connectionEpoch
+        message = "Checking connected media…"
+        providerJob = scope.launch {
+            var prepared: PreparedProviderPlayback? = null
+            try {
+                val access = requireNotNull(providerAccess) { "Protected connections are unavailable" }
+                val result = withContext(Dispatchers.IO) {
+                    if (video != null) access.prepare(video) else access.openMedia(requireNotNull(id))
+                }
+                prepared = result
+                check(!closing && ticket == connectionEpoch && result.isAuthorized()) { "Connection changed" }
+                val current = freshCore()
+                check(result.guard.isAllowed(current.snapshot)) { "Playback access changed" }
+                val resumeMs = current.snapshot.profiles[result.profileId]?.playbackPositionsMs?.get(result.mediaId) ?: 0L
+                val player = requireNotNull(vlc) { "In-process LibVLC is unavailable on this computer" }
+                    .player(result.bytes, resumeMs)
+                try {
+                    check(!closing && ticket == connectionEpoch && result.isAuthorized()) { "Connection changed" }
+                    loaded = Result.success(current)
+                    active = ActivePlayback(result.mediaId, result.profileId, result.title, player, result.guard, result)
+                    prepared = null // ActivePlayback now owns cancellation and cleanup.
+                    message = null
+                    revision++
+                } catch (failure: Exception) { player.close(); throw failure }
+            } catch (_: Exception) {
+                message = "Connected media could not be opened. Check the connection and file, then try again."
+                reloadCore()
+            } finally {
+                prepared?.close()
+                providerJob = null
+            }
         }
     }
 
@@ -148,11 +235,11 @@ fun main(args: Array<String>) = application {
         val playback = active ?: return@LaunchedEffect
         while (active === playback) {
             val allowed = withContext(Dispatchers.IO) {
-                runCatching { playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load()) }.getOrDefault(false)
+                runCatching { playback.isAllowed(freshCore().snapshot) }.getOrDefault(false)
             }
             if (active !== playback) return@LaunchedEffect
             if (!allowed) {
-                runCatching { playback.player.close() }
+                runCatching { playback.close() }
                 active = null
                 message = "Playback stopped because your profile or source changed, or access could not be checked. Return to your library to try again."
                 revision++
@@ -162,7 +249,7 @@ fun main(args: Array<String>) = application {
         }
     }
 
-    LaunchedEffect(library) {
+    LaunchedEffect(Unit) {
         library?.let {
             runCatching { withContext(Dispatchers.IO) { it.reconcile() } }.onFailure { failure ->
                 message = "Could not recheck local media: ${failure.message ?: "saved state is unchanged"}"
@@ -170,14 +257,16 @@ fun main(args: Array<String>) = application {
             revision++
         }
     }
-    DisposableEffect(vlc) { onDispose { active?.player?.close(); vlc?.close() } }
+    DisposableEffect(vlc) { onDispose { active?.close(); connection?.cancelPending(); vlc?.close() } }
 
     Window(onCloseRequest = {
         if (!closing) {
             closing = true
             finishAfterImport(importJob, { finish -> SwingUtilities.invokeLater(finish) }) {
-                closeActive()
-                exitApplication()
+                finishAfterImport(providerJob, { finish -> SwingUtilities.invokeLater(finish) }) {
+                    closeActive()
+                    exitApplication()
+                }
             }
         }
     }, title = "ReelOS — Native Validation") {
@@ -210,26 +299,32 @@ fun main(args: Array<String>) = application {
                     } catch (failure: Exception) {
                         message = "Couldn’t import this file: ${failure.message?.take(180) ?: "the previous library is unchanged"}"
                     } finally { chooser.dispose() }
-                }, onPlay = { id ->
+                }, onPlay = playAction@ { id ->
                     try {
                         check(!closing) { "ReelOS is closing" }
-                        val profileId = requireNotNull(core.snapshot.activeProfileId)
-                        val record = requireNotNull(core.snapshot.media[id])
+                        val record = requireNotNull(freshCore().snapshot.media[id])
+                        if (record.sourceId?.startsWith("external-provider-") == true) {
+                            playProvider(id = id)
+                            return@playAction
+                        }
                         message = null
                         closeActive()
-                        val session = LocalPlaybackSession.open(FileCoreStore(dataDirectory.resolve("core.bin")).load(), id)
+                        val current = freshCore()
+                        val profileId = requireNotNull(current.snapshot.activeProfileId)
+                        val session = LocalPlaybackSession.open(current.snapshot, id)
                         check(session.profileId == profileId) { "The active profile changed" }
-                        // Persist the old session before reading this profile's resume position.
-                        val player = requireNotNull(library).open(id, profileId)
+                        val player = DesktopMediaLibrary(dataDirectory, current, vlc).open(id, profileId)
                         try {
-                            check(session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) { "Playback access changed" }
+                            check(session.isAllowed(freshCore().snapshot)) { "Playback access changed" }
+                            loaded = Result.success(current)
                             active = ActivePlayback(id, profileId, record.title, player, session)
                         } catch (failure: Exception) { player.close(); throw failure }
                     } catch (failure: Exception) {
                         message = "Playback unavailable: ${failure.message?.take(180) ?: "the media could not be opened"}"
-                        revision++
+                        reloadCore()
                     }
-                }, hostRevision = revision, motionAllowed = deviceMotionAllowed)
+                }, hostRevision = revision, motionAllowed = deviceMotionAllowed, connection = connection,
+                    onProviderPlay = { video -> playProvider(video = video) }, onConnectionChanged = ::connectionChanged)
             } }
             pendingLaunch?.let { path ->
                 AlertDialog(
@@ -244,16 +339,21 @@ fun main(args: Array<String>) = application {
     }
 
     active?.let { playback ->
-        val core = loaded.getOrThrow()
         Window(onCloseRequest = ::closeActive, title = "ReelOS — ${playback.title}") {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
                 PlaybackView(playback, onPosition = { position ->
                     try {
-                        check(playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) { "Playback access changed" }
-                        core.setPlaybackPosition(playback.profileId, playback.id, position)
+                        val current = freshCore()
+                        check(playback.isAllowed(current.snapshot)) { "Playback access changed" }
+                        current.setPlaybackPosition(playback.profileId, playback.id, position)
+                        loaded = Result.success(current)
+                        revision++
                     }
-                    catch (failure: Exception) { message = "Resume could not be saved: ${failure.message?.take(180) ?: "storage failed"}" }
+                    catch (failure: Exception) {
+                        message = if (playback.remote != null) "Connected-media resume could not be saved."
+                            else "Resume could not be saved: ${failure.message?.take(180) ?: "storage failed"}"
+                    }
                 }, onClose = ::closeActive)
                 }
             }

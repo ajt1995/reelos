@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory)][string]$Device,
-    [ValidateSet('media','personal-ui','first-run')][string]$Journey = 'media',
+    [ValidateSet('media','personal-ui','first-run','connection','provider-live')][string]$Journey = 'media',
     [string]$Adb = 'C:\Users\austi\Documents\Codex\.toolchains\android-sdk\platform-tools\adb.exe'
 )
 $ErrorActionPreference = 'Stop'
@@ -10,9 +10,15 @@ $tests = Join-Path $repo 'clients/native/android/build/outputs/apk/androidTest/d
 $safeDevice = $Device -replace '[^A-Za-z0-9.-]', '_'
 $personalJourney = $Journey -eq 'personal-ui'
 $freshJourney = $Journey -eq 'first-run'
-$evidence = Join-Path $repo $(if ($freshJourney) { ".reelos-audit/native-first-run/$safeDevice" } elseif ($personalJourney) { ".reelos-audit/native-personal-ui/$safeDevice" } else { ".reelos-audit/native-hardware/$safeDevice" })
+$connectionJourney = $Journey -eq 'connection'
+$liveProviderJourney = $Journey -eq 'provider-live'
+$evidence = Join-Path $repo $(if ($liveProviderJourney) { ".reelos-audit/native-provider-live/$safeDevice" } elseif ($connectionJourney) { ".reelos-audit/native-connection/$safeDevice" } elseif ($freshJourney) { ".reelos-audit/native-first-run/$safeDevice" } elseif ($personalJourney) { ".reelos-audit/native-personal-ui/$safeDevice" } else { ".reelos-audit/native-hardware/$safeDevice" })
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
-$required = if ($freshJourney) {
+$required = if ($liveProviderJourney) {
+    @('live-provider-account','live-provider-exact-file','live-provider-range-bytes')
+} elseif ($connectionJourney) {
+    @('keystore-protected-roundtrip','keystore-reopen-and-clear','keystore-tamper-fails-closed','keystore-disable-rejects-stale-save')
+} elseif ($freshJourney) {
     @('fresh-identity-and-back','fresh-color-and-guidance','fresh-taste-and-restart','fresh-standalone-and-empty-home','fresh-completed-restart','fresh-import-requires-confirmation','fresh-confirmed-import-and-save','fresh-ui-playback-and-return','fresh-ui-resume')
 } elseif ($personalJourney) {
     @('personal-appearance-controls','personal-taste-like-love','personal-taste-cozy-reset-dismiss','personal-taste-finish-and-reentry','personal-second-profile-isolation','personal-restart-persistence','personal-setup-finish')
@@ -20,14 +26,14 @@ $required = if ($freshJourney) {
     @('valid-local-import-and-decoder','invalid-video-rejected','repeat-import-does-not-leak-private-copies','mutable-provider-retained-bytes-validated','native-player-decodes-real-frame','seek-and-persist-position','resume-restores-position','completed-playback-restarts-from-beginning','player-keeps-screen-on-only-while-playing','active-playback-stops-after-source-revocation','active-playback-stops-after-profile-switch','profile-isolation-and-revoked-source')
 }
 $result = [ordered]@{
-    schema = if ($freshJourney) { 'reelos-native-first-run/v1' } elseif ($personalJourney) { 'reelos-native-personal-ui/v1' } else { 'reelos-native-hardware/v1' }
+    schema = if ($liveProviderJourney) { 'reelos-native-provider-live/v1' } elseif ($connectionJourney) { 'reelos-native-connection/v1' } elseif ($freshJourney) { 'reelos-native-first-run/v1' } elseif ($personalJourney) { 'reelos-native-personal-ui/v1' } else { 'reelos-native-hardware/v1' }
     journey = $Journey
     device = $Device
     timestamp = [DateTime]::UtcNow.ToString('o')
     status = 'failed'
     tests = @()
     skips = 0
-    scope = if ($freshJourney) { 'Empty-profile native first run, explicit import, Save/Library and local fixture playback. No seeded profile transitions; not Family/provider/audio/artwork or whole-product acceptance.' } elseif ($personalJourney) { 'Seeded isolated-profile appearance and taste UI interaction only; not fresh onboarding or whole-product acceptance.' } else { 'Local native media integration only; not whole-product, UI, audio, subtitle, or sustained-playback acceptance.' }
+    scope = if ($liveProviderJourney) { 'Explicit owner-authorized account, exact-file resolution and 16KiB range verification inside the app. No secrets/media identifiers logged; not decoder or sustained-playback acceptance.' } elseif ($connectionJourney) { 'Synthetic-key Android Keystore, protected persistence, tamper and revocation checks. No provider network calls or live credentials.' } elseif ($freshJourney) { 'Empty-profile native first run, explicit import, Save/Library and local fixture playback. No seeded profile transitions; not Family/provider/audio/artwork or whole-product acceptance.' } elseif ($personalJourney) { 'Seeded isolated-profile appearance and taste UI interaction only; not fresh onboarding or whole-product acceptance.' } else { 'Local native media integration only; not whole-product, UI, audio, subtitle, or sustained-playback acceptance.' }
 }
 try {
     $devices = (& $Adb devices) -join "`n"
@@ -76,7 +82,7 @@ try {
     $stdout = Join-Path $evidence 'instrumentation.txt'
     $stderr = Join-Path $evidence 'instrumentation-error.txt'
     $instrumentArgs = @('-s',$Device,'shell','am','instrument','-w')
-    if ($personalJourney -or $freshJourney) { $instrumentArgs += @('-e','journey',$Journey) }
+    if ($personalJourney -or $freshJourney -or $connectionJourney -or $liveProviderJourney) { $instrumentArgs += @('-e','journey',$Journey) }
     $instrumentArgs += 'com.reelos.nativepreview.test/com.reelos.nativepreview.NativeHardwareChecks'
     $process = Start-Process -FilePath $Adb -ArgumentList $instrumentArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
     $deadline = [DateTime]::UtcNow.AddSeconds($(if ($personalJourney -or $freshJourney) { 180 } else { 120 }))

@@ -48,6 +48,8 @@ Core ships personal and public-domain sources with neutral adapter interfaces. C
 
 ## Expanded behaviors and release gate
 
+- Family/taste addition: “More of this in their world” lets authorized parents suggest titles or qualities through the shared taste engine. Keep suggestions separately attributed from the child's own preferences and deterministic safety rules. Introduce eligible suggestions gently, preserve favorites, and back off after dismissals (never infer dislike). Include a “Watch with me” collection. Implement after the current playback slice; verify isolation, authority, exposure/backoff and favorites/safety preservation before acceptance.
+
 - Preserve Background TV channels, isolated ambient history/progress and Tune In; charging/unmetered overnight preparation; household compute and gaming/playback yielding; predictive caching; adaptive guidance; remote storage management with acknowledged/pending states; adaptive atmosphere.
 - In-flight analysis reuses decode samples for edition-bound scene/audio/intro/credit evidence; it is not just making smaller files. Small predictors and shared encoders may serve multiple specialists. All 15 intended specialists need artifact/algorithm provenance, quality evidence and truthful lifecycle before promotion.
 - A UI/UX specialist independently audits all 47 interface requirements before implementation and on installed native candidates afterward. Record reachability, clarity, full interaction states, accessibility, Fold posture, TV focus, visual consistency and retest evidence.

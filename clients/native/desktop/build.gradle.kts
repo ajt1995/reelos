@@ -10,6 +10,7 @@ kotlin { jvmToolchain(17) }
 sourceSets.main { kotlin.srcDir("../presentation/src/main/kotlin") }
 dependencies {
     implementation(project(":core"))
+    implementation(project(":provider-api"))
     implementation(project(":shared-ui"))
     implementation(compose.desktop.currentOs)
     // Cached approved dependency; LibVLC itself is supplied by the desktop host.

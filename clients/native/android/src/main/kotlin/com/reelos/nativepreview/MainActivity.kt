@@ -37,12 +37,53 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
+    private val connection by lazy {
+        com.reelos.providers.ProviderConnectionController("External media connection",
+            com.reelos.providers.TorBoxProviderClient(),
+            com.reelos.providers.ProtectedConnectionStore(noBackupFilesDir.resolve("connection.bin").toPath(), AndroidCredentialProtector(this)))
+    }
     private lateinit var core: ReelCore
     private var hostRevision by mutableStateOf(0)
     private var backRevision by mutableStateOf(0)
     private var handlesBack by mutableStateOf(false)
     private var hostMessage by mutableStateOf<String?>(null)
     private var importRunning = false
+    private var remotePreparing = false
+    private fun providerMedia() = com.reelos.presentation.ProviderMediaAccess(
+        { ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), core.deviceKind) }, connection)
+
+    private fun reconcileConnection() {
+        lifecycleScope.launch {
+            runCatching { withContext(Dispatchers.IO) { providerMedia().reconcile() } }
+                .onFailure { hostMessage = "Connection changes could not be applied to the library. Retry before playing." }
+            runCatching { ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), core.deviceKind) }
+                .onSuccess { core = it; hostRevision++ }
+        }
+    }
+
+    private fun playRemote(video: com.reelos.providers.ProviderVideo? = null, mediaId: String? = null) {
+        if (remotePreparing) return
+        remotePreparing = true; hostMessage = "Checking the source and preparing playback…"
+        lifecycleScope.launch {
+            var prepared: com.reelos.presentation.PreparedProviderPlayback? = null
+            var pendingId: String? = null
+            try {
+                withContext(Dispatchers.IO) { prepared = if (video != null) providerMedia().prepare(video) else providerMedia().openMedia(requireNotNull(mediaId)) }
+                check(lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED))
+                core = ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), core.deviceKind)
+                hostRevision++
+                pendingId = PendingProviderPlayback.put(requireNotNull(prepared))
+                prepared = null
+                startActivity(Intent(this@MainActivity, PlaybackActivity::class.java).putExtra("providerPlayback", pendingId))
+                pendingId = null; hostMessage = null
+            } catch (_: Exception) {
+                hostMessage = "This stream could not start. Check the connection, file readiness and network, then retry."
+            } finally {
+                prepared?.close(); pendingId?.let(PendingProviderPlayback::discard)
+                remotePreparing = false
+            }
+        }
+    }
     private val mediaPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) acceptImport(uri)
     }
@@ -91,11 +132,13 @@ class MainActivity : ComponentActivity() {
                             hostMessage = "This device has no file picker. File import needs a supported local source adapter."
                         }
                     }, onPlay = { id ->
-                        if (core.mediaAction(id) == MediaAction.PLAY) {
+                        if (id.startsWith("remote-")) playRemote(mediaId = id)
+                        else if (core.mediaAction(id) == MediaAction.PLAY) {
                             startActivity(Intent(this@MainActivity, PlaybackActivity::class.java).putExtra("mediaId", id))
                         } else hostMessage = "This title is not available from your current sources."
                     }, hostRevision = hostRevision, motionAllowed = Settings.Global.getFloat(contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f,
-                        backRevision = backRevision, onBackAvailabilityChanged = { handlesBack = it })
+                        backRevision = backRevision, onBackAvailabilityChanged = { handlesBack = it }, connection = connection,
+                        onProviderPlay = { playRemote(video = it) }, onConnectionChanged = ::reconcileConnection)
                 }
                 }
             }
@@ -128,6 +171,7 @@ class MainActivity : ComponentActivity() {
         // A player activity can persist progress while this screen is stopped.
         // Reload its revision before issuing another write; never overwrite it with a stale snapshot.
         if (::core.isInitialized) {
+            reconcileConnection()
             runCatching { ReelCore(FileCoreStore(filesDir.resolve("core.bin").toPath()), core.deviceKind) }
                 .onSuccess { core = it; hostRevision++ }
                 .onFailure { hostMessage = "Saved state changed but could not be reloaded. Nothing was reset." }

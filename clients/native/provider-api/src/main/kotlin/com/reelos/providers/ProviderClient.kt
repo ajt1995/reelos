@@ -5,7 +5,18 @@ import java.net.URI
 interface ProviderClient {
     fun validate(secret: CharArray): ProviderAccount
     fun list(secret: CharArray, expectedAccount: String): List<ProviderVideo>
+    fun page(secret: CharArray, expectedAccount: String, offset: Int = 0): ProviderPage {
+        require(offset >= 0)
+        val all = list(secret, expectedAccount)
+        val end = minOf(all.size.toLong(), offset.toLong() + 25).toInt()
+        return ProviderPage(all.drop(offset).take(25), if (end < all.size) end else null)
+    }
     fun resolve(secret: CharArray, expectedAccount: String, video: ProviderVideo): ProviderStream
+}
+
+/** Bounded browsing window; a continuation is not a maximum library size. */
+class ProviderPage(val videos: List<ProviderVideo>, val nextOffset: Int?) {
+    override fun toString() = "ProviderPage(count=${videos.size}, hasMore=${nextOffset != null})"
 }
 
 class ProviderAccount(val id: String) {
@@ -27,8 +38,12 @@ class ProviderVideo internal constructor(
 }
 
 /** A short-lived lease, not a persistent media identity or a loggable value. */
-class ProviderStream internal constructor(private val lease: URI) {
-    fun <T> useLease(block: (URI) -> T): T = block(lease)
+class ProviderStream internal constructor(private val lease: URI,
+    private val destinationAllowed: (URI) -> Boolean = { true }) {
+    internal fun <T> useLease(block: (URI) -> T): T = block(lease)
+    /** Hosts receive guarded bytes, never a credential-bearing URL for a player, intent or log. */
+    fun openBytes(expectedSize: Long, authorize: () -> Boolean): RemoteByteStream =
+        RemoteByteStream(lease, expectedSize, authorize, destinationAllowed)
     override fun toString(): String = "ProviderStream([redacted])"
 }
 

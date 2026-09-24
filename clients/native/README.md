@@ -9,12 +9,14 @@ implementation; `clients/android` and the web application remain migration refer
 - `core`: pure Kotlin/JVM state and source-availability policy shared with Android.
 - `shared-ui`: Compose Multiplatform UI, Android + desktop targets, no browser.
 - `presentation`: one Kotlin adapter compiled into both host applications.
-- `desktop`: Windows/Linux native-rendered JVM host with a LibVLC local-media adapter.
+- `desktop`: Windows/Linux native-rendered JVM host with LibVLC local-media and guarded byte-callback adapters.
   Windows rendered real fixture bytes in a native video surface; Linux first-screen rendering is verified,
   but Linux input/playback acceptance remains open.
   LibVLC is currently a separately installed host dependency, not bundled release media tooling.
-- `android`: isolated `com.reelos.nativepreview` local-media validation host using native Media3.
-  It has no internet permission, does not replace `com.reelos`, and cannot produce a release.
+- `android`: isolated `com.reelos.nativepreview` validation host using native Media3.
+  It has INTERNET permission for explicitly configured optional sources, forbids cleartext traffic,
+  does not replace `com.reelos`, and cannot produce a release. The current validation build directly
+  includes the optional provider adapter; sanitized public packaging remains a separate release gate.
 
 The first slice persists name, color, guidance, taste selections/reactions, per-profile motion,
 density/transparency and local profile state. The native taste field automatically cycles a finite
@@ -82,14 +84,15 @@ uninstalled, household data wiped, or signing key replaced. A failed build must 
 not be replaced by a stale APK.
 
 Validated optional media sources are normal functionality, not blanket beta. Only unverified
-external-app handoffs have an experimental preference. No source/handoff adapter exists in
-this validation build yet, and the toggle cannot grant media access. Core schema 5 retains personal
+external-app handoffs have an experimental preference. The shared optional provider adapter is integrated for validation;
+verified official-app handoff remains unimplemented and its toggle cannot grant media access. Core schema 5 retains personal
 appearance and schema 3's separation: old blanket-beta snapshots do not revive
 optional access or inherit experiment consent. OS motion preferences override decorative motion.
 The local player binds a persisted source/media/profile access generation and rechecks it roughly
 once per second. Profile switching, source revocation, media-access changes and unreadable state
 release the session; rapid revoke/restore cannot revive it. This local guard does not certify
-external-byte leases, Family/PIN enforcement, or instantaneous revocation.
+Family/PIN enforcement or instantaneous revocation. External transport now checks credential/source
+continuity with guarded ranges; live verification is tracked separately below.
 
 ## Physical media checks
 
@@ -146,3 +149,32 @@ end-of-video Replay and normal application exit. This uses a 30-second silent fi
 not a sustained feature film, audio/subtitle certification, OS file-picker certification,
 or an installer test. Nine desktop tests also passed with the real decoder fixture and
 zero skips. Neither this nor TV integration evidence completes the 19/47 release gates.
+
+## Current optional-source validation slice
+
+One provider protocol, protected connection controller and projection layer serve Android and
+Windows. Android Keystore and current-user Windows DPAPI keep credentials out of core/profile
+state. Linux has no protected credential adapter yet and never falls back to plaintext.
+The shared connection panel supports validate/replace/remove and bounded collection pages;
+40 visible files is a navigation window, not an inaccessible tail. Positive readiness requires
+provider finished+present flags and fresh exact-file validation. The native players receive
+bytes/callbacks, not credential-bearing URLs. Personal originals are never removed by disconnect.
+
+Use `-Journey connection` for four synthetic-key protected-store checks (verified on Fold,
+Pixel and Onn). Use `-Journey provider-live` only with explicit owner authorization and an
+in-app-entered key: account, exact-file and 16 KiB range checks; no acquisition/deletion,
+no secret/media identity output, and no implied decoder or sustained-playback acceptance.
+Live Fold account, exact-file resolution and bounded 16 KiB range checks passed. A provider-issued
+CDN lease embeds the credential; the corrected opaque transport confines every lease/redirect
+to the provider-published CDN domains and checks public DNS/address/range authority. Cancellable
+bounded DNS prevents an unresolved lookup from hanging native-player shutdown. This does not
+establish full-film remote decoding, audio/subtitles or provider-disable end-to-end UI acceptance.
+Integrated offline checks passed 30 provider tests and 20 desktop tests with no skips, including
+the opt-in installed-decoder fixture. Recheck the source-fingerprinted reports after each change.
+
+For Windows callback/decoder tests, set `REELOS_DESKTOP_FIXTURE` to
+`clients/native/android/src/androidTest/assets/Native-Validation-30s.mp4` (absolute path),
+and `REELOS_TEST_LIBVLC_CALLBACKS=1`, then run `:desktop:test`. The latter opt-in tests
+silent-fixture byte callbacks, time progress, seek and resume using installed LibVLC 3.
+It is not live provider playback or a visual/frame/audio/subtitle certification. Missing
+opt-ins count as skipped, never passing hardware evidence.

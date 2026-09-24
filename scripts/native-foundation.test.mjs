@@ -55,7 +55,8 @@ test("validation Android app cannot replace household installation or claim rele
   assert.match(build, /applicationId = "com\.reelos\.nativepreview"/);
   assert.match(build, /not an accepted or signed consumer release/);
   const manifest = read("clients/native/android/src/main/AndroidManifest.xml");
-  assert.doesNotMatch(manifest, /android\.permission\.INTERNET/);
+  assert.match(manifest, /android\.permission\.INTERNET/);
+  assert.match(manifest, /android:usesCleartextTraffic="false"/);
   assert.match(manifest, /PlaybackActivity" android:exported="false"/);
   assert.match(manifest, /android:allowBackup="false"/);
 });

@@ -2,6 +2,7 @@
   "$schema": "https://reelos.local/schemas/test-inventory-policy/v1",
   "purpose": "Every test must have one deliberate release disposition. Rules are ordered; the first match wins.",
   "rules": [
+    {"id":"native-provider-contracts","match":"clients/native/provider-api/src/test/**/*.kt","disposition":"targeted","reason":"Shared native provider identity, error handling, encrypted credential persistence and revocation contract tests; not live provider or byte-playback certification."},
     {"id":"provider-account-cache","match":"scripts/reelflow/cache-checker.test.mjs","disposition":"release","reason":"Provider availability caches must be separated by validated account and provider; these tests use synthetic credentials, not live-provider certification."},
     {"id":"provider-account-dispatch","match":"scripts/reelflow/dispatcher.test.mjs","disposition":"release","reason":"Acquisition dispatch must use the currently validated account, recheck revocation and never fall back to the retired bridge."},
     {"id":"native-hardware-runner","match":"scripts/test-native-android-hardware.ps1","disposition":"targeted","reason":"Physical Android media/personal-UI runner requires every named check, bounded completion and source/package fingerprints; unavailable devices fail rather than skip."},

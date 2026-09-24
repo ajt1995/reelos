@@ -35,6 +35,9 @@ fun NativeExperience(
     motionAllowed: Boolean = true,
     backRevision: Int = 0,
     onBackAvailabilityChanged: (Boolean) -> Unit = {},
+    connection: com.reelos.providers.ProviderConnectionController? = null,
+    onProviderPlay: ((com.reelos.providers.ProviderVideo) -> Unit)? = null,
+    onConnectionChanged: () -> Unit = {},
 ) {
     var revision by remember(core) { mutableIntStateOf(0) }
     var error by remember(core) { mutableStateOf<String?>(null) }
@@ -88,7 +91,8 @@ fun NativeExperience(
             error = error,
         )
     }
-    NativeScreen(model, motionAllowed, backRevision, onBackAvailabilityChanged) { event ->
+    NativeScreen(model, motionAllowed, backRevision, onBackAvailabilityChanged,
+        connectionContent = { NativeConnectionPanel(connection, onProviderPlay, onConnectionChanged) }) { event ->
         val profileId = core.snapshot.activeProfileId
         try {
             when (event) {

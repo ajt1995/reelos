@@ -28,6 +28,7 @@ android {
 }
 dependencies {
     implementation(project(":core"))
+    implementation(project(":provider-api"))
     implementation(project(":shared-ui"))
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
