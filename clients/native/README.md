@@ -54,14 +54,15 @@ does not reset data. The local snapshot is a feasibility store, not the finished
 
 ## Current blockers / next slice
 
-1. Approved build dependencies downloaded on 2026-09-23. Gradle passed 45 core JUnit tests
+1. Approved build dependencies downloaded on 2026-09-23. Gradle passed 52 core JUnit tests
    and nine Windows desktop tests (zero failures/skips), desktop Kotlin compilation and Android
    debug assembly. Both the Fold
    and 32-bit Onn TV installed and launched the isolated APK. This is launch/render evidence,
    not complete onboarding, playback, model or platform acceptance.
 2. Complete model-worker boundary and approved artwork/taste field;
    then measure the actual native slice on all four targets before expanding remaining journeys.
-3. Android TV (`armeabi-v7a`) passed ten physical media checks; the script below
+3. Android TV (`armeabi-v7a`) passed twelve physical media checks, including rapid source
+   revocation/restoration and profile switch/back during active playback; the script below
    replaces evidence on each run and fails on missing checks. This is not full UI acceptance.
    Fold ARM64 is currently disconnected. Windows .214 is 15.8 GiB, not 64 GiB.
    HP password SSH verified Ubuntu 26.04.1 x86_64, about 3.2 GiB RAM and an active Wayland
@@ -79,9 +80,13 @@ not be replaced by a stale APK.
 
 Validated optional media sources are normal functionality, not blanket beta. Only unverified
 external-app handoffs have an experimental preference. No source/handoff adapter exists in
-this validation build yet, and the toggle cannot grant media access. Core schema 4 adds personal
-appearance while retaining schema 3's separation: old blanket-beta snapshots do not revive
+this validation build yet, and the toggle cannot grant media access. Core schema 5 retains personal
+appearance and schema 3's separation: old blanket-beta snapshots do not revive
 optional access or inherit experiment consent. OS motion preferences override decorative motion.
+The local player binds a persisted source/media/profile access generation and rechecks it roughly
+once per second. Profile switching, source revocation, media-access changes and unreadable state
+release the session; rapid revoke/restore cannot revive it. This local guard does not certify
+external-byte leases, Family/PIN enforcement, or instantaneous revocation.
 
 ## Physical media checks
 

@@ -61,7 +61,7 @@ test("validation Android app cannot replace household installation or claim rele
 
 test("new native Kotlin tests cannot disappear from the test inventory", () => {
   const inventory = buildTestInventory();
-  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt", "/LocalLearningTest.kt", "/NativeTasteCoordinatorTest.kt", "/NativeTasteIntegrationTest.kt", "/AppearanceCoreTest.kt", "/NativeTasteCatalogTest.kt", "/DesktopMotionPolicyTest.kt"]) {
+  for (const suffix of ["/ReelCoreTest.kt", "/CoreSmoke.kt", "/LocalLearningTest.kt", "/NativeTasteCoordinatorTest.kt", "/NativeTasteIntegrationTest.kt", "/AppearanceCoreTest.kt", "/NativeTasteCatalogTest.kt", "/DesktopMotionPolicyTest.kt", "/LocalPlaybackSessionTest.kt"]) {
     const entry = inventory.tests.find((candidate) => candidate.file.endsWith(suffix));
     assert.ok(entry, `Missing test inventory entry: ${suffix}`);
     assert.equal(entry.disposition, "targeted");
@@ -113,4 +113,16 @@ test("personal navigation resets entry scroll and appearance controls send only 
   assert.ok(personal.includes("UiEvent.Appearance(motion = value)"));
   assert.ok(personal.includes("UiEvent.Appearance(density = value)"));
   assert.ok(personal.includes("UiEvent.Appearance(toggleTransparency = true)"));
+});
+
+test("both native players enforce the shared continuity guard and TV checks cannot omit revocation", () => {
+  for (const file of ["clients/native/android/src/main/kotlin/com/reelos/nativepreview/PlaybackActivity.kt", "clients/native/desktop/src/main/kotlin/com/reelos/desktop/Main.kt"]) {
+    const source = read(file);
+    assert.ok(source.includes("LocalPlaybackSession.open("));
+    assert.ok(source.includes(".isAllowed("));
+    assert.ok(source.includes("delay(1_000)"));
+  }
+  const runner = read("scripts/test-native-android-hardware.ps1");
+  assert.ok(runner.includes("active-playback-stops-after-source-revocation"));
+  assert.ok(runner.includes("active-playback-stops-after-profile-switch"));
 });

@@ -31,6 +31,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import com.reelos.core.DeviceKind
 import com.reelos.core.FileCoreStore
+import com.reelos.core.LocalPlaybackSession
 import com.reelos.core.ReelCore
 import com.reelos.presentation.NativeExperience
 import java.awt.BorderLayout
@@ -49,7 +50,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private data class ActivePlayback(val id: String, val profileId: String, val title: String, val player: VlcPlayback)
+private data class ActivePlayback(val id: String, val profileId: String, val title: String, val player: VlcPlayback, val session: LocalPlaybackSession)
 internal data class FileLaunch(val path: Path? = null, val error: String? = null)
 
 /** Closing an idle window must not depend on a composition-owned coroutine. */
@@ -129,7 +130,7 @@ fun main(args: Array<String>) = application {
         val playback = active ?: return
         try {
             val state = playback.player.poll()
-            if (state.ended || state.positionMs > 0) {
+            if ((state.ended || state.positionMs > 0) && playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) {
                 loaded.getOrThrow().setPlaybackPosition(playback.profileId, playback.id, if (state.ended) 0 else state.positionMs)
             }
         } catch (failure: Exception) {
@@ -140,6 +141,24 @@ fun main(args: Array<String>) = application {
             }
             active = null
             revision++
+        }
+    }
+
+    LaunchedEffect(active) {
+        val playback = active ?: return@LaunchedEffect
+        while (active === playback) {
+            val allowed = withContext(Dispatchers.IO) {
+                runCatching { playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load()) }.getOrDefault(false)
+            }
+            if (active !== playback) return@LaunchedEffect
+            if (!allowed) {
+                runCatching { playback.player.close() }
+                active = null
+                message = "Playback stopped because your profile or source changed, or access could not be checked. Return to your library to try again."
+                revision++
+                return@LaunchedEffect
+            }
+            delay(1_000)
         }
     }
 
@@ -198,9 +217,14 @@ fun main(args: Array<String>) = application {
                         val record = requireNotNull(core.snapshot.media[id])
                         message = null
                         closeActive()
+                        val session = LocalPlaybackSession.open(FileCoreStore(dataDirectory.resolve("core.bin")).load(), id)
+                        check(session.profileId == profileId) { "The active profile changed" }
                         // Persist the old session before reading this profile's resume position.
                         val player = requireNotNull(library).open(id, profileId)
-                        active = ActivePlayback(id, profileId, record.title, player)
+                        try {
+                            check(session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) { "Playback access changed" }
+                            active = ActivePlayback(id, profileId, record.title, player, session)
+                        } catch (failure: Exception) { player.close(); throw failure }
                     } catch (failure: Exception) {
                         message = "Playback unavailable: ${failure.message?.take(180) ?: "the media could not be opened"}"
                         revision++
@@ -225,7 +249,10 @@ fun main(args: Array<String>) = application {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
                 PlaybackView(playback, onPosition = { position ->
-                    try { core.setPlaybackPosition(playback.profileId, playback.id, position) }
+                    try {
+                        check(playback.session.isAllowed(FileCoreStore(dataDirectory.resolve("core.bin")).load())) { "Playback access changed" }
+                        core.setPlaybackPosition(playback.profileId, playback.id, position)
+                    }
                     catch (failure: Exception) { message = "Resume could not be saved: ${failure.message?.take(180) ?: "storage failed"}" }
                 }, onClose = ::closeActive)
                 }

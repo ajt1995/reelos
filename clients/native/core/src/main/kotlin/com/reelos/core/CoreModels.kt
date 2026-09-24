@@ -69,10 +69,12 @@ data class CoreState(
     val media: Map<String, MediaRecord> = emptyMap(),
     /** Unverified external-app handoff experiments only; never gates validated media sources. */
     val experimentalHandoffsEnabled: Boolean = false,
+    /** Monotonic local access generations; keep tombstones so reused IDs cannot revive sessions. */
+    val playbackEpochs: Map<String, Long> = emptyMap(),
 ) {
     val activeProfile: ProfileState? get() = activeProfileId?.let(profiles::get)
 }
 
-const val CORE_SCHEMA_VERSION = 4
+const val CORE_SCHEMA_VERSION = 5
 const val PERSONAL_SOURCE_ID = "personal"
 const val PUBLIC_DOMAIN_SOURCE_ID = "public-domain"

@@ -77,13 +77,14 @@ class FileCoreStore(private val path: Path) : CoreStore {
             val legacyOrHandoffFlag = if (version >= 2) input.readBoolean() else false
             // Legacy blanket provider consent is not consent to external-app experiments.
             val handoffsEnabled = version >= 3 && legacyOrHandoffFlag
+            val playbackEpochs = if (version >= 5) readMap(input) { input.readUTF() to input.readLong() } else emptyMap()
             require(input.read() == -1) { "Unexpected trailing core data" }
             require(activeId == null || activeId in profiles) { "Active profile is missing" }
             val migratedSources = if (version < 3) sources.mapValues { (_, source) ->
                 if (source.kind == SourceKind.OPTIONAL_ADAPTER && source.status == SourceStatus.AVAILABLE)
                     source.copy(status = SourceStatus.UNAVAILABLE) else source
             } else sources
-            return validateCoreState(CoreState(CORE_SCHEMA_VERSION, revision, profiles, activeId, requestedHomeId, migratedSources, media, handoffsEnabled))
+            return validateCoreState(CoreState(CORE_SCHEMA_VERSION, revision, profiles, activeId, requestedHomeId, migratedSources, media, handoffsEnabled, playbackEpochs))
         }
     }
 
@@ -152,6 +153,7 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     output.writeUTF(item.availability.name)
                 }
                 output.writeBoolean(state.experimentalHandoffsEnabled)
+                writeMap(output, state.playbackEpochs) { key, epoch -> output.writeUTF(key); output.writeLong(epoch) }
                 output.flush()
                 file.fd.sync()
             }
@@ -206,6 +208,9 @@ class FileCoreStore(private val path: Path) : CoreStore {
 internal fun validateCoreState(state: CoreState): CoreState {
     require(state.schemaVersion == CORE_SCHEMA_VERSION) { "Unsupported core state version" }
     require(state.revision >= 0) { "Invalid core revision" }
+    require(state.playbackEpochs.size <= 100_000 && state.playbackEpochs.all { (key, epoch) ->
+        key.isNotBlank() && key.length <= 150 && epoch >= 0
+    }) { "Invalid playback access generations" }
     require(state.activeProfileId == null || state.activeProfileId in state.profiles) { "Active profile is missing" }
     require(state.requestedHomeId == null || (state.requestedHomeId.isNotBlank() && state.requestedHomeId.length <= 128)) {
         "Invalid Home identity"
@@ -249,6 +254,7 @@ internal fun validateCoreState(state: CoreState): CoreState {
         profiles = immutableMap(frozenProfiles),
         sources = immutableMap(state.sources),
         media = immutableMap(state.media),
+        playbackEpochs = immutableMap(state.playbackEpochs),
     )
 }
 

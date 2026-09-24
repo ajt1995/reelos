@@ -5,6 +5,13 @@ import android.os.Bundle
 import android.widget.FrameLayout
 import android.widget.TextView
 import androidx.activity.ComponentActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -19,6 +26,9 @@ class PlaybackActivity : ComponentActivity() {
     private var mediaId: String? = null
     private var profileId: String? = null
     private var hasRenderedFrame = false
+    private var session: LocalPlaybackSession? = null
+    private var accessJob: Job? = null
+    private val stateStore by lazy { FileCoreStore(filesDir.resolve("core.bin").toPath()) }
     private lateinit var playerView: PlayerView
     private lateinit var status: TextView
 
@@ -35,6 +45,7 @@ class PlaybackActivity : ComponentActivity() {
             val id = requireNotNull(intent.getStringExtra("mediaId"))
             val profile = requireNotNull(state.snapshot.activeProfile)
             check(state.canEnterHome(profile.id) && state.mediaAction(id) == MediaAction.PLAY)
+            session = LocalPlaybackSession.open(state.snapshot, id)
             val uri = Uri.parse(requireNotNull(getSharedPreferences("local-media", MODE_PRIVATE).getString(id, null)))
             LocalVideo.verifyAccess(this, uri)
             mediaId = id; profileId = profile.id
@@ -56,13 +67,43 @@ class PlaybackActivity : ComponentActivity() {
                 })
                 playback.setMediaItem(MediaItem.fromUri(uri))
                 playback.seekTo(profile.playbackPositionsMs[id] ?: 0L)
+                check(requireNotNull(session).isAllowed(stateStore.load())) { "Playback access changed" }
                 playback.prepare()
                 playback.playWhenReady = true
             }
-        }.onFailure { status.text = "This file is no longer available. Nothing was changed. Go back to your library." }
+        }.onFailure {
+            playerView.player?.release()
+            playerView.player = null
+            player = null
+            session = null
+            status.text = "This file is no longer available. Nothing was changed. Go back to your library."
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val expected = session ?: return
+        accessJob = lifecycleScope.launch {
+            while (isActive && player != null) {
+                val allowed = withContext(Dispatchers.IO) { runCatching { expected.isAllowed(stateStore.load()) }.getOrDefault(false) }
+                if (!allowed) {
+                    // Release rather than pause: the old controls cannot resume a revoked session.
+                    playerView.player = null
+                    player?.release()
+                    player = null
+                    session = null
+                    playerView.keepScreenOn = false
+                    status.text = "Playback stopped because your profile or source changed, or access could not be checked. Return to your library to try again."
+                    break
+                }
+                delay(1_000)
+            }
+        }
     }
 
     override fun onStop() {
+        accessJob?.cancel()
+        accessJob = null
         playerView.keepScreenOn = false
         player?.let { playback ->
             val completed = playback.playbackState == Player.STATE_ENDED
@@ -85,6 +126,7 @@ class PlaybackActivity : ComponentActivity() {
         var stale: ConcurrentModificationException? = null
         repeat(3) {
             val current = ReelCore(store, DeviceKind.ANDROID_PHONE)
+            check(requireNotNull(session).isAllowed(current.snapshot)) { "Playback access changed" }
             check(originalProfileId in current.snapshot.profiles) { "Playback profile is no longer available" }
             val sourceId = current.snapshot.media[originalMediaId]?.sourceId
             check(sourceId != null && sourceId in current.snapshot.sources) { "Playback source is no longer available" }

@@ -11,11 +11,24 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AppearanceCoreTest {
+    @Test fun versionFourMigratesAccessGenerationsWithoutResettingPreferences() = withFileStore { path ->
+        writeLegacyProfile(path, 4, motion = "EXPRESSIVE", density = "COMPACT")
+        val core = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
+        assertEquals(CORE_SCHEMA_VERSION, core.snapshot.schemaVersion)
+        assertTrue(core.snapshot.playbackEpochs.isEmpty())
+        assertEquals(MotionMode.EXPRESSIVE, core.snapshot.activeProfile?.motionMode)
+        assertEquals(BrowsingDensity.COMPACT, core.snapshot.activeProfile?.browsingDensity)
+        core.revokeSource("optional")
+        val reopened = ReelCore(FileCoreStore(path), DeviceKind.LINUX)
+        assertEquals(1L, reopened.snapshot.playbackEpochs["source:optional"])
+        assertEquals(MotionMode.EXPRESSIVE, reopened.snapshot.activeProfile?.motionMode)
+    }
+
     @Test fun versionThreeMigratesAppearanceWithoutChangingSourceOrHandoffPolicy() = withFileStore { path ->
         writeLegacyProfile(path, 3)
         val core = ReelCore(FileCoreStore(path), DeviceKind.WINDOWS)
         val p = core.snapshot.activeProfile!!
-        assertEquals(4, core.snapshot.schemaVersion)
+        assertEquals(CORE_SCHEMA_VERSION, core.snapshot.schemaVersion)
         assertEquals(MotionMode.SUBTLE, p.motionMode)
         assertEquals(BrowsingDensity.COMFORTABLE, p.browsingDensity)
         assertTrue(p.transparencyEnabled)

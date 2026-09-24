@@ -290,7 +290,23 @@ class ReelCore(
     }
 
     private fun publish(next: CoreState) {
-        val validated = validateCoreState(next.copy(revision = Math.addExact(snapshot.revision, 1)))
+        val epochs = snapshot.playbackEpochs.toMutableMap()
+        fun bump(key: String) { epochs[key] = Math.addExact(epochs[key] ?: 0L, 1L) }
+        if (next.activeProfileId != snapshot.activeProfileId ||
+            next.activeProfile?.onboardingStep != snapshot.activeProfile?.onboardingStep) bump(PlaybackEpoch.PROFILE)
+        if (next.sources !== snapshot.sources) {
+            (snapshot.sources.keys + next.sources.keys).forEach { id ->
+                if (snapshot.sources[id] != next.sources[id]) bump(PlaybackEpoch.source(id))
+            }
+        }
+        if (next.media !== snapshot.media) {
+            (snapshot.media.keys + next.media.keys).forEach { id ->
+                val old = snapshot.media[id]
+                val updated = next.media[id]
+                if (old?.sourceId != updated?.sourceId || old?.availability != updated?.availability) bump(PlaybackEpoch.media(id))
+            }
+        }
+        val validated = validateCoreState(next.copy(revision = Math.addExact(snapshot.revision, 1), playbackEpochs = epochs))
         store.save(validated)
         snapshot = validated
     }

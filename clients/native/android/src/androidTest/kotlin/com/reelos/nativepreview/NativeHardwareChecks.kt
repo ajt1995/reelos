@@ -202,6 +202,51 @@ class NativeHardwareChecks : Instrumentation() {
                 runOnMainSync { mutableActivity.finish() }
                 waitFor("retained-copy player destroyed") { mutableActivity.isDestroyed }
             }
+            checkCase("active-playback-stops-after-source-revocation") {
+                load().selectProfile(profileId)
+                playback = launchPlayer()
+                val activity = requireNotNull(playback)
+                waitFor("revocation fixture first frame") { firstFrame(activity) }
+                try {
+                    load().revokeSource(PERSONAL_SOURCE_ID)
+                    // Restore before the next periodic observation: the old session must still die.
+                    load().putSource(SourceRecord(PERSONAL_SOURCE_ID, SourceKind.PERSONAL, SourceStatus.AVAILABLE))
+                    waitFor("revoked player released") {
+                        var stopped = false
+                        runOnMainSync { stopped = playerView(activity).player == null && !playerView(activity).keepScreenOn }
+                        stopped
+                    }
+                    load().putSource(SourceRecord(PERSONAL_SOURCE_ID, SourceKind.PERSONAL, SourceStatus.AVAILABLE))
+                    runOnMainSync { check(playerView(activity).player == null) { "Revoked session resumed after source restoration" } }
+                } finally {
+                    runOnMainSync { activity.finish() }
+                    waitFor("revoked player destroyed") { activity.isDestroyed }
+                    load().putSource(SourceRecord(PERSONAL_SOURCE_ID, SourceKind.PERSONAL, SourceStatus.AVAILABLE))
+                }
+            }
+            checkCase("active-playback-stops-after-profile-switch") {
+                val core = load()
+                val other = "$profileId-switch"
+                core.createProfile(other, "Switch validation profile")
+                core.selectProfile(profileId)
+                playback = launchPlayer()
+                val activity = requireNotNull(playback)
+                waitFor("profile-switch fixture first frame") { firstFrame(activity) }
+                try {
+                    load().selectProfile(other)
+                    load().selectProfile(profileId)
+                    waitFor("switched profile player released") {
+                        var stopped = false
+                        runOnMainSync { stopped = playerView(activity).player == null && !playerView(activity).keepScreenOn }
+                        stopped
+                    }
+                    check(load().snapshot.profiles.getValue(other).playbackPositionsMs.isEmpty())
+                } finally {
+                    runOnMainSync { activity.finish() }
+                    waitFor("profile-switch player destroyed") { activity.isDestroyed }
+                    load().selectProfile(profileId)
+                }
+            }
             checkCase("profile-isolation-and-revoked-source") {
                 val core = load()
                 val other = "$profileId-other"

@@ -31,7 +31,9 @@ availability policy, not an ML implementation or a complete product runtime.
 - `save(profileId, mediaId, saved)` changes a private watchlist preference. It does not
   acquire media or assert that a playable copy exists.
 - `setAppearance(profileId, motionMode, browsingDensity, transparencyEnabled)` saves the
-  selected profile only and does not change onboarding. Defaults are `SUBTLE`,
+  selected profile only and does not change onboarding. Omitted fields keep the current value;
+  `toggleTransparency = true` toggles the latest value atomically and cannot accompany an explicit
+  transparency value. This avoids stale UI snapshots reverting unrelated choices. Defaults are `SUBTLE`,
   `COMFORTABLE`, and `true`. `effectiveMotionMode(profile, osMotionAllowed, setup)`
   returns `STILL` when OS motion is disallowed or the profile explicitly chose Still;
   otherwise setup uses `EXPRESSIVE` and normal browsing uses the profile's selection.
@@ -53,10 +55,23 @@ availability policy, not an ML implementation or a complete product runtime.
 
 ## Storage and safety boundary
 
-`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 4`. Version 1 and 2 snapshots migrate
+`LocalPlaybackSession.open(state, mediaId)` binds an already-available local item to the
+active completed profile and its source identity/kind. Both native players recheck persisted
+state while open, approximately once per second, and release playback on profile/source changes
+or an unreadable snapshot. Restoring a source does not resurrect a released session. Resume
+writes also recheck this guard. Persisted per-source, per-media and active-profile generations
+invalidate an old session even when access is revoked then restored between observations.
+Unrelated sources, title-label corrections and preference changes do not invalidate it. All
+ordinary state mutations must use ReelCore, which advances these generations. This is bounded local continuity protection, not an instantaneous
+byte-revocation lease, external-provider authorization, PIN enforcement, or Family certification.
+
+`CoreStore` is versioned at `CORE_SCHEMA_VERSION = 5`. Version 1 and 2 snapshots migrate
 with optional sources unavailable until adapter revalidation; legacy beta consent does not
 enable handoff experiments. Version 3 preserves its handoff preference and source status.
 Versions 1–3 receive appearance defaults; malformed version 4 appearance enums fail load.
+Versions 1–4 start with empty playback-generation maps; version 5 persists them. Negative,
+oversized or malformed generation maps fail closed. Live player sessions are never restored
+across application restarts; old binaries must not load a version-5 snapshot.
 Profile data and media metadata are preserved. Rollback requires
 compatible state backup/migration; older binaries must not open a newer schema.
 `FileCoreStore` writes a synced
