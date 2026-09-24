@@ -107,6 +107,14 @@ class ReelCore(
         updateProfile(profileId) { it.copy(playbackPreferences = normalized) }
     }
 
+    /** A player's preference edit cannot cross a profile/source change or overwrite language intent. */
+    @Synchronized
+    fun setCaptionAppearance(session: LocalPlaybackSession, size: CaptionSizePreference, style: CaptionStylePreference) {
+        check(session.isAllowed(snapshot)) { "Playback access changed" }
+        val previous = snapshot.profiles.getValue(session.profileId).playbackPreferences
+        setPlaybackPreferences(session.profileId, previous.copy(captionSize = size, captionStyle = style))
+    }
+
     @Synchronized
     fun setTasteSeeds(profileId: String, seeds: Set<String>) {
         val clean = seeds.map(String::trim).filter(String::isNotEmpty).toSet()

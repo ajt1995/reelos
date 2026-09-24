@@ -17,6 +17,17 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.*
 
 class DesktopCaptionAppearanceTest {
+    @Test fun everyStoredCaptionChoiceMapsToTheNativeRenderer() {
+        com.reelos.core.CaptionSizePreference.entries.forEach { size ->
+            com.reelos.core.CaptionStylePreference.entries.forEach { style ->
+                val appearance = DesktopCaptionAppearance(PlaybackPreferences(captionSize = size, captionStyle = style))
+                assertEquals(size.name, appearance.size.name)
+                assertEquals(style.name, appearance.style.name)
+                assertEquals(DesktopCaptionAppearance(CaptionSize.valueOf(size.name), CaptionStyle.valueOf(style.name)).options(), appearance.options())
+            }
+        }
+    }
+
     @Test fun restartedPauseDisplaysTheActualSavedFrame() {
         assumeTrue("Opt in to installed decoder pixel validation", System.getenv("REELOS_DESKTOP_TRACK_FIXTURE") != null)
         assertPausedReplacement(Path.of("src/test/assets/Native-Seek-Colors-12s.mp4").toAbsolutePath(), false)

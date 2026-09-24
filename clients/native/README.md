@@ -85,8 +85,11 @@ not be replaced by a stale APK.
 
 Validated optional media sources are normal functionality, not blanket beta. Only unverified
 external-app handoffs have an experimental preference. The shared optional provider adapter is integrated for validation;
-verified official-app handoff remains unimplemented and its toggle cannot grant media access. Core schema 5 retains personal
-appearance and schema 3's separation: old blanket-beta snapshots do not revive
+verified official-app handoff remains unimplemented and its toggle cannot grant media access. Core schema 7 retains profile-private
+caption size/style and schema 6 language defaults; schema 5/6 snapshots migrate to device caption
+defaults without changing access generations. Android and desktop load these choices for every
+new playback; changing captions never changes language intent or another profile. Schema 3's
+separation remains: old blanket-beta snapshots do not revive
 optional access or inherit experiment consent. OS motion preferences override decorative motion.
 The local player binds a persisted source/media/profile access generation and rechecks it roughly
 once per second. Profile switching, source revocation, media-access changes and unreadable state

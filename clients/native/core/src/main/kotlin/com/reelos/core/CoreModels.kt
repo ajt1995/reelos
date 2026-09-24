@@ -76,6 +76,6 @@ data class CoreState(
     val activeProfile: ProfileState? get() = activeProfileId?.let(profiles::get)
 }
 
-const val CORE_SCHEMA_VERSION = 6
+const val CORE_SCHEMA_VERSION = 7
 const val PERSONAL_SOURCE_ID = "personal"
 const val PUBLIC_DOMAIN_SOURCE_ID = "public-domain"

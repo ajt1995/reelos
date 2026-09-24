@@ -99,12 +99,10 @@ class PlaybackActivity : ComponentActivity() {
                             playerView.showController()
                         })
                     if (hasSubtitleTracks) com.reelos.ui.CaptionAppearanceControl(captionSize, captionStyle,
-                        onSize = { captionSize = it; updateCaptionAppearance() },
-                        onStyle = { captionStyle = it; updateCaptionAppearance() },
+                        onSize = { updateCaptionAppearance(it, captionStyle) },
+                        onStyle = { updateCaptionAppearance(captionSize, it) },
                         onReset = {
-                            captionSize = com.reelos.ui.CaptionSize.DEVICE
-                            captionStyle = com.reelos.ui.CaptionStyle.DEVICE
-                            updateCaptionAppearance()
+                            updateCaptionAppearance(com.reelos.ui.CaptionSize.DEVICE, com.reelos.ui.CaptionStyle.DEVICE)
                         },
                         onExpanded = { open ->
                             playerView.controllerShowTimeoutMs = if (open) 0 else 5_000
@@ -136,6 +134,10 @@ class PlaybackActivity : ComponentActivity() {
                 else Uri.parse(requireNotNull(getSharedPreferences("local-media", MODE_PRIVATE).getString(id, null)))
             if (remote == null) LocalVideo.verifyAccess(this, uri)
             mediaId = id; profileId = profile.id
+            // The profile is authoritative after rotation, process death and opening another title.
+            captionSize = com.reelos.ui.CaptionSize.valueOf(profile.playbackPreferences.captionSize.name)
+            captionStyle = com.reelos.ui.CaptionStyle.valueOf(profile.playbackPreferences.captionStyle.name)
+            playerView.subtitleView?.applyCaptionAppearance(captionSize, captionStyle)
             val factory = object : androidx.media3.exoplayer.DefaultRenderersFactory(this) {
                 override fun buildTextRenderers(context: android.content.Context,
                     output: androidx.media3.exoplayer.text.TextOutput, outputLooper: android.os.Looper,
@@ -276,8 +278,15 @@ class PlaybackActivity : ComponentActivity() {
         }.onFailure { status.text = "Caption timing could not be changed. Try again." }
     }
 
-    private fun updateCaptionAppearance() {
-        playerView.subtitleView?.applyCaptionAppearance(captionSize, captionStyle)
+    private fun updateCaptionAppearance(size: com.reelos.ui.CaptionSize, style: com.reelos.ui.CaptionStyle) {
+        runCatching {
+            val expected = requireNotNull(session)
+            val current = ReelCore(stateStore, DeviceKind.ANDROID_PHONE)
+            check(providerPlayback?.isAuthorized() != false)
+            current.setCaptionAppearance(expected, CaptionSizePreference.valueOf(size.name), CaptionStylePreference.valueOf(style.name))
+            captionSize = size; captionStyle = style
+            playerView.subtitleView?.applyCaptionAppearance(size, style)
+        }.onFailure { status.text = "Caption preference could not be saved. Your previous choice is unchanged. Try again." }
     }
 
     private fun applySleepTimer() {

@@ -62,7 +62,11 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     motionMode = if (version >= 4) enumValueOf<MotionMode>(input.readUTF()) else MotionMode.SUBTLE,
                     browsingDensity = if (version >= 4) enumValueOf<BrowsingDensity>(input.readUTF()) else BrowsingDensity.COMFORTABLE,
                     transparencyEnabled = if (version >= 4) input.readBoolean() else true,
-                    playbackPreferences = if (version >= 6) PlaybackPreferences(readNullable(input), readNullable(input), enumValueOf<SubtitleMode>(input.readUTF())) else PlaybackPreferences(),
+                    playbackPreferences = if (version >= 6) PlaybackPreferences(
+                        readNullable(input), readNullable(input), enumValueOf<SubtitleMode>(input.readUTF()),
+                        if (version >= 7) enumValueOf<CaptionSizePreference>(input.readUTF()) else CaptionSizePreference.DEVICE,
+                        if (version >= 7) enumValueOf<CaptionStylePreference>(input.readUTF()) else CaptionStylePreference.DEVICE,
+                    ) else PlaybackPreferences(),
                 )
             }
             val activeId = readNullable(input)
@@ -142,6 +146,8 @@ class FileCoreStore(private val path: Path) : CoreStore {
                     writeNullable(output, p.playbackPreferences.audioLanguage)
                     writeNullable(output, p.playbackPreferences.subtitleLanguage)
                     output.writeUTF(p.playbackPreferences.subtitleMode.name)
+                    output.writeUTF(p.playbackPreferences.captionSize.name)
+                    output.writeUTF(p.playbackPreferences.captionStyle.name)
                 }
                 writeNullable(output, state.activeProfileId)
                 writeNullable(output, state.requestedHomeId)

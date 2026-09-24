@@ -222,22 +222,28 @@ fun main(args: Array<String>) = application {
         message = "Checking connected media…"
         providerJob = scope.launch {
             var prepared: PreparedProviderPlayback? = null
+            var decoder: NativeVlc? = null
             try {
                 val access = requireNotNull(providerAccess) { "Protected connections are unavailable" }
-                val result = withContext(Dispatchers.IO) {
-                    if (video != null) access.prepare(video) else access.openMedia(requireNotNull(id))
+                withContext(Dispatchers.IO) {
+                    prepared = if (video != null) access.prepare(video) else access.openMedia(requireNotNull(id))
                 }
-                prepared = result
+                val result = requireNotNull(prepared)
                 check(!closing && ticket == connectionEpoch && result.isAuthorized()) { "Connection changed" }
                 val current = freshCore()
                 check(result.guard.isAllowed(current.snapshot)) { "Playback access changed" }
                 val resumeMs = current.snapshot.profiles[result.profileId]?.playbackPositionsMs?.get(result.mediaId) ?: 0L
-                val player = requireNotNull(vlc) { "In-process LibVLC is unavailable on this computer" }
-                    .player(result.bytes, resumeMs, current.snapshot.profiles.getValue(result.profileId).playbackPreferences)
+                val preferences = current.snapshot.profiles.getValue(result.profileId).playbackPreferences
+                val appearance = DesktopCaptionAppearance(preferences)
+                withContext(Dispatchers.IO) { decoder = NativeVlc.open(appearance).getOrThrow() }
+                val runtime = requireNotNull(decoder)
+                val player = runtime.player(result.bytes, resumeMs, preferences)
                 try {
                     check(!closing && ticket == connectionEpoch && result.isAuthorized()) { "Connection changed" }
                     loaded = Result.success(current)
-                    active = ActivePlayback(result.mediaId, result.profileId, result.title, player, result.guard, result)
+                    active = ActivePlayback(result.mediaId, result.profileId, result.title, player, result.guard, result,
+                        appearance, runtime)
+                    decoder = null
                     prepared = null // ActivePlayback now owns cancellation and cleanup.
                     message = null
                     revision++
@@ -247,6 +253,7 @@ fun main(args: Array<String>) = application {
                 reloadCore()
             } finally {
                 prepared?.close()
+                decoder?.close()
                 providerJob = null
             }
         }
@@ -418,12 +425,16 @@ fun main(args: Array<String>) = application {
                         val profileId = requireNotNull(current.snapshot.activeProfileId)
                         val session = LocalPlaybackSession.open(current.snapshot, id)
                         check(session.profileId == profileId) { "The active profile changed" }
-                        val player = DesktopMediaLibrary(dataDirectory, current, vlc).open(id, profileId)
+                        val appearance = DesktopCaptionAppearance(current.snapshot.profiles.getValue(profileId).playbackPreferences)
+                        val runtime = NativeVlc.open(appearance).getOrThrow()
+                        val player = try { DesktopMediaLibrary(dataDirectory, current, runtime).open(id, profileId) }
+                            catch (failure: Exception) { runtime.close(); throw failure }
                         try {
                             check(session.isAllowed(freshCore().snapshot)) { "Playback access changed" }
                             loaded = Result.success(current)
-                            active = ActivePlayback(id, profileId, record.title, player, session)
-                        } catch (failure: Exception) { player.close(); throw failure }
+                            active = ActivePlayback(id, profileId, record.title, player, session,
+                                appearance = appearance, ownedDecoder = runtime)
+                        } catch (failure: Exception) { try { player.close() } finally { runtime.close() }; throw failure }
                     } catch (failure: Exception) {
                         message = "Playback unavailable: ${failure.message?.take(180) ?: "the media could not be opened"}"
                         reloadCore()
@@ -448,7 +459,17 @@ fun main(args: Array<String>) = application {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 Surface(Modifier.fillMaxSize()) {
                 PlaybackView(playback, changingCaptions = providerJob?.isActive == true, notice = message,
-                    onReady = { if (active === playback) runCatching { playback.releaseFallback() } },
+                    onReady = {
+                        if (active === playback && playback.fallback != null) {
+                            // Persist only after restoration succeeds; a failed replacement keeps the old default.
+                            runCatching {
+                                val current = freshCore()
+                                check(playback.isAllowed(current.snapshot))
+                                playback.appearance.save(current, playback.session)
+                            }.onFailure { message = "Captions changed for this video, but your preference could not be saved. Try again later." }
+                            runCatching { playback.releaseFallback() }
+                        }
+                    },
                     onFailure = { captionReplacementFailed(playback) },
                     onAppearance = ::changeCaptionAppearance, onPosition = { position ->
                     try {

@@ -8,6 +8,13 @@ internal data class DesktopCaptionAppearance(
     val size: CaptionSize = CaptionSize.DEVICE,
     val style: CaptionStyle = CaptionStyle.DEVICE,
 ) {
+    constructor(preferences: com.reelos.core.PlaybackPreferences) : this(
+        CaptionSize.valueOf(preferences.captionSize.name), CaptionStyle.valueOf(preferences.captionStyle.name))
+
+    fun save(core: com.reelos.core.ReelCore, session: com.reelos.core.LocalPlaybackSession) =
+        core.setCaptionAppearance(session, com.reelos.core.CaptionSizePreference.valueOf(size.name),
+            com.reelos.core.CaptionStylePreference.valueOf(style.name))
+
     fun options(): List<String> = buildList {
         if (this@DesktopCaptionAppearance.size != CaptionSize.DEVICE) {
             add("--freetype-fontsize=0")

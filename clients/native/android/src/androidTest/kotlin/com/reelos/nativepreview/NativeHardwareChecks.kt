@@ -436,7 +436,31 @@ class NativeHardwareChecks : Instrumentation() {
                 choose("Yellow on black")
                 val yellow = pixels()
                 check(yellow.second > 0 && yellow.first == 0) { "Selected caption color did not reach native rendered glyphs" }
+                val stored = load().snapshot.profiles.getValue(profileId).playbackPreferences
+                check(stored.captionSize == com.reelos.core.CaptionSizePreference.LARGE &&
+                    stored.captionStyle == com.reelos.core.CaptionStylePreference.YELLOW) { "Caption appearance was not saved to the active profile" }
+                load().setPlaybackPreferences(profileId, stored.copy(subtitleMode = com.reelos.core.SubtitleMode.ON, subtitleLanguage = "es"))
+                val previousPlayer = requireNotNull(playback)
+                runOnMainSync { previousPlayer.finish() }
+                waitFor("caption player closed") { previousPlayer.isDestroyed }
+                playback = launchPlayer(trackId)
+                waitFor("caption preference restored on new playback") {
+                    val rendered = firstFrame(requireNotNull(playback))
+                    var ready = false
+                    runOnMainSync {
+                        ready = rendered && player(requireNotNull(playback)).currentCues.cues.isNotEmpty()
+                    }
+                    ready
+                }
+                runOnMainSync {
+                    player(requireNotNull(playback)).pause()
+                    playerView(requireNotNull(playback)).showController()
+                }
+                check(pixels().second > 0) { "Reopened player lost the saved caption style" }
                 choose("Use device captions")
+                check(load().snapshot.profiles.getValue(profileId).playbackPreferences.let {
+                    it.captionSize == com.reelos.core.CaptionSizePreference.DEVICE && it.captionStyle == com.reelos.core.CaptionStylePreference.DEVICE
+                }) { "Reset was not persisted" }
                 runOnMainSync {
                     check(PlaybackActivity::class.java.getDeclaredMethod("getCaptionSize").apply { isAccessible = true }
                         .invoke(requireNotNull(playback)) == com.reelos.ui.CaptionSize.DEVICE)

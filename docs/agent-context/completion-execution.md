@@ -105,6 +105,13 @@ Priority: finish the existing-player integration, then a bounded real-encoder/ru
 check after artifact approval; use the Home/Friends dependency graph before selecting sync storage.
 No savings estimate or upstream test result substitutes for ReelOS acceptance evidence.
 
+Current C4 increment: shared profile schema7 retains caption size/style across titles with
+schema5/6 migration and stale-session guards. Native TV/Pixel checks verify rendered styling
+after player reopen and persistent reset; desktop uses those same stored choices with
+per-playback LibVLC options. Desktop Main reopen/focus, authored-format overrides, live-source
+restart/cancellation, Linux output and the earlier native crash remain open. HP identity/runtime
+was rechecked through its pinned SSH host key; the legacy kiosk has not been replaced.
+
 Queued after current playback work (C1–C4): extend N2/U5 with Family’s “More of this in their world” parent suggestions and a “Watch with me” collection. Use the shared taste engine; suggestions remain separate from child taste and safety, preserve favorites, enter gently and back off after dismissals. Add tests for attribution/isolation, eligibility, exposure/backoff and unchanged safety enforcement; this addition is recorded, not implemented.
 
 Taste; semantic search; preparation; storage/retention; machine protection; interface/atmosphere;

@@ -4,7 +4,7 @@
 
 ## Current installed-app findings
 
-### Windows player follow-up — 2026-09-24, after 04f0861
+### Native player follow-up — 2026-09-24, after c7c2f67
 
 Actual native Main app, isolated Caption Check profile, synthetic Native-Tracks-30s.mp4;
 no owner media or credentials. This narrow check does not accept all of `ui-player`.
@@ -33,14 +33,23 @@ a causal module. It remains a stability investigation, not a resolved defect.
 | Replay after caption change | Main exposed retained start-time on Replay. Replay now resets that media option to zero; real-decoder regression proves a20s caption restart does not become the new beginning. |
 | Format-specific caption appearance | Main's embedded MP4 mov_text cue remained white despite Yellow selection. Plain SubRip/MKV pixel tests support actual style overrides; authored-format override behavior remains unresolved and must not be claimed universally. |
 | Close/return | Native player Close returns to Home; saved Resume action observed. Normal app close exits successfully. |
+| Caption appearance reset on every title | Shared profile schema 7 now stores size/style, migrates schema 5/6 to device defaults, preserves language choices and rejects stale playback-profile edits. Android restores the saved style on new playback and persists reset. Desktop opens each playback with its profile's renderer options and only saves a change after successful restoration; failed replacement retains the prior default. Migration/isolation tests and native Android rendered-caption reopening cover this change; desktop Main reopening still needs direct interaction verification. |
 
 The rejected approaches were paused-input seek, a single next-frame call, and start-time
 combined with start-paused. Current restoration starts MUTED but playing; it pauses only
 after output is ready. Output statistics are cumulative and are not universal pixel proof;
 visible tests remain required. Real-decoder test surfaces must be visible, not merely
 addNotify-created hidden windows. Next: live provider restart/cancellation, Linux output,
-format-specific styling, dialog focus and native crash investigation. No Android physical
-rerun in this follow-up.
+format-specific styling, dialog focus and native crash investigation. The current Android
+media case also checks saved appearance after closing/reopening playback and reset persistence;
+device pass/fail and exact source hashes belong in `.reelos-audit/native-hardware/<device>/result.json`.
+The schema7 batch passed63 core and34 desktop tests plus21 native media cases each on
+OnnTV and Pixel, zero skips. A final desktop-only rerun also passed34 after the reviewed
+provider-setup cancellation ownership fix (`caption-persistence-final.log`). The Fold was
+not connected. These are scoped playback results, not whole-interface approval.
+HP authenticated identity/runtime recheck succeeded; its legacy Cage/Chromium kiosk is still
+active and unchanged. SSH key-only authentication failed; the existing owner login works
+with the already-pinned host key. This is not Linux playback certification.
 
 ## Authority and shared design (baseline contract)
 
