@@ -283,7 +283,8 @@ class NativeHardwareChecks : Instrumentation() {
                 }
             }
             fun clickLabel(label: String) {
-                waitFor("native track option") {
+                sendStatus(0, Bundle().apply { putString("stream", "Native control: $label\n") })
+                waitFor("native control '$label'") {
                     if (android.os.Build.VERSION.SDK_INT >= 34) uiAutomation.clearCache()
                     val root = uiAutomation.rootInActiveWindow ?: return@waitFor false
                     if (root.packageName?.toString() != targetContext.packageName) return@waitFor false
@@ -359,10 +360,52 @@ class NativeHardwareChecks : Instrumentation() {
                     runOnMainSync { off = tracksOf(C.TRACK_TYPE_TEXT).none { it.isSelected } && player(requireNotNull(playback)).currentCues.cues.isEmpty() }
                     off
                 }
-                val closing = requireNotNull(playback)
-                runOnMainSync { closing.finish() }
-                waitFor("track player destroyed") { closing.isDestroyed }
             }
+            fun sleepTimer() = PlaybackActivity::class.java.getDeclaredField("sleepTimer")
+                .apply { isAccessible = true }.get(requireNotNull(playback)) as com.reelos.core.PlaybackSleepTimer
+            checkCase("native-sleep-controls-and-cancel") {
+                runOnMainSync { playerView(requireNotNull(playback)).showController() }
+                clickLabel("Sleep · Off")
+                clickLabel("15 minutes")
+                runOnMainSync {
+                    val remaining = requireNotNull(sleepTimer().state?.deadlineMs) - SystemClock.elapsedRealtime()
+                    check(remaining in 850_000L..900_000L)
+                }
+                clickLabel("Sleep · 15 min")
+                clickLabel("Off")
+                runOnMainSync { check(sleepTimer().state == null) }
+            }
+            checkCase("native-sleep-pauses-and-saves") {
+                runOnMainSync {
+                    player(requireNotNull(playback)).seekTo(5_000)
+                    player(requireNotNull(playback)).play()
+                }
+                waitFor("playing before sleep") {
+                    var playing = false
+                    runOnMainSync { playing = player(requireNotNull(playback)).isPlaying }
+                    playing
+                }
+                // Accelerated deadline exercises the production loop, not a 15-minute wall-clock claim.
+                runOnMainSync { sleepTimer().after(400) }
+                waitFor("sleep pauses and releases screen wake") {
+                    var asleep = false
+                    runOnMainSync {
+                        val current = requireNotNull(playback)
+                        asleep = !player(current).playWhenReady && !playerView(current).keepScreenOn && sleepTimer().state == null
+                    }
+                    asleep
+                }
+                check((load().snapshot.activeProfile?.playbackPositionsMs?.get(trackId) ?: 0) >= 5_000)
+                runOnMainSync { player(requireNotNull(playback)).play() }
+                waitFor("manual resume after sleep") {
+                    var playing = false
+                    runOnMainSync { playing = player(requireNotNull(playback)).isPlaying }
+                    playing
+                }
+            }
+            val closing = requireNotNull(playback)
+            runOnMainSync { closing.finish() }
+            waitFor("track player destroyed") { closing.isDestroyed }
             checkCase("profile-isolation-and-revoked-source") {
                 val core = load()
                 val other = "$profileId-other"

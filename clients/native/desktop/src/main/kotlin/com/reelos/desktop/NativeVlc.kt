@@ -288,6 +288,12 @@ internal class VlcPlayback(
     }
 
     @Synchronized
+    fun pause() {
+        check(!closed.get()) { "The player is closed" }
+        if (started.get()) api.libvlc_media_player_set_pause(player, 1)
+    }
+
+    @Synchronized
     fun togglePause() {
         check(!closed.get()) { "The player is closed" }
         if (api.libvlc_media_player_get_state(player) == 6) {

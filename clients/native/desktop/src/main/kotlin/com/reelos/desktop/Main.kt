@@ -365,6 +365,8 @@ fun main(args: Array<String>) = application {
 
 @Composable
 private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, onClose: () -> Unit) {
+    val sleepTimer = remember(playback) { com.reelos.core.PlaybackSleepTimer { System.nanoTime() / 1_000_000 } }
+    var sleepLabel by remember(playback) { mutableStateOf(sleepTimer.label()) }
     var status by remember(playback) { mutableStateOf(playback.player.poll()) }
     var tracks by remember(playback) { mutableStateOf<VlcTracks?>(null) }
     var problem by remember(playback) { mutableStateOf<String?>(null) }
@@ -393,6 +395,13 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
             }
             val current = result.getOrThrow()
             status = current
+            if (sleepTimer.shouldPause(current.ended)) {
+                runCatching {
+                    playback.player.pause()
+                    onPosition(if (current.ended) 0 else current.positionMs)
+                }.onFailure { problem = "Sleep pause failed. Please pause playback manually." }
+            }
+            sleepLabel = sleepTimer.label()
             // Demux may discover tracks after playback starts (especially remote media).
             runCatching { playback.player.tracks() }.onSuccess { tracks = it }
             if (current.error) problem = "LibVLC reported a decoding or media error."
@@ -437,6 +446,10 @@ private fun PlaybackView(playback: ActivePlayback, onPosition: (Long) -> Unit, o
             }
             Text("${formatTime(status.positionMs)} / ${formatTime(status.durationMs)}", Modifier.padding(top = 12.dp))
             Button(onClick = onClose) { Text("Close") }
+            com.reelos.ui.SleepTimerControl(sleepLabel,
+                onMinutes = { sleepTimer.after(it * 60_000L); sleepLabel = sleepTimer.label() },
+                onEnd = { sleepTimer.atEnd(); sleepLabel = sleepTimer.label() },
+                onCancel = { sleepTimer.cancel(); sleepLabel = sleepTimer.label() })
         }
         tracks?.let { available ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

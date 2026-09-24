@@ -59,6 +59,16 @@ class NativeVlcTest {
                     awaitTrackState(playback) { state, _ ->
                         state.playing && state.positionMs >= afterOff.first.positionMs + 300
                     }
+                    var clock = 0L
+                    val sleep = com.reelos.core.PlaybackSleepTimer { clock }.apply { after(1_000) }
+                    clock = 1_000
+                    assertTrue(sleep.shouldPause(false))
+                    playback.pause()
+                    val paused = awaitTrackState(playback) { state, _ -> !state.playing && !state.ended }.first
+                    Thread.sleep(350)
+                    assertTrue(kotlin.math.abs(playback.poll().positionMs - paused.positionMs) < 400)
+                    playback.togglePause()
+                    awaitTrackState(playback) { state, _ -> state.playing && state.positionMs > paused.positionMs }
                 }
                 vlc.player(fixture, 0, PlaybackPreferences(subtitleMode = SubtitleMode.OFF)).use { playback ->
                     SwingUtilities.invokeAndWait { playback.attach(canvas) }

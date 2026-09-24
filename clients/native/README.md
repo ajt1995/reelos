@@ -206,6 +206,13 @@ checkpoint, not whole-product acceptance or proof that every platform works.
 
 ### Native track controls
 
+The shared sleep control offers Off, 15/30/60/90 minutes and End of title. It is session-only,
+uses monotonic elapsed time (including paused/buffering time), and pauses rather than deleting
+media or closing the app. Android retains the deadline across activity recreation. Timer expiry
+saves the current authorized resume position and releases the screen-wake request; playback
+requires deliberate manual resume. This is deterministic playback policy, not a neural claim.
+Device tests accelerate the deadline and verify actual pause/save/resume, not a 15-minute soak.
+
 Android/TV exposes Media3's native audio Settings and subtitle button; choices come from the
 actual media tracks. The desktop adapter enumerates LibVLC3 tracks and offers Audio/Subtitles
 menus including Off. Personal/Settings share saved profile-private audio and subtitle defaults
