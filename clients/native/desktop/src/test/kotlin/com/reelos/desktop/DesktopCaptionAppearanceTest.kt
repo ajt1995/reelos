@@ -17,6 +17,70 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.*
 
 class DesktopCaptionAppearanceTest {
+    @Test fun restartedPauseDisplaysTheActualSavedFrame() {
+        assumeTrue("Opt in to installed decoder pixel validation", System.getenv("REELOS_DESKTOP_TRACK_FIXTURE") != null)
+        assertPausedReplacement(Path.of("src/test/assets/Native-Seek-Colors-12s.mp4").toAbsolutePath(), false)
+    }
+
+    @Test fun restartedMultitrackPauseDisplaysVideoAfterRestoringTrackIds() {
+        val fixture = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Opt in to installed multitrack pixel validation", fixture != null)
+        assertPausedReplacement(Path.of(requireNotNull(fixture)), true)
+    }
+
+    private fun assertPausedReplacement(fixture: Path, multitrack: Boolean) {
+        val frame = Frame("ReelOS seek pixel validation")
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait {
+            frame.add(canvas); frame.setSize(640, 400); frame.setLocation(20, 20)
+            frame.isAlwaysOnTop = true; frame.isVisible = true; frame.toFront()
+        }
+        val robot = Robot()
+        val originalRuntime = NativeVlc.open().getOrThrow()
+        val original = originalRuntime.player(fixture, 0)
+        try {
+            SwingUtilities.invokeAndWait { original.attach(canvas) }
+            val originalDeadline = System.nanoTime() + 10_000_000_000L
+            while ((!original.poll().seekable || (multitrack && original.tracks().audio.isEmpty())) && System.nanoTime() < originalDeadline) Thread.sleep(100)
+            original.seek(6_000)
+            val saved = original.pauseForReplacement().copy(positionMs = 6_000, playing = false)
+            original.releaseDrawableForReplacement()
+            val replacementCanvas = Canvas()
+            SwingUtilities.invokeAndWait {
+                frame.remove(canvas); frame.add(replacementCanvas); frame.validate()
+            }
+            NativeVlc.open(DesktopCaptionAppearance(CaptionSize.LARGE, CaptionStyle.YELLOW)).getOrThrow().use { vlc ->
+                vlc.player(fixture, 0).use { player ->
+                    player.restoreBeforeAttach(saved)
+                    SwingUtilities.invokeAndWait { player.attach(replacementCanvas) }
+                    val deadline = System.nanoTime() + 15_000_000_000L
+                    var green = false
+                    var state = player.poll()
+                    while (System.nanoTime() < deadline) {
+                        state = player.poll()
+                        check(!state.error)
+                        if (!state.restoring) original.close() // Mirrors Main's onReady fallback retirement.
+                        lateinit var bounds: Rectangle
+                        SwingUtilities.invokeAndWait {
+                            val p = replacementCanvas.locationOnScreen
+                            bounds = Rectangle(p.x + replacementCanvas.width / 2 - 10, p.y + replacementCanvas.height / 2 - 10, 20, 20)
+                        }
+                        val image = robot.createScreenCapture(bounds)
+                        val color = java.awt.Color(image.getRGB(10, 10))
+                        green = if (multitrack) color.red > 100 || color.green > 100 || color.blue > 100
+                            else color.green > 180 && color.red < 60 && color.blue < 60
+                        if (!state.restoring && green) break
+                        Thread.sleep(100)
+                    }
+                    assertFalse(state.restoring)
+                    assertFalse(state.playing)
+                    assertTrue(kotlin.math.abs(state.positionMs - 6_000) <= 400)
+                    assertTrue(green, "Paused replacement must display decoded video, not a clock over black video (multitrack=$multitrack)")
+                }
+            }
+        } finally { original.close(); originalRuntime.close(); SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
     @Test fun optionsAreBoundedAndDeviceDefaultsAreNotOverridden() {
         assertTrue(DesktopCaptionAppearance().options().isEmpty())
         assertContains(DesktopCaptionAppearance(CaptionSize.LARGE, CaptionStyle.YELLOW).options(), "--freetype-rel-fontsize=12")

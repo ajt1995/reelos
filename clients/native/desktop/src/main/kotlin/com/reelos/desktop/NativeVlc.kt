@@ -208,6 +208,7 @@ internal class VlcPlayback(
     private var restorePositionReads = 0
     private var resumeContinuation: () -> Boolean = { true }
     private var reattachContinuation: VlcContinuation? = null
+    private var boundDrawable: Long? = null
 
     @Synchronized
     fun pauseForReplacement(): VlcContinuation {
@@ -217,6 +218,16 @@ internal class VlcPlayback(
         // Retain the pre-swap state instead of consulting that damaged input during rollback.
         reattachContinuation = saved.copy(playing = false)
         return saved
+    }
+
+    @Synchronized
+    fun releaseDrawableForReplacement() {
+        check(!closed.get() && reattachContinuation != null) { "Capture playback before replacing its surface" }
+        // Stop the old video output while its drawable still exists. Otherwise native render
+        // threads can target a destroyed/reused HWND after Compose installs the replacement.
+        if (started.get()) api.libvlc_media_player_stop(player)
+        started.set(false)
+        boundDrawable = null
     }
 
     @Synchronized
@@ -285,23 +296,28 @@ internal class VlcPlayback(
     @Synchronized
     fun attach(canvas: Canvas) {
         check(!closed.get()) { "The player is closed" }
-        if (!canvas.isDisplayable) return
-        if (started.get()) {
+        if (!canvas.isDisplayable || canvas.width <= 0 || canvas.height <= 0) return
+        val windows = System.getProperty("os.name").startsWith("Windows")
+        val drawable = if (windows) Pointer.nativeValue(Native.getComponentPointer(canvas)) else Native.getComponentID(canvas)
+        check(drawable != 0L) { "The video surface is unavailable" }
+        if (started.get() && boundDrawable == drawable) return
+        if (started.get() || reattachContinuation != null) {
             // LibVLC3 applies a new drawable at playback start (not reliably through a seek).
             // Rebuild the input in a paused state before returning a retained fallback to a new canvas.
             val saved = reattachContinuation ?: captureContinuation().copy(playing = false)
             reattachContinuation = null
-            api.libvlc_media_player_stop(player)
+            if (started.get()) api.libvlc_media_player_stop(player)
             started.set(false)
             resumeApplied = false
             restorePositionReads = 0
             restoreBeforeAttach(saved)
         }
-        if (System.getProperty("os.name").startsWith("Windows")) {
-            api.libvlc_media_player_set_hwnd(player, Native.getComponentPointer(canvas))
+        if (windows) {
+            api.libvlc_media_player_set_hwnd(player, Pointer(drawable))
         } else {
-            api.libvlc_media_player_set_xwindow(player, Native.getComponentID(canvas).toInt())
+            api.libvlc_media_player_set_xwindow(player, drawable.toInt())
         }
+        boundDrawable = drawable
         started.set(true)
         check(api.libvlc_media_player_play(player) == 0) { "LibVLC could not begin playback" }
         restoreStartedAt = System.nanoTime()
@@ -325,9 +341,12 @@ internal class VlcPlayback(
             val atPosition = resumeApplied && kotlin.math.abs(api.libvlc_media_player_get_time(player) - saved.positionMs) <= 400 && api.libvlc_media_player_get_state(player) == 4
             restorePositionReads = if (atPosition) restorePositionReads + 1 else 0
             if (restorePositionReads >= 2 && audioReady && textReady) {
-                saved.audioId?.let(::selectAudioTrack)
-                saved.subtitleId?.let(::selectSubtitleTrack)
-                setSubtitleDelayMs(saved.subtitleDelayMs)
+                // Restore differences only; matching selections need no native track reset.
+                saved.audioId?.let { if (selected.audioId != it) selectAudioTrack(it) }
+                saved.subtitleId?.let { if (selected.subtitleId != it) selectSubtitleTrack(it) }
+                if (subtitleDelayMs() != saved.subtitleDelayMs) setSubtitleDelayMs(saved.subtitleDelayMs)
+                if (saved.audioId != null) audioPreferenceApplied = true
+                if (saved.subtitleId != null) subtitlePreferenceApplied = true
                 val allowed = resumeContinuation()
                 continuation = null
                 resumeContinuation = { true }

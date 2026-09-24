@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -21,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,8 +32,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.ui.window.application
 import com.reelos.core.DeviceKind
 import com.reelos.core.CoreState
@@ -49,6 +57,8 @@ import java.awt.Color
 import java.awt.FileDialog
 import java.awt.event.HierarchyEvent
 import java.awt.event.HierarchyListener
+import java.awt.event.ComponentAdapter
+import java.awt.event.ComponentEvent
 import java.nio.file.Files
 import java.nio.file.Path
 import javax.swing.JPanel
@@ -59,7 +69,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private data class ActivePlayback(
+private class ActivePlayback(
     val id: String, val profileId: String, val title: String, val player: VlcPlayback,
     val session: LocalPlaybackSession, val remote: PreparedProviderPlayback? = null,
     val appearance: DesktopCaptionAppearance = DesktopCaptionAppearance(),
@@ -289,6 +299,7 @@ fun main(args: Array<String>) = application {
                 check(!closing && active === original && ticket == connectionEpoch && original.isAllowed(freshCore().snapshot) && prepared?.isAuthorized() != false)
                 val replacement = ActivePlayback(original.id, original.profileId, original.title, candidate,
                     original.session, prepared, appearance, runtime, original.sleepTimer, original)
+                original.player.releaseDrawableForReplacement()
                 active = replacement
                 decoder = null; remote = null; next = null // The active session owns all new resources.
                 message = null
@@ -464,17 +475,28 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
     var subtitleDelayMs by remember(playback) { mutableStateOf(0L) }
     var problem by remember(playback) { mutableStateOf<String?>(null) }
     var dragged by remember(playback) { mutableStateOf<Float?>(null) }
+    var appearanceOpen by remember(playback) { mutableStateOf(false) }
+    // Reserve the existing control area during replacement instead of expanding the video.
+    var controlsHeightPx by remember { mutableIntStateOf(0) }
+    val controlsMinHeight = with(LocalDensity.current) { controlsHeightPx.toDp() }
     val canvas = remember(playback) { Canvas().apply { background = Color.BLACK } }
     val panel = remember(playback) { JPanel(BorderLayout()).apply { background = Color.BLACK; add(canvas, BorderLayout.CENTER) } }
     DisposableEffect(playback, canvas) {
-        val listener = HierarchyListener { event ->
-            if (event.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong() != 0L && canvas.isDisplayable) {
+        fun attachWhenLaidOut() {
+            if (canvas.isDisplayable && canvas.width > 0 && canvas.height > 0) {
                 runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start"; onFailure() }
             }
         }
+        val listener = HierarchyListener { event ->
+            if (event.changeFlags and HierarchyEvent.DISPLAYABILITY_CHANGED.toLong() != 0L) attachWhenLaidOut()
+        }
+        val sizeListener = object : ComponentAdapter() {
+            override fun componentResized(event: ComponentEvent) = attachWhenLaidOut()
+        }
         canvas.addHierarchyListener(listener)
-        if (canvas.isDisplayable) runCatching { playback.player.attach(canvas) }.onFailure { problem = it.message ?: "Native video could not start"; onFailure() }
-        onDispose { canvas.removeHierarchyListener(listener) }
+        canvas.addComponentListener(sizeListener)
+        attachWhenLaidOut()
+        onDispose { canvas.removeHierarchyListener(listener); canvas.removeComponentListener(sizeListener) }
     }
     LaunchedEffect(playback, changingCaptions) {
         var lastSaved = 0L
@@ -521,13 +543,21 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
     }
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(playback.title, style = MaterialTheme.typography.titleLarge)
-        Box(Modifier.fillMaxWidth().weight(1f)) { SwingPanel(factory = { panel }, modifier = Modifier.fillMaxSize()) }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            // SwingPanel retains its factory result; a replacement player must receive its own drawable.
+            key(playback.player) { SwingPanel(factory = { panel }, modifier = Modifier.fillMaxSize()) }
+        }
         problem?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         notice?.let { Text(it) }
+        Box(Modifier.fillMaxWidth().heightIn(min = controlsMinHeight)) {
         if (changingCaptions || status.restoring) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Updating captions… Your place is saved.")
             Button(onClick = onClose) { Text("Close") }
+            }
         } else {
+        Column(Modifier.fillMaxWidth().onSizeChanged { controlsHeightPx = it.height },
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Slider(
             value = dragged ?: if (status.durationMs > 0) (status.positionMs.toFloat() / status.durationMs).coerceIn(0f, 1f) else 0f,
             onValueChange = { dragged = it },
@@ -554,11 +584,7 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
                 onCancel = { sleepTimer.cancel(); sleepLabel = sleepTimer.label() })
         }
         tracks?.let { available ->
-            if (available.subtitles.isNotEmpty()) com.reelos.ui.CaptionAppearanceControl(
-                playback.appearance.size, playback.appearance.style,
-                onSize = { onAppearance(playback.appearance.copy(size = it)) },
-                onStyle = { onAppearance(playback.appearance.copy(style = it)) },
-                onReset = { onAppearance(DesktopCaptionAppearance()) })
+            if (available.subtitles.isNotEmpty()) Button(onClick = { appearanceOpen = true }) { Text("Caption appearance") }
             if (available.subtitles.isNotEmpty()) com.reelos.ui.SubtitleTimingControl(subtitleDelayMs,
                 onAdjust = { delta -> runCatching {
                     playback.player.setSubtitleDelayMs(com.reelos.core.SubtitleTiming.adjust(subtitleDelayMs, delta))
@@ -584,6 +610,22 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
                 )
             }
         }
+        }
+        }
+        }
+    }
+    if (appearanceOpen) DialogWindow(onCloseRequest = { appearanceOpen = false }, title = "Caption appearance",
+        state = rememberDialogState(width = 340.dp, height = 540.dp)) {
+        MaterialTheme(colorScheme = darkColorScheme()) {
+            Surface(Modifier.fillMaxSize()) {
+                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
+                    com.reelos.ui.CaptionAppearanceChoices(playback.appearance.size, playback.appearance.style,
+                        onSize = { appearanceOpen = false; onAppearance(playback.appearance.copy(size = it)) },
+                        onStyle = { appearanceOpen = false; onAppearance(playback.appearance.copy(style = it)) },
+                        onReset = { appearanceOpen = false; onAppearance(DesktopCaptionAppearance()) })
+                    TextButton(onClick = { appearanceOpen = false }) { Text("Close") }
+                }
+            }
         }
     }
 }

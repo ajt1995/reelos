@@ -20,19 +20,24 @@ enum class CaptionStyle(val label: String) {
     Box {
         Button(onClick = { expand(true) }) { Text("Caption appearance") }
         DropdownMenu(expanded, onDismissRequest = { expand(false) }) {
-            CaptionSize.entries.forEach { choice ->
-                DropdownMenuItem(text = { Text(choice.label) },
-                    trailingIcon = { if (choice == size) Text("✓") },
-                    onClick = { expand(false); onSize(choice) })
-            }
-            HorizontalDivider()
-            CaptionStyle.entries.forEach { choice ->
-                DropdownMenuItem(text = { Text(choice.label) },
-                    trailingIcon = { if (choice == style) Text("✓") },
-                    onClick = { expand(false); onStyle(choice) })
-            }
-            DropdownMenuItem(text = { Text("Use device captions") },
-                onClick = { expand(false); onReset() })
+            CaptionAppearanceChoices(size, style,
+                onSize = { expand(false); onSize(it) }, onStyle = { expand(false); onStyle(it) },
+                onReset = { expand(false); onReset() })
         }
     }
+}
+
+/** Same options in an Android menu or desktop native dialog above heavyweight video. */
+@Composable fun CaptionAppearanceChoices(size: CaptionSize, style: CaptionStyle,
+    onSize: (CaptionSize) -> Unit, onStyle: (CaptionStyle) -> Unit, onReset: () -> Unit) {
+    CaptionSize.entries.forEach { choice ->
+        DropdownMenuItem(text = { Text(choice.label) },
+            trailingIcon = { if (choice == size) Text("✓") }, onClick = { onSize(choice) })
+    }
+    HorizontalDivider()
+    CaptionStyle.entries.forEach { choice ->
+        DropdownMenuItem(text = { Text(choice.label) },
+            trailingIcon = { if (choice == style) Text("✓") }, onClick = { onStyle(choice) })
+    }
+    DropdownMenuItem(text = { Text("Use device captions") }, onClick = onReset)
 }

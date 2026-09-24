@@ -2,7 +2,30 @@
 
 2026-09-23. Static source and requirement review before the shared native UI is built. This is a design and reachability audit, **not** an installed-device review or a native functional pass. The 47 `ui-*` IDs below come from `docs/feature-acceptance.json` and `docs/INTERFACE-FEATURE-REGISTER.md`. Earlier browser/service evidence cannot certify Windows, Linux, phone, or TV behavior. Record native results against the same IDs only after app and physical-device checks.
 
-## Authority and shared design
+## Current installed-app findings
+
+### Windows player follow-up — 2026-09-24, WIP after b820dc7
+
+Actual native Main app, isolated Caption Check profile, synthetic Native-Tracks-30s.mp4;
+no owner media or credentials. This narrow check does not accept all of `ui-player`.
+Final targeted batch:61 core tests passed;28/29 desktop tests passed, one reproduced
+paused multitrack pixel failure, zero skips. Context, feature inventory and314-test
+classification passed separately. Release acceptance remains blocked with146 gaps.
+
+| Finding | Result / remaining check |
+| --- | --- |
+| Appearance dropdown obscured by heavyweight video | Separate native dialog now shows all size/style/reset choices above video; actual pointer selection verified. Keyboard focus/Escape still require verification. |
+| Replacement retained old SwingPanel drawable | Keyed surface and stopping old output before removal restore controls and correct resumed time. Duplicate same-handle attachment is guarded. |
+| Paused replacement shows black instead of saved picture (major) | STILL OPEN. Clock and track IDs restore, Play renders correct burned-in time. Reproduced at11/14/20s; new visible multitrack pixel test fails whereas simple color-only fixture passes. Do not count clock-only tests as success. |
+| Close/return | Native player Close returns to Home; saved Resume action observed. Normal app close exits successfully. |
+
+Canvas size gating and stable control space did not resolve the black picture. Neither
+skipping redundant track setters nor a single LibVLC next-frame request resolved the pixel
+regression; start-time preroll also failed. The latter two experiments were removed. Next:
+diagnose the multitrack/hardware paused presentation path, then retest installed Main,
+provider restart/cancellation and Linux. No Android physical rerun in this follow-up.
+
+## Authority and shared design (baseline contract)
 
 Latest owner direction for this implementation: one shared Kotlin/Jetpack Compose UI and core on Windows, Linux, Android phone/tablet, and Android TV; Books is absent on TV; learning data is not exported beyond the Home. This supersedes the older C# Windows/Linux-toolkit wording in `docs/agent-context/owner-requirements.md` and `active-decisions.json` for this implementation. A Home is optional for standalone use. Device layout and input adapt while journey names, meaning, state transitions, and policy stay shared.
 

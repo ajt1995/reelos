@@ -46,6 +46,7 @@ public/install/*.zip
 # Generated, non-personal decoder fixtures belong only to the test APK.
 !clients/native/android/src/androidTest/assets/Native-Validation-30s.mp4
 !clients/native/android/src/androidTest/assets/invalid-video.mp4
+!clients/native/desktop/src/test/assets/Native-Seek-Colors-12s.mp4
 
 # Scratch scripts & temporary test artifacts
 scratch/

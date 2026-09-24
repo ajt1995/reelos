@@ -22,7 +22,7 @@ class NativeVlcTest {
         assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
         var clock = 0L
         val sleep = com.reelos.core.PlaybackSleepTimer { clock }.apply { after(1_000) }
         var policyCalls = 0
@@ -53,7 +53,7 @@ class NativeVlcTest {
         val fixture = Path.of(requireNotNull(supplied))
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
         try {
             NativeVlc.open().getOrThrow().use { originalRuntime ->
                 originalRuntime.player(fixture, 0).use { original ->
@@ -63,6 +63,7 @@ class NativeVlcTest {
                     awaitTrackState(original) { state, _ -> state.positionMs in 5_600..7_000 }
                     val saved = original.pauseForReplacement()
                     awaitTrackState(original) { state, _ -> !state.playing }
+                    original.releaseDrawableForReplacement()
                     NativeVlc.open().getOrThrow().use { replacementRuntime ->
                         replacementRuntime.player(fixture, 0).use { replacement ->
                             replacement.restoreBeforeAttach(saved) { error("Test source authority revoked") }
@@ -95,7 +96,7 @@ class NativeVlcTest {
         val fixture = Path.of(requireNotNull(supplied))
         val frame = Frame()
         val canvas = Canvas()
-        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify() }
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.addNotify(); frame.validate() }
         try {
             for (playing in listOf(false, true)) {
                 val saved = NativeVlc.open().getOrThrow().use { vlc ->
@@ -150,12 +151,16 @@ class NativeVlcTest {
             frame.add(canvas)
             frame.setSize(320, 180)
             frame.addNotify()
+            frame.validate()
         }
         check(canvas.isDisplayable) { "Native test drawable could not be created" }
         try {
             NativeVlc.open().getOrThrow().use { vlc ->
                 vlc.player(fixture, 0, PlaybackPreferences("es", "en", SubtitleMode.ON)).use { playback ->
                     SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    awaitTrackState(playback) { state, _ -> state.playing && state.positionMs > 500 }
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    assertFalse(playback.poll().restoring, "Duplicate attachment must not restart an existing drawable")
                     awaitTrackState(playback) { state, _ -> state.playing && state.positionMs > 500 }
                     val initial = awaitTrackState(playback) { _, tracks ->
                         tracks.audio.size == 2 && tracks.subtitles.size == 2
