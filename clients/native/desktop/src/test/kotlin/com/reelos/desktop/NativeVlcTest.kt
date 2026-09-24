@@ -17,6 +17,29 @@ import kotlin.test.assertTrue
 
 class NativeVlcTest {
     @Test
+    fun captionRestartDoesNotChangeTheBeginningOfReplay() {
+        val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())
+        val frame = Frame()
+        val canvas = Canvas()
+        SwingUtilities.invokeAndWait { frame.add(canvas); frame.setSize(640, 360); frame.isVisible = true; frame.validate() }
+        try {
+            NativeVlc.open().getOrThrow().use { vlc ->
+                vlc.player(Path.of(requireNotNull(supplied)), 0).use { playback ->
+                    playback.restoreBeforeAttach(VlcContinuation(20_000, true, null, null, 0))
+                    SwingUtilities.invokeAndWait { playback.attach(canvas) }
+                    awaitTrackState(playback) { state, _ -> !state.restoring && state.playing && state.positionMs >= 19_900 }
+                    playback.seek(29_000)
+                    awaitTrackState(playback) { state, _ -> state.ended }
+                    playback.togglePause()
+                    val replay = awaitTrackState(playback) { state, _ -> state.playing && state.positionMs in 1..1_500 }.first
+                    assertTrue(replay.positionMs < 1_500, "Replay must not retain the caption restart offset")
+                }
+            }
+        } finally { SwingUtilities.invokeAndWait { frame.dispose() } }
+    }
+
+    @Test
     fun captionRestartAcceptsSleepPauseDuringDecoderWarmup() {
         val supplied = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
         assumeTrue("Real multitrack fixture required", !supplied.isNullOrBlank())

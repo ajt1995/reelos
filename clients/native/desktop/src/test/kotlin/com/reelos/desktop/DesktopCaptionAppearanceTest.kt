@@ -28,7 +28,13 @@ class DesktopCaptionAppearanceTest {
         assertPausedReplacement(Path.of(requireNotNull(fixture)), true)
     }
 
-    private fun assertPausedReplacement(fixture: Path, multitrack: Boolean) {
+    @Test fun restartedCallbackPauseDisplaysVideoAndClosesBothSources() {
+        val fixture = System.getenv("REELOS_DESKTOP_TRACK_FIXTURE")
+        assumeTrue("Opt in to installed callback pixel validation", fixture != null)
+        assertPausedReplacement(Path.of(requireNotNull(fixture)), true, remote = true)
+    }
+
+    private fun assertPausedReplacement(fixture: Path, multitrack: Boolean, remote: Boolean = false) {
         val frame = Frame("ReelOS seek pixel validation")
         val canvas = Canvas()
         SwingUtilities.invokeAndWait {
@@ -36,8 +42,24 @@ class DesktopCaptionAppearanceTest {
             frame.isAlwaysOnTop = true; frame.isVisible = true; frame.toFront()
         }
         val robot = Robot()
+        val bytes = if (remote) Files.readAllBytes(fixture) else null
+        val sourceStates = mutableListOf<java.util.concurrent.atomic.AtomicBoolean>()
+        fun openPlayer(runtime: NativeVlc): VlcPlayback {
+            if (bytes == null) return runtime.player(fixture, 0)
+            val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+            sourceStates += closed
+            return runtime.player(object : RemoteByteSource {
+                override val expectedSize = bytes.size.toLong()
+                override fun open(offset: Long): java.io.InputStream {
+                    check(!closed.get())
+                    require(offset in 0..expectedSize)
+                    return java.io.ByteArrayInputStream(bytes, offset.toInt(), bytes.size - offset.toInt())
+                }
+                override fun close() { closed.set(true) }
+            }, 0)
+        }
         val originalRuntime = NativeVlc.open().getOrThrow()
-        val original = originalRuntime.player(fixture, 0)
+        val original = openPlayer(originalRuntime)
         try {
             SwingUtilities.invokeAndWait { original.attach(canvas) }
             val originalDeadline = System.nanoTime() + 10_000_000_000L
@@ -71,7 +93,7 @@ class DesktopCaptionAppearanceTest {
                 frame.remove(canvas); frame.add(replacementCanvas); frame.validate()
             }
             NativeVlc.open(DesktopCaptionAppearance(CaptionSize.LARGE, CaptionStyle.YELLOW)).getOrThrow().use { vlc ->
-                vlc.player(fixture, 0).use { player ->
+                openPlayer(vlc).use { player ->
                     player.restoreBeforeAttach(saved)
                     SwingUtilities.invokeAndWait { player.attach(replacementCanvas) }
                     val deadline = System.nanoTime() + 15_000_000_000L
@@ -96,7 +118,7 @@ class DesktopCaptionAppearanceTest {
                         }
                         green = if (multitrack) colored > 125
                             else color.green > 180 && color.red < 60 && color.blue < 60
-                        val diagnostic = "multitrack=$multitrack time=${state.positionMs} restoring=${state.restoring} frames=${player.videoProgress()} pixel=${color.rgb}"
+                        val diagnostic = "multitrack=$multitrack remote=$remote time=${state.positionMs} restoring=${state.restoring} frames=${player.videoProgress()} pixel=${color.rgb}"
                         if (diagnostic != previousDiagnostic) { println(diagnostic); previousDiagnostic = diagnostic }
                         if (!state.restoring && green) break
                         Thread.sleep(100)
@@ -107,7 +129,14 @@ class DesktopCaptionAppearanceTest {
                     assertTrue(green, "Paused replacement must display decoded video, not a clock over black video (multitrack=$multitrack)")
                 }
             }
-        } finally { original.close(); originalRuntime.close(); SwingUtilities.invokeAndWait { frame.dispose() } }
+        } finally {
+            original.close(); originalRuntime.close(); SwingUtilities.invokeAndWait { frame.dispose() }
+            bytes?.fill(0)
+        }
+        if (remote) {
+            assertEquals(2, sourceStates.size)
+            assertTrue(sourceStates.all { it.get() }, "Both replacement and original byte sources must close")
+        }
     }
 
     @Test fun optionsAreBoundedAndDeviceDefaultsAreNotOverridden() {

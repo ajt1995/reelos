@@ -472,6 +472,9 @@ internal class VlcPlayback(
         if (api.libvlc_media_player_get_state(player) == 6) {
             // LibVLC 3 can remain in Ended after a bare seek(0) + play().
             api.libvlc_media_player_stop(player)
+            // Caption restoration's input option must not become the next replay's start.
+            media?.let { api.libvlc_media_add_option(it, ":start-time=0") }
+            resumeMs = 0
             resumeApplied = true
             check(api.libvlc_media_player_play(player) == 0) { "LibVLC could not replay this media" }
         } else {

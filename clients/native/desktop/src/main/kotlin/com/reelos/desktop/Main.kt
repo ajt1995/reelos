@@ -32,6 +32,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -615,7 +619,13 @@ private fun PlaybackView(playback: ActivePlayback, changingCaptions: Boolean, no
         }
     }
     if (appearanceOpen) DialogWindow(onCloseRequest = { appearanceOpen = false }, title = "Caption appearance",
-        state = rememberDialogState(width = 340.dp, height = 540.dp)) {
+        state = rememberDialogState(width = 340.dp, height = 540.dp),
+        onPreviewKeyEvent = {
+            if (it.type == KeyEventType.KeyDown && (it.key == Key.Escape || it.key == Key.Back)) {
+                appearanceOpen = false
+                true
+            } else false
+        }) {
         MaterialTheme(colorScheme = darkColorScheme()) {
             Surface(Modifier.fillMaxSize()) {
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
